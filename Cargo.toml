@@ -1,0 +1,33 @@
+[package]
+name = "git-gpg"
+version = "0.1.0"
+edition = "2021"
+authors = ["git-gpg contributors"]
+description = "A Rust-based Git secret management tool inspired by Git Secret" 
+license = "GPL-3.0-or-later"
+repository = "https://codeforge.io/simbo1905/git-gpg"
+readme = "README.md"
+keywords = ["git", "gpg", "encryption", "secrets", "openpgp"]
+categories = ["command-line-utilities", "cryptography"]
+
+[dependencies]
+# Pure Rust OpenPGP implementation (RFC 4880, compatible with RFC 9580)
+pgp = "0.19"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Error handling
+anyhow = "1.0"
+
+# Serialization for config
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Random number generation
+rand = "0.8"
+
+[dev-dependencies]
+tempfile = "3.10"
+assert_cmd = "2.0"
+predicates = "3.0"

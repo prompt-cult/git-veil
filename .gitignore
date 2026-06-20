@@ -1,3 +1,20 @@
-.tmp
+# Build outputs
 /target
+*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Transient files
+.tmp
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# git-gpg secrets (never commit encrypted files)
 .git-gpg/secrets
