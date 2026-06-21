@@ -1,0 +1,13 @@
+pub mod init;
+pub mod trust;
+pub mod tell;
+pub mod show_repo_id;
+pub mod whoami;
+pub mod verify_keyring;
+pub mod list_keys;
+pub mod add;
+pub mod remove;
+pub mod list;
+pub mod hide;
+pub mod reveal;
+pub mod clean;

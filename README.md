@@ -1,68 +1,171 @@
 # Git GPG
 
-**Git GPG** is a pure Rust replacement for `git-secret` that manages encrypted files in Git repositories using OpenPGP (RFC 4880 / RFC 9580) cryptography.
+**Git GPG** is a pure Rust tool for managing encrypted files in Git repositories using OpenPGP, with a trust model based on digitally-signed keyrings.
 
 ## Overview
 
 ### What It Is
 - A **pure Rust** CLI tool for managing secrets in Git repositories
 - Uses **zero C dependencies** - only pure Rust crates (`pgp`, `clap`, `anyhow`, `serde_json`)
-- **No bash** - eliminates the problems of `git-secret` (forking, version issues, shell injection)
+- **No external `gpg` process forking** - all crypto is pure Rust
 - **Cross-platform** - works on macOS, Linux, Windows
-- **RFC 4880 / RFC 9580 compatible** - roundtrips with `gpg`
+- **RFC 4880 / RFC 9580 compatible** - interoperates with standard GPG
 
 ### What It Does
-- Encrypts/decrypts files using **OpenPGP** (Ed25519, RSA-4096, etc.)
-- Tracks which files should be encrypted in `.git-gpg/config.json`
-- Stores encrypted files in `.git-gpg/secrets/` (which is gitignored)
-- Provides a clean CLI interface: `git gpg <command>`
+- Encrypts/decrypts files using **OpenPGP** with a signed keyring trust model
+- Repository owner signs a keyring file containing collaborator public keys
+- Each command verifies the keyring signature before encrypting/decrypting
+- Derives repository identity from `git remote` push URL
+- Integrates with your existing GPG keyring (defaults to `~/.gnupg`)
 
-### Why It Exists
-`git-secret` is a bash script that:
-- Forks the `gpg` CLI for every operation (slow, fragile)
-- Has issues with GPG versions across systems
-- Requires bash and proper shell environment
-- Has potential shell injection vulnerabilities
+### Trust Model
 
-**Git GPG solves these problems** by:
-- Using the pure Rust [`pgp`](https://crates.io/crates/pgp) crate
-- Implementing OpenPGP directly (RFC 4880 / RFC 9580)
-- Using RustCrypto primitives (NIST-approved, audited)
-- Being a single statically-linked binary
+1. **Repository Identity**: Derived from git remote push URL
+   - Format: `{repo}+{user}@{service}`
+   - Example: `fara+simbo1905@github.com` from `git@github.com:simbo1905/fara.git`
+   - Example: `nextcloud-hello-world+simbo1905@codeberg.org` from `ssh://git@codeberg.org/simbo1905/nextcloud-hello-world.git`
+
+2. **Signed Keyring**: `.git-gpg/keyring` contains:
+   ```
+   -----BEGIN GIT-GPG KEYRING-----
+   alice@example.com:LS0tLS1CRUdJTi...=:ABCD1234EF567890
+   bob@work.com:bXkgcHVibGljIGtleQ==:1234ABCD5678EF90
+   -----END GIT-GPG KEYRING-----
+   -----BEGIN PGP SIGNATURE-----
+   ... digital signature of everything above ...
+   -----END PGP SIGNATURE-----
+   ```
+
+3. **Trust Flow**:
+   - Repository owner uses `git gpg trust {repo-id} {signing-key.pub}` to establish trust in the signing key
+   - Owner uses `git gpg tell {email} {collaborator.pub}` to add collaborators (signs keyring after each addition)
+   - All `hide`/`reveal` operations verify the keyring signature against the trusted signing key
+   - If signature verification fails, operations abort
 
 ---
 
-## Specification - Supported Commands
+## Repository Identity
 
-Based on the original `git-secret` commands, Git GPG supports:
+Git GPG derives a unique repository identity from the git remote push URL.
 
-### Core Commands
+### Examples
 
-| Command | Description | Original git-secret equivalent |
-|---------|-------------|-------------------------------|
-| `git gpg init` | Initialize git-gpg in the current repository | `git secret init` |
-| `git gpg add <files...>` | Add files to be encrypted | `git secret add <files>` |
-| `git gpg remove <files...>` | Remove files from encryption tracking | `git secret remove <files>` |
-| `git gpg list` | List all encrypted files | `git secret list` |
-| `git gpg hide` | Encrypt all tracked files | `git secret hide` |
-| `git gpg reveal` | Decrypt all tracked files | `git secret reveal` |
-| `git gpg clean` | Remove all git-gpg metadata | `git secret clean` |
+| Push URL | Repository Identity |
+|----------|---------------------|
+| `git@github.com:microsoft/fara.git` | `fara+microsoft@github.com` |
+| `ssh://git@codeberg.org/simbo1905/nextcloud-hello-world.git` | `nextcloud-hello-world+simbo1905@codeberg.org` |
+| `https://gitlab.com/myorg/project.git` | `project+myorg@gitlab.com` |
 
-### Key Management Commands
+### Remote Selection
 
-| Command | Description | Notes |
-|---------|-------------|-------|
-| `git gpg keygen` | Generate a new OpenPGP key pair | Generates Ed25519 or RSA-4096 keys |
-| `git gpg export-pubkey` | Export public key (armored ASCII) | For sharing with collaborators |
-| `git gpg export-privkey` | Export private key (armored ASCII) | BACKUP ONLY - keep safe! |
-| `git gpg change-passphrase` | Change passphrase on private key | Future feature |
+All commands accept `--remote <name>` to specify which git remote to use (defaults to `origin`).
 
-### Additional Commands
+```bash
+# Use default 'origin' remote
+git gpg hide
+
+# Use 'simbo1905' remote
+git gpg hide --remote simbo1905
+```
+
+---
+
+## Command Reference
+
+### Core Workflow Commands
 
 | Command | Description |
 |---------|-------------|
-| `git gpg --help` | Show help |
-| `git gpg --version` | Show version |
+| `git gpg init` | Initialize git-gpg in the current repository |
+| `git gpg trust <repo-id> <signing-key.pub>` | Trust a signing key for this repository |
+| `git gpg tell <email> <collaborator.pub>` | Add a collaborator's public key to the signed keyring |
+| `git gpg add <files...>` | Track files for encryption |
+| `git gpg remove <files...>` | Stop tracking files |
+| `git gpg list` | List tracked files |
+| `git gpg hide` | Encrypt all tracked files (verifies keyring signature first) |
+| `git gpg reveal` | Decrypt all tracked files (verifies keyring signature first) |
+| `git gpg clean` | Remove all git-gpg metadata |
+
+### Query Commands
+
+| Command | Description |
+|---------|-------------|
+| `git gpg whoami` | Show your identity (from git config or `--email` override) |
+| `git gpg show-repo-id` | Show derived repository identity |
+| `git gpg verify-keyring` | Verify keyring signature |
+| `git gpg list-keys` | List all keys in the keyring |
+
+---
+
+## Setup Workflow
+
+### 1. Repository Owner Setup
+
+```bash
+cd my-repo
+
+# Initialize git-gpg
+git gpg init
+
+# Generate or export your signing key (using standard gpg)
+gpg --gen-key  # or use existing key
+gpg --armor --export alice@example.com > alice.pub
+
+# Trust your signing key for this repo
+# (computes repo-id from 'origin' remote push URL)
+git gpg trust fara+simbo1905@github.com alice.pub
+
+# Add yourself to the keyring
+git gpg tell alice@example.com alice.pub
+
+# Track secret files
+git gpg add .env secrets.yml
+
+# Commit the signed keyring
+git add .git-gpg/keyring
+git commit -m "Add signed keyring"
+```
+
+### 2. Add Collaborators
+
+```bash
+# Bob sends you bob.pub
+# Verify it's really Bob's key, then:
+git gpg tell bob@work.com bob.pub
+
+# This:
+# 1. Checks bob@work.com is an identity in bob.pub
+# 2. Extracts fingerprint and base64-encodes the key
+# 3. Appends to keyring
+# 4. Signs the entire keyring with alice@example.com's private key
+# 5. Test-encrypts a temp file to verify the key works
+
+git add .git-gpg/keyring
+git commit -m "Add Bob to keyring"
+```
+
+### 3. Collaborator Setup
+
+```bash
+# Clone the repo
+git clone git@github.com:simbo1905/fara.git
+cd fara
+
+# Trust the repo signing key (Alice's key)
+# This installs alice.pub into Bob's GPG keyring
+git gpg trust fara+simbo1905@github.com alice.pub
+
+# Verify the keyring
+git gpg verify-keyring
+# ✓ Keyring signature valid (signed by alice@example.com)
+
+# Reveal secrets
+git gpg reveal
+# This:
+# 1. Verifies keyring signature
+# 2. Finds bob@work.com in keyring (uses git config user.email)
+# 3. Decrypts tracked files using bob@work.com's private key from ~/.gnupg
+```
 
 ---
 
@@ -70,11 +173,11 @@ Based on the original `git-secret` commands, Git GPG supports:
 
 ### `git gpg init`
 
-Initialize git-gpg in the current Git repository.
+Initialize git-gpg in the current repository.
 
 **Creates:**
-- `.git-gpg/config.json` - Configuration file tracking encrypted files
-- `.git-gpg/secrets/` - Directory for encrypted files
+- `.git-gpg/keyring` - Empty signed keyring file
+- `.git-gpg/tracked.json` - Tracked files list
 - `.gitignore` entry for `.git-gpg/secrets/`
 
 **Usage:**
@@ -85,280 +188,493 @@ git gpg init
 
 ---
 
-### `git gpg add <files...>`
+### `git gpg trust <repo-id> <signing-key.pub>`
 
-Add one or more files to be encrypted/decrypted.
+Trust a signing key for this repository. The signing key is used to verify the keyring.
 
 **Arguments:**
-- `<files...>` - One or more file paths to track
+- `<repo-id>` - Repository identity (e.g., `fara+simbo1905@github.com`)
+- `<signing-key.pub>` - Path to ASCII-armored public key
+
+**Options:**
+- `--remote <name>` - Git remote to verify against (default: `origin`)
+- `--gpg-home <path>` - GPG home directory (default: `~/.gnupg`)
 
 **Behavior:**
-- Adds absolute paths to `.git-gpg/config.json`
-- Does not encrypt the files (use `hide` for that)
+1. Computes expected repo-id from `git remote show <remote>` push URL
+2. Verifies provided repo-id matches computed value
+3. Verifies signing-key.pub contains an identity matching repo-id
+4. Imports signing-key.pub into GPG keyring at `--gpg-home`
+5. Stores trust mapping in `.git-gpg/trust.json`
 
 **Usage:**
 ```bash
-git gpg add secrets.env .env.local config/credentials.yml
-git gpg add directory/*.key
+# Trust alice.pub for this repo (using 'origin' remote)
+git gpg trust fara+simbo1905@github.com alice.pub
+
+# Use custom remote
+git gpg trust fara+simbo1905@codeberg.org alice.pub --remote simbo1905
+
+# Use custom GPG home
+git gpg trust fara+simbo1905@github.com alice.pub --gpg-home /opt/gpg
+```
+
+---
+
+### `git gpg tell <email> <collaborator.pub>`
+
+Add a collaborator's public key to the signed keyring.
+
+**Arguments:**
+- `<email>` - Email address (must be an identity in the public key)
+- `<collaborator.pub>` - Path to ASCII-armored public key
+
+**Options:**
+- `--remote <name>` - Git remote (default: `origin`)
+- `--gpg-home <path>` - GPG home directory (default: `~/.gnupg`)
+
+**Behavior:**
+1. Verifies `<email>` is an identity in `<collaborator.pub>`
+2. Extracts key fingerprint
+3. Base64-encodes the public key
+4. Appends `{email}:{base64_key}:{fingerprint}` to `.git-gpg/keyring`
+5. Signs the entire keyring (including end marker) using the trusted signing key
+6. Test-encrypts `.git-gpg/keyring` with the new key to verify it works
+
+**Keyring Format:**
+```
+-----BEGIN GIT-GPG KEYRING-----
+alice@example.com:LS0tLS1CRUdJTi...=:ABCD1234EF567890
+bob@work.com:bXkgcHVibGljIGtleQ==:1234ABCD5678EF90
+-----END GIT-GPG KEYRING-----
+-----BEGIN PGP SIGNATURE-----
+iQIzBAABCAAdFiEE...
+-----END PGP SIGNATURE-----
+```
+
+**Usage:**
+```bash
+# Add Bob's key
+git gpg tell bob@work.com bob.pub
+
+# Verify it was added
+git gpg list-keys
+# alice@example.com (ABCD1234EF567890)
+# bob@work.com (1234ABCD5678EF90)
+```
+
+**Failure Cases:**
+- `<email>` not found in `<collaborator.pub>` identities → error
+- Test encryption fails → error (key is invalid or corrupted)
+- Signing key not trusted → error (run `git gpg trust` first)
+
+---
+
+### `git gpg add <files...>`
+
+Track files for encryption.
+
+**Arguments:**
+- `<files...>` - One or more file paths
+
+**Behavior:**
+- Adds absolute paths to `.git-gpg/tracked.json`
+- Does not encrypt files (use `hide` for that)
+
+**Usage:**
+```bash
+git gpg add .env secrets.yml config/credentials.json
 ```
 
 ---
 
 ### `git gpg remove <files...>`
 
-Remove files from encryption tracking.
+Stop tracking files.
 
 **Arguments:**
-- `<files...>` - One or more file paths to stop tracking
+- `<files...>` - One or more file paths
 
 **Behavior:**
-- Removes paths from `.git-gpg/config.json`
-- Does not delete the files or their encrypted versions
+- Removes paths from `.git-gpg/tracked.json`
+- Does not delete encrypted or plaintext versions
 
 **Usage:**
 ```bash
 git gpg remove old-secret.txt
-git gpg remove temp/*.key
 ```
 
 ---
 
 ### `git gpg list`
 
-List all files currently being tracked for encryption.
+List all tracked files.
 
 **Output:**
-- Lists all files in `.git-gpg/config.json`
-- Shows absolute paths
-
-**Usage:**
 ```bash
-git gpg list
-
-# Example output:
-# Tracked files:
-#   - /home/user/project/secrets.env
-#   - /home/user/project/.env.local
+Tracked files:
+  - /home/user/project/.env
+  - /home/user/project/secrets.yml
 ```
 
 ---
 
 ### `git gpg hide`
 
-Encrypt all tracked files and remove the originals.
+Encrypt all tracked files.
+
+**Options:**
+- `--remote <name>` - Git remote (default: `origin`)
+- `--gpg-home <path>` - GPG home directory (default: `~/.gnupg`)
 
 **Behavior:**
-1. For each tracked file in `.git-gpg/config.json`:
-   - Reads the plaintext file
-   - Encrypts it using OpenPGP (to the default public key)
+1. Verifies `.git-gpg/keyring` signature against trusted signing key
+2. If signature invalid or signing key not trusted → **abort**
+3. Reads all public keys from keyring
+4. For each tracked file:
+   - Encrypts to **all** public keys in keyring
    - Saves encrypted version to `.git-gpg/secrets/<relative-path>.asc`
-   - Deletes the original file
-2. Encrypted files use ASCII-armored OpenPGP format (`.asc` extension)
-
-**After running:**
-- Tracked files are **encrypted at rest** in `.git-gpg/secrets/`
-- Original files are **removed** from the working directory
-- Safe to commit and push to Git
+   - Deletes plaintext original
+5. Updates `.git-gpg/tracked.json` with encryption metadata
 
 **Usage:**
 ```bash
-git gpg add secrets.env
+# Encrypt using 'origin' remote
 git gpg hide
 
-# Now secrets.env is encrypted and safe to commit
-git add .git-gpg/secrets/secrets.env.asc
-git commit -m "Add encrypted secrets"
+# Encrypt using custom remote
+git gpg hide --remote simbo1905
+
+# After hiding, commit encrypted files
+git add .git-gpg/secrets/
+git commit -m "Hide secrets"
 ```
+
+**Failure Cases:**
+- Keyring signature verification fails → abort
+- Signing key not trusted → abort (run `git gpg trust` first)
+- No public keys in keyring → abort
 
 ---
 
 ### `git gpg reveal`
 
-Decrypt all tracked files and restore the originals.
+Decrypt all tracked files.
+
+**Options:**
+- `--email <addr>` - Email to use for decryption (default: `git config user.email`)
+- `--remote <name>` - Git remote (default: `origin`)
+- `--gpg-home <path>` - GPG home directory (default: `~/.gnupg`)
 
 **Behavior:**
-1. For each tracked file in `.git-gpg/config.json`:
-   - Finds the encrypted file in `.git-gpg/secrets/<relative-path>.asc`
-   - Decrypts it using the default private key
-   - Restores the original file to its location
-   - Deletes the encrypted `.asc` file
-
-**After running:**
-- Original files are **restored** to their locations
-- Encrypted files are **removed** from `.git-gpg/secrets/`
-- Files are in plaintext (be careful!)
+1. Verifies `.git-gpg/keyring` signature against trusted signing key
+2. If signature invalid → **abort**
+3. Finds `--email` in keyring to get key fingerprint
+4. For each tracked file:
+   - Finds encrypted file at `.git-gpg/secrets/<relative-path>.asc`
+   - Decrypts using private key from `--gpg-home` matching `--email`
+   - Restores plaintext to original location
+   - Deletes encrypted `.asc` file
 
 **Usage:**
 ```bash
-# After cloning a repo with encrypted files
+# Decrypt using git config user.email
 git gpg reveal
 
-# Now secrets.env is available in plaintext
-cat secrets.env
+# Decrypt using specific email
+git gpg reveal --email bob@work.com
+
+# Decrypt using custom GPG home
+git gpg reveal --gpg-home /opt/gpg
+```
+
+**Failure Cases:**
+- Keyring signature verification fails → abort
+- `--email` not found in keyring → abort
+- Private key not found in GPG keyring → abort
+- Decryption fails (wrong key) → abort
+
+---
+
+### `git gpg whoami`
+
+Show your identity.
+
+**Options:**
+- `--email <addr>` - Override email (default: `git config user.email`)
+
+**Output:**
+```bash
+Your identity: alice@example.com
+GPG home: /home/alice/.gnupg
+```
+
+---
+
+### `git gpg show-repo-id`
+
+Show derived repository identity.
+
+**Options:**
+- `--remote <name>` - Git remote (default: `origin`)
+
+**Output:**
+```bash
+Repository ID: fara+simbo1905@github.com
+Remote: origin
+Push URL: git@github.com:simbo1905/fara.git
+```
+
+---
+
+### `git gpg verify-keyring`
+
+Verify keyring signature.
+
+**Options:**
+- `--remote <name>` - Git remote (default: `origin`)
+- `--gpg-home <path>` - GPG home directory (default: `~/.gnupg`)
+
+**Output:**
+```bash
+✓ Keyring signature valid
+  Signed by: alice@example.com (ABCD1234EF567890)
+  Repository ID: fara+simbo1905@github.com
+  Keys in keyring: 2
+```
+
+**Failure:**
+```bash
+✗ Keyring signature verification failed
+  Expected signer: alice@example.com
+  Trusted key fingerprint: ABCD1234EF567890
+```
+
+---
+
+### `git gpg list-keys`
+
+List all keys in the keyring.
+
+**Output:**
+```bash
+Keys in keyring:
+  alice@example.com (ABCD1234EF567890)
+  bob@work.com (1234ABCD5678EF90)
+  charlie@company.com (EF901234ABCD5678)
 ```
 
 ---
 
 ### `git gpg clean`
 
-Remove all git-gpg metadata and encrypted files.
+Remove all git-gpg metadata.
 
-**Behavior:**
-- Deletes `.git-gpg/` directory entirely
-- Removes `.gitignore` entry for `.git-gpg/secrets/`
-- **Warning:** This also deletes any encrypted files that haven't been revealed!
+**Warning:** This deletes:
+- `.git-gpg/` directory
+- `.gitignore` entry for `.git-gpg/secrets/`
 
 **Usage:**
 ```bash
-# Start fresh
 git gpg clean
-git gpg init
 ```
 
 ---
 
-### `git gpg keygen`
+## File Structure
 
-Generate a new OpenPGP key pair.
+```
+.git-gpg/
+├── keyring              # Signed keyring: email:base64_key:fingerprint
+├── trust.json           # Trusted signing keys: { "repo-id": "fingerprint" }
+├── tracked.json         # Tracked files list
+└── secrets/             # Encrypted files (gitignored)
+    ├── .env.asc
+    └── secrets.yml.asc
+```
 
-**Options:**
-- `--name <name>` - Name for the key (default: "git-gpg user")
-- `--email <email>` - Email for the key (default: "git-gpg@example.com")
-- `--key-type <type>` - Key type: `ed25519` (default) or `rsa4096`
+### `.git-gpg/keyring` Format
 
-**Creates:**
-- `.git-gpg/public.key` - Your public key (share with collaborators)
-- `.git-gpg/private.key` - Your private key (KEEP THIS SAFE!)
+```
+-----BEGIN GIT-GPG KEYRING-----
+alice@example.com:LS0tLS1CRUdJTiBQR1AgUFVCTElDIEtFWS...=:ABCD1234EF567890
+bob@work.com:bXkgcHVibGljIGtleSBkYXRh...=:1234ABCD5678EF90
+-----END GIT-GPG KEYRING-----
+-----BEGIN PGP SIGNATURE-----
+iQIzBAABCAAdFiEEABCD1234EF567890ABCD1234EF567890AAoJEABCD1234EF56
+789012345678901234567890123456789012345678901234567890123456789012
+...
+-----END PGP SIGNATURE-----
+```
 
-**Usage:**
-```bash
-# Generate Ed25519 key (recommended)
-git gpg keygen --name "Alice" --email "alice@example.com"
+**Format Details:**
+- Each line: `{email}:{base64_public_key}:{fingerprint}`
+- `:` is the separator (not in email addresses or base64)
+- Entire content (including markers and key lines) is signed
+- Signature follows the `-----END GIT-GPG KEYRING-----` marker
 
-# Generate RSA-4096 key
-git gpg keygen --name "Bob" --email "bob@example.com" --key-type rsa4096
+### `.git-gpg/trust.json` Format
+
+```json
+{
+  "fara+simbo1905@github.com": "ABCD1234EF567890"
+}
+```
+
+Maps repository identity to trusted signing key fingerprint.
+
+### `.git-gpg/tracked.json` Format
+
+```json
+{
+  "files": [
+    "/home/user/project/.env",
+    "/home/user/project/secrets.yml"
+  ]
+}
 ```
 
 ---
 
-### `git gpg export-pubkey`
+## Integration with Existing GPG
 
-Export your public key in ASCII-armored format.
+Git GPG uses your existing GPG keyring (defaults to `~/.gnupg`).
 
-**Output:**
-- Prints public key to stdout (OpenPGP ASCII-armored format)
+**No key generation** - use `gpg --gen-key` to create keys.
 
-**Usage:**
+**Import keys:**
 ```bash
-# Export to file
-git gpg export-pubkey > my-public-key.asc
+# Import into default GPG home
+gpg --import alice.pub
 
-# Share with collaborators
-# (send them my-public-key.asc)
+# Import into custom location
+gpg --homedir /opt/gpg --import alice.pub
+```
+
+**Export keys:**
+```bash
+# Export public key
+gpg --armor --export alice@example.com > alice.pub
+
+# Export private key (backup only!)
+gpg --armor --export-secret-keys alice@example.com > alice.priv
 ```
 
 ---
 
-### `git gpg export-privkey`
+## Security Model
 
-Export your private key in ASCII-armored format.
+### Trust Chain
 
-**Warning:** Your private key can decrypt ALL files encrypted to your public key. Keep it safe!
+1. **Repository owner** creates and signs the keyring
+2. **Collaborators** verify the signature before every `hide`/`reveal`
+3. **Signing key** is trusted via `git gpg trust` (one-time setup)
+4. **Keyring tampering** is detected (signature verification fails)
 
-**Output:**
-- Prints private key to stdout (OpenPGP ASCII-armored format)
+### Threat Model
 
-**Usage:**
-```bash
-# Export to file (BACKUP ONLY!)
-git gpg export-privkey > my-private-key.asc
+**Protects against:**
+- ✅ Accidental secret commits (secrets are encrypted)
+- ✅ Unauthorized keyring modifications (signature verification)
+- ✅ Man-in-the-middle attacks (keyring is signed)
 
-# Store in a secure location
-# (encrypted USB drive, password manager, etc.)
-```
+**Does NOT protect against:**
+- ❌ Compromised signing key (re-sign malicious keyring)
+- ❌ Compromised collaborator private key (decrypt secrets)
+- ❌ Malicious repository owner (sign malicious keyring)
+
+### Best Practices
+
+1. **Verify signing key out-of-band** (phone call, video chat, key signing party)
+2. **Use strong passphrases** on private keys
+3. **Regularly audit keyring** with `git gpg list-keys`
+4. **Rotate signing keys** if compromised
+5. **Backup private keys** securely
 
 ---
 
 ## Installation
 
-### Using mise (Recommended)
-
-This project uses [mise](https://mise.jdx.dev/) for toolchain management.
+### Using the install script
 
 ```bash
-# Install mise
-curl https://mise.jdx.dev/install.sh | sh
+# Install to ~/.local/bin (default)
+./scripts/install.sh
 
-# In the project directory
-mise use rust@stable
-mise exec -- cargo build --release
+# Install to custom location
+./scripts/install.sh /usr/local/bin
 
-# Binary is at ./target/release/git-gpg
+# Or set INSTALL_DIR environment variable
+INSTALL_DIR=/opt/bin ./scripts/install.sh
 ```
 
-### Direct cargo install
+### Using cargo
 
 ```bash
-cargo install --git https://codeforge.io/git-gpg/git-gpg.git
+# Install from source
+cargo install --path . --locked --root ~/.local
+
+# Or use the cargo alias
+cargo install-local --root ~/.local
 ```
 
 ---
 
-## Project Structure
+## Example Workflow
 
+### Alice (Repository Owner)
+
+```bash
+# Setup
+cd my-project
+git gpg init
+gpg --armor --export alice@example.com > alice.pub
+git gpg trust fara+simbo1905@github.com alice.pub
+git gpg tell alice@example.com alice.pub
+
+# Track secrets
+git gpg add .env secrets.yml
+git gpg hide
+
+# Commit
+git add .git-gpg/keyring .git-gpg/tracked.json .git-gpg/secrets/
+git commit -m "Add encrypted secrets"
+git push
+
+# Add Bob
+git gpg tell bob@work.com bob.pub
+git add .git-gpg/keyring
+git commit -m "Add Bob to keyring"
+git push
 ```
-.
-├── .git-gpg/                          # Git GPG metadata
-│   ├── config.json                    # Tracked files list
-│   ├── public.key                     # Public key
-│   ├── private.key                    # Private key (KEEP SAFE!)
-│   └── secrets/                       # Encrypted files
-│       ├── file1.txt.asc             # Encrypted files
-│       └── dir/file2.yml.asc         # (preserve directory structure)
-├── Cargo.toml                         # Rust dependencies
-├── .mise.toml                        # mise configuration
-├── README.md                          # This file
-└── src/
-    └── main.rs                        # Implementation
+
+### Bob (Collaborator)
+
+```bash
+# Clone
+git clone git@github.com:simbo1905/fara.git
+cd fara
+
+# Trust Alice's signing key
+git gpg trust fara+simbo1905@github.com alice.pub
+
+# Verify keyring
+git gpg verify-keyring
+# ✓ Keyring signature valid (signed by alice@example.com)
+
+# Reveal secrets
+git gpg reveal
+# Decrypts .env and secrets.yml
+
+# Work with secrets
+vim .env
+
+# Hide before committing
+git gpg hide
+git add .git-gpg/secrets/
+git commit -m "Update secrets"
+git push
 ```
-
----
-
-## Technical Details
-
-### OpenPGP Implementation
-
-Git GPG uses the [`pgp`](https://crates.io/crates/pgp) crate which provides:
-- **Pure Rust** OpenPGP implementation
-- **RFC 4880** compliance (baseline for RFC 9580)
-- **Zero C dependencies**
-- Uses **RustCrypto** primitives:
-  - `aes` - AES-256 symmetric encryption
-  - `sha2` - SHA-256/512 hashing
-  - `rsa` - RSA public-key crypto
-  - `ed25519-dalek` - Ed25519 signatures
-  - `curve25519-dalek` - Curve25519 key exchange
-
-### Key Types Supported
-
-| Type | Algorithm | Security | Speed |
-|------|-----------|----------|-------|
-| `ed25519` | EdDSA over Curve25519 | ✅ Modern | ⚡ Fast |
-| `rsa4096` | RSA 4096-bit | ✅ NIST-approved | 🐢 Slower |
-
-### File Format
-
-- **Plaintext:** Original files (stored in working directory when revealed)
-- **Encrypted:** ASCII-armored OpenPGP messages (`.asc` extension)
-- **Config:** JSON file tracking which files are encrypted
-- **Keys:** ASCII-armored OpenPGP keys
-
-### Interoperability
-
-Git GPG files are **fully compatible** with:
-- `gpg --encrypt` / `gpg --decrypt`
-- Other OpenPGP implementations
-- Existing GPG keyrings
 
 ---
 

@@ -1,0 +1,60 @@
+use anyhow::{Context, Result};
+use pgp::composed::{SignedSecretKey, SignedPublicKey, Deserializable, DetachedSignature};
+use pgp::crypto::hash::HashAlgorithm;
+use pgp::types::Password;
+use rand::thread_rng;
+use std::io::Cursor;
+
+/// Signs keyring content with a private key and returns an armored signature.
+pub fn sign_keyring_content(keyring_content: &str, signing_key: &SignedSecretKey) -> Result<String> {
+    let mut rng = thread_rng();
+    let passphrase = Password::empty();
+    
+    // Get the primary key for signing
+    let primary_key = &signing_key.primary_key;
+    
+    let cursor = Cursor::new(keyring_content.as_bytes());
+    let signature = DetachedSignature::sign_binary_data(
+        &mut rng,
+        primary_key,
+        &passphrase,
+        HashAlgorithm::Sha256,
+        cursor,
+    ).context("Failed to create detached signature")?;
+    
+    let armored = signature.to_armored_string(Default::default())
+        .context("Failed to armor signature")?;
+    
+    Ok(armored)
+}
+
+/// Verifies a keyring signature against the content using a public key.
+pub fn verify_keyring_signature(keyring_content: &str, signature: &str, signing_key: &SignedPublicKey) -> Result<()> {
+    let (sig, _headers) = DetachedSignature::from_string(signature)
+        .context("Failed to parse signature")?;
+    
+    sig.verify(&signing_key.primary_key, keyring_content.as_bytes())
+        .context("Signature verification failed")?;
+    
+    Ok(())
+}
+
+/// Extracts the signature section from a keyring text.
+pub fn extract_signature_from_keyring(keyring_text: &str) -> Result<String> {
+    let sig_begin = keyring_text
+        .find("-----BEGIN PGP SIGNATURE-----")
+        .context("No PGP signature found in keyring")?;
+    let sig_end = keyring_text
+        .find("-----END PGP SIGNATURE-----")
+        .context("No PGP signature end marker found")?;
+    Ok(keyring_text[sig_begin..sig_end + "-----END PGP SIGNATURE-----".len()].to_string())
+}
+
+/// Extracts the content to verify (everything up to and including END GIT-GPG KEYRING marker).
+pub fn extract_content_to_verify_from_keyring(keyring_text: &str) -> Result<String> {
+    let end_marker = "-----END GIT-GPG KEYRING-----";
+    let end_idx = keyring_text
+        .find(end_marker)
+        .context("No END GIT-GPG KEYRING marker found")?;
+    Ok(keyring_text[..end_idx + end_marker.len()].to_string())
+}
