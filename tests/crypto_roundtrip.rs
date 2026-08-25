@@ -45,13 +45,13 @@ fn generate_rsa_test_key() -> (SignedSecretKey, SignedPublicKey) {
     let mut rng = thread_rng();
 
     let encrypt_subkey = SubkeyParamsBuilder::default()
-        .key_type(pgp::composed::KeyType::Rsa(4096))
+        .key_type(pgp::composed::KeyType::Rsa(2048))
         .can_encrypt(EncryptionCaps::All)
         .build()
         .expect("build encrypt subkey params");
 
     let secret_key_params = SecretKeyParamsBuilder::default()
-        .key_type(pgp::composed::KeyType::Rsa(4096))
+        .key_type(pgp::composed::KeyType::Rsa(2048))
         .can_certify(true)
         .can_sign(true)
         .primary_user_id("test <test@example.com>".into())

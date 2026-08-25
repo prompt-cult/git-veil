@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-use crate::{get_git_config_email, default_gpg_home};
+use crate::get_git_config_email;
 
 /// Shows the current user's identity.
 pub fn cmd_whoami(email_override: Option<&str>, gpg_home: &PathBuf) -> Result<()> {

@@ -3,7 +3,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{derive_repo_id, get_remote_push_url, Keyring, TrackedFiles, find_private_key_by_email, decrypt_with_gpg_key, cmd_verify_keyring};
+use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email, Keyring, TrackedFiles};
 
 /// Decrypts all tracked files using the user's private key.
 pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
@@ -17,7 +17,7 @@ pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<
     let keyring = Keyring::parse(&keyring_text)?;
     
     // Find user's entry
-    let user_entry = keyring.find_by_email(email)
+    keyring.find_by_email(email)
         .with_context(|| format!("User {} not found in keyring", email))?;
     
     // Find user's private key

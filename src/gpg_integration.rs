@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use pgp::composed::{SignedPublicKey, SignedSecretKey, Deserializable};
+use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::types::{KeyDetails, Password};
-use pgp::crypto::hash::HashAlgorithm;
 use rand::thread_rng;
 use std::fs;
 use std::path::PathBuf;
@@ -12,7 +11,7 @@ pub fn default_gpg_home() -> PathBuf {
     PathBuf::from(home).join(".gnupg")
 }
 
-/// Imports an armored public key to the GPG home directory.
+/// Imports an armoured public key to the GPG home directory.
 pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<()> {
     fs::create_dir_all(gpg_home).context("Failed to create GPG home directory")?;
     let pubring_path = gpg_home.join("pubring.pgp");

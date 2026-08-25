@@ -3,7 +3,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{derive_repo_id, get_remote_push_url, Keyring, TrackedFiles, base64_decode_public_key, encrypt_to_gpg_key, cmd_verify_keyring};
+use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_key, Keyring, TrackedFiles};
 
 /// Encrypts all tracked files to all keys in the keyring.
 pub fn cmd_hide(remote_name: &str, gpg_home: &PathBuf) -> Result<()> {

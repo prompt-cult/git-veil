@@ -5,12 +5,7 @@
 
 use git_gpg::*;
 use std::path::PathBuf;
-use std::collections::HashMap;
 use pgp::composed::{SecretKeyParamsBuilder, SubkeyParamsBuilder, KeyType, EncryptionCaps};
-use pgp::types::Password;
-use pgp::crypto::hash::HashAlgorithm;
-use pgp::composed::MessageBuilder;
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use rand::thread_rng;
 use serial_test::serial;
 
@@ -535,7 +530,7 @@ fn test_verify_keyring_signature_invalid_tampering() {
 #[test]
 #[serial]
 fn test_verify_keyring_signature_wrong_key() {
-    let (secret_key_alice, public_key_alice) = generate_test_key("alice@example.com");
+    let (secret_key_alice, _public_key_alice) = generate_test_key("alice@example.com");
     let (_secret_key_bob, public_key_bob) = generate_test_key("bob@example.com");
     let keyring_content = "test keyring content";
     let signature = sign_keyring_content(keyring_content, &secret_key_alice).expect("signing should succeed");
@@ -709,7 +704,7 @@ fn test_decrypt_with_gpg_key() {
 #[test]
 #[serial]
 fn test_custom_gpg_home_location() {
-    let temp = tempfile::tempdir().unwrap();
+    let _temp = tempfile::tempdir().unwrap();
     let home = default_gpg_home();
     assert!(home.exists() || home.to_str().unwrap().contains(".gnupg"));
 }
@@ -2144,7 +2139,7 @@ fn test_full_workflow_add_collaborator() {
     
     // Sign keyring
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret).expect("signing should succeed");
+    let _signature = sign_keyring_content(&content, &owner_secret).expect("signing should succeed");
     
     assert!(keyring.entries.len() == 2);
 }
@@ -2160,7 +2155,7 @@ fn test_full_workflow_collaborator_clone_and_reveal() {
     
     // Generate keys
     let (owner_secret, owner_public) = generate_test_key("owner@example.com");
-    let (collab_secret, collab_public) = generate_test_key("collab@example.com");
+    let (_collab_secret, collab_public) = generate_test_key("collab@example.com");
     
     // Create keyring
     let mut keyring = Keyring::new();
@@ -2310,7 +2305,7 @@ fn test_custom_gpg_home_workflow() {
     let custom_gpg_home = temp.path().join("custom-gpg");
     std::fs::create_dir_all(&custom_gpg_home).unwrap();
     
-    let (secret_key, public_key) = generate_test_key("alice@example.com");
+    let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
     
     // Import to custom GPG home

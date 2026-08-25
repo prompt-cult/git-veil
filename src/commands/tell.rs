@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, base64_encode_public_key, Keyring, sign_keyring_content, find_private_key_by_email, TrustStore, derive_repo_id, get_remote_push_url, verify_keyring_signature, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
+use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, extract_key_fingerprint, find_private_key_by_email, get_remote_push_url, parse_armored_public_key, sign_keyring_content, Keyring, TrustStore};
 
 /// Adds a collaborator's public key to the keyring and signs it.
 pub fn cmd_tell(email: &str, collaborator_key_path: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
@@ -13,7 +13,7 @@ pub fn cmd_tell(email: &str, collaborator_key_path: &str, remote_name: &str, gpg
     
     let trust_path = PathBuf::from(".git-gpg/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
+    trust_store.get_trusted_fingerprint(&repo_id)
         .context("No trust established for this repository. Run 'git gpg trust' first.")?;
     
     // Read and parse collaborator key

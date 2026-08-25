@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{Keyring, BEGIN_MARKER, END_MARKER};
+use crate::Keyring;
 
-/// Initializes a new git-gpg repository structure.
+/// Initialises a new git-gpg repository structure.
 pub fn cmd_init() -> Result<()> {
     let git_gpg_dir = PathBuf::from(".git-gpg");
     let secrets_dir = git_gpg_dir.join("secrets");
