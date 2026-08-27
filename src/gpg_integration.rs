@@ -54,7 +54,7 @@ const PRIVATE_KEY_END_MARKER: &str = "-----END PGP PRIVATE KEY BLOCK-----";
 /// marker and no END marker means the secring is corrupt (e.g. truncated
 /// by a partial write or bad merge), which is a hard error: silently
 /// dropping the tail would let an attacker remove keys by truncation.
-fn split_armored_private_key_blocks(
+pub(crate) fn split_armored_private_key_blocks(
     content: &str,
     secring_path: &std::path::Path,
 ) -> Result<Vec<String>> {

@@ -15,6 +15,7 @@ pub use commands::add::cmd_add;
 pub use commands::clean::cmd_clean;
 pub use commands::hide::cmd_hide;
 pub use commands::init::cmd_init;
+pub use commands::import::cmd_import;
 pub use commands::list::cmd_list;
 pub use commands::list_keys::cmd_list_keys;
 pub use commands::remove::cmd_remove;

@@ -1,4 +1,5 @@
 pub mod init;
+pub mod import;
 pub mod trust;
 pub mod tell;
 pub mod show_repo_id;

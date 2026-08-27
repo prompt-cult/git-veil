@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use git_gpg::{
-    cmd_init, cmd_trust, cmd_tell, cmd_add, cmd_remove, cmd_list,
+    cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_add, cmd_remove, cmd_list,
     cmd_hide, cmd_reveal, cmd_clean, cmd_show_repo_id, cmd_whoami,
     cmd_verify_keyring, cmd_list_keys, default_gpg_home,
 };
@@ -26,6 +26,16 @@ struct Cli {
 enum Commands {
     /// Initialize git-gpg in the current repository
     Init,
+
+    /// Import your private key(s) into the git-gpg key store
+    Import {
+        /// File(s) containing armoured private key blocks
+        #[arg(required = true)]
+        files: Vec<String>,
+        /// GPG home directory
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+    },
 
     /// Establish trust for a repository by verifying the owner's signing key
     Trust {
@@ -138,6 +148,9 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init => cmd_init()?,
+        Commands::Import { files, gpg_home: opt } => {
+            cmd_import(&files, &opt.unwrap_or(gpg_home))?;
+        }
         Commands::Trust { repo_id, signing_key, remote, gpg_home: opt } => {
             cmd_trust(&repo_id, &signing_key, &remote, &opt.unwrap_or(gpg_home))?;
         }
