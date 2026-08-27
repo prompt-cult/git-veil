@@ -1510,7 +1510,7 @@ fn test_add_multiple_files_to_tracked_json() {
 
 #[test]
 #[serial]
-fn test_add_stores_absolute_paths() {
+fn test_add_stores_repo_relative_paths() {
     let temp = tempfile::tempdir().unwrap();
     std::env::set_current_dir(temp.path()).unwrap();
     std::process::Command::new("git").args(&["init"]).output().unwrap();
@@ -1664,7 +1664,7 @@ fn test_list_multiple_files() {
 
 #[test]
 #[serial]
-fn test_list_displays_absolute_paths() {
+fn test_list_displays_tracked_paths() {
     let temp = tempfile::tempdir().unwrap();
     std::env::set_current_dir(temp.path()).unwrap();
     std::process::Command::new("git").args(&["init"]).output().unwrap();

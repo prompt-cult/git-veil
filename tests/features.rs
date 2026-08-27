@@ -4,9 +4,10 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring, extract_content_to_verify_from_keyring,
-    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
-    sign_keyring_content, Keyring, KeyringEntry, TrustStore,
+    cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring,
+    encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
+    find_private_key_by_email, find_private_key_by_fingerprint, sign_keyring_content, Keyring,
+    KeyringEntry, TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -414,4 +415,257 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
     trust_result.expect("cmd_trust must succeed on a fresh repo");
     tell_result.expect("cmd_tell must succeed on a fresh repo");
     verify_result.expect("cmd_verify_keyring must succeed after trust and tell");
+}
+
+// ============================================================================
+// C2/M4: tracked paths are repo-relative and validated at every boundary
+// ============================================================================
+
+fn init_git_repo_in_cwd() {
+    let status = std::process::Command::new("git")
+        .args(["init"])
+        .status()
+        .expect("run git init");
+    assert!(status.success(), "git init failed");
+    cmd_init().expect("cmd_init must succeed");
+}
+
+fn write_tracked_json(files: &[&str]) {
+    let entries: Vec<String> = files.iter().map(|f| format!("\"{}\"", f)).collect();
+    let content = format!("{{\n  \"files\": [{}]\n}}", entries.join(", "));
+    std::fs::create_dir_all(".git-gpg").unwrap();
+    std::fs::write(".git-gpg/tracked.json", content).unwrap();
+}
+
+/// Sets up a repo where the trusted owner key is also a keyring entry, so a
+/// full add -> hide -> reveal flow can run with the owner's own keypair.
+fn setup_repo_with_owner_in_keyring()
+-> (tempfile::TempDir, PathBuf, pgp::composed::SignedPublicKey) {
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let gpg_home = repo_temp.path().join("gpg-home");
+
+    cmd_trust(
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    write_multi_key_secring(&gpg_home, &[owner_sec]);
+
+    cmd_tell(
+        "owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed");
+
+    (repo_temp, gpg_home, owner_pub)
+}
+
+#[test]
+#[serial]
+fn tracked_files_load_rejects_absolute_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
+    std::fs::create_dir_all(tracked_path.parent().unwrap()).unwrap();
+    std::fs::write(&tracked_path, r#"{"files":["/etc/passwd"]}"#).unwrap();
+
+    let result = TrackedFiles::load(&tracked_path);
+
+    let err = result.err().expect("absolute tracked path must be rejected");
+    assert!(
+        err.to_string().contains("/etc/passwd"),
+        "error must name the offending path, got: {}",
+        err
+    );
+}
+
+#[test]
+#[serial]
+fn tracked_files_load_rejects_dotdot_components() {
+    let temp = tempfile::tempdir().unwrap();
+    let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
+    std::fs::create_dir_all(tracked_path.parent().unwrap()).unwrap();
+    std::fs::write(&tracked_path, r#"{"files":["../escape.txt"]}"#).unwrap();
+
+    let result = TrackedFiles::load(&tracked_path);
+
+    let err = result
+        .err()
+        .expect("tracked path with a .. component must be rejected");
+    assert!(
+        err.to_string().contains("../escape.txt"),
+        "error must name the offending path, got: {}",
+        err
+    );
+}
+
+#[test]
+#[serial]
+fn add_stores_repo_relative_paths() {
+    let original_dir = std::env::current_dir().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    std::env::set_current_dir(temp.path()).unwrap();
+    init_git_repo_in_cwd();
+
+    std::fs::write("secret.env", "s3cret").unwrap();
+    let result = cmd_add(vec!["secret.env".to_string()]);
+
+    let tracked_content = std::fs::read_to_string(temp.path().join(".git-gpg/tracked.json"))
+        .expect("tracked.json must exist after add");
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    result.expect("cmd_add must succeed for a file inside the repo");
+    assert!(
+        tracked_content.contains("\"secret.env\""),
+        "tracked.json must store the repo-relative path, got: {}",
+        tracked_content
+    );
+    assert!(
+        !tracked_content.contains(temp.path().to_str().unwrap()),
+        "tracked.json must not contain absolute paths, got: {}",
+        tracked_content
+    );
+}
+
+#[test]
+#[serial]
+fn add_rejects_file_outside_repo() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = tempfile::tempdir().unwrap();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+    init_git_repo_in_cwd();
+
+    let outside = tempfile::tempdir().unwrap();
+    let outside_file = outside.path().join("outside.env");
+    std::fs::write(&outside_file, "nope").unwrap();
+
+    let result = cmd_add(vec![outside_file.to_str().unwrap().to_string()]);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_err(),
+        "cmd_add must reject a file outside the repository: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+#[serial]
+fn remove_rejects_file_outside_repo() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = tempfile::tempdir().unwrap();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+    init_git_repo_in_cwd();
+
+    let outside = tempfile::tempdir().unwrap();
+    let outside_file = outside.path().join("outside.env");
+    std::fs::write(&outside_file, "nope").unwrap();
+
+    let result = cmd_remove(vec![outside_file.to_str().unwrap().to_string()]);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_err(),
+        "cmd_remove must reject a file outside the repository: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+#[serial]
+fn reveal_refuses_escaping_tracked_path() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write("secret.env", "topsecret").unwrap();
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    assert!(
+        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
+        "hide must write the ciphertext into .git-gpg/secrets"
+    );
+
+    // Attacker (any repo writer) tampers with the committed tracked.json to
+    // point one level above the repo root, and commits a ciphertext that
+    // decrypts with the victim's key. join("../outside.txt") under
+    // .git-gpg/secrets lands at .git-gpg/outside.txt.asc.
+    write_tracked_json(&["../outside.txt"]);
+    let ciphertext = encrypt_to_gpg_key(b"pwned", &owner_pub).unwrap();
+    std::fs::write(".git-gpg/outside.txt.asc", ciphertext).unwrap();
+
+    let target = repo_temp
+        .path()
+        .parent()
+        .unwrap()
+        .join("outside.txt");
+    let _ = std::fs::remove_file(&target);
+
+    let result = cmd_reveal("owner@github.com", "origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let target_exists = target.exists();
+    let _ = std::fs::remove_file(&target);
+
+    assert!(
+        result.is_err(),
+        "reveal must refuse an escaping tracked path: {:?}",
+        result.err()
+    );
+    assert!(
+        !target_exists,
+        "reveal must not write outside the repository, but {} was created",
+        target.display()
+    );
+}
+
+#[test]
+#[serial]
+fn symlink_outside_repo_is_rejected() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = tempfile::tempdir().unwrap();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+    init_git_repo_in_cwd();
+
+    let outside = tempfile::tempdir().unwrap();
+    let outside_file = outside.path().join("target.env");
+    std::fs::write(&outside_file, "outside").unwrap();
+    std::os::unix::fs::symlink(&outside_file, repo_temp.path().join("link.env")).unwrap();
+
+    let result = cmd_add(vec!["link.env".to_string()]);
+
+    let tracked_content = std::fs::read_to_string(repo_temp.path().join(".git-gpg/tracked.json"))
+        .expect("tracked.json must exist");
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_err(),
+        "cmd_add must reject a symlink whose target is outside the repo: {:?}",
+        result.err()
+    );
+    assert!(
+        outside_file.exists(),
+        "the symlink target outside the repo must be untouched"
+    );
+    assert!(
+        !tracked_content.contains("link.env"),
+        "escaping symlink must not be tracked, got: {}",
+        tracked_content
+    );
 }

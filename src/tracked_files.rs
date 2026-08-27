@@ -1,12 +1,52 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
+
+const SECRETS_DIR: &str = ".git-gpg/secrets";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrackedFiles {
     pub files: Vec<PathBuf>,
+}
+
+/// Validates that a tracked path is a safe repo-relative path.
+///
+/// Tracked paths must be relative, must contain no `..` (or other
+/// non-normal) components, and — as defence in depth — must stay inside
+/// `.git-gpg/secrets` when joined under it. This is the shared boundary
+/// check used when loading tracked.json and before any path use in
+/// hide/reveal, so a malicious tracked.json (committed by any repo writer)
+/// cannot make git-gpg read or write outside the repository.
+pub fn validate_tracked_path(path: &Path) -> Result<()> {
+    if path.as_os_str().is_empty() {
+        anyhow::bail!("Tracked path is empty");
+    }
+    if path.is_absolute() {
+        anyhow::bail!(
+            "Tracked path must be relative, got absolute path: {}",
+            path.display()
+        );
+    }
+    for component in path.components() {
+        match component {
+            Component::Normal(_) => {}
+            other => anyhow::bail!(
+                "Tracked path contains forbidden {:?} component: {}",
+                other,
+                path.display()
+            ),
+        }
+    }
+    let joined = PathBuf::from(SECRETS_DIR).join(path);
+    if !joined.starts_with(SECRETS_DIR) {
+        anyhow::bail!(
+            "Tracked path escapes the secrets directory: {}",
+            path.display()
+        );
+    }
+    Ok(())
 }
 
 impl TrackedFiles {
@@ -18,6 +58,10 @@ impl TrackedFiles {
             .context("Failed to read tracked files")?;
         let tracked: TrackedFiles = serde_json::from_str(&content)
             .context("Failed to parse tracked files JSON")?;
+        for file in &tracked.files {
+            validate_tracked_path(file)
+                .with_context(|| format!("Invalid tracked file entry: {}", file.display()))?;
+        }
         Ok(tracked)
     }
 
