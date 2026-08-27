@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, extract_key_fingerprint, find_private_key_by_email, get_remote_push_url, parse_armored_public_key, sign_keyring_content, Keyring, TrustStore};
+use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, extract_key_fingerprint, find_private_key_by_email, get_remote_push_url, parse_armored_public_key, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
 
 /// Adds a collaborator's public key to the keyring and signs it.
 pub fn cmd_tell(email: &str, collaborator_key_path: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
@@ -15,6 +15,13 @@ pub fn cmd_tell(email: &str, collaborator_key_path: &str, remote_name: &str, gpg
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     trust_store.get_trusted_fingerprint(&repo_id)
         .context("No trust established for this repository. Run 'git gpg trust' first.")?;
+    
+    // Verify the existing keyring signature against the trusted key BEFORE any
+    // mutation. An unsigned keyring is only acceptable when it has zero entries
+    // (the fresh-init state); a keyring containing entries must already carry a
+    // valid signature from the trusted key, otherwise tell would launder trust
+    // by re-signing attacker-supplied content.
+    verify_keyring_against_trust(remote_name, gpg_home)?;
     
     // Read and parse collaborator key
     let key_content = fs::read_to_string(collaborator_key_path)

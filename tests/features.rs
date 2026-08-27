@@ -3,7 +3,10 @@
 //! Each test targets one named contract. Tests here are written Red/Green:
 //! they must fail against the code they were written to fix, and pass after.
 
-use git_gpg::{cmd_init, cmd_trust, extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint};
+use git_gpg::{
+    cmd_init, cmd_tell, cmd_trust, extract_key_fingerprint, find_private_key_by_email,
+    find_private_key_by_fingerprint, sign_keyring_content, Keyring, KeyringEntry,
+};
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use serial_test::serial;
@@ -182,5 +185,156 @@ fn trust_rejects_key_without_owner_email() {
         err.to_string().contains("owner@github.com"),
         "error must come from the owner-email check, got: {}",
         err
+    );
+}
+
+// ============================================================================
+// Tell must not launder trust (C1): verify incoming keyring signature first
+// ============================================================================
+
+/// Sets up a repo with trust established for owner@github.com and a gpg home
+/// containing the owner key (pubring, via cmd_trust) plus the given secret keys
+/// in the secring. Returns (repo_temp, gpg_home).
+fn setup_trusted_repo_with_secring(
+    secret_keys: &[pgp::composed::SignedSecretKey],
+) -> (tempfile::TempDir, PathBuf) {
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let gpg_home = repo_temp.path().join("gpg-home");
+
+    cmd_trust(
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    let mut secring_keys: Vec<pgp::composed::SignedSecretKey> = vec![owner_sec];
+    secring_keys.extend_from_slice(secret_keys);
+    write_multi_key_secring(&gpg_home, &secring_keys);
+
+    (repo_temp, gpg_home)
+}
+
+#[test]
+#[serial]
+fn tell_rejects_unsigned_keyring_containing_entries() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    // Overwrite the keyring with a well-formed but UNSIGNED keyring that
+    // already contains an attacker entry.
+    let unsigned_keyring = Keyring {
+        entries: vec![KeyringEntry {
+            email: "attacker@evil.com".to_string(),
+            base64_key: "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+            fingerprint: "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234".to_string(),
+        }],
+        signature: None,
+    };
+    std::fs::write(".git-gpg/keyring", unsigned_keyring.serialize()).unwrap();
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    let result = cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    );
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_err(),
+        "tell must reject an unsigned keyring that already contains entries"
+    );
+}
+
+#[test]
+#[serial]
+fn tell_rejects_keyring_signed_by_wrong_key() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    // Forge a keyring containing a third-party entry, signed by a key that is
+    // NOT the trusted owner key.
+    let (mallory_sec, mallory_pub) = generate_test_key("mallory@evil.com");
+    let mut forged = Keyring {
+        entries: vec![KeyringEntry {
+            email: "mallory@evil.com".to_string(),
+            base64_key: "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+            fingerprint: extract_key_fingerprint(&mallory_pub),
+        }],
+        signature: None,
+    };
+    let signature = sign_keyring_content(&forged.serialize(), &mallory_sec)
+        .expect("mallory must be able to sign her own keyring");
+    forged.signature = Some(signature);
+    std::fs::write(".git-gpg/keyring", forged.serialize()).unwrap();
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    let result = cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    );
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_err(),
+        "tell must reject a keyring signed by a non-trusted key"
+    );
+}
+
+#[test]
+#[serial]
+fn tell_first_entry_on_fresh_repo_succeeds() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    let result = cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    );
+
+    let keyring_text =
+        std::fs::read_to_string(".git-gpg/keyring").expect("keyring must exist after tell");
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_ok(),
+        "first tell on a fresh repo (zero-entry unsigned keyring) must succeed: {:?}",
+        result.err()
+    );
+    assert!(
+        keyring_text.contains("alice@example.com"),
+        "keyring must contain alice's entry after tell"
+    );
+    assert!(
+        keyring_text.contains("-----BEGIN PGP SIGNATURE-----"),
+        "keyring must be signed after tell"
     );
 }
