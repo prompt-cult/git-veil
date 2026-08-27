@@ -25,8 +25,8 @@ impl TrustStore {
         self.trusted_keys.get(repo_id).map(|s| s.as_str())
     }
 
-    pub fn serialize(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_default()
+    pub fn serialize(&self) -> Result<String> {
+        serde_json::to_string_pretty(self).map_err(Into::into)
     }
 
     pub fn deserialize(content: &str) -> Result<Self> {
@@ -35,7 +35,7 @@ impl TrustStore {
     }
 
     pub fn save_to_file(&self, path: &PathBuf) -> Result<()> {
-        let content = self.serialize();
+        let content = self.serialize()?;
         fs::write(path, content)?;
         Ok(())
     }

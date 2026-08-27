@@ -349,7 +349,7 @@ fn test_trust_store_update_existing_trust() {
 fn test_trust_store_serialize_to_json() {
     let mut store = TrustStore::new();
     store.add_trust("repo+user@github.com".into(), "ABC123".into());
-    let json = store.serialize();
+    let json = store.serialize().unwrap();
     assert!(json.contains("repo+user@github.com"));
     assert!(json.contains("ABC123"));
 }

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::Keyring;
+use crate::{Keyring, TrackedFiles, TrustStore};
 
 /// Initialises a new git-gpg repository structure.
 pub fn cmd_init() -> Result<()> {
@@ -19,12 +19,16 @@ pub fn cmd_init() -> Result<()> {
     fs::write(git_gpg_dir.join("keyring"), keyring_content)
         .context("Failed to create keyring file")?;
     
-    // Create empty trust.json
-    fs::write(git_gpg_dir.join("trust.json"), "{}")
+    // Create empty trust.json via the type's own API (single source of truth
+    // for the on-disk format)
+    TrustStore::default()
+        .save_to_file(&git_gpg_dir.join("trust.json"))
         .context("Failed to create trust.json")?;
-    
-    // Create empty tracked.json
-    fs::write(git_gpg_dir.join("tracked.json"), r#"{"files":[]}"#)
+
+    // Create empty tracked.json via the type's own API (single source of
+    // truth for the on-disk format)
+    TrackedFiles::default()
+        .save(&git_gpg_dir.join("tracked.json"))
         .context("Failed to create tracked.json")?;
     
     // Add .git-gpg/secrets to .gitignore if not already present

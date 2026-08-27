@@ -4,8 +4,9 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    cmd_init, cmd_tell, cmd_trust, extract_key_fingerprint, find_private_key_by_email,
-    find_private_key_by_fingerprint, sign_keyring_content, Keyring, KeyringEntry,
+    cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring, extract_content_to_verify_from_keyring,
+    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
+    sign_keyring_content, Keyring, KeyringEntry, TrustStore,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -269,7 +270,8 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
     // Forge a keyring containing a third-party entry, signed by a key that is
-    // NOT the trusted owner key.
+    // NOT the trusted owner key. Sign the canonical content verify_keyring
+    // extracts, so rejection is attributable to the signer's identity alone.
     let (mallory_sec, mallory_pub) = generate_test_key("mallory@evil.com");
     let mut forged = Keyring {
         entries: vec![KeyringEntry {
@@ -279,7 +281,10 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
         }],
         signature: None,
     };
-    let signature = sign_keyring_content(&forged.serialize(), &mallory_sec)
+    let serialized = forged.serialize();
+    let content_to_sign = extract_content_to_verify_from_keyring(&serialized)
+        .expect("freshly serialized keyring must contain the END marker");
+    let signature = sign_keyring_content(&content_to_sign, &mallory_sec)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
     std::fs::write(".git-gpg/keyring", forged.serialize()).unwrap();
@@ -337,4 +342,76 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
         keyring_text.contains("-----BEGIN PGP SIGNATURE-----"),
         "keyring must be signed after tell"
     );
+}
+
+// ============================================================================
+// Init produces loadable, canonical store files
+// ============================================================================
+
+#[test]
+#[serial]
+fn init_creates_loadable_trust_store() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let loaded = TrustStore::load_from_file(&PathBuf::from(".git-gpg/trust.json"));
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let store = loaded.expect("trust.json written by init must load via TrustStore");
+    assert!(
+        store.trusted_keys.is_empty(),
+        "a freshly initialised trust store must be empty"
+    );
+}
+
+// ============================================================================
+// Fresh repo multi-command happy path: init -> trust -> tell -> verify
+// ============================================================================
+
+#[test]
+#[serial]
+fn fresh_repo_init_trust_tell_verify_happy_path() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let gpg_home = repo_temp.path().join("gpg-home");
+
+    let trust_result = cmd_trust(
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    );
+
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    write_multi_key_secring(&gpg_home, &[owner_sec, alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    let tell_result = cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    );
+
+    let verify_result = cmd_verify_keyring("origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    trust_result.expect("cmd_trust must succeed on a fresh repo");
+    tell_result.expect("cmd_tell must succeed on a fresh repo");
+    verify_result.expect("cmd_verify_keyring must succeed after trust and tell");
 }
