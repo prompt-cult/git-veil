@@ -50,19 +50,29 @@ const PRIVATE_KEY_END_MARKER: &str = "-----END PGP PRIVATE KEY BLOCK-----";
 /// Splits file content into individual armoured private key blocks.
 ///
 /// A secring may hold several keys, each as its own armoured block.
-fn split_armored_private_key_blocks(content: &str) -> Vec<String> {
+/// Garbage between complete blocks is ignored, but a block with a BEGIN
+/// marker and no END marker means the secring is corrupt (e.g. truncated
+/// by a partial write or bad merge), which is a hard error: silently
+/// dropping the tail would let an attacker remove keys by truncation.
+fn split_armored_private_key_blocks(
+    content: &str,
+    secring_path: &std::path::Path,
+) -> Result<Vec<String>> {
     let mut blocks = Vec::new();
     let mut rest = content;
     while let Some(start) = rest.find(PRIVATE_KEY_BEGIN_MARKER) {
         let after = &rest[start..];
         let end = match after.find(PRIVATE_KEY_END_MARKER) {
             Some(e) => e + PRIVATE_KEY_END_MARKER.len(),
-            None => break,
+            None => anyhow::bail!(
+                "Unterminated private key block in {} (corrupt secring)",
+                secring_path.display()
+            ),
         };
         blocks.push(after[..end].to_string());
         rest = &after[end..];
     }
-    blocks
+    Ok(blocks)
 }
 
 /// Loads and parses every private key in the GPG home directory.
@@ -71,7 +81,7 @@ fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
     let content = fs::read_to_string(&secring_path)
         .context("Failed to read secring.pgp")?;
 
-    let blocks = split_armored_private_key_blocks(&content);
+    let blocks = split_armored_private_key_blocks(&content, &secring_path)?;
     if blocks.is_empty() {
         anyhow::bail!("No private key blocks found in {}", secring_path.display());
     }

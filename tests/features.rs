@@ -175,6 +175,89 @@ fn find_private_key_by_email_ignores_garbage_between_blocks() {
 }
 
 #[test]
+fn find_private_key_by_email_errors_on_truncated_final_block() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (alice, _) = generate_test_key("alice@example.com");
+    let (bob, _) = generate_test_key("bob@example.com");
+    let alice_armored = alice.to_armored_string(Default::default()).unwrap();
+    let bob_armored = bob.to_armored_string(Default::default()).unwrap();
+    let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
+    let truncated_bob = bob_armored[..bob_armored.find(end_marker).unwrap()].to_string();
+    let content = format!("{}\n{}", alice_armored, truncated_bob);
+    write_secring_content(&gpg_home, &content);
+
+    let bob_result = find_private_key_by_email(&gpg_home, "bob@example.com");
+
+    let bob_err = bob_result.err().expect(
+        "a secring whose final block is truncated must not yield any key",
+    );
+    assert!(
+        bob_err.to_string().contains("Unterminated private key block"),
+        "the error must name the unterminated block, not the misleading 'No secret key found for email', got: {}",
+        bob_err
+    );
+    assert!(
+        bob_err.to_string().contains("corrupt secring"),
+        "the error must state the secring is corrupt, got: {}",
+        bob_err
+    );
+    assert!(
+        bob_err.to_string().contains("secring.pgp"),
+        "the error must mention the secring file, got: {}",
+        bob_err
+    );
+    assert!(
+        !bob_err.to_string().contains("No secret key found for email"),
+        "the error must not be indistinguishable from 'email never existed', got: {}",
+        bob_err
+    );
+
+    // A corrupt tail invalidates the whole secring: for a secrets tool the
+    // safe choice is to reject every key rather than silently serve the
+    // healthy-looking prefix, because truncation may itself be an attack
+    // (an attacker who can truncate the secring must not be able to quietly
+    // remove keys from use).
+    let alice_result = find_private_key_by_email(&gpg_home, "alice@example.com");
+
+    let alice_err = alice_result.err().expect(
+        "a corrupt secring must be rejected in full: even keys before the truncated tail must not be served",
+    );
+    assert!(
+        alice_err.to_string().contains("Unterminated private key block"),
+        "alice's lookup must fail with the corrupt-secring error too, got: {}",
+        alice_err
+    );
+}
+
+#[test]
+fn find_private_key_by_email_errors_on_truncated_only_secring() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (alice, _) = generate_test_key("alice@example.com");
+    let alice_armored = alice.to_armored_string(Default::default()).unwrap();
+    let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
+    let truncated = alice_armored[..alice_armored.find(end_marker).unwrap()].to_string();
+    write_secring_content(&gpg_home, &truncated);
+
+    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+
+    let err = result
+        .err()
+        .expect("a secring holding only a truncated block must not yield any key");
+    assert!(
+        err.to_string().contains("Unterminated private key block"),
+        "the error must name the unterminated block, got: {}",
+        err
+    );
+    assert!(
+        !err.to_string().contains("No private key blocks found"),
+        "the error must not misleadingly claim no blocks were found, got: {}",
+        err
+    );
+}
+
+#[test]
 fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
