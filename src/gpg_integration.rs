@@ -44,42 +44,67 @@ pub fn export_key_from_gpg_home(gpg_home: &PathBuf, identifier: &str) -> Result<
     }
 }
 
-/// Finds a private key by email in the GPG home directory.
-pub fn find_private_key_by_email(gpg_home: &PathBuf, email: &str) -> Result<SignedSecretKey> {
+const PRIVATE_KEY_BEGIN_MARKER: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----";
+const PRIVATE_KEY_END_MARKER: &str = "-----END PGP PRIVATE KEY BLOCK-----";
+
+/// Splits file content into individual armoured private key blocks.
+///
+/// A secring may hold several keys, each as its own armoured block.
+fn split_armored_private_key_blocks(content: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut rest = content;
+    while let Some(start) = rest.find(PRIVATE_KEY_BEGIN_MARKER) {
+        let after = &rest[start..];
+        let end = match after.find(PRIVATE_KEY_END_MARKER) {
+            Some(e) => e + PRIVATE_KEY_END_MARKER.len(),
+            None => break,
+        };
+        blocks.push(after[..end].to_string());
+        rest = &after[end..];
+    }
+    blocks
+}
+
+/// Loads and parses every private key in the GPG home directory.
+fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
     let secring_path = gpg_home.join("secring.pgp");
     let content = fs::read_to_string(&secring_path)
         .context("Failed to read secring.pgp")?;
-    
-    // Parse the key and check if email matches
-    let (key, _headers) = SignedSecretKey::from_string(&content)
-        .context("Failed to parse secret key")?;
-    
-    let identities: Vec<String> = key.details.users.iter()
-        .map(|u| u.id.to_string())
-        .collect();
-    
-    if identities.iter().any(|id| id.contains(email)) {
-        Ok(key)
-    } else {
-        anyhow::bail!("No secret key found for email: {}", email)
+
+    let blocks = split_armored_private_key_blocks(&content);
+    if blocks.is_empty() {
+        anyhow::bail!("No private key blocks found in {}", secring_path.display());
     }
+
+    blocks
+        .iter()
+        .map(|block| {
+            let (key, _headers) = SignedSecretKey::from_string(block)
+                .context("Failed to parse secret key")?;
+            Ok(key)
+        })
+        .collect()
+}
+
+/// Finds a private key by email in the GPG home directory.
+pub fn find_private_key_by_email(gpg_home: &PathBuf, email: &str) -> Result<SignedSecretKey> {
+    let keys = load_secret_keys(gpg_home)?;
+
+    keys.into_iter()
+        .find(|key| {
+            key.details.users.iter().any(|u| u.id.to_string().contains(email))
+        })
+        .ok_or_else(|| anyhow::anyhow!("No secret key found for email: {}", email))
 }
 
 /// Finds a private key by fingerprint in the GPG home directory.
 pub fn find_private_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Result<SignedSecretKey> {
-    let secring_path = gpg_home.join("secring.pgp");
-    let content = fs::read_to_string(&secring_path)
-        .context("Failed to read secring.pgp")?;
-    
-    let (key, _headers) = SignedSecretKey::from_string(&content)
-        .context("Failed to parse secret key")?;
-    
-    let key_fp = key.fingerprint().to_string();
-    if key_fp.to_uppercase() == fingerprint.to_uppercase() {
-        Ok(key)
-    } else {
-        anyhow::bail!("No secret key found for fingerprint: {}", fingerprint)
-    }
+    let keys = load_secret_keys(gpg_home)?;
+
+    let wanted = fingerprint.to_uppercase();
+    keys.into_iter()
+        .find(|key| key.fingerprint().to_string().to_uppercase() == wanted)
+        .ok_or_else(|| anyhow::anyhow!("No secret key found for fingerprint: {}", fingerprint))
 }
 
 /// Decrypts ciphertext using a private key.
