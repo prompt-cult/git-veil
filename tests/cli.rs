@@ -1,0 +1,206 @@
+//! CLI end-to-end tests.
+//!
+//! These spawn the real `git-gpg` binary via assert_cmd. Each test builds its
+//! own temporary git repository and fake $HOME, so every child process gets an
+//! isolated GNUPGHOME ($HOME/.gnupg) without touching the test process's
+//! working directory or environment — hence no #[serial] is needed.
+
+use assert_cmd::Command;
+use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
+use rand::thread_rng;
+use std::path::Path;
+
+fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+    let mut rng = thread_rng();
+
+    let encrypt_subkey = SubkeyParamsBuilder::default()
+        .key_type(KeyType::X25519)
+        .can_encrypt(EncryptionCaps::All)
+        .build()
+        .expect("build encrypt subkey params");
+
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id(format!("Test User <{}>", email))
+        .passphrase(None)
+        .subkeys(vec![encrypt_subkey])
+        .build()
+        .expect("build key params");
+
+    let secret_key = params.generate(&mut rng).expect("generate key");
+    let public_key = secret_key.to_public_key();
+
+    (secret_key, public_key)
+}
+
+fn write_multi_key_secring(gpg_home: &Path, keys: &[pgp::composed::SignedSecretKey]) {
+    let mut content = String::new();
+    for key in keys {
+        if !content.is_empty() {
+            content.push('\n');
+        }
+        content.push_str(&key.to_armored_string(Default::default()).unwrap());
+    }
+    std::fs::create_dir_all(gpg_home).unwrap();
+    std::fs::write(gpg_home.join("secring.pgp"), content).unwrap();
+}
+
+fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Path) {
+    let armored = public_key.to_armored_string(Default::default()).unwrap();
+    std::fs::write(path, armored).unwrap();
+}
+
+fn git(repo: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .current_dir(repo)
+        .args(args)
+        .status()
+        .expect("run git");
+    assert!(status.success(), "git {:?} failed", args);
+}
+
+fn run(repo: &Path, home: &Path, args: &[&str]) -> std::process::Output {
+    Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .current_dir(repo)
+        .env("HOME", home)
+        .args(args)
+        .output()
+        .expect("run git-gpg")
+}
+
+/// Builds a temp repo (with origin remote and local user.email) plus a fake
+/// home holding the owner + collaborator secring, runs the full CLI flow
+/// init -> trust -> tell -> add -> hide, and returns (repo_temp, home_temp).
+fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+
+    git(repo_temp.path(), &["init"]);
+    git(
+        repo_temp.path(),
+        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    );
+    git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+
+    write_multi_key_secring(&home_temp.path().join(".gnupg"), &[owner_sec, alice_sec]);
+
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
+    assert!(out.status.success(), "init failed: {:?}", out.stderr);
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["trust", "repo+owner@github.com", "owner.pub"],
+    );
+    assert!(out.status.success(), "trust failed: {:?}", out.stderr);
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["tell", "alice@example.com", "alice.pub"],
+    );
+    assert!(out.status.success(), "tell failed: {:?}", out.stderr);
+
+    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
+    let out = run(repo_temp.path(), home_temp.path(), &["add", "secret.env"]);
+    assert!(out.status.success(), "add failed: {:?}", out.stderr);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["hide"]);
+    assert!(out.status.success(), "hide failed: {:?}", out.stderr);
+    assert!(
+        !repo_temp.path().join("secret.env").exists(),
+        "hide must delete the plaintext file"
+    );
+
+    (repo_temp, home_temp)
+}
+
+#[test]
+fn reveal_defaults_to_git_config_user_email() {
+    let (repo_temp, home_temp) = setup_hidden_repo();
+
+    // No --email: the CLI must fall back to `git config user.email`
+    // (alice@example.com), not any hardcoded placeholder address.
+    let out = run(repo_temp.path(), home_temp.path(), &["reveal"]);
+
+    assert!(
+        out.status.success(),
+        "reveal without --email must resolve the email from git config user.email and succeed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
+        b"s3cret",
+        "reveal must restore the original plaintext"
+    );
+}
+
+#[test]
+fn reveal_with_explicit_email_succeeds() {
+    let (repo_temp, home_temp) = setup_hidden_repo();
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["reveal", "--email", "alice@example.com"],
+    );
+
+    assert!(
+        out.status.success(),
+        "reveal with an explicit --email must succeed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
+        b"s3cret",
+        "reveal must restore the original plaintext"
+    );
+}
+
+#[test]
+fn cli_help_and_version_exit_zero() {
+    for args in [&["--help"][..], &["--version"][..]] {
+        let out = Command::cargo_bin("git-gpg")
+            .expect("git-gpg binary must be buildable")
+            .args(args)
+            .output()
+            .expect("run git-gpg");
+        assert!(
+            out.status.success(),
+            "git-gpg {:?} must exit 0, got {:?}",
+            args,
+            out.status
+        );
+    }
+}
+
+#[test]
+fn cli_reports_nonzero_exit_on_failure() {
+    // A directory that is not a git repo: show-repo-id must fail loudly.
+    let not_a_repo = tempfile::tempdir().unwrap();
+
+    let out = Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .current_dir(not_a_repo.path())
+        .args(["show-repo-id"])
+        .output()
+        .expect("run git-gpg");
+
+    assert!(
+        !out.status.success(),
+        "show-repo-id outside a git repo must exit nonzero, got success"
+    );
+}

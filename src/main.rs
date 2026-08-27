@@ -10,7 +10,7 @@ use anyhow::Result;
 use git_gpg::{
     cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_add, cmd_remove, cmd_list,
     cmd_hide, cmd_reveal, cmd_clean, cmd_show_repo_id, cmd_whoami,
-    cmd_verify_keyring, cmd_list_keys, default_gpg_home,
+    cmd_verify_keyring, cmd_list_keys, default_gpg_home, get_git_config_email,
 };
 
 #[derive(Debug, clap::Parser)]
@@ -142,6 +142,16 @@ enum Commands {
     Clean,
 }
 
+/// Resolves the email for commands that accept --email: an explicit,
+/// non-empty value wins; otherwise fall back to `git config user.email`.
+fn resolve_email(email: Option<String>) -> Result<String> {
+    match email {
+        Some(e) if !e.trim().is_empty() => Ok(e),
+        Some(_) => anyhow::bail!("--email must not be empty"),
+        None => get_git_config_email(),
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let gpg_home = default_gpg_home();
@@ -164,7 +174,7 @@ fn main() -> Result<()> {
             cmd_hide(&remote, &opt.unwrap_or(gpg_home))?;
         }
         Commands::Reveal { email, remote, gpg_home: opt } => {
-            let email = email.unwrap_or_else(|| "default@example.com".to_string());
+            let email = resolve_email(email)?;
             cmd_reveal(&email, &remote, &opt.unwrap_or(gpg_home))?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&remote)?,
