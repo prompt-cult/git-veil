@@ -622,23 +622,6 @@ fn test_import_key_to_gpg_home() {
 
 #[test]
 #[serial]
-fn test_export_key_from_gpg_home() {
-    let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
-    
-    let (_secret_key, public_key) = generate_test_key("alice@example.com");
-    let armored = public_key.to_armored_string(Default::default()).unwrap();
-    
-    import_key_to_gpg_home(&gpg_home, &armored).unwrap();
-    assert!(gpg_home.join("pubring.pgp").exists());
-    
-    // Export using the armored content itself as identifier (since it's in the file)
-    let result = export_key_from_gpg_home(&gpg_home, "-----BEGIN PGP PUBLIC KEY BLOCK-----");
-    assert!(result.is_ok());
-}
-
-#[test]
-#[serial]
 fn test_find_private_key_by_email() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();

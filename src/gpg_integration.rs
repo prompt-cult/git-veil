@@ -30,20 +30,6 @@ pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<(
     Ok(())
 }
 
-/// Exports a public key from the GPG home directory by email or fingerprint.
-pub fn export_key_from_gpg_home(gpg_home: &PathBuf, identifier: &str) -> Result<String> {
-    let pubring_path = gpg_home.join("pubring.pgp");
-    let content = fs::read_to_string(&pubring_path)
-        .context("Failed to read pubring.pgp")?;
-    
-    // Simple search for the identifier in the keyring content
-    if content.contains(identifier) {
-        Ok(content)
-    } else {
-        anyhow::bail!("Key not found for identifier: {}", identifier)
-    }
-}
-
 const PRIVATE_KEY_BEGIN_MARKER: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----";
 const PRIVATE_KEY_END_MARKER: &str = "-----END PGP PRIVATE KEY BLOCK-----";
 
