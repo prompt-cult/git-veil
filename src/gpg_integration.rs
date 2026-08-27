@@ -1,3 +1,4 @@
+use crate::pubkey::extract_email_from_user_id;
 use anyhow::{Context, Result};
 use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::types::{KeyDetails, Password};
@@ -83,12 +84,19 @@ fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
 }
 
 /// Finds a private key by email in the GPG home directory.
+///
+/// Matching is exact equality (case-insensitive) between the requested email
+/// and the address extracted from each user-ID — never substring matching.
 pub fn find_private_key_by_email(gpg_home: &PathBuf, email: &str) -> Result<SignedSecretKey> {
     let keys = load_secret_keys(gpg_home)?;
+    let wanted = email.trim().to_lowercase();
 
     keys.into_iter()
         .find(|key| {
-            key.details.users.iter().any(|u| u.id.to_string().contains(email))
+            key.details.users.iter().any(|u| {
+                extract_email_from_user_id(&String::from_utf8_lossy(u.id.id()))
+                    .is_some_and(|addr| addr == wanted)
+            })
         })
         .ok_or_else(|| anyhow::anyhow!("No secret key found for email: {}", email))
 }

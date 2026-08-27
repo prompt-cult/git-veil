@@ -16,7 +16,7 @@ pub fn extract_key_identities(key: &SignedPublicKey) -> Vec<String> {
     key.details
         .users
         .iter()
-        .map(|user| user.id.to_string())
+        .map(|user| String::from_utf8_lossy(user.id.id()).into_owned())
         .collect()
 }
 
@@ -25,10 +25,37 @@ pub fn extract_key_fingerprint(key: &SignedPublicKey) -> String {
     key.fingerprint().to_string()
 }
 
+/// Extracts the email address from a user-ID string.
+///
+/// If the ID contains an angle-bracket address (`Name <addr>`), the address
+/// between the brackets is returned (trimmed, lowercased). Otherwise, if the
+/// whole trimmed ID itself looks like a bare address (contains '@' and no
+/// whitespace), it is returned lowercased. Otherwise there is no usable
+/// address and `None` is returned.
+pub fn extract_email_from_user_id(user_id: &str) -> Option<String> {
+    let trimmed = user_id.trim();
+    if let (Some(start), Some(end)) = (trimmed.find('<'), trimmed.find('>')) {
+        if start < end {
+            return Some(trimmed[start + 1..end].trim().to_lowercase());
+        }
+    }
+    if trimmed.contains('@') && !trimmed.contains(char::is_whitespace) {
+        return Some(trimmed.to_lowercase());
+    }
+    None
+}
+
 /// Checks if an email address is present in any of the key's user identities.
+///
+/// Matching is exact equality (case-insensitive) between the requested email
+/// and the address extracted from each user-ID — never substring matching.
 pub fn check_email_in_identities(key: &SignedPublicKey, email: &str) -> bool {
+    let wanted = email.trim().to_lowercase();
     let identities = extract_key_identities(key);
-    identities.iter().any(|id| id.contains(email))
+    identities
+        .iter()
+        .filter_map(|id| extract_email_from_user_id(id))
+        .any(|addr| addr == wanted)
 }
 
 /// Encodes a public key to base64 (after armoring it).

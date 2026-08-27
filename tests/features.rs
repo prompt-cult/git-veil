@@ -4,10 +4,10 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring,
-    encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
-    find_private_key_by_email, find_private_key_by_fingerprint, sign_keyring_content, Keyring,
-    KeyringEntry, TrustStore, TrackedFiles,
+    check_email_in_identities, cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_reveal, cmd_tell,
+    cmd_trust, cmd_verify_keyring, encrypt_to_gpg_key, extract_content_to_verify_from_keyring,
+    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
+    sign_keyring_content, Keyring, KeyringEntry, TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -276,6 +276,124 @@ fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated
         extract_key_fingerprint(&key.to_public_key()),
         first_fingerprint,
         "the first key in secring order must win when the email is duplicated"
+    );
+}
+
+// ============================================================================
+// Email matching requires exact address equality (M1)
+// ============================================================================
+
+fn generate_test_key_with_uid(uid: &str) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+    let mut rng = thread_rng();
+
+    let encrypt_subkey = SubkeyParamsBuilder::default()
+        .key_type(KeyType::X25519)
+        .can_encrypt(EncryptionCaps::All)
+        .build()
+        .expect("build encrypt subkey params");
+
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id(uid.to_string())
+        .passphrase(None)
+        .subkeys(vec![encrypt_subkey])
+        .build()
+        .expect("build key params");
+
+    let secret_key = params.generate(&mut rng).expect("generate key");
+    let public_key = secret_key.to_public_key();
+
+    (secret_key, public_key)
+}
+
+#[test]
+fn email_matching_requires_exact_address() {
+    let (_, evil_pub) =
+        generate_test_key_with_uid("Evil <evil-bob@x.com.attacker.net>");
+
+    // A UID whose address merely *contains* the requested email as a
+    // substring must NOT match: trusting/adding for bob@x.com must not
+    // bless a key held by evil-bob@x.com.attacker.net.
+    assert!(
+        !check_email_in_identities(&evil_pub, "bob@x.com"),
+        "substring user-ID match must not count as owning bob@x.com"
+    );
+
+    // Exact address still matches.
+    assert!(
+        check_email_in_identities(&evil_pub, "evil-bob@x.com.attacker.net"),
+        "the key's exact address must match"
+    );
+
+    // Matching is case-insensitive.
+    let (_, bob_pub) = generate_test_key("bob@x.com");
+    assert!(
+        check_email_in_identities(&bob_pub, "BOB@X.COM"),
+        "email matching must be case-insensitive"
+    );
+}
+
+#[test]
+fn find_private_key_by_email_requires_exact_address() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (evil, _) = generate_test_key("xalice@example.com.evil.net");
+    let (alice, alice_pub) = generate_test_key("alice@example.com");
+    let alice_fingerprint = extract_key_fingerprint(&alice_pub);
+    write_multi_key_secring(&gpg_home, &[evil, alice]);
+
+    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let key = result.expect(
+        "alice's exact key must be found even though another key's address contains the query as a substring",
+    );
+    assert_eq!(
+        extract_key_fingerprint(&key.to_public_key()),
+        alice_fingerprint,
+        "the key returned for alice@example.com must be alice's key, not the substring impostor"
+    );
+}
+
+#[test]
+fn find_private_key_by_email_rejects_substring_only_match() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (evil, _) = generate_test_key("xalice@example.com.evil.net");
+    write_multi_key_secring(&gpg_home, &[evil]);
+
+    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    assert!(
+        result.is_err(),
+        "a key whose address merely contains the query as a substring must not be returned"
+    );
+}
+
+#[test]
+fn bare_user_id_without_angle_brackets_still_matches() {
+    let (_, plain_pub) = generate_test_key_with_uid("plain@example.com");
+
+    assert!(
+        check_email_in_identities(&plain_pub, "plain@example.com"),
+        "a bare user-ID that is itself an address must match exactly"
+    );
+    assert!(
+        !check_email_in_identities(&plain_pub, "other@example.com"),
+        "a bare user-ID must not match a different address"
+    );
+
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (plain_sec, plain_sec_pub) = generate_test_key_with_uid("plain@example.com");
+    let stored_fingerprint = extract_key_fingerprint(&plain_sec_pub);
+    write_multi_key_secring(&gpg_home, &[plain_sec]);
+
+    let found = find_private_key_by_email(&gpg_home, "plain@example.com")
+        .expect("a bare user-ID secring key must be findable by exact email");
+    assert_eq!(
+        extract_key_fingerprint(&found.to_public_key()),
+        stored_fingerprint,
+        "the bare-UID key found must be the one stored"
     );
 }
 
