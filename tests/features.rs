@@ -634,6 +634,188 @@ fn reveal_refuses_escaping_tracked_path() {
     );
 }
 
+// ============================================================================
+// Full hide -> reveal roundtrip restores exact bytes
+//
+// These are protective (Green-only) tests: they pin the successful
+// decrypt-and-restore path that no earlier test exercised. They were written
+// to pass against the current implementation, not to fix a regression.
+// ============================================================================
+
+#[test]
+#[serial]
+fn hide_then_reveal_restores_exact_bytes() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed");
+
+    let plaintext: &str = "API_KEY=s3cr3t-value\nDB_PASSWORD=hunter2\n# unicode: héllo wörld — 日本語 🌍\nline with trailing spaces   \n";
+    std::fs::write("secret.env", plaintext).unwrap();
+
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide("origin", &gpg_home);
+    let plaintext_gone_after_hide = !std::path::Path::new("secret.env").exists();
+    let ciphertext_after_hide =
+        std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
+
+    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
+    let restored = std::fs::read("secret.env");
+    let ciphertext_gone_after_reveal =
+        !std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    hide_result.expect("cmd_hide must succeed");
+    assert!(
+        plaintext_gone_after_hide,
+        "hide must delete the plaintext file"
+    );
+    assert!(
+        ciphertext_after_hide,
+        "hide must write the ciphertext into .git-gpg/secrets/secret.env.asc"
+    );
+    reveal_result.expect("cmd_reveal must succeed");
+    assert_eq!(
+        restored.expect("revealed file must exist"),
+        plaintext.as_bytes(),
+        "reveal must restore the exact original bytes"
+    );
+    assert!(
+        ciphertext_gone_after_reveal,
+        "reveal must delete the ciphertext"
+    );
+    assert!(
+        repo_temp.path().join("secret.env").is_file(),
+        "the revealed file must be a regular file at the original path"
+    );
+}
+
+#[test]
+#[serial]
+fn hide_then_reveal_in_subdirectory() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed");
+
+    let tracked_rel = "a/b/c/secret.env";
+    let plaintext: &str = "NESTED_SECRET=prüne\ntrailing newline follows\n";
+    std::fs::create_dir_all("a/b/c").unwrap();
+    std::fs::write(tracked_rel, plaintext).unwrap();
+
+    cmd_add(vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide("origin", &gpg_home);
+    let plaintext_gone_after_hide = !std::path::Path::new(tracked_rel).exists();
+    let ciphertext_after_hide = std::path::Path::new(
+        ".git-gpg/secrets/a/b/c/secret.env.asc",
+    )
+    .exists();
+
+    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
+    let restored = std::fs::read(tracked_rel);
+    let ciphertext_gone_after_reveal = !std::path::Path::new(
+        ".git-gpg/secrets/a/b/c/secret.env.asc",
+    )
+    .exists();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    hide_result.expect("cmd_hide must succeed");
+    assert!(
+        plaintext_gone_after_hide,
+        "hide must delete the plaintext file"
+    );
+    assert!(
+        ciphertext_after_hide,
+        "hide must preserve the directory structure under .git-gpg/secrets"
+    );
+    reveal_result.expect("cmd_reveal must succeed");
+    assert_eq!(
+        restored.expect("revealed file must exist"),
+        plaintext.as_bytes(),
+        "reveal must restore the exact original bytes at the nested path"
+    );
+    assert!(
+        ciphertext_gone_after_reveal,
+        "reveal must delete the ciphertext"
+    );
+    assert!(
+        repo_temp.path().join(tracked_rel).is_file(),
+        "the revealed file must be recreated at the nested path"
+    );
+}
+
+#[test]
+#[serial]
+fn hide_reveal_roundtrip_binary_file() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed");
+
+    let plaintext: Vec<u8> = (0..=255u8).collect();
+    std::fs::write("blob.bin", &plaintext).unwrap();
+
+    cmd_add(vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide("origin", &gpg_home);
+    let plaintext_gone_after_hide = !std::path::Path::new("blob.bin").exists();
+
+    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
+    let restored = std::fs::read("blob.bin");
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    hide_result.expect("cmd_hide must succeed");
+    assert!(
+        plaintext_gone_after_hide,
+        "hide must delete the plaintext file"
+    );
+    reveal_result.expect("cmd_reveal must succeed");
+    assert_eq!(
+        restored.expect("revealed file must exist"),
+        plaintext,
+        "reveal must restore every byte value 0x00..=0xFF unchanged"
+    );
+    assert!(
+        repo_temp.path().join("blob.bin").is_file(),
+        "the revealed file must be a regular file at the original path"
+    );
+}
+
 #[test]
 #[serial]
 fn symlink_outside_repo_is_rejected() {
