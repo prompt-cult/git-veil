@@ -81,11 +81,16 @@ impl Keyring {
     }
 
     pub fn add_entry(&mut self, email: String, base64_key: String, fingerprint: String) {
-        self.entries.push(KeyringEntry {
-            email,
-            base64_key,
-            fingerprint,
-        });
+        if let Some(existing) = self.entries.iter_mut().find(|e| e.email == email) {
+            existing.base64_key = base64_key;
+            existing.fingerprint = fingerprint;
+        } else {
+            self.entries.push(KeyringEntry {
+                email,
+                base64_key,
+                fingerprint,
+            });
+        }
         self.signature = None;
     }
 

@@ -1019,32 +1019,6 @@ fn test_tell_signs_keyring_after_append() {
 
 #[test]
 #[serial]
-fn test_tell_test_encrypts_keyring_with_new_key() {
-    let temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
-    std::process::Command::new("git").args(&["init"]).output().unwrap();
-    std::process::Command::new("git").args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    cmd_init().unwrap();
-    
-    let result = cmd_tell("alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
-    assert!(result.is_err());
-}
-
-#[test]
-#[serial]
-fn test_tell_test_encryption_fails_if_key_invalid() {
-    let temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
-    std::process::Command::new("git").args(&["init"]).output().unwrap();
-    std::process::Command::new("git").args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    cmd_init().unwrap();
-    
-    let result = cmd_tell("alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
-    assert!(result.is_err());
-}
-
-#[test]
-#[serial]
 fn test_tell_fails_if_trust_not_established() {
     let temp = tempfile::tempdir().unwrap();
     std::env::set_current_dir(temp.path()).unwrap();
@@ -1097,18 +1071,9 @@ fn test_tell_with_custom_gpg_home() {
     assert!(result.is_err());
 }
 
-#[test]
-#[serial]
-fn test_tell_duplicate_email_updates_entry() {
-    let temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
-    std::process::Command::new("git").args(&["init"]).output().unwrap();
-    std::process::Command::new("git").args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    cmd_init().unwrap();
-    
-    let result = cmd_tell("alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
-    assert!(result.is_err());
-}
+// test_tell_duplicate_email_updates_entry deleted: the update-not-duplicate
+// contract for a repeated email is covered by add_entry_updates_existing_email_and_clears_signature
+// and tell_twice_same_email_updates_rather_than_duplicates in tests/features.rs.
 
 #[test]
 #[serial]

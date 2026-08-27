@@ -280,6 +280,114 @@ fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated
 }
 
 // ============================================================================
+// Keyring add_entry: update-not-duplicate for a repeated email (M3)
+// ============================================================================
+
+#[test]
+fn add_entry_updates_existing_email_and_clears_signature() {
+    let mut keyring = Keyring::new();
+    keyring.add_entry(
+        "alice@example.com".to_string(),
+        "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+        "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
+    );
+    keyring.add_entry(
+        "bob@example.com".to_string(),
+        "QkNERUVGR0hJSktMTU5PUFI=".to_string(),
+        "BBBB2222BBBB2222BBBB2222BBBB2222BBBB2222".to_string(),
+    );
+    keyring.signature = Some("-----BEGIN PGP SIGNATURE-----\nstale\n-----END PGP SIGNATURE-----".to_string());
+
+    keyring.add_entry(
+        "alice@example.com".to_string(),
+        "REVGREdISklLTE1OT1BSU1Q=".to_string(),
+        "CCCC3333CCCC3333CCCC3333CCCC3333CCCC3333".to_string(),
+    );
+
+    assert_eq!(
+        keyring.entries.len(),
+        2,
+        "re-adding an existing email must not append a duplicate entry, got: {:?}",
+        keyring.entries
+    );
+    assert_eq!(keyring.entries[0].email, "alice@example.com", "order must be preserved: alice first");
+    assert_eq!(keyring.entries[1].email, "bob@example.com", "order must be preserved: bob second");
+    assert_eq!(
+        keyring.entries[0].fingerprint, "CCCC3333CCCC3333CCCC3333CCCC3333CCCC3333",
+        "alice's fingerprint must be updated in place, got: {:?}",
+        keyring.entries[0]
+    );
+    assert_eq!(
+        keyring.entries[0].base64_key, "REVGREdISklLTE1OT1BSU1Q=",
+        "alice's key material must be replaced, got: {:?}",
+        keyring.entries[0]
+    );
+    assert!(
+        keyring.signature.is_none(),
+        "add_entry must clear the signature so the keyring gets re-signed"
+    );
+}
+
+#[test]
+#[serial]
+fn tell_twice_same_email_updates_rather_than_duplicates() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("first tell must succeed");
+
+    let keyring_after_first =
+        Keyring::parse(&std::fs::read_to_string(".git-gpg/keyring").unwrap()).unwrap();
+
+    let second_tell = cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    );
+
+    let keyring_text = std::fs::read_to_string(".git-gpg/keyring").unwrap();
+    let keyring_after_second = Keyring::parse(&keyring_text).unwrap();
+    let alice_count = keyring_after_second
+        .entries
+        .iter()
+        .filter(|e| e.email == "alice@example.com")
+        .count();
+    let verify_result = cmd_verify_keyring("origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    second_tell.expect("second tell for the same email must succeed");
+    assert_eq!(
+        keyring_after_first.entries.len(),
+        1,
+        "sanity: first tell must yield one entry, got: {:?}",
+        keyring_after_first.entries
+    );
+    assert_eq!(
+        alice_count, 1,
+        "telling the same email twice must update, not duplicate: got {} alice entries in {}",
+        alice_count, keyring_text
+    );
+    assert_eq!(
+        keyring_after_second.entries.len(), 1,
+        "keyring must hold exactly one entry total after duplicate tell, got: {:?}",
+        keyring_after_second.entries
+    );
+    verify_result.expect("keyring must still verify after duplicate tell");
+}
+
+// ============================================================================
 // Trust establishment validates the owner email from the repo ID
 // ============================================================================
 
