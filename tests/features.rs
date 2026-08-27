@@ -47,6 +47,10 @@ fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecr
         }
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
+    write_secring_content(gpg_home, &content);
+}
+
+fn write_secring_content(gpg_home: &PathBuf, content: &str) {
     std::fs::create_dir_all(gpg_home).unwrap();
     std::fs::write(gpg_home.join("secring.pgp"), content).unwrap();
 }
@@ -77,24 +81,25 @@ fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Pat
 // ============================================================================
 
 #[test]
-#[serial]
 fn find_private_key_by_email_selects_matching_key_when_not_first_in_secring() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
-    let (bob, _) = generate_test_key("bob@example.com");
+    let (bob, bob_pub) = generate_test_key("bob@example.com");
+    let bob_fingerprint = extract_key_fingerprint(&bob_pub);
     write_multi_key_secring(&gpg_home, &[alice, bob]);
 
-    let result = find_private_key_by_email(&gpg_home, "bob@example.com");
-    assert!(
-        result.is_ok(),
-        "bob's key should be found even though alice's key comes first: {:?}",
-        result.err()
+    let key = find_private_key_by_email(&gpg_home, "bob@example.com").expect(
+        "bob's key should be found even though alice's key comes first",
+    );
+    assert_eq!(
+        extract_key_fingerprint(&key.to_public_key()),
+        bob_fingerprint,
+        "the key returned for bob@example.com must be bob's key, not another key from the secring"
     );
 }
 
 #[test]
-#[serial]
 fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secring() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
@@ -103,16 +108,17 @@ fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secrin
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
     write_multi_key_secring(&gpg_home, &[alice, bob]);
 
-    let result = find_private_key_by_fingerprint(&gpg_home, &bob_fingerprint);
-    assert!(
-        result.is_ok(),
-        "bob's key should be found even though alice's key comes first: {:?}",
-        result.err()
+    let key = find_private_key_by_fingerprint(&gpg_home, &bob_fingerprint).expect(
+        "bob's key should be found even though alice's key comes first",
+    );
+    assert_eq!(
+        extract_key_fingerprint(&key.to_public_key()),
+        bob_fingerprint,
+        "the key returned for bob's fingerprint must be bob's key, not another key from the secring"
     );
 }
 
 #[test]
-#[serial]
 fn find_private_key_by_email_fails_when_no_key_matches() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
@@ -121,6 +127,73 @@ fn find_private_key_by_email_fails_when_no_key_matches() {
 
     let result = find_private_key_by_email(&gpg_home, "carol@example.com");
     assert!(result.is_err(), "unknown email must not match any key");
+}
+
+#[test]
+fn find_private_key_by_email_errors_on_empty_secring() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    write_secring_content(&gpg_home, "");
+
+    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+
+    let err = result.err().expect("an empty secring must not yield any key");
+    assert!(
+        err.to_string().contains("No private key blocks found"),
+        "the error must state that no private key blocks were found, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("secring.pgp"),
+        "the error must mention the secring file, got: {}",
+        err
+    );
+}
+
+#[test]
+fn find_private_key_by_email_ignores_garbage_between_blocks() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (alice, _) = generate_test_key("alice@example.com");
+    let (bob, bob_pub) = generate_test_key("bob@example.com");
+    let bob_fingerprint = extract_key_fingerprint(&bob_pub);
+    let alice_armored = alice.to_armored_string(Default::default()).unwrap();
+    let bob_armored = bob.to_armored_string(Default::default()).unwrap();
+    let content = format!(
+        "this leading text is not a key at all\n{}\n>>> random junk between blocks <<<\n{}\ntrailing junk",
+        alice_armored, bob_armored
+    );
+    write_secring_content(&gpg_home, &content);
+
+    let key = find_private_key_by_email(&gpg_home, "bob@example.com")
+        .expect("bob's key must be found despite junk text around the blocks");
+    assert_eq!(
+        extract_key_fingerprint(&key.to_public_key()),
+        bob_fingerprint,
+        "the key returned for bob@example.com must be bob's key"
+    );
+}
+
+#[test]
+fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
+    let (carol_second, _) = generate_test_key("carol@example.com");
+    let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
+    write_multi_key_secring(&gpg_home, &[carol_first, carol_second]);
+
+    // Documented current behaviour: when two keys in the secring claim the
+    // same email, the first matching key in file order wins. Treating
+    // duplicated emails as an ambiguity error is out of scope here and is
+    // reviewed under a separate task.
+    let key = find_private_key_by_email(&gpg_home, "carol@example.com")
+        .expect("a key matching the duplicated email must be found");
+    assert_eq!(
+        extract_key_fingerprint(&key.to_public_key()),
+        first_fingerprint,
+        "the first key in secring order must win when the email is duplicated"
+    );
 }
 
 // ============================================================================
@@ -366,6 +439,22 @@ fn init_creates_loadable_trust_store() {
     assert!(
         store.trusted_keys.is_empty(),
         "a freshly initialised trust store must be empty"
+    );
+}
+
+#[test]
+fn trust_store_load_from_file_accepts_empty_object() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("trust.json");
+    std::fs::write(&path, "{}").unwrap();
+
+    let loaded = TrustStore::load_from_file(&path);
+
+    let store = loaded.expect("an empty JSON object must load as an empty trust store");
+    assert!(
+        store.trusted_keys.is_empty(),
+        "loading '{{}}' must yield an empty trust store, got: {:?}",
+        store.trusted_keys
     );
 }
 

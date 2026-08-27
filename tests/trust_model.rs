@@ -809,12 +809,31 @@ fn test_trust_validates_repo_id_matches_remote() {
     std::process::Command::new("git").args(&["init"]).output().unwrap();
     std::process::Command::new("git").args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init().unwrap();
-    
-    let result = cmd_trust("repo+user@github.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
-    // cmd_trust should fail because the key file doesn't exist
-    assert!(result.is_err());
-    let err_msg = result.err().unwrap().to_string();
-    assert!(err_msg.contains("not found") || err_msg.contains("No such file") || err_msg.contains("Failed to read signing key"));
+
+    // A provided repo_id that does not match the one computed from the
+    // remote's push URL must be rejected with the mismatch error. That check
+    // runs before the signing key is read, so the nonexistent key path never
+    // matters here.
+    let result = cmd_trust("wrong+user@github.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let err = result
+        .err()
+        .expect("a repo_id that does not match the remote must be rejected");
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("does not match"),
+        "error must be the repo-id mismatch, got: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("wrong+user@github.com"),
+        "error must name the provided repo id, got: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains("repo+user@github.com"),
+        "error must name the computed repo id, got: {}",
+        err_msg
+    );
 }
 
 #[test]
