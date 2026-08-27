@@ -30,7 +30,7 @@ pub fn cmd_trust(repo_id: &str, signing_key_path: &str, remote_name: &str, gpg_h
     let fingerprint = extract_key_fingerprint(&public_key);
     
     // Verify repo-id email is in key identities
-    let repo_email = repo_id.split('+').next().unwrap_or("");
+    let repo_email = repo_id.splitn(2, '+').nth(1).unwrap_or("");
     if !check_email_in_identities(&public_key, repo_email) {
         anyhow::bail!(
             "Signing key does not contain email from repo ID: {}",

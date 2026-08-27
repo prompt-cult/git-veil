@@ -3,7 +3,7 @@
 //! Each test targets one named contract. Tests here are written Red/Green:
 //! they must fail against the code they were written to fix, and pass after.
 
-use git_gpg::{extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint};
+use git_gpg::{cmd_init, cmd_trust, extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint};
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use serial_test::serial;
@@ -44,6 +44,27 @@ fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecr
     }
     std::fs::create_dir_all(gpg_home).unwrap();
     std::fs::write(gpg_home.join("secring.pgp"), content).unwrap();
+}
+
+fn setup_git_repo_with_origin_remote() -> tempfile::TempDir {
+    let temp = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["init"],
+        vec!["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    ] {
+        let status = std::process::Command::new("git")
+            .current_dir(temp.path())
+            .args(&args)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git {:?} failed", args);
+    }
+    temp
+}
+
+fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &PathBuf) {
+    let armored = public_key.to_armored_string(Default::default()).unwrap();
+    std::fs::write(path, armored).unwrap();
 }
 
 // ============================================================================
@@ -95,4 +116,71 @@ fn find_private_key_by_email_fails_when_no_key_matches() {
 
     let result = find_private_key_by_email(&gpg_home, "carol@example.com");
     assert!(result.is_err(), "unknown email must not match any key");
+}
+
+// ============================================================================
+// Trust establishment validates the owner email from the repo ID
+// ============================================================================
+
+#[test]
+#[serial]
+fn trust_accepts_owner_key_matching_user_at_service_email() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let (_, owner_pub) = generate_test_key("owner@github.com");
+    let keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &keyfile);
+
+    let gpg_temp = tempfile::tempdir().unwrap();
+
+    let result = cmd_trust(
+        "repo+owner@github.com",
+        keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_temp.path().to_path_buf(),
+    );
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        result.is_ok(),
+        "owner key for owner@github.com must be trusted: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+#[serial]
+fn trust_rejects_key_without_owner_email() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let (_, evil_pub) = generate_test_key("evil@attacker.com");
+    let keyfile = repo_temp.path().join("evil.pub");
+    write_public_key_file(&evil_pub, &keyfile);
+
+    let gpg_temp = tempfile::tempdir().unwrap();
+
+    let result = cmd_trust(
+        "repo+owner@github.com",
+        keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_temp.path().to_path_buf(),
+    );
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let err = result.err().expect("evil key must not be trusted");
+    assert!(
+        err.to_string().contains("owner@github.com"),
+        "error must come from the owner-email check, got: {}",
+        err
+    );
 }

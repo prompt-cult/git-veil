@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrustStore {
+    #[serde(default)]
     pub trusted_keys: HashMap<String, String>,
 }
 
