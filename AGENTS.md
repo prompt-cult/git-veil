@@ -9,3 +9,18 @@ When committing changes to this repository:
 - Use clear, descriptive commit messages that explain what changed and why
 - Follow conventional commit style: `<type>: <description>`
 - Types include: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `wip`
+
+## Andon 行灯 — Stop the Line
+
+If the best and correct fix lies outside your assigned lane:
+
+- **DO NOT** work around it; **DO NOT** make tactical hacks.
+- Do the work that IS in your lane, then stop and report: *task incomplete — the correct fix needs a larger structural change*, with file:line specifics.
+- The coordinator adds a todo for the deeper work and delegates it to an agent.
+
+## Workflow (preferred approach)
+
+Preferred, not a straitjacket: common sense and context-specific good practice supersede these steps where they conflict.
+
+- Break work into subtasks; delegate each to a subagent that must `git add` its own work.
+- The coordinator then: checks what is in the git index, confirms tests were added, runs the full test suite, commits if green, checks code coverage, and raises a new delegated todo if coverage is missing or follow-on work is required.
