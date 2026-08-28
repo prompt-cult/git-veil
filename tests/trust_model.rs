@@ -351,6 +351,10 @@ fn parse_git_remote_url_table() {
         // Trailing slashes are tolerated
         ("https://github.com/owner/repo/", Some(("repo", "owner", "github.com"))),
         ("git@github.com:owner/repo/", Some(("repo", "owner", "github.com"))),
+        // Credential-shaped material in owner/repo (fuzz finding) must fail
+        // closed, never forge a repo identity
+        ("https://github.com/user:pass@evil/repo", None),
+        ("git@github.com:git@github.com:simbo1905/fara.srg:2g2", None),
         // Invalid rows must stay invalid
         ("not-a-valid-url", None),
         ("git@github.com", None),

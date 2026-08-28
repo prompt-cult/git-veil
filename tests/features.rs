@@ -567,17 +567,15 @@ fn keyring_parse_rejects_end_marker_before_begin() {
 }
 
 // Andon (fuzz finding, 2026-08-28): fuzz_parse_git_remote_url showed the
-// remote-URL parser accepts '@' and ':' inside the user/repo components, so
-// credential-shaped material lands IN the derived repo_id — e.g.
-// `https://github.com/user:pass@evil/repo` yields user = "user:pass@evil",
-// and `git@github.com:git@github.com:simbo1905/fara.srg:2g2` yields
-// user = "git@github.com:simbo1905". The owning module is src/repo_identity.rs
-// (outside the fuzzing agent's lane), so the fix is delegated: the user and
-// repo capture groups in SSH_SCP_RE and SCHEME_USERINFO_RE must exclude
-// '@' and ':' (or the parse must reject such URLs). This test is the Red
-// half of the Red/Green pair; un-ignore it when the fix lands.
+// remote-URL parser accepted '@' and ':' inside the user/repo components, so
+// credential-shaped material landed IN the derived repo_id — e.g.
+// `https://github.com/user:pass@evil/repo` yielded user = "user:pass@evil",
+// and `git@github.com:git@github.com:simbo1905/fara.srg:2g2` yielded
+// user = "git@github.com:simbo1905". Fixed in src/repo_identity.rs by
+// excluding '@' and ':' from the user and repo capture groups in SSH_SCP_RE
+// and SCHEME_USERINFO_RE, so credential-shaped URLs fail closed. This test is
+// the Green half of the Red/Green pair and guards the fix.
 #[test]
-#[ignore = "Andon: repo_identity parser leaks credential-shaped material into repo_id components; fix delegated to repo_identity owner"]
 fn repo_id_components_never_contain_credential_shaped_material() {
     let urls = [
         "https://github.com/user:pass@evil/repo",

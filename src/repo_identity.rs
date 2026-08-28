@@ -6,17 +6,21 @@ use std::sync::LazyLock;
 
 /// SSH SCP-style: `user@host:owner/repo[.git][/][?]` — any SSH user (not just
 /// `git`). The user part must not contain `/` so that scheme URLs like
-/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs.
+/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The user
+/// and owner/repo groups additionally exclude `@` and `:` so credential-shaped
+/// material can never land in the derived identity (fails closed instead).
 static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[^@/]+@([^:/]+):([^/]+)/([^/]+?)(?:\.git)?/?$")
+    Regex::new(r"^[^@/]+@([^:/]+):([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
         .expect("valid SCP-style SSH URL regex")
 });
 
 /// Scheme URL shared shape: `scheme://[user[:pass]@]host[:port]/owner/repo`.
 /// The optional userinfo (`user[:pass]@`) is a login credential and is
-/// stripped — it never becomes part of the identity.
+/// stripped — it never becomes part of the identity. The owner/repo groups
+/// exclude `@` and `:` so credential-shaped material can never land in the
+/// derived identity (fails closed instead).
 static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/]+)/([^/]+?)(?:\.git)?/?$")
+    Regex::new(r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
         .expect("valid scheme URL regex")
 });
 
