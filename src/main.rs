@@ -152,37 +152,44 @@ fn resolve_email(email: Option<String>) -> Result<String> {
     }
 }
 
+/// Resolves the key store location for commands that consume a gpg_home:
+/// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.gnupg`.
+/// Resolved lazily so HOME-free subcommands (init/add/remove/list/
+/// list-keys/clean/show-repo-id) never fail on an unset HOME.
+fn resolve_gpg_home(gpg_home: Option<PathBuf>) -> Result<PathBuf> {
+    gpg_home.map(Ok).unwrap_or_else(default_gpg_home)
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let gpg_home = default_gpg_home()?;
 
     match cli.command {
         Commands::Init => cmd_init()?,
         Commands::Import { files, gpg_home: opt } => {
-            cmd_import(&files, &opt.unwrap_or(gpg_home))?;
+            cmd_import(&files, &resolve_gpg_home(opt)?)?;
         }
         Commands::Trust { repo_id, signing_key, remote, gpg_home: opt } => {
-            cmd_trust(&repo_id, &signing_key, &remote, &opt.unwrap_or(gpg_home))?;
+            cmd_trust(&repo_id, &signing_key, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Tell { email, public_key, remote, gpg_home: opt } => {
-            cmd_tell(&email, &public_key, &remote, &opt.unwrap_or(gpg_home))?;
+            cmd_tell(&email, &public_key, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Add { files } => cmd_add(files)?,
         Commands::Remove { files } => cmd_remove(files)?,
         Commands::List => cmd_list()?,
         Commands::Hide { remote, gpg_home: opt } => {
-            cmd_hide(&remote, &opt.unwrap_or(gpg_home))?;
+            cmd_hide(&remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Reveal { email, remote, gpg_home: opt } => {
             let email = resolve_email(email)?;
-            cmd_reveal(&email, &remote, &opt.unwrap_or(gpg_home))?;
+            cmd_reveal(&email, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&remote)?,
         Commands::Whoami { email, gpg_home: opt } => {
-            cmd_whoami(email.as_deref(), &opt.unwrap_or(gpg_home))?;
+            cmd_whoami(email.as_deref(), &resolve_gpg_home(opt)?)?;
         }
         Commands::VerifyKeyring { remote, gpg_home: opt } => {
-            cmd_verify_keyring(&remote, &opt.unwrap_or(gpg_home))?;
+            cmd_verify_keyring(&remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::ListKeys => cmd_list_keys()?,
         Commands::Clean => cmd_clean()?,

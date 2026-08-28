@@ -5,21 +5,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::gpg_integration::split_armored_private_key_blocks;
+use crate::pubkey::extract_email_from_user_id;
 use pgp::types::KeyDetails;
-
-/// Extracts the email address from a user-id string, if present.
-fn extract_email(user_id: &str) -> &str {
-    match (user_id.find('<'), user_id.find('>')) {
-        (Some(start), Some(end)) if end > start => user_id[start + 1..end].trim(),
-        _ => user_id.trim(),
-    }
-}
 
 fn primary_user_id(key: &SignedSecretKey) -> String {
     key.details
         .users
         .first()
-        .map(|u| u.id.to_string())
+        .map(|u| String::from_utf8_lossy(u.id.id()).into_owned())
         .unwrap_or_else(|| "<no user id>".to_string())
 }
 
@@ -76,11 +69,14 @@ pub fn cmd_import(files: &[String], gpg_home: &PathBuf) -> Result<()> {
 
             let fingerprint = key.fingerprint().to_string().to_uppercase();
             let user_id = primary_user_id(&key);
-            let email = extract_email(&user_id);
+            // Print the extracted email when the UID carries one; otherwise
+            // fall back to the raw UID so the output stays informative.
+            let display = extract_email_from_user_id(&user_id)
+                .unwrap_or_else(|| user_id.clone());
 
             if known.contains(&fingerprint) {
                 skipped += 1;
-                println!("= skipped (already imported): {} ({})", email, fingerprint);
+                println!("= skipped (already imported): {} ({})", display, fingerprint);
             } else {
                 if !secring_content.is_empty() && !secring_content.ends_with('\n') {
                     secring_content.push('\n');
@@ -89,7 +85,7 @@ pub fn cmd_import(files: &[String], gpg_home: &PathBuf) -> Result<()> {
                 secring_content.push('\n');
                 known.insert(fingerprint.clone());
                 imported += 1;
-                println!("+ imported: {} ({})", email, fingerprint);
+                println!("+ imported: {} ({})", display, fingerprint);
             }
         }
 

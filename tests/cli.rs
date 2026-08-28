@@ -204,3 +204,51 @@ fn cli_reports_nonzero_exit_on_failure() {
         "show-repo-id outside a git repo must exit nonzero, got success"
     );
 }
+
+#[test]
+fn home_free_subcommands_work_without_home_set() {
+    // init/add/remove/list/list-keys/clean never touch the key store, so
+    // they must succeed even with HOME removed from the environment
+    // (previously default_gpg_home() errored before command dispatch).
+    let repo_temp = tempfile::tempdir().unwrap();
+
+    git(repo_temp.path(), &["init"]);
+    git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
+
+    let run_without_home = |args: &[&str]| {
+        Command::cargo_bin("git-gpg")
+            .expect("git-gpg binary must be buildable")
+            .current_dir(repo_temp.path())
+            .env_remove("HOME")
+            .args(args)
+            .output()
+            .expect("run git-gpg")
+    };
+
+    let out = run_without_home(&["init"]);
+    assert!(
+        out.status.success(),
+        "git-gpg init without HOME must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
+
+    for args in [
+        &["add", "secret.env"][..],
+        &["list"][..],
+        &["remove", "secret.env"][..],
+        &["list-keys"][..],
+        &["clean"][..],
+    ] {
+        let out = run_without_home(args);
+        assert!(
+            out.status.success(),
+            "git-gpg {:?} without HOME must exit 0: stdout={:?} stderr={:?}",
+            args,
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
