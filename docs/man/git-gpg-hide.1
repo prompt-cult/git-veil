@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-hide 1  "git-gpg-hide " 
 .SH NAME
-git\-gpg\-hide \- Hide \- encrypt all tracked files
+git\-gpg\-hide \- Encrypt all tracked files to the keyring and delete the plaintexts
 .SH SYNOPSIS
 \fBgit\-gpg hide\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Hide \- encrypt all tracked files
+Encrypt all tracked files to the keyring and delete the plaintexts
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -16,4 +16,21 @@ Git remote name
 Key store directory (default: $HOME/.git\-gpg)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Encrypts every tracked file to every key in the keyring, deletes the
+plaintext, and leaves <name>.secret beside where the plaintext was
+(notes \-> notes.secret). You gitignore the PLAINTEXT filenames and commit
+the .secret files: a fresh clone carrying only ciphertext stays
+decryptable by every keyring member via reveal.
+
+hide only works after the repository is initialized (git\-gpg init), the
+owner\*(Aqs key is trusted on this machine (git\-gpg trust), collaborators are
+in the keyring (git\-gpg tell), and files are tracked (git\-gpg add).
+Before encrypting anything, the keyring signature is verified against the
+pinned trusted key. unhide, reveal and cat invert hide.
+
+EXAMPLES
+  $ git\-gpg hide    # encrypt all tracked files, delete the plaintexts
+  $ git\-gpg hide \-\-remote upstream
+  $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files

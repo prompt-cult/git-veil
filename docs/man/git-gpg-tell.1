@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-tell 1  "git-gpg-tell " 
 .SH NAME
-git\-gpg\-tell \- Add a collaborator\*(Aqs public key to the keyring
+git\-gpg\-tell \- Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 .SH SYNOPSIS
 \fBgit\-gpg tell\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
 .SH DESCRIPTION
-Add a collaborator\*(Aqs public key to the keyring
+Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -19,10 +19,24 @@ Key store directory (default: $HOME/.git\-gpg)
 Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIEMAIL\fR>
 Collaborator\*(Aqs email
 .TP
 <\fIPUBLIC_KEY\fR>
 Path to collaborator\*(Aqs public key file
+.SH EXTRA
+Adds a collaborator\*(Aqs public key to the repository keyring and re\-signs
+the keyring with the owner\*(Aqs private key. The existing keyring signature
+is verified against the pinned trusted key before any modification, and a
+canary is test\-encrypted to the new key so a key that cannot encrypt is
+never signed into the ring.
+
+Requires init, an established trust pin (trust) for this repository on
+this machine, and the owner\*(Aqs private key in the local key store
+(import). Next steps: add files, then hide.
+
+EXAMPLES
+  $ git\-gpg tell alice@example.com alice.pub
+  $ git\-gpg tell alice@example.com alice.pub \-\-passphrase\-stdin < pass.txt

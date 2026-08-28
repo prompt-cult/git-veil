@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-reveal 1  "git-gpg-reveal " 
 .SH NAME
-git\-gpg\-reveal \- Reveal \- decrypt all tracked files
+git\-gpg\-reveal \- Decrypt all tracked files back to plaintext
 .SH SYNOPSIS
 \fBgit\-gpg reveal\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Reveal \- decrypt all tracked files
+Decrypt all tracked files back to plaintext
 .SH OPTIONS
 .TP
 \fB\-\-email\fR \fI<EMAIL>\fR
@@ -22,4 +22,19 @@ Key store directory (default: $HOME/.git\-gpg)
 Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Decrypts every tracked file whose .secret ciphertext exists back to its
+plaintext path, using your private key from the local key store. The
+keyring signature is verified against the pinned trusted key before any
+decryption. Your identity comes from git config user.email or \-\-email;
+passphrase\-protected keys take the passphrase from GITGPG_PASSPHRASE or
+\-\-passphrase\-stdin.
+
+reveal is the inverse of hide for all files; unhide does one file and
+deletes its ciphertext; cat prints one file without touching disk state.
+
+EXAMPLES
+  $ git\-gpg reveal
+  $ git\-gpg reveal \-\-email alice@example.com
+  $ git\-gpg reveal \-\-passphrase\-stdin < pass.txt

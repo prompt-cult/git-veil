@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-removeperson 1  "git-gpg-removeperson " 
 .SH NAME
-git\-gpg\-removeperson \- Remove a collaborator from the keyring
+git\-gpg\-removeperson \- Remove a collaborator from the keyring and re\-sign it
 .SH SYNOPSIS
 \fBgit\-gpg removeperson\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
 .SH DESCRIPTION
-Remove a collaborator from the keyring
+Remove a collaborator from the keyring and re\-sign it
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -19,7 +19,21 @@ Key store directory (default: $HOME/.git\-gpg)
 Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIEMAIL\fR>
 Email of the collaborator to remove
+.SH EXTRA
+Removes a collaborator\*(Aqs entry from the keyring and re\-signs it with the
+owner\*(Aqs private key. The existing keyring signature is verified against
+the pinned trusted key before any modification. After removal the
+ex\-collaborator can no longer decrypt newly hidden files — but files
+hidden while they were a member were encrypted to their key, so rotate
+the underlying secrets if that matters.
+
+Requires init, an established trust pin (trust), and the owner\*(Aqs private
+key in the local key store (import).
+
+EXAMPLES
+  $ git\-gpg removeperson alice@example.com
+  $ git\-gpg removeperson alice@example.com \-\-passphrase\-stdin < pass.txt

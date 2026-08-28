@@ -280,6 +280,116 @@ fn cli_help_and_version_exit_zero() {
 }
 
 #[test]
+fn bare_help_lists_every_command_with_one_liner() {
+    // `git-gpg help` must be a table of contents: every subcommand name with
+    // a one-line purpose, NOT a flag dump of the root or any subcommand.
+    let out = Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .args(["help"])
+        .output()
+        .expect("run git-gpg");
+
+    assert!(
+        out.status.success(),
+        "git-gpg help must exit 0, got {:?}",
+        out.status
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for name in [
+        "init",
+        "import",
+        "trust",
+        "tell",
+        "removeperson",
+        "add",
+        "remove",
+        "list",
+        "hide",
+        "reveal",
+        "cat",
+        "unhide",
+        "changes",
+        "show-repo-id",
+        "whoami",
+        "verify-keyring",
+        "list-keys",
+        "clean",
+        "completions",
+        "manpages",
+    ] {
+        assert!(
+            stdout.contains(name),
+            "git-gpg help must list every subcommand; missing: {name}\n---\n{stdout}"
+        );
+    }
+
+    // A flag dump would enumerate subcommand options here; the one-liner
+    // list must not. --gpg-home is a stable marker: it belongs to several
+    // subcommands but never to the table of contents.
+    assert!(
+        !stdout.contains("--gpg-home"),
+        "git-gpg help must be a one-liner table of contents, not a flag dump\n---\n{stdout}"
+    );
+}
+
+#[test]
+fn help_hide_shows_workflow_and_examples() {
+    // `git-gpg help hide` must show the long-form workflow discussion and
+    // commented examples, not just the flag list.
+    let out = Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .args(["help", "hide"])
+        .output()
+        .expect("run git-gpg");
+
+    assert!(
+        out.status.success(),
+        "git-gpg help hide must exit 0, got {:?}",
+        out.status
+    );
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for marker in ["init", "trust", "tell", "add", "secret", "#"] {
+        assert!(
+            stdout.contains(marker),
+            "git-gpg help hide must discuss the workflow (missing: {marker})\n---\n{stdout}"
+        );
+    }
+}
+
+#[test]
+fn help_unknown_command_exits_nonzero() {
+    let out = Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .args(["help", "nosuchcmd"])
+        .output()
+        .expect("run git-gpg");
+
+    assert!(
+        !out.status.success(),
+        "git-gpg help nosuchcmd must exit nonzero, got success"
+    );
+}
+
+#[test]
+fn manpage_for_hide_contains_workflow_text() {
+    // The committed man page must carry the same workflow discussion that
+    // `git-gpg help hide` shows, because clap_mangen renders it from the
+    // same clap definition.
+    let man_page = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("docs/man/git-gpg-hide.1");
+    let content = std::fs::read_to_string(&man_page).expect("read committed man page");
+
+    for marker in ["init", "trust", "tell", "add", "secret"] {
+        assert!(
+            content.contains(marker),
+            "{man_page:?} must contain the hide workflow text (missing: {marker})"
+        );
+    }
+}
+
+#[test]
 fn cli_reports_nonzero_exit_on_failure() {
     // A directory that is not a git repo: show-repo-id must fail loudly.
     let not_a_repo = tempfile::tempdir().unwrap();

@@ -17,58 +17,58 @@ Print version
 .SH SUBCOMMANDS
 .TP
 git\-gpg\-init(1)
-Initialize git\-gpg in the current repository
+Initialize git\-gpg state (.git\-gpg/) in the current repository
 .TP
 git\-gpg\-import(1)
 Import your private key(s) into the git\-gpg key store
 .TP
 git\-gpg\-trust(1)
-Establish trust for a repository by verifying the owner\*(Aqs signing key
+Verify and pin the repository owner\*(Aqs signing key (per machine)
 .TP
 git\-gpg\-tell(1)
-Add a collaborator\*(Aqs public key to the keyring
+Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 .TP
 git\-gpg\-removeperson(1)
-Remove a collaborator from the keyring
+Remove a collaborator from the keyring and re\-sign it
 .TP
 git\-gpg\-add(1)
-Add a file to be encrypted
+Track files for encryption
 .TP
 git\-gpg\-remove(1)
-Remove a file from encryption tracking
+Untrack files (leaves any ciphertext in place)
 .TP
 git\-gpg\-list(1)
 List all tracked files
 .TP
 git\-gpg\-hide(1)
-Hide \- encrypt all tracked files
+Encrypt all tracked files to the keyring and delete the plaintexts
 .TP
 git\-gpg\-reveal(1)
-Reveal \- decrypt all tracked files
+Decrypt all tracked files back to plaintext
 .TP
 git\-gpg\-cat(1)
-Cat \- decrypt a single tracked file to stdout
+Decrypt a single tracked file to stdout
 .TP
 git\-gpg\-unhide(1)
-Unhide \- decrypt a single tracked file back to plaintext and delete its ciphertext
+Decrypt one tracked file back to plaintext and delete its ciphertext
 .TP
 git\-gpg\-changes(1)
-Changes \- report where plaintext differs from the last hidden version
+Report where plaintext differs from the last hidden version
 .TP
 git\-gpg\-show\-repo\-id(1)
-Show the repository ID
+Show the repository ID derived from the git remote push URL
 .TP
 git\-gpg\-whoami(1)
-Show your identity
+Show the identity and key store git\-gpg will use
 .TP
 git\-gpg\-verify\-keyring(1)
-Verify the keyring signature
+Verify the keyring signature against the pinned trusted key
 .TP
 git\-gpg\-list\-keys(1)
-List all keys in the keyring (requires a verified keyring signature)
+List keyring keys after verifying the keyring signature
 .TP
 git\-gpg\-clean(1)
-Clean \- remove all git\-gpg metadata
+Remove the .git\-gpg state directory (\-\-yes required when data would be lost)
 .TP
 git\-gpg\-completions(1)
 Emit a shell completion script for the given shell to stdout

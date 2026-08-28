@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-trust 1  "git-gpg-trust " 
 .SH NAME
-git\-gpg\-trust \- Establish trust for a repository by verifying the owner\*(Aqs signing key
+git\-gpg\-trust \- Verify and pin the repository owner\*(Aqs signing key (per machine)
 .SH SYNOPSIS
 \fBgit\-gpg trust\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> <\fISIGNING_KEY\fR> 
 .SH DESCRIPTION
-Establish trust for a repository by verifying the owner\*(Aqs signing key
+Verify and pin the repository owner\*(Aqs signing key (per machine)
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -16,10 +16,29 @@ Git remote name
 Key store directory (default: $HOME/.git\-gpg)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIREPO_ID\fR>
 Repository ID (e.g., fara+simbo1905@github.com)
 .TP
 <\fISIGNING_KEY\fR>
 Path to owner\*(Aqs public key file
+.SH EXTRA
+Verifies the repository owner\*(Aqs public signing key and pins it in your
+local key store, keyed by the repository ID derived from the git remote
+push URL. The pin is per machine: it lives in $HOME/.git\-gpg, is never
+committed, and every collaborator must run trust themselves after a fresh
+clone. The pinned key is the anchor against which every subsequent keyring
+signature is verified — tell, hide, reveal, cat, unhide, changes,
+removeperson, verify\-keyring and list\-keys all fail closed without it.
+
+The provided repo_id must match the one computed from the remote push URL
+(see show\-repo\-id), the key file must carry the repository\*(Aqs email
+identity, and the key must not be expired, revoked or unsigned.
+
+Requires init first. Typical next step: tell.
+
+EXAMPLES
+  $ git\-gpg show\-repo\-id                          # get the repo id to pass here
+  $ git\-gpg trust fara+simbo1905@github.com owner.pub
+  $ git\-gpg trust fara+simbo1905@github.com owner.pub \-\-remote upstream

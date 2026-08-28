@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-list-keys 1  "git-gpg-list-keys " 
 .SH NAME
-git\-gpg\-list\-keys \- List all keys in the keyring (requires a verified keyring signature)
+git\-gpg\-list\-keys \- List keyring keys after verifying the keyring signature
 .SH SYNOPSIS
 \fBgit\-gpg list\-keys\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-List all keys in the keyring (requires a verified keyring signature)
+List keyring keys after verifying the keyring signature
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -16,4 +16,15 @@ Git remote name
 Key store directory (default: $HOME/.git\-gpg)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Lists all keys in the keyring after verifying its signature against the
+pinned trusted key. On failure the unverified content is still printed
+under a loud invalid\-signature banner (an auditor must SEE the tampered
+content), but the command exits nonzero so scripts never mistake an audit
+of a tampered ring for a clean one. A repo with no trust established or
+no local pin fails closed like every other gated command.
+
+EXAMPLES
+  $ git\-gpg list\-keys
+  $ git\-gpg list\-keys \-\-remote upstream

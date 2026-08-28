@@ -10,4 +10,11 @@ List all tracked files
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Prints every file tracked in .git\-gpg/tracked.json. Tracking records
+intent only: whether the plaintext or its .secret ciphertext currently
+exists on disk is not checked.
+
+EXAMPLES
+  $ git\-gpg list

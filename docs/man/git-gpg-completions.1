@@ -10,7 +10,7 @@ Emit a shell completion script for the given shell to stdout
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fISHELL\fR>
 Shell to generate completions for
@@ -30,3 +30,12 @@ powershell
 .IP \(bu 2
 zsh
 .RE
+.SH EXTRA
+Writes a shell completion script for the git\-gpg CLI to stdout. The
+script is generated from the live clap definition, so it always matches
+the installed binary.
+
+EXAMPLES
+  $ git\-gpg completions bash > /etc/bash_completion.d/git\-gpg
+  $ git\-gpg completions zsh > "${fpath[1]}/_git\-gpg"
+  $ git\-gpg completions fish > ~/.config/fish/completions/git\-gpg.fish

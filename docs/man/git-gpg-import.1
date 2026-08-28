@@ -13,7 +13,20 @@ Import your private key(s) into the git\-gpg key store
 Key store directory (default: $HOME/.git\-gpg)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIFILES\fR>
 File(s) containing armoured private key blocks
+.SH EXTRA
+Imports armoured PRIVATE key blocks into your per\-machine key store
+($HOME/.git\-gpg/secret\-keys.pgp). This is where reveal/cat/unhide/changes
+find the private key matching your email, and where tell/removeperson find
+the owner\*(Aqs signing key. The key store is local to this machine and is
+never committed; each collaborator imports their own key.
+
+Keys whose fingerprint is already present in the key store are not
+duplicated.
+
+EXAMPLES
+  $ git\-gpg import my\-key.asc
+  $ git\-gpg import key1.asc key2.asc \-\-gpg\-home /path/to/store

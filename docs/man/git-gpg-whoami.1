@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-whoami 1  "git-gpg-whoami " 
 .SH NAME
-git\-gpg\-whoami \- Show your identity
+git\-gpg\-whoami \- Show the identity and key store git\-gpg will use
 .SH SYNOPSIS
 \fBgit\-gpg whoami\fR [\fB\-\-email\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Show your identity
+Show the identity and key store git\-gpg will use
 .SH OPTIONS
 .TP
 \fB\-\-email\fR \fI<EMAIL>\fR
@@ -16,4 +16,13 @@ Email override
 Key store directory (default: $HOME/.git\-gpg)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Prints the identity git\-gpg will use for you — git config user.email, or
+the \-\-email override — plus the local key store path where your private
+key must be imported (git\-gpg import). Use it to check which key
+reveal/cat/unhide will look up before they fail on a missing identity.
+
+EXAMPLES
+  $ git\-gpg whoami
+  $ git\-gpg whoami \-\-email alice@example.com

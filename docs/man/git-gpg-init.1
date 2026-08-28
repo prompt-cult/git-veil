@@ -2,12 +2,24 @@
 .el .ds Aq '
 .TH git-gpg-init 1  "git-gpg-init " 
 .SH NAME
-git\-gpg\-init \- Initialize git\-gpg in the current repository
+git\-gpg\-init \- Initialize git\-gpg state (.git\-gpg/) in the current repository
 .SH SYNOPSIS
 \fBgit\-gpg init\fR [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Initialize git\-gpg in the current repository
+Initialize git\-gpg state (.git\-gpg/) in the current repository
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Run init first: trust, tell, add and hide all require the .git\-gpg/ state
+directory it creates (keyring, trust.json, tracked.json). init never
+touches .gitignore — the <name>.secret ciphertext files are meant to be
+committed, so gitignoring them would defeat the fresh\-clone decryptability
+contract.
+
+init refuses to reset a repository that already has established trust;
+remove .git\-gpg/ explicitly if you really want a fresh start.
+
+EXAMPLES
+  $ git\-gpg init    # create .git\-gpg/ in the current git repository

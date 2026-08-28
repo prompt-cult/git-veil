@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-verify-keyring 1  "git-gpg-verify-keyring " 
 .SH NAME
-git\-gpg\-verify\-keyring \- Verify the keyring signature
+git\-gpg\-verify\-keyring \- Verify the keyring signature against the pinned trusted key
 .SH SYNOPSIS
 \fBgit\-gpg verify\-keyring\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Verify the keyring signature
+Verify the keyring signature against the pinned trusted key
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -16,4 +16,15 @@ Git remote name
 Key store directory (default: $HOME/.git\-gpg)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Verifies the keyring\*(Aqs signature against the pinned trusted key for this
+repository. Fail\-closed: without an established trust pin (git\-gpg
+trust) on this machine, or when the signature does not verify, the
+command exits with an error. Every gated command (hide, reveal, cat,
+unhide, changes, tell, removeperson, list\-keys) runs this same check
+before touching secrets.
+
+EXAMPLES
+  $ git\-gpg verify\-keyring
+  $ git\-gpg verify\-keyring \-\-remote upstream

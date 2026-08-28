@@ -2,15 +2,25 @@
 .el .ds Aq '
 .TH git-gpg-remove 1  "git-gpg-remove " 
 .SH NAME
-git\-gpg\-remove \- Remove a file from encryption tracking
+git\-gpg\-remove \- Untrack files (leaves any ciphertext in place)
 .SH SYNOPSIS
 \fBgit\-gpg remove\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
-Remove a file from encryption tracking
+Untrack files (leaves any ciphertext in place)
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIFILES\fR>
 File(s) to remove
+.SH EXTRA
+Untracks files (removes them from .git\-gpg/tracked.json). The plaintext
+may already be gone — hide deletes it — so the file does not need to
+exist. Untracking is not decrypting: any <name>.secret ciphertext is left
+in place; restore the plaintext with unhide or reveal first if you want
+it gone too.
+
+EXAMPLES
+  $ git\-gpg remove .env
+  $ git\-gpg remove config/credentials.yml

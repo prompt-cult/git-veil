@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-unhide 1  "git-gpg-unhide " 
 .SH NAME
-git\-gpg\-unhide \- Unhide \- decrypt a single tracked file back to plaintext and delete its ciphertext
+git\-gpg\-unhide \- Decrypt one tracked file back to plaintext and delete its ciphertext
 .SH SYNOPSIS
 \fBgit\-gpg unhide\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
-Unhide \- decrypt a single tracked file back to plaintext and delete its ciphertext
+Decrypt one tracked file back to plaintext and delete its ciphertext
 .SH OPTIONS
 .TP
 \fB\-\-email\fR \fI<EMAIL>\fR
@@ -22,7 +22,18 @@ Key store directory (default: $HOME/.git\-gpg)
 Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIFILE\fR>
 File to unhide
+.SH EXTRA
+Decrypts one tracked file\*(Aqs in\-place <name>.secret ciphertext back to
+the plaintext path and deletes the ciphertext — the inverse of hide for a
+single file. The keyring signature is verified against the pinned trusted
+key first; the file must be tracked and its ciphertext present. Typical
+round trip: unhide to edit, then hide to re\-encrypt.
+
+EXAMPLES
+  $ git\-gpg unhide .env
+  $ git\-gpg unhide .env \-\-email alice@example.com
+  $ git\-gpg unhide .env \-\-passphrase\-stdin < pass.txt

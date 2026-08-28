@@ -2,15 +2,26 @@
 .el .ds Aq '
 .TH git-gpg-add 1  "git-gpg-add " 
 .SH NAME
-git\-gpg\-add \- Add a file to be encrypted
+git\-gpg\-add \- Track files for encryption
 .SH SYNOPSIS
 \fBgit\-gpg add\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
-Add a file to be encrypted
+Track files for encryption
 .SH OPTIONS
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIFILES\fR>
 File(s) to add
+.SH EXTRA
+Tracks files for encryption in .git\-gpg/tracked.json (stored
+repo\-relative). Nothing is encrypted yet — hide does that. Files must
+exist, and a symlink must resolve inside the repository, so hide can
+never be tricked into reading or deleting a file outside the repo.
+
+Typical flow: init \-> trust \-> tell (once per collaborator) \-> add \-> hide.
+
+EXAMPLES
+  $ git\-gpg add .env
+  $ git\-gpg add config/credentials.yml notes.md

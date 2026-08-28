@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-gpg-changes 1  "git-gpg-changes " 
 .SH NAME
-git\-gpg\-changes \- Changes \- report where plaintext differs from the last hidden version
+git\-gpg\-changes \- Report where plaintext differs from the last hidden version
 .SH SYNOPSIS
 \fBgit\-gpg changes\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
-Changes \- report where plaintext differs from the last hidden version
+Report where plaintext differs from the last hidden version
 .SH OPTIONS
 .TP
 \fB\-\-email\fR \fI<EMAIL>\fR
@@ -22,7 +22,18 @@ Key store directory (default: $HOME/.git\-gpg)
 Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 [\fIFILES\fR]
 File(s) to check (default: all tracked files)
+.SH EXTRA
+Reports where the on\-disk plaintext differs from the last hidden version:
+each tracked file\*(Aqs .secret ciphertext is decrypted and compared with the
+plaintext beside it. Differences are data, not errors. Files with no
+ciphertext, or no plaintext on disk, are skipped with a note and are not
+counted as changed.
+
+EXAMPLES
+  $ git\-gpg changes                # check every tracked file
+  $ git\-gpg changes .env           # check one file
+  $ git\-gpg changes \-\-passphrase\-stdin < pass.txt

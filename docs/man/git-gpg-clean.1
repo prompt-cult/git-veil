@@ -2,15 +2,28 @@
 .el .ds Aq '
 .TH git-gpg-clean 1  "git-gpg-clean " 
 .SH NAME
-git\-gpg\-clean \- Clean \- remove all git\-gpg metadata
+git\-gpg\-clean \- Remove the .git\-gpg state directory (\-\-yes required when data would be lost)
 .SH SYNOPSIS
 \fBgit\-gpg clean\fR [\fB\-\-yes\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Clean \- remove all git\-gpg metadata
+Remove the .git\-gpg state directory (\-\-yes required when data would be lost)
 .SH OPTIONS
 .TP
 \fB\-\-yes\fR
 Confirm destruction of tracked state and any ciphertext. Required when the clean would destroy tracked files or their in\-place `<name>.secret` ciphertext (which may be the only remaining copy)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
-Print help
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Removes the .git\-gpg state directory (keyring, trust.json,
+tracked.json). .gitignore is never rewritten, and the in\-place .secret
+ciphertext files are ordinary committable files that clean does not
+disown.
+
+Because hide deletes the plaintexts, the .secret ciphertexts beside them
+can be the ONLY remaining copy of a secret. A clean that would destroy
+tracked state or ciphertext therefore refuses unless \-\-yes confirms it.
+
+EXAMPLES
+  $ git\-gpg clean          # refuses while tracked files or ciphertext exist
+  $ git\-gpg clean \-\-yes    # confirmed destruction of .git\-gpg/
