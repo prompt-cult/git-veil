@@ -355,6 +355,10 @@ fn parse_git_remote_url_table() {
         // closed, never forge a repo identity
         ("https://github.com/user:pass@evil/repo", None),
         ("git@github.com:git@github.com:simbo1905/fara.srg:2g2", None),
+        // fuzz finding: SCP-style HOST group must also reject `@` — a
+        // credential-shaped `user@host` inside the host must never land in
+        // the derived service identity
+        ("git@github\u{0}4om?git@github.com:simbo1905/fara.srg\u{11}2g2", None),
         // Invalid rows must stay invalid
         ("not-a-valid-url", None),
         ("git@github.com", None),
@@ -377,6 +381,56 @@ fn parse_git_remote_url_table() {
                 assert!(
                     parse_git_remote_url(url).is_err(),
                     "expected {url:?} to be rejected"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn parse_error_never_echoes_the_input() {
+    // fuzz artifact crash-d921462957196246962ab5f7e319fdb370e3f8da: an
+    // embedded credential-shaped prefix later in the URL must not surface
+    // in the parse error, and the fixed message must echo no input at all
+    let artifact = "https://gm.cOm:git@githttps://gm.cOm:git@gith]\0\0\0\0\0\0imbo1905/fara.srg:3g2\nh]\0\0\0\0\0\0imbo1905/fara.srg:3g2\n";
+    let inputs: &[&str] = &[
+        // note: `https://user:pass@github.com/owner/repo` alone is a SUPPORTED
+        // shape (userinfo is stripped, parse succeeds), so the invalid variant
+        // here doubles the credential material — rejected fail-closed
+        "https://user:pass@github.com/user:pass@evil/repo",
+        artifact,
+    ];
+
+    for input in inputs {
+        let err = parse_git_remote_url(input)
+            .err()
+            .expect("credential-shaped input must be rejected");
+        let message = err.to_string();
+
+        assert!(
+            !message.contains("://"),
+            "error text must not echo any URL/scheme fragment: {message:?}"
+        );
+        assert!(
+            !message.contains("user:pass"),
+            "error text must not echo the userinfo: {message:?}"
+        );
+        assert!(
+            !message.contains("gm.cOm:git"),
+            "error text must not echo the embedded credential: {message:?}"
+        );
+        assert!(
+            !message.contains(input),
+            "error text must not echo the raw input: {message:?}"
+        );
+        // policy strength: no substring of the input longer than 8 chars
+        // may appear in the error text (mirrors the fuzz oracle)
+        if input.len() >= 8 {
+            let message_bytes = message.as_bytes();
+            for window in input.as_bytes().windows(8) {
+                assert!(
+                    !message_bytes.windows(8).any(|w| w == window),
+                    "error text must not echo any 8+ char substring of the input: {message:?}"
                 );
             }
         }

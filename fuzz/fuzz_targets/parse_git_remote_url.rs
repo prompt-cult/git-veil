@@ -32,27 +32,21 @@ fuzz_target!(|data: &[u8]| {
             );
         }
         Err(err) => {
-            // credential redaction: when the URL starts with scheme
-            // userinfo (`scheme://user:pass@...`), the error text must
-            // never echo that credential prefix (redact_url invariant)
+            // never-echo policy: on Err the error text must not contain ANY
+            // substring of the raw input longer than 8 characters. Check the
+            // error string against each sliding 8-char window of the input,
+            // so no URL shape can leak credentials into the error message.
             let message = format!("{err:#}");
-            if let Some((scheme, rest)) = s.split_once("://") {
-                if scheme.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
-                    && !scheme.is_empty()
-                {
-                    if let Some(at) = rest.find('@') {
-                        let userinfo = &rest[..at];
-                        if !userinfo.is_empty() && !userinfo.contains('/') {
-                            let credential_prefix = format!("{scheme}://{userinfo}@");
-                            if s.starts_with(&credential_prefix) {
-                                assert!(
-                                    !message.contains(&credential_prefix),
-                                    "error text must not echo credentials: {message}"
-                                );
-                            }
-                        }
-                    }
-                }
+            let message_bytes = message.as_bytes();
+            if s.len() < 8 {
+                return;
+            }
+            for window in s.as_bytes().windows(8) {
+                assert!(
+                    !message_bytes.windows(8).any(|w| w == window),
+                    "error text must not echo any part of the input (window {:?}): {message}",
+                    String::from_utf8_lossy(window)
+                );
             }
         }
     }

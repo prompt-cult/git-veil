@@ -6,11 +6,12 @@ use std::sync::LazyLock;
 
 /// SSH SCP-style: `user@host:owner/repo[.git][/][?]` — any SSH user (not just
 /// `git`). The user part must not contain `/` so that scheme URLs like
-/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The user
-/// and owner/repo groups additionally exclude `@` and `:` so credential-shaped
-/// material can never land in the derived identity (fails closed instead).
+/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The user,
+/// host and owner/repo groups additionally exclude `@` and `:` (where shape
+/// permits) so credential-shaped material can never land in the derived
+/// identity (fails closed instead).
 static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[^@/]+@([^:/]+):([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
+    Regex::new(r"^[^@/]+@([^:/@]+):([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
         .expect("valid SCP-style SSH URL regex")
 });
 
@@ -23,17 +24,6 @@ static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
         .expect("valid scheme URL regex")
 });
-
-/// Strips `user[:pass]@` credentials from a scheme URL so that failed parses
-/// can be reported without ever logging credentials.
-static REDACT_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@]+@").expect("valid userinfo redaction regex")
-});
-
-/// Redacts credentials from a URL for safe display in error messages.
-fn redact_url(url: &str) -> String {
-    REDACT_USERINFO_RE.replace(url, "${1}***@").into_owned()
-}
 
 /// Lowercases service, owner and repo so that `GitHub.com/Owner/Repo` and
 /// `github.com/owner/repo` are the same repository identity.
@@ -83,7 +73,12 @@ pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
         return Ok(normalize(&repo, &user, &service));
     }
 
-    anyhow::bail!("Invalid git remote URL format: {}", redact_url(url))
+    // Never echo the failing URL: the user typed it, and echoing it risks
+    // surfacing embedded credentials (redaction is shape-dependent and
+    // cannot be made exhaustive). A fixed message carries no input material.
+    anyhow::bail!(
+        "invalid git remote URL format; expected a supported GitHub/GitLab/Codeberg shape — see git-gpg help trust"
+    )
 }
 
 /// Gets the push URL for a given remote from a git repository.
