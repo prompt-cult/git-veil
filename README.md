@@ -112,6 +112,8 @@ Step-by-step guides are in `docs/`:
 - Two collaborators: [docs/two-collaborators.md](docs/two-collaborators.md)
 - Joining user: [docs/joining.md](docs/joining.md)
 - Departing user: [docs/departing.md](docs/departing.md)
+- Migrating from git-secret: [docs/migrating-from-git-secret.md](docs/migrating-from-git-secret.md)
+- Migrating from git-crypt: [docs/migrating-from-git-crypt.md](docs/migrating-from-git-crypt.md)
 
 ## Compatibility with git-secret
 
