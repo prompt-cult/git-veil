@@ -58,11 +58,24 @@ measure.
 rm -rf ~/work/demo                 # wipe his clone (ciphertext + .git-gpg/)
 ```
 
-And his local key store, `$HOME/.git-gpg/secret-keys.pgp`, holds his
-PRIVATE key. **git-gpg has no command to remove a single key from the key
-store** — he must edit the armoured blocks out of that file by hand, or
-delete the file if it holds nothing else he needs. His normal gpg keyring
-(gnupg) is separate: revoke or delete the key there if he wants it dead:
+And his local key store, `$HOME/.git-gpg`, holds his PRIVATE key. He
+removes it from that store with `removekey` — by fingerprint where known
+(preferred: an email that matches several keys is refused without
+confirmation), or by exact email. The key is usually the only private key
+in his store, so `--yes` confirms its removal:
+
+```sh
+git-gpg removekey bob@example.com --yes
+```
+
+This is destructive and local-only: it does not touch any repository,
+keyring or trust state, and it does NOT revoke anything. If removekey
+refuses (a corrupt store is never deleted; an email matching several keys
+must be disambiguated), the fallback is the same as ever: edit the
+armoured blocks out of `secret-keys.pgp` and `public-keys.pgp` by hand,
+or delete the file if it holds nothing else he needs. His normal gpg
+keyring (gnupg) is separate: revoke or delete the key there if he wants
+it dead:
 
 ```sh
 gpg --delete-secret-and-public-key bob@example.com
@@ -112,13 +125,11 @@ Meanwhile, bob pulling the updated repo finds the tool shuts him out:
 $ git-gpg reveal
 ✓ Keyring signature verified
 ...
-Error: user bob@example.com not found in keyring; check --email, or ask the owner to add you with git gpg tell
+Error: user bob@example.com not found in keyring; check --email, or ask the owner to add you with git-gpg tell
 ```
 
 Both facts at once are the whole story: the tool refuses him on NEW
 keyrings, but no software can un-ring old ciphertext in his possession.
-(That error line also says `git gpg tell` — the binary is spelled
-`git-gpg`.)
 
 ## Checklist
 
@@ -126,5 +137,5 @@ keyrings, but no software can un-ring old ciphertext in his possession.
 - [ ] Owner: `reveal` then `hide`, commit `.git-gpg/keyring` + re-hidden `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
-- [ ] Departing user: wipe clone; hand-remove their key from `$HOME/.git-gpg/secret-keys.pgp`; revoke/delete the key in their gpg keyring
+- [ ] Departing user: wipe clone; `removekey` their key from the local key store; revoke/delete the key in their gpg keyring
 - [ ] Optional: rewrite history (`git filter-repo`) and force-push if the ciphertext bytes themselves must vanish

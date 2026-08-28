@@ -27,8 +27,12 @@ gpg --armor --export example@github.com > me.pub
 
 What just happened: a signing key with an encryption subkey exists in your
 gpg keyring, exported as `key.asc` (PRIVATE — import this, then delete it)
-and `me.pub` (public — what `trust` pins). git-gpg has no key-export
-command; public keys travel as armoured files like any OpenPGP key.
+and `me.pub` (public — what `trust` pins). git-gpg has **no** key
+generation — every OpenPGP key starts life in an external tool like gpg.
+For the public half, `gpg --armor --export` above is one way out; once
+your key is imported (step 2), `git-gpg export example@github.com
+--output me.pub` writes the same armoured public key from the local key
+store, no gpg needed.
 
 ## 2. Initialize, import, identify
 

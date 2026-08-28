@@ -78,6 +78,8 @@ member.
 |------------------|-------------------------------------------------------------------------|
 | `init`           | Initialize git-gpg state (`.git-gpg/`) in the current repository        |
 | `import`         | Import your private key(s) into the git-gpg key store                   |
+| `export`         | Export an armoured public key from the local key store                  |
+| `removekey`      | Remove a key from the local key store (destructive, local-only)         |
 | `trust`          | Verify and pin the repository owner's signing key (per machine)         |
 | `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
 | `removeperson`   | Remove a collaborator from the keyring and re-sign it                   |

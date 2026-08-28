@@ -26,8 +26,11 @@ $ git-gpg tell newcomer@example.com newcomer.pub
 ```
 
 (You send them your public key first: generate a key pair as in step 1 of
-[docs/solo.md](solo.md) with your own email, then `gpg --armor --export
-newcomer@example.com > newcomer.pub`. git-gpg has no export command.)
+[docs/solo.md](solo.md) with your own email — git-gpg has **no** key
+generation — then export it from your key store with `git-gpg import
+key.asc` followed by `git-gpg export newcomer@example.com --output
+newcomer.pub`; `gpg --armor --export newcomer@example.com > newcomer.pub`
+works too.)
 
 Then — critical — the owner re-hides, because files hidden before you were
 told do not have you as a recipient:
@@ -136,14 +139,14 @@ the last hidden version.
 ## Failure shapes worth knowing
 
 - `no local pin for …` — you have not run `trust` on this machine (step 4).
-- `user newcomer@example.com not found in keyring` — the owner has not run
-  `tell` (or has not pushed the updated keyring; `git pull` first).
+- `user newcomer@example.com not found in keyring; check --email, or ask
+  the owner to add you with git-gpg tell` — the owner has not run `tell`
+  (or has not pushed the updated keyring; `git pull` first).
 - `decryption failed: this ciphertext was not encrypted to your key …` —
   the owner told you but did not re-`hide` (or you are on an old commit;
   `git pull`).
 - `No secret key found for email: …` — your key store lacks your private
-  key; redo step 2. Error strings may say `git gpg <cmd>`; the binary is
-  spelled `git-gpg`.
+  key; redo step 2.
 
 ## Daily use
 

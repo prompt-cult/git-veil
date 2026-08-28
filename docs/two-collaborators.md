@@ -3,9 +3,11 @@
 The owner (`example@github.com`) shares a repository with a collaborator
 (`alice@example.com`), remote `git@github.com:example/demo.git`, repository
 ID `demo+example@github.com`. Each person has their own machine, their own
-`$HOME/.git-gpg` key store, and their own key pair. Both sides need gpg (or
-any OpenPGP tool) to generate and export keys — git-gpg itself has no
-key-generation or key-export command.
+`$HOME/.git-gpg` key store, and their own key pair. Both sides need gpg
+(or any OpenPGP tool) to generate keys — git-gpg itself has **no** key
+generation. Exporting public keys needs no gpg: each person runs
+`git-gpg export <email> --output <file>` from their own key store (below,
+after their key is imported; `gpg --armor --export` works too).
 
 ## Part 1 — the owner sets the repository up
 
@@ -34,10 +36,12 @@ git push
 Public keys travel as armoured `.pub` files over any channel you both
 trust. **Alice** generates her key pair exactly as in step 1 of
 [docs/solo.md](solo.md) (primary + encryption subkey, with her own email),
-then exports her public key and sends it to the owner:
+then imports her private key into her key store and exports her public
+key from it, and sends the file to the owner:
 
 ```sh
-gpg --armor --export alice@example.com > alice.pub
+git-gpg import alice-private-key.asc
+git-gpg export alice@example.com --output alice.pub
 ```
 
 **The owner** verifies out of band that `alice.pub` really is Alice's key
@@ -87,11 +91,10 @@ pins the owner key — this is per machine and the clone cannot carry it:
 
 ```sh
 $ git-gpg reveal
-Error: no local pin for demo+example@github.com (from remote 'origin'); run git gpg trust demo+example@github.com <keyfile> to pin this repository's key on this machine
+Error: no local pin for demo+example@github.com (from remote 'origin'); run git-gpg trust demo+example@github.com <keyfile> to pin this repository's key on this machine
 ```
 
-(That failure is fail-closed working as designed. Note the error text says
-`git gpg trust` — the binary is spelled `git-gpg trust`.) Alice runs it
+(That failure is fail-closed working as designed.) Alice runs it
 with the repo ID she gets from `git-gpg show-repo-id` and the `owner.pub`
 file the owner gave her:
 
@@ -136,8 +139,9 @@ $ git-gpg cat .env        # peek to stdout; touches no disk state
   onboarding notes, or have the owner re-send it).
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
-- The `tell` error `user alice@example.com not found in keyring` at reveal
-  time means the owner has not yet done Part 2's re-hide-and-push.
+- The reveal error `user alice@example.com not found in keyring; check
+  --email, or ask the owner to add you with git-gpg tell` means the owner
+  has not yet done Part 2's re-hide-and-push.
 
 ## Handy checks on either side
 
