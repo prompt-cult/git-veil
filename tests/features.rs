@@ -4,8 +4,8 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    check_email_in_identities, cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_verify_keyring, default_gpg_home, encrypt_to_gpg_key,
+    check_email_in_identities, cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_removeperson,
+    cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring, default_gpg_home, encrypt_to_gpg_key,
     extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_email,
     find_private_key_by_fingerprint, sign_keyring_content, Keyring, KeyringEntry, TrustStore,
     TrackedFiles,
@@ -773,6 +773,171 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
     assert!(
         keyring_text.contains("-----BEGIN PGP SIGNATURE-----"),
         "keyring must be signed after tell"
+    );
+}
+
+// ============================================================================
+// removeperson: revoking a collaborator from the keyring
+// ============================================================================
+
+#[test]
+#[serial]
+fn removeperson_removes_entry_and_resigns() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_, alice_pub) = generate_test_key("alice@example.com");
+    let (_, bob_pub) = generate_test_key("bob@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+    let bob_keyfile = repo_temp.path().join("bob.pub");
+    write_public_key_file(&bob_pub, &bob_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("tell alice must succeed");
+    cmd_tell(
+        "bob@example.com",
+        bob_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("tell bob must succeed");
+
+    let remove_result = cmd_removeperson("bob@example.com", "origin", &gpg_home);
+
+    let keyring_text = std::fs::read_to_string(".git-gpg/keyring").unwrap();
+    let keyring = Keyring::parse(&keyring_text).unwrap();
+    let verify_result = cmd_verify_keyring("origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    remove_result.expect("removeperson must succeed for an existing collaborator");
+    assert_eq!(
+        keyring.list_emails(),
+        vec!["alice@example.com"],
+        "keyring must contain exactly alice after removing bob, got: {:?}",
+        keyring.entries
+    );
+    assert!(
+        keyring_text.contains("-----BEGIN PGP SIGNATURE-----"),
+        "keyring must be re-signed after removeperson, got: {}",
+        keyring_text
+    );
+    verify_result.expect("keyring signature must still verify after removeperson");
+}
+
+#[test]
+#[serial]
+fn removeperson_unknown_email_fails() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("tell alice must succeed");
+
+    let remove_result = cmd_removeperson("carol@example.com", "origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let err = remove_result.err().expect("removing an unknown email must fail");
+    assert!(
+        err.to_string().contains("carol@example.com"),
+        "the error must name the missing email, got: {}",
+        err
+    );
+}
+
+#[test]
+#[serial]
+fn removeperson_requires_trust() {
+    let original_dir = std::env::current_dir().unwrap();
+    let repo_temp = setup_git_repo_with_origin_remote();
+    std::env::set_current_dir(repo_temp.path()).unwrap();
+
+    cmd_init().expect("cmd_init must succeed");
+
+    let remove_result = cmd_removeperson(
+        "alice@example.com",
+        "origin",
+        &repo_temp.path().join("gpg-home"),
+    );
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        remove_result.is_err(),
+        "removeperson without established trust must fail: {:?}",
+        remove_result.err()
+    );
+}
+
+#[test]
+#[serial]
+fn removeperson_rejects_tampered_keyring() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("tell alice must succeed");
+
+    // Tamper: forge a keyring containing an attacker entry, signed by a key
+    // that is NOT the trusted owner key. removeperson must refuse to touch
+    // (and never re-sign) this content.
+    let (mallory_sec, mallory_pub) = generate_test_key("mallory@evil.com");
+    let mut forged = Keyring {
+        entries: vec![KeyringEntry {
+            email: "mallory@evil.com".to_string(),
+            base64_key: "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+            fingerprint: extract_key_fingerprint(&mallory_pub),
+        }],
+        signature: None,
+    };
+    let serialized = forged.serialize();
+    let content_to_sign = extract_content_to_verify_from_keyring(&serialized)
+        .expect("freshly serialized keyring must contain the END marker");
+    let signature = sign_keyring_content(&content_to_sign, &mallory_sec)
+        .expect("mallory must be able to sign her own keyring");
+    forged.signature = Some(signature);
+    std::fs::write(".git-gpg/keyring", forged.serialize()).unwrap();
+
+    let remove_result = cmd_removeperson("mallory@evil.com", "origin", &gpg_home);
+
+    let keyring_text_after = std::fs::read_to_string(".git-gpg/keyring").unwrap();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    assert!(
+        remove_result.is_err(),
+        "removeperson must reject a tampered keyring: {:?}",
+        remove_result.err()
+    );
+    assert!(
+        keyring_text_after.contains("mallory@evil.com"),
+        "the tampered keyring must be left untouched, got: {}",
+        keyring_text_after
     );
 }
 

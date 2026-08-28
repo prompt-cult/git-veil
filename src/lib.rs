@@ -19,6 +19,7 @@ pub use commands::import::cmd_import;
 pub use commands::list::cmd_list;
 pub use commands::list_keys::cmd_list_keys;
 pub use commands::remove::cmd_remove;
+pub use commands::removeperson::cmd_removeperson;
 pub use commands::reveal::cmd_reveal;
 pub use commands::show_repo_id::cmd_show_repo_id;
 pub use commands::tell::cmd_tell;

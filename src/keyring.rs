@@ -98,6 +98,18 @@ impl Keyring {
         self.entries.iter().find(|e| e.email == email)
     }
 
+    /// Removes the entry with the exact given email. Returns true if an entry
+    /// was removed. Clearing the signature forces a re-sign, like add_entry.
+    pub fn remove_entry(&mut self, email: &str) -> bool {
+        let len_before = self.entries.len();
+        self.entries.retain(|e| e.email != email);
+        let removed = self.entries.len() != len_before;
+        if removed {
+            self.signature = None;
+        }
+        removed
+    }
+
     pub fn list_emails(&self) -> Vec<&str> {
         self.entries.iter().map(|e| e.email.as_str()).collect()
     }

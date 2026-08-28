@@ -2,6 +2,7 @@ pub mod init;
 pub mod import;
 pub mod trust;
 pub mod tell;
+pub mod removeperson;
 pub mod show_repo_id;
 pub mod whoami;
 pub mod verify_keyring;

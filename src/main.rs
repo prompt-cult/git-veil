@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use git_gpg::{
-    cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_add, cmd_remove, cmd_list,
+    cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove, cmd_list,
     cmd_hide, cmd_reveal, cmd_clean, cmd_show_repo_id, cmd_whoami,
     cmd_verify_keyring, cmd_list_keys, default_gpg_home, get_git_config_email,
 };
@@ -57,6 +57,19 @@ enum Commands {
         email: String,
         /// Path to collaborator's public key file
         public_key: String,
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// GPG home directory
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+    },
+
+    /// Remove a collaborator from the keyring
+    #[command(name = "removeperson")]
+    RemovePerson {
+        /// Email of the collaborator to remove
+        email: String,
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
@@ -173,6 +186,9 @@ fn main() -> Result<()> {
         }
         Commands::Tell { email, public_key, remote, gpg_home: opt } => {
             cmd_tell(&email, &public_key, &remote, &resolve_gpg_home(opt)?)?;
+        }
+        Commands::RemovePerson { email, remote, gpg_home: opt } => {
+            cmd_removeperson(&email, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Add { files } => cmd_add(files)?,
         Commands::Remove { files } => cmd_remove(files)?,
