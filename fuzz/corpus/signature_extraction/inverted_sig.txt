@@ -1,0 +1,4 @@
+-----BEGIN GIT-GPG KEYRING-----
+-----END GIT-GPG KEYRING-----
+-----END PGP SIGNATURE-----
+-----BEGIN PGP SIGNATURE-----

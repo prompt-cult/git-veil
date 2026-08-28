@@ -34,6 +34,17 @@ impl Keyring {
             .find(END_MARKER)
             .context("Missing END GIT-GPG KEYRING marker")?;
 
+        // The END marker must come strictly after the full BEGIN marker:
+        // anything else (END before BEGIN, or an END overlapping the BEGIN
+        // region) is a misordered keyring. The keyring is committed repo
+        // content and therefore attacker-writable, so this is rejected as a
+        // parse error — never a slicing panic.
+        if end_idx < begin_idx + BEGIN_MARKER.len() {
+            anyhow::bail!(
+                "Malformed keyring: END GIT-GPG KEYRING marker precedes or overlaps the BEGIN marker"
+            );
+        }
+
         let keyring_section = &content[begin_idx + BEGIN_MARKER.len()..end_idx];
         let entries: Vec<KeyringEntry> = keyring_section
             .lines()

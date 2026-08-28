@@ -1,0 +1,11 @@
+git@github.com:simbo1905/fara.git
+https://github.com/user/repo.git
+https://user:pass@github.com/user/repo.git
+ssh://git@codeberg.org:2222/user/repo.git
+person@git.sr.ht:~person/repo.git
+git@host:repo
+git@host:a@b/c
+git@host:a:b/c
+https://
+
+https://user:pass@host:8443/o/r.git/

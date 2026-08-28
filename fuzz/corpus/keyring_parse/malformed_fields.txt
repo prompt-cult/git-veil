@@ -1,0 +1,6 @@
+-----BEGIN GIT-GPG KEYRING-----
+two:fields
+four:a:b:c:d
+empty:::
+::::::::::::::::::::
+-----END GIT-GPG KEYRING-----

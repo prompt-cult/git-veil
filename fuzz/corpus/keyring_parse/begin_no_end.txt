@@ -1,0 +1,2 @@
+-----BEGIN GIT-GPG KEYRING-----
+alice@example.com:YWJj:ABC123

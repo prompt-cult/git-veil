@@ -10,9 +10,9 @@ use git_gpg::{
     cmd_verify_keyring, cmd_list_keys, decrypt_with_gpg_key, default_gpg_home,
     encrypt_to_gpg_key, export_public_key, extract_content_to_verify_from_keyring,
     extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
-    import_key_to_gpg_home, parse_armored_public_key, sign_keyring_content,
-    verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry, TrustPinStore, TrustStore,
-    TrackedFiles,
+    import_key_to_gpg_home, parse_armored_public_key, parse_git_remote_url,
+    sign_keyring_content, verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry,
+    TrustPinStore, TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -530,6 +530,70 @@ fn add_entry_updates_existing_email_and_clears_signature() {
         keyring.signature.is_none(),
         "add_entry must clear the signature so the keyring gets re-signed"
     );
+}
+
+#[test]
+fn keyring_parse_rejects_end_marker_before_begin() {
+    // A committed keyring is attacker-writable content: an END marker that
+    // precedes (or overlaps) the BEGIN marker must yield a proper parse
+    // error, never a panic (this input used to panic with
+    // "byte range starts at .. but ends at 0" in the marker slicing).
+    let inverted = format!(
+        "{}\n{}\n",
+        git_gpg::END_MARKER,
+        git_gpg::BEGIN_MARKER
+    );
+    let err = Keyring::parse(&inverted)
+        .err()
+        .expect("END-before-BEGIN keyring must be rejected, not panic");
+    let message = format!("{err:#}");
+    assert!(
+        message.to_lowercase().contains("marker"),
+        "the error must name the marker misordering, got: {message}"
+    );
+
+    // BEGIN followed by END with nothing (or junk) between still parses as
+    // an empty keyring; a second BEGIN inside the body is malformed.
+    let nested = format!(
+        "{}\n{}\n{}\n",
+        git_gpg::BEGIN_MARKER,
+        git_gpg::BEGIN_MARKER,
+        git_gpg::END_MARKER
+    );
+    assert!(
+        Keyring::parse(&nested).is_err(),
+        "a nested BEGIN marker must be rejected as a malformed entry"
+    );
+}
+
+// Andon (fuzz finding, 2026-08-28): fuzz_parse_git_remote_url showed the
+// remote-URL parser accepts '@' and ':' inside the user/repo components, so
+// credential-shaped material lands IN the derived repo_id — e.g.
+// `https://github.com/user:pass@evil/repo` yields user = "user:pass@evil",
+// and `git@github.com:git@github.com:simbo1905/fara.srg:2g2` yields
+// user = "git@github.com:simbo1905". The owning module is src/repo_identity.rs
+// (outside the fuzzing agent's lane), so the fix is delegated: the user and
+// repo capture groups in SSH_SCP_RE and SCHEME_USERINFO_RE must exclude
+// '@' and ':' (or the parse must reject such URLs). This test is the Red
+// half of the Red/Green pair; un-ignore it when the fix lands.
+#[test]
+#[ignore = "Andon: repo_identity parser leaks credential-shaped material into repo_id components; fix delegated to repo_identity owner"]
+fn repo_id_components_never_contain_credential_shaped_material() {
+    let urls = [
+        "https://github.com/user:pass@evil/repo",
+        "git@github.com:git@github.com:simbo1905/fara.srg:2g2",
+    ];
+    for url in urls {
+        if let Ok((repo, user, service)) = parse_git_remote_url(url) {
+            assert!(
+                !repo.contains(['@', ':'])
+                    && !user.contains(['@', ':'])
+                    && !service.contains(['@', ':']),
+                "credential-shaped material leaked into repo_id components for {url}: \
+                 repo={repo:?} user={user:?} service={service:?}"
+            );
+        }
+    }
 }
 
 #[test]

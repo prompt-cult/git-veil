@@ -1,0 +1,7 @@
+-----BEGIN GIT-GPG KEYRING-----
+decoy:YWJj:-----BEGIN PGP SIGNATURE-----
+alice@example.com:YWJj:ABC123
+-----END GIT-GPG KEYRING-----
+-----BEGIN PGP SIGNATURE-----
+sig
+-----END PGP SIGNATURE-----

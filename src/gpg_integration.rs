@@ -53,7 +53,7 @@ pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<(
 /// BEGIN marker and no END marker means the store is corrupt (e.g. truncated
 /// by a partial write or bad merge), which is a hard error: silently
 /// dropping the tail would let an attacker remove keys by truncation.
-pub(crate) fn split_armored_private_key_blocks(
+pub fn split_armored_private_key_blocks(
     content: &str,
     secret_keys_path: &std::path::Path,
 ) -> Result<Vec<String>> {
@@ -79,7 +79,7 @@ pub(crate) fn split_armored_private_key_blocks(
 /// Same contract as [`split_armored_private_key_blocks`]: garbage between
 /// complete blocks is ignored, an unterminated block is a hard error (the
 /// public key store must never be silently truncated).
-pub(crate) fn split_armored_public_key_blocks(
+pub fn split_armored_public_key_blocks(
     content: &str,
     public_keys_path: &std::path::Path,
 ) -> Result<Vec<String>> {
