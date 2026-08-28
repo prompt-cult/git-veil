@@ -595,7 +595,7 @@ fn test_check_email_in_identities_not_found() {
 #[test]
 fn test_base64_encode_public_key() {
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
-    let encoded = base64_encode_public_key(&public_key);
+    let encoded = base64_encode_public_key(&public_key).expect("armouring should succeed");
     assert!(!encoded.is_empty());
     // Should be valid base64
     assert!(encoded.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
@@ -604,7 +604,7 @@ fn test_base64_encode_public_key() {
 #[test]
 fn test_base64_decode_public_key() {
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
-    let encoded = base64_encode_public_key(&public_key);
+    let encoded = base64_encode_public_key(&public_key).expect("armouring should succeed");
     let decoded = base64_decode_public_key(&encoded).expect("decode should succeed");
     let original_fp = extract_key_fingerprint(&public_key);
     let decoded_fp = extract_key_fingerprint(&decoded);
@@ -614,9 +614,9 @@ fn test_base64_decode_public_key() {
 #[test]
 fn test_roundtrip_base64_encoding() {
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
-    let encoded = base64_encode_public_key(&public_key);
+    let encoded = base64_encode_public_key(&public_key).expect("armouring should succeed");
     let decoded = base64_decode_public_key(&encoded).expect("decode should succeed");
-    let re_encoded = base64_encode_public_key(&decoded);
+    let re_encoded = base64_encode_public_key(&decoded).expect("armouring should succeed");
     assert_eq!(encoded, re_encoded);
 }
 
@@ -1759,7 +1759,7 @@ fn test_full_workflow_owner_setup() {
     
     // Create keyring with owner
     let mut keyring = Keyring::new();
-    let owner_base64 = base64_encode_public_key(&owner_public);
+    let owner_base64 = base64_encode_public_key(&owner_public).expect("armouring should succeed");
     keyring.add_entry("owner@example.com".to_string(), owner_base64, owner_fingerprint.clone()).unwrap();
     
     // Sign keyring
@@ -1782,8 +1782,8 @@ fn test_full_workflow_add_collaborator() {
     
     // Create keyring with both
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public)).unwrap();
-    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public), extract_key_fingerprint(&collab_public)).unwrap();
+    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public).expect("armouring should succeed"), extract_key_fingerprint(&owner_public)).unwrap();
+    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public).expect("armouring should succeed"), extract_key_fingerprint(&collab_public)).unwrap();
     
     // Sign keyring
     let content = keyring.serialize();
@@ -1805,8 +1805,8 @@ fn test_full_workflow_collaborator_clone_and_reveal() {
     
     // Create keyring
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public)).unwrap();
-    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public), extract_key_fingerprint(&collab_public)).unwrap();
+    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public).expect("armouring should succeed"), extract_key_fingerprint(&owner_public)).unwrap();
+    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public).expect("armouring should succeed"), extract_key_fingerprint(&collab_public)).unwrap();
     
     // Sign and verify
     let content = keyring.serialize();
@@ -1845,9 +1845,9 @@ fn test_multi_collaborator_workflow() {
     
     // Create keyring with all collaborators
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public)).unwrap();
-    keyring.add_entry("collab1@example.com".to_string(), base64_encode_public_key(&collab1_public), extract_key_fingerprint(&collab1_public)).unwrap();
-    keyring.add_entry("collab2@example.com".to_string(), base64_encode_public_key(&collab2_public), extract_key_fingerprint(&collab2_public)).unwrap();
+    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public).expect("armouring should succeed"), extract_key_fingerprint(&owner_public)).unwrap();
+    keyring.add_entry("collab1@example.com".to_string(), base64_encode_public_key(&collab1_public).expect("armouring should succeed"), extract_key_fingerprint(&collab1_public)).unwrap();
+    keyring.add_entry("collab2@example.com".to_string(), base64_encode_public_key(&collab2_public).expect("armouring should succeed"), extract_key_fingerprint(&collab2_public)).unwrap();
     
     assert!(keyring.entries.len() == 3);
     
@@ -1874,7 +1874,7 @@ fn test_keyring_signature_rotation() {
     
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let fingerprint = extract_key_fingerprint(&public_key);
-    let base64_key = base64_encode_public_key(&public_key);
+    let base64_key = base64_encode_public_key(&public_key).expect("armouring should succeed");
     
     // Create keyring with entry
     let mut keyring = Keyring::new();

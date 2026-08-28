@@ -4,14 +4,12 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    base64_encode_public_key, check_email_in_identities, cmd_add, cmd_cat, cmd_changes, cmd_hide,
-    cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide,
-    cmd_verify_keyring,
-    decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key,
-    extract_content_to_verify_from_keyring,
-    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
-    import_key_to_gpg_home, sign_keyring_content, Keyring, KeyringEntry, TrustPinStore, TrustStore,
-    TrackedFiles,
+    base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
+    cmd_cat, cmd_changes, cmd_hide, cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell,
+    cmd_trust, cmd_unhide, cmd_verify_keyring, decrypt_with_gpg_key, default_gpg_home,
+    encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
+    find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_gpg_home,
+    sign_keyring_content, Keyring, KeyringEntry, TrustPinStore, TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -1920,7 +1918,8 @@ fn verify_fails_closed_when_pin_mismatches() {
     let mut attacker_ring = Keyring {
         entries: vec![KeyringEntry {
             email: "attacker@evil.com".to_string(),
-            base64_key: base64_encode_public_key(&attacker_pub),
+            base64_key: base64_encode_public_key(&attacker_pub)
+                .expect("armouring the attacker key must succeed"),
             fingerprint: attacker_fingerprint.clone(),
         }],
         signature: None,
@@ -2561,5 +2560,26 @@ fn unhide_fails_when_secret_missing() {
         err.to_string().contains("Encrypted file not found"),
         "the failure must name the missing ciphertext, got: {}",
         err
+    );
+}
+
+#[test]
+fn base64_encode_public_key_round_trips_through_decode() {
+    let (_secret, public_key) = generate_test_key("roundtrip@example.com");
+
+    let encoded = base64_encode_public_key(&public_key).expect(
+        "armouring a freshly generated key must never silently degrade to an empty blob",
+    );
+    assert!(
+        !encoded.is_empty(),
+        "the encoded keyring entry must not be an empty blob"
+    );
+
+    let decoded = base64_decode_public_key(&encoded)
+        .expect("the encoded keyring entry must decode back to a parseable key");
+    assert_eq!(
+        extract_key_fingerprint(&public_key),
+        extract_key_fingerprint(&decoded),
+        "the keyring entry must carry the real key, not an empty blob"
     );
 }

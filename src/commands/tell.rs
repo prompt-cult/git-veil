@@ -34,7 +34,7 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
 
     // Extract fingerprint and base64 encode
     let fingerprint = extract_key_fingerprint(&collaborator_key);
-    let base64_key = base64_encode_public_key(&collaborator_key);
+    let base64_key = base64_encode_public_key(&collaborator_key)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-gpg/keyring");

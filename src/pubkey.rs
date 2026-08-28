@@ -59,9 +59,11 @@ pub fn check_email_in_identities(key: &SignedPublicKey, email: &str) -> bool {
 }
 
 /// Encodes a public key to base64 (after armoring it).
-pub fn base64_encode_public_key(key: &SignedPublicKey) -> String {
-    let armored = key.to_armored_string(ArmorOptions::default()).unwrap_or_default();
-    STANDARD.encode(armored.as_bytes())
+pub fn base64_encode_public_key(key: &SignedPublicKey) -> Result<String> {
+    let armored = key
+        .to_armored_string(ArmorOptions::default())
+        .context("Failed to armor public key for keyring entry")?;
+    Ok(STANDARD.encode(armored.as_bytes()))
 }
 
 /// Decodes a base64-encoded public key back to a SignedPublicKey.
