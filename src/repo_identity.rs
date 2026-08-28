@@ -2,39 +2,58 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use std::path::Path;
 use std::process::Command;
+use std::sync::LazyLock;
+
+/// SSH SCP-style: `user@host:owner/repo[.git]` — any SSH user (not just `git`).
+/// The user part must not contain `/` so that scheme URLs like
+/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs.
+static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[^@/]+@([^:]+):([^/]+)/([^/]+?)(\.git)?$").expect("valid SCP-style SSH URL regex")
+});
+
+/// SSH URL: `ssh://[user@]host[:port]/owner/repo[.git]` — a `:port` suffix is
+/// discarded so the service is always the bare host.
+static SSH_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^ssh://git@([^/:]+)(?::\d+)?/([^/]+)/([^/]+?)(\.git)?$").expect("valid ssh:// URL regex")
+});
+
+/// HTTPS URL: `https://host[:port]/owner/repo[.git]` — a `:port` suffix is
+/// discarded so the service is always the bare host.
+static HTTPS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^https://([^/:]+)(?::\d+)?/([^/]+)/([^/]+?)(\.git)?$").expect("valid https:// URL regex")
+});
 
 /// Parses a git remote URL and extracts (repo_name, user_or_org, service).
 ///
 /// Supports:
-/// - GitHub SSH: `git@github.com:user/repo.git`
+/// - GitHub SSH (SCP-style): `git@github.com:user/repo.git`
+/// - Other SSH users (SCP-style): `deploy@host.tld:org/repo.git`,
+///   `person@git.sr.ht:~person/repo.git`
 /// - GitHub HTTPS: `https://github.com/user/repo.git`
 /// - GitLab SSH: `git@gitlab.com:org/project.git`
 /// - GitLab HTTPS: `https://gitlab.com/org/project.git`
 /// - Codeberg SSH: `ssh://git@codeberg.org/user/repo.git`
+/// - Port forms (port discarded, service stays the bare host):
+///   `ssh://git@codeberg.org:2222/user/repo.git`,
+///   `https://host:8443/user/repo.git`
 ///
 /// Returns error for invalid formats.
 pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
-    // SSH SCP-style: git@github.com:user/repo.git
-    let ssh_scp_re = Regex::new(r"^git@([^:]+):([^/]+)/([^/]+?)(\.git)?$")?;
-    if let Some(caps) = ssh_scp_re.captures(url) {
+    if let Some(caps) = SSH_SCP_RE.captures(url) {
         let service = caps[1].to_string();
         let user = caps[2].to_string();
         let repo = caps[3].to_string();
         return Ok((repo, user, service));
     }
 
-    // SSH URL: ssh://git@codeberg.org/user/repo.git
-    let ssh_url_re = Regex::new(r"^ssh://git@([^/]+)/([^/]+)/([^/]+?)(\.git)?$")?;
-    if let Some(caps) = ssh_url_re.captures(url) {
+    if let Some(caps) = SSH_URL_RE.captures(url) {
         let service = caps[1].to_string();
         let user = caps[2].to_string();
         let repo = caps[3].to_string();
         return Ok((repo, user, service));
     }
 
-    // HTTPS URL: https://github.com/user/repo.git
-    let https_re = Regex::new(r"^https://([^/]+)/([^/]+)/([^/]+?)(\.git)?$")?;
-    if let Some(caps) = https_re.captures(url) {
+    if let Some(caps) = HTTPS_RE.captures(url) {
         let service = caps[1].to_string();
         let user = caps[2].to_string();
         let repo = caps[3].to_string();

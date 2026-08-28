@@ -206,6 +206,87 @@ fn test_derive_repo_id_from_git_remote() {
     assert_eq!(repo_id, "fara+simbo1905@github.com");
 }
 
+#[test]
+fn ssh_url_with_non_git_user_parses() {
+    // The SSH login (`deploy`) is not the `git` user; the second tuple element
+    // is the repo owner path segment, per the established repo-id convention
+    // (`{repo}+{owner}@{service}`, see test_derive_repo_id_from_git_remote).
+    let (repo, owner, service) = parse_git_remote_url("deploy@host.tld:org/repo.git").unwrap();
+    assert_eq!(repo, "repo");
+    assert_eq!(owner, "org");
+    assert_eq!(service, "host.tld");
+}
+
+#[test]
+fn ssh_url_with_port_keeps_port_out_of_service() {
+    let (repo, owner, service) =
+        parse_git_remote_url("ssh://git@codeberg.org:2222/user/repo.git").unwrap();
+    assert_eq!(repo, "repo");
+    assert_eq!(owner, "user");
+    assert_eq!(
+        service, "codeberg.org",
+        "port must be discarded, not folded into the service host"
+    );
+
+    let (repo, owner, service) = parse_git_remote_url("https://host:8443/user/repo.git").unwrap();
+    assert_eq!(repo, "repo");
+    assert_eq!(owner, "user");
+    assert_eq!(
+        service, "host",
+        "port must be discarded, not folded into the service host"
+    );
+}
+
+#[test]
+fn parse_git_remote_url_table() {
+    type UrlCase = (&'static str, Option<(&'static str, &'static str, &'static str)>);
+    // (url, expected (repo, user, service); None = must be rejected)
+    let cases: &[UrlCase] = &[
+        // Documented SSH SCP-style shapes
+        ("git@github.com:user/repo.git", Some(("repo", "user", "github.com"))),
+        ("git@gitlab.com:org/project.git", Some(("project", "org", "gitlab.com"))),
+        // Non-`git` SSH users (second element is the repo owner path segment)
+        ("deploy@host.tld:org/repo.git", Some(("repo", "org", "host.tld"))),
+        ("person@git.sr.ht:~person/repo.git", Some(("repo", "~person", "git.sr.ht"))),
+        // Documented ssh:// and https:// shapes
+        ("ssh://git@codeberg.org/user/repo.git", Some(("repo", "user", "codeberg.org"))),
+        ("https://github.com/user/repo.git", Some(("repo", "user", "github.com"))),
+        ("https://gitlab.com/org/project.git", Some(("project", "org", "gitlab.com"))),
+        // Port forms: the port must be discarded so the service is the bare host
+        ("ssh://git@codeberg.org:2222/user/repo.git", Some(("repo", "user", "codeberg.org"))),
+        ("https://github.com:8443/user/repo.git", Some(("repo", "user", "github.com"))),
+        // .git suffix and no-suffix variants
+        ("git@github.com:user/my-project.git", Some(("my-project", "user", "github.com"))),
+        ("git@github.com:user/my-project", Some(("my-project", "user", "github.com"))),
+        ("https://github.com/user/repo", Some(("repo", "user", "github.com"))),
+        // Invalid rows must stay invalid
+        ("not-a-valid-url", None),
+        ("git@github.com", None),
+        ("git@:user/repo.git", None),
+        ("ssh://git@/user/repo.git", None),
+        ("ftp://github.com/user/repo.git", None),
+        ("", None),
+    ];
+
+    for (url, expected) in cases {
+        match expected {
+            Some((repo, user, service)) => {
+                let (r, u, s) = parse_git_remote_url(url)
+                    .unwrap_or_else(|e| panic!("expected {url:?} to parse, got error: {e}"));
+                assert_eq!(&r, repo, "repo mismatch for {url:?}");
+                assert_eq!(&u, user, "user mismatch for {url:?}");
+                assert_eq!(&s, service, "service mismatch for {url:?}");
+            }
+            None => {
+                assert!(
+                    parse_git_remote_url(url).is_err(),
+                    "expected {url:?} to be rejected"
+                );
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Phase 1: Keyring Format
 // ============================================================================
@@ -266,7 +347,7 @@ fn test_keyring_parse_malformed_entry_fails() {
 #[test]
 fn test_keyring_serialize_single_entry() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into());
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
     let serialized = keyring.serialize();
     assert!(serialized.contains("-----BEGIN GIT-GPG KEYRING-----"));
     assert!(serialized.contains("alice@example.com"));
@@ -278,8 +359,8 @@ fn test_keyring_serialize_single_entry() {
 #[test]
 fn test_keyring_serialize_multiple_entries() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into());
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into());
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
     let serialized = keyring.serialize();
     assert!(serialized.contains("alice@example.com"));
     assert!(serialized.contains("bob@work.com"));
@@ -289,14 +370,14 @@ fn test_keyring_serialize_multiple_entries() {
 fn test_keyring_add_entry() {
     let mut keyring = Keyring::new();
     assert_eq!(keyring.entries.len(), 0);
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into());
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
     assert_eq!(keyring.entries.len(), 1);
 }
 
 #[test]
 fn test_keyring_find_by_email() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into());
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
     let entry = keyring.find_by_email("alice@example.com").unwrap();
     assert_eq!(entry.email, "alice@example.com");
 }
@@ -311,8 +392,8 @@ fn test_keyring_find_by_email_not_found() {
 #[test]
 fn test_keyring_list_all_emails() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into());
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into());
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
     let emails = keyring.list_emails();
     assert_eq!(emails.len(), 2);
     assert!(emails.contains(&"alice@example.com"));
@@ -322,12 +403,50 @@ fn test_keyring_list_all_emails() {
 #[test]
 fn test_keyring_extract_fingerprints() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into());
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into());
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
     let fps = keyring.extract_fingerprints();
     assert_eq!(fps.len(), 2);
     assert!(fps.contains(&"ABC123"));
     assert!(fps.contains(&"DEF456"));
+}
+
+#[test]
+fn add_entry_rejects_colon_in_email() {
+    let mut keyring = Keyring::new();
+    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring.signature = Some("stale-sig".to_string());
+    let before = keyring.serialize();
+
+    let err = keyring
+        .add_entry("bad:email@x.com".into(), "ZGVm".into(), "DEF456".into())
+        .expect_err(
+            "a colon in the email must be rejected: the `email:key:fingerprint` line format \
+             would become a 4-field line that every subsequent parse rejects, bricking the keyring",
+        );
+    assert!(
+        err.to_string().contains("bad:email@x.com"),
+        "error must name the offending email, got: {}",
+        err
+    );
+
+    assert_eq!(keyring.entries.len(), 1, "rejected entry must NOT be added");
+    assert!(
+        keyring.find_by_email("bad:email@x.com").is_none(),
+        "no entry stored for the rejected email"
+    );
+    assert_eq!(
+        keyring.signature.as_deref(),
+        Some("stale-sig"),
+        "a rejected add_entry must leave the signature untouched"
+    );
+    assert_eq!(keyring.serialize(), before, "keyring must be unchanged after rejection");
+
+    // Round-trip: a keyring serialized from valid entries still parses.
+    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
+    keyring.signature = None;
+    let parsed = Keyring::parse(&keyring.serialize()).expect("serialized keyring must parse");
+    assert_eq!(parsed.list_emails(), vec!["alice@example.com", "bob@work.com"]);
 }
 
 #[test]
@@ -579,6 +698,42 @@ fn test_extract_signature_from_keyring() {
     let content = "-----BEGIN GIT-GPG KEYRING-----\n-----END GIT-GPG KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig123\n-----END PGP SIGNATURE-----";
     let sig = extract_signature_from_keyring(content).unwrap();
     assert!(sig.contains("sig123"));
+}
+
+#[test]
+fn extract_signature_from_keyring_takes_last_signature_block() {
+    let (secret_key, public_key) = generate_test_key("owner@example.com");
+
+    // The keyring body carries a decoy PGP SIGNATURE marker inside a stored
+    // entry line; the real detached signature follows the END marker.
+    let base = "-----BEGIN GIT-GPG KEYRING-----\ndecoy:YWJj:-----BEGIN PGP SIGNATURE-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----";
+    let signature = sign_keyring_content(base, &secret_key, None).expect("signing should succeed");
+    let full = format!("{}\n{}", base, signature);
+
+    let extracted = extract_signature_from_keyring(&full).unwrap();
+    assert_eq!(
+        extracted,
+        signature.trim_end_matches('\n'),
+        "extraction must return the LAST signature block, not a stray marker inside the body"
+    );
+    verify_keyring_signature(base, &extracted, &public_key)
+        .expect("the extracted (last) signature must verify against the keyring content");
+}
+
+#[test]
+fn extract_signature_from_keyring_matches_keyring_parse() {
+    let (secret_key, _public_key) = generate_test_key("owner@example.com");
+    let base = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----";
+    let signature = sign_keyring_content(base, &secret_key, None).expect("signing should succeed");
+    let full = format!("{}\n{}", base, signature);
+
+    let extracted = extract_signature_from_keyring(&full).unwrap();
+    let parsed = Keyring::parse(&full).expect("well-formed keyring must parse");
+    assert_eq!(
+        extracted,
+        parsed.signature.expect("parse must find the signature"),
+        "extraction and Keyring::parse must agree on well-formed keyrings"
+    );
 }
 
 #[test]
@@ -1434,7 +1589,7 @@ fn test_full_workflow_owner_setup() {
     // Create keyring with owner
     let mut keyring = Keyring::new();
     let owner_base64 = base64_encode_public_key(&owner_public);
-    keyring.add_entry("owner@example.com".to_string(), owner_base64, owner_fingerprint.clone());
+    keyring.add_entry("owner@example.com".to_string(), owner_base64, owner_fingerprint.clone()).unwrap();
     
     // Sign keyring
     let content = keyring.serialize();
@@ -1456,8 +1611,8 @@ fn test_full_workflow_add_collaborator() {
     
     // Create keyring with both
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public));
-    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public), extract_key_fingerprint(&collab_public));
+    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public)).unwrap();
+    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public), extract_key_fingerprint(&collab_public)).unwrap();
     
     // Sign keyring
     let content = keyring.serialize();
@@ -1479,8 +1634,8 @@ fn test_full_workflow_collaborator_clone_and_reveal() {
     
     // Create keyring
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public));
-    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public), extract_key_fingerprint(&collab_public));
+    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public)).unwrap();
+    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public), extract_key_fingerprint(&collab_public)).unwrap();
     
     // Sign and verify
     let content = keyring.serialize();
@@ -1519,9 +1674,9 @@ fn test_multi_collaborator_workflow() {
     
     // Create keyring with all collaborators
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public));
-    keyring.add_entry("collab1@example.com".to_string(), base64_encode_public_key(&collab1_public), extract_key_fingerprint(&collab1_public));
-    keyring.add_entry("collab2@example.com".to_string(), base64_encode_public_key(&collab2_public), extract_key_fingerprint(&collab2_public));
+    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public), extract_key_fingerprint(&owner_public)).unwrap();
+    keyring.add_entry("collab1@example.com".to_string(), base64_encode_public_key(&collab1_public), extract_key_fingerprint(&collab1_public)).unwrap();
+    keyring.add_entry("collab2@example.com".to_string(), base64_encode_public_key(&collab2_public), extract_key_fingerprint(&collab2_public)).unwrap();
     
     assert!(keyring.entries.len() == 3);
     
@@ -1552,7 +1707,7 @@ fn test_keyring_signature_rotation() {
     
     // Create keyring with entry
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".to_string(), base64_key, fingerprint);
+    keyring.add_entry("alice@example.com".to_string(), base64_key, fingerprint).unwrap();
     
     // Sign keyring content (without signature)
     let content_without_sig = keyring.serialize();

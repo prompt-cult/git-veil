@@ -43,7 +43,7 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
     let mut keyring = Keyring::parse(&keyring_content)?;
 
     // Add entry (this clears signature)
-    keyring.add_entry(email.to_string(), base64_key, fingerprint);
+    keyring.add_entry(email.to_string(), base64_key, fingerprint)?;
 
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();

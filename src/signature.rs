@@ -5,6 +5,8 @@ use pgp::types::Password;
 use rand::thread_rng;
 use std::io::Cursor;
 
+use crate::keyring::{SIG_BEGIN, SIG_END};
+
 /// Signs keyring content with a private key and returns an armored signature.
 ///
 /// `passphrase` unlocks a passphrase-protected signing key; `None` means an
@@ -47,14 +49,26 @@ pub fn verify_keyring_signature(keyring_content: &str, signature: &str, signing_
 }
 
 /// Extracts the signature section from a keyring text.
+///
+/// The detached signature is BY CONVENTION the LAST PGP signature block,
+/// after the END GIT-GPG KEYRING marker. Extraction therefore searches
+/// backwards from the end of the text so a stray signature marker inside
+/// the keyring body cannot desynchronise the verify path.
+/// (`Keyring::parse` extracts the signature independently; its positional
+/// format — after the END marker — is unaffected.)
 pub fn extract_signature_from_keyring(keyring_text: &str) -> Result<String> {
     let sig_begin = keyring_text
-        .find("-----BEGIN PGP SIGNATURE-----")
+        .rfind(SIG_BEGIN)
         .context("No PGP signature found in keyring")?;
     let sig_end = keyring_text
-        .find("-----END PGP SIGNATURE-----")
+        .rfind(SIG_END)
         .context("No PGP signature end marker found")?;
-    Ok(keyring_text[sig_begin..sig_end + "-----END PGP SIGNATURE-----".len()].to_string())
+    if sig_begin >= sig_end {
+        anyhow::bail!(
+            "Malformed PGP signature block: BEGIN marker found at or after END marker"
+        );
+    }
+    Ok(keyring_text[sig_begin..sig_end + SIG_END.len()].to_string())
 }
 
 /// Extracts the content to verify (everything up to and including END GIT-GPG KEYRING marker).

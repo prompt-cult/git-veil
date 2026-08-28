@@ -80,7 +80,25 @@ impl Keyring {
         result
     }
 
-    pub fn add_entry(&mut self, email: String, base64_key: String, fingerprint: String) {
+    /// Adds an entry, or updates the existing entry in place when the email
+    /// already exists. Clears the signature so the keyring gets re-signed.
+    ///
+    /// # Format constraint
+    ///
+    /// The serialized keyring line format is `email:base64_key:fingerprint`
+    /// with `:` as the field separator, so the email MUST NOT contain `:`.
+    /// A colon would produce a 4-field line that every subsequent
+    /// [`Keyring::parse`] rejects with "Malformed keyring entry", bricking
+    /// the signed keyring. This is rejected here with an error naming the
+    /// offending email; on rejection nothing is mutated.
+    pub fn add_entry(&mut self, email: String, base64_key: String, fingerprint: String) -> Result<()> {
+        if email.contains(':') {
+            anyhow::bail!(
+                "Invalid keyring email '{}': emails must not contain ':' \
+                 because it is the keyring line field separator",
+                email
+            );
+        }
         if let Some(existing) = self.entries.iter_mut().find(|e| e.email == email) {
             existing.base64_key = base64_key;
             existing.fingerprint = fingerprint;
@@ -92,6 +110,7 @@ impl Keyring {
             });
         }
         self.signature = None;
+        Ok(())
     }
 
     pub fn find_by_email(&self, email: &str) -> Option<&KeyringEntry> {

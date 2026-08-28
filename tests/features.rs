@@ -492,19 +492,19 @@ fn add_entry_updates_existing_email_and_clears_signature() {
         "alice@example.com".to_string(),
         "QUJDREVGR0hJSktMTU5PUA==".to_string(),
         "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
-    );
+    ).unwrap();
     keyring.add_entry(
         "bob@example.com".to_string(),
         "QkNERUVGR0hJSktMTU5PUFI=".to_string(),
         "BBBB2222BBBB2222BBBB2222BBBB2222BBBB2222".to_string(),
-    );
+    ).unwrap();
     keyring.signature = Some("-----BEGIN PGP SIGNATURE-----\nstale\n-----END PGP SIGNATURE-----".to_string());
 
     keyring.add_entry(
         "alice@example.com".to_string(),
         "REVGREdISklLTE1OT1BSU1Q=".to_string(),
         "CCCC3333CCCC3333CCCC3333CCCC3333CCCC3333".to_string(),
-    );
+    ).unwrap();
 
     assert_eq!(
         keyring.entries.len(),
