@@ -14,7 +14,7 @@ use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verif
 /// resolve against `repo_root`; tracked paths are stored repo-relative and
 /// are validated, so the ciphertext path can never escape the repository
 /// root.
-pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<Vec<u8>> {
+pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<Vec<u8>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
@@ -78,7 +78,7 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
         .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
 
     // Decrypt
-    let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key)?;
+    let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
 
     // Write plaintext to stdout
     std::io::stdout()

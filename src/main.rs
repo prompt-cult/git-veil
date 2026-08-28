@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use git_gpg::{
     cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove, cmd_list,
@@ -58,6 +58,11 @@ enum Commands {
         /// GPG home directory
         #[arg(long)]
         gpg_home: Option<PathBuf>,
+        /// Read the passphrase for a passphrase-protected private key from
+        /// stdin (exactly one line). Wins over the GITGPG_PASSPHRASE
+        /// environment variable; never pass a passphrase as a CLI argument.
+        #[arg(long)]
+        passphrase_stdin: bool,
     },
 
     /// Remove a collaborator from the keyring
@@ -71,6 +76,11 @@ enum Commands {
         /// GPG home directory
         #[arg(long)]
         gpg_home: Option<PathBuf>,
+        /// Read the passphrase for a passphrase-protected private key from
+        /// stdin (exactly one line). Wins over the GITGPG_PASSPHRASE
+        /// environment variable; never pass a passphrase as a CLI argument.
+        #[arg(long)]
+        passphrase_stdin: bool,
     },
 
     /// Add a file to be encrypted
@@ -111,6 +121,11 @@ enum Commands {
         /// GPG home directory
         #[arg(long)]
         gpg_home: Option<PathBuf>,
+        /// Read the passphrase for a passphrase-protected private key from
+        /// stdin (exactly one line). Wins over the GITGPG_PASSPHRASE
+        /// environment variable; never pass a passphrase as a CLI argument.
+        #[arg(long)]
+        passphrase_stdin: bool,
     },
 
     /// Cat - decrypt a single tracked file to stdout
@@ -126,6 +141,11 @@ enum Commands {
         /// GPG home directory
         #[arg(long)]
         gpg_home: Option<PathBuf>,
+        /// Read the passphrase for a passphrase-protected private key from
+        /// stdin (exactly one line). Wins over the GITGPG_PASSPHRASE
+        /// environment variable; never pass a passphrase as a CLI argument.
+        #[arg(long)]
+        passphrase_stdin: bool,
     },
 
     /// Changes - report where plaintext differs from the last hidden version
@@ -141,6 +161,11 @@ enum Commands {
         /// GPG home directory
         #[arg(long)]
         gpg_home: Option<PathBuf>,
+        /// Read the passphrase for a passphrase-protected private key from
+        /// stdin (exactly one line). Wins over the GITGPG_PASSPHRASE
+        /// environment variable; never pass a passphrase as a CLI argument.
+        #[arg(long)]
+        passphrase_stdin: bool,
     },
 
     /// Show the repository ID
@@ -198,6 +223,35 @@ fn resolve_gpg_home(gpg_home: Option<PathBuf>) -> Result<PathBuf> {
     gpg_home.map(Ok).unwrap_or_else(default_gpg_home)
 }
 
+/// Resolves the passphrase for private-key use, mirroring resolve_email/
+/// resolve_gpg_home: `--passphrase-stdin` wins over the `GITGPG_PASSPHRASE`
+/// environment variable; when both are absent, None is returned and the key
+/// is unlocked with an empty passphrase (back-compat with unprotected keys).
+/// Interactive tty prompting is deliberately deferred. The passphrase is
+/// never passed as a CLI argument (process-listing leak) and is never logged.
+fn resolve_passphrase(passphrase_stdin: bool) -> Result<Option<String>> {
+    if passphrase_stdin {
+        let mut line = String::new();
+        std::io::stdin()
+            .read_line(&mut line)
+            .context("Failed to read passphrase from stdin")?;
+        if line.ends_with("\r\n") {
+            line.truncate(line.len() - 2);
+        } else if line.ends_with('\n') {
+            line.truncate(line.len() - 1);
+        }
+        return Ok(Some(line));
+    }
+    match std::env::var("GITGPG_PASSPHRASE") {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            // Never propagate the value into the error message.
+            anyhow::bail!("GITGPG_PASSPHRASE is not valid UTF-8")
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let repo_root = std::env::current_dir()?;
@@ -210,11 +264,13 @@ fn main() -> Result<()> {
         Commands::Trust { repo_id, signing_key, remote, gpg_home: opt } => {
             cmd_trust(&repo_root, &repo_id, &signing_key, &remote, &resolve_gpg_home(opt)?)?;
         }
-        Commands::Tell { email, public_key, remote, gpg_home: opt } => {
-            cmd_tell(&repo_root, &email, &public_key, &remote, &resolve_gpg_home(opt)?)?;
+        Commands::Tell { email, public_key, remote, gpg_home: opt, passphrase_stdin } => {
+            let passphrase = resolve_passphrase(passphrase_stdin)?;
+            cmd_tell(&repo_root, &email, &public_key, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
         }
-        Commands::RemovePerson { email, remote, gpg_home: opt } => {
-            cmd_removeperson(&repo_root, &email, &remote, &resolve_gpg_home(opt)?)?;
+        Commands::RemovePerson { email, remote, gpg_home: opt, passphrase_stdin } => {
+            let passphrase = resolve_passphrase(passphrase_stdin)?;
+            cmd_removeperson(&repo_root, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
         }
         Commands::Add { files } => cmd_add(&repo_root, files)?,
         Commands::Remove { files } => cmd_remove(&repo_root, files)?,
@@ -222,17 +278,20 @@ fn main() -> Result<()> {
         Commands::Hide { remote, gpg_home: opt } => {
             cmd_hide(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
         }
-        Commands::Reveal { email, remote, gpg_home: opt } => {
+        Commands::Reveal { email, remote, gpg_home: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
-            cmd_reveal(&repo_root, &email, &remote, &resolve_gpg_home(opt)?)?;
+            let passphrase = resolve_passphrase(passphrase_stdin)?;
+            cmd_reveal(&repo_root, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
         }
-        Commands::Cat { file, email, remote, gpg_home: opt } => {
+        Commands::Cat { file, email, remote, gpg_home: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
-            cmd_cat(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?)?;
+            let passphrase = resolve_passphrase(passphrase_stdin)?;
+            cmd_cat(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
         }
-        Commands::Changes { files, email, remote, gpg_home: opt } => {
+        Commands::Changes { files, email, remote, gpg_home: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
-            cmd_changes(&repo_root, files, &email, &remote, &resolve_gpg_home(opt)?)?;
+            let passphrase = resolve_passphrase(passphrase_stdin)?;
+            cmd_changes(&repo_root, files, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&repo_root, &remote)?,
         Commands::Whoami { email, gpg_home: opt } => {

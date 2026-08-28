@@ -118,15 +118,24 @@ pub fn find_private_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) ->
 }
 
 /// Decrypts ciphertext using a private key.
-pub fn decrypt_with_gpg_key(ciphertext: &str, private_key: &SignedSecretKey) -> Result<Vec<u8>> {
+///
+/// `passphrase` unlocks a passphrase-protected private key; `None` means an
+/// empty passphrase (unprotected keys). Interactive tty prompting is
+/// deliberately deferred — callers source the passphrase from
+/// `GITGPG_PASSPHRASE` or `--passphrase-stdin` (see main.rs).
+pub fn decrypt_with_gpg_key(
+    ciphertext: &str,
+    private_key: &SignedSecretKey,
+    passphrase: Option<&str>,
+) -> Result<Vec<u8>> {
     use pgp::composed::Message;
-    
-    let passphrase = Password::empty();
+
+    let passphrase = passphrase.map(Password::from).unwrap_or_else(Password::empty);
     let (message, _headers) = Message::from_string(ciphertext)
         .context("Failed to parse encrypted message")?;
-    
+
     let mut decrypted = message.decrypt(&passphrase, private_key)
-        .context("Failed to decrypt message")?;
+        .context("Failed to decrypt message (wrong passphrase? if this key is passphrase-protected, supply it via GITGPG_PASSPHRASE or --passphrase-stdin)")?;
     
     let plaintext = decrypted.as_data_vec()
         .context("Failed to extract plaintext")?;

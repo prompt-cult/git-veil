@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
 
 /// Adds a collaborator's public key to the keyring and signs it.
-pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -58,7 +58,7 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
     // trailing newline), using the same canonicalization function so the two
     // sides of the sign/verify contract cannot drift apart.
     let content_to_sign = extract_content_to_verify_from_keyring(&keyring_without_sig)?;
-    let signature = sign_keyring_content(&content_to_sign, &signing_key)?;
+    let signature = sign_keyring_content(&content_to_sign, &signing_key, passphrase)?;
     keyring.signature = Some(signature);
 
     // Save keyring

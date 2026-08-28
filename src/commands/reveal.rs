@@ -12,7 +12,7 @@ use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email,
 /// validated before any use, so a malicious committed tracked.json cannot
 /// make reveal write attacker-chosen plaintext to an arbitrary path outside
 /// the repository.
-pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, gpg_home)?;
 
@@ -59,7 +59,7 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
             .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
 
         // Decrypt
-        let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key)?;
+        let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
 
         // Write plaintext
         if let Some(parent) = file.parent() {

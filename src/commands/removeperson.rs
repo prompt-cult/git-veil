@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::{derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint, get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
-pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -50,7 +50,7 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
     // legitimate result (revoking the last collaborator); verify_keyring
     // accepts a signed keyring regardless of entry count.
     let content_to_sign = extract_content_to_verify_from_keyring(&keyring_without_sig)?;
-    let signature = sign_keyring_content(&content_to_sign, &signing_key)?;
+    let signature = sign_keyring_content(&content_to_sign, &signing_key, passphrase)?;
     keyring.signature = Some(signature);
 
     // Save keyring

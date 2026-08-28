@@ -6,13 +6,20 @@ use rand::thread_rng;
 use std::io::Cursor;
 
 /// Signs keyring content with a private key and returns an armored signature.
-pub fn sign_keyring_content(keyring_content: &str, signing_key: &SignedSecretKey) -> Result<String> {
+///
+/// `passphrase` unlocks a passphrase-protected signing key; `None` means an
+/// empty passphrase (unprotected keys).
+pub fn sign_keyring_content(
+    keyring_content: &str,
+    signing_key: &SignedSecretKey,
+    passphrase: Option<&str>,
+) -> Result<String> {
     let mut rng = thread_rng();
-    let passphrase = Password::empty();
-    
+    let passphrase = passphrase.map(Password::from).unwrap_or_else(Password::empty);
+
     // Get the primary key for signing
     let primary_key = &signing_key.primary_key;
-    
+
     let cursor = Cursor::new(keyring_content.as_bytes());
     let signature = DetachedSignature::sign_binary_data(
         &mut rng,
@@ -20,7 +27,7 @@ pub fn sign_keyring_content(keyring_content: &str, signing_key: &SignedSecretKey
         &passphrase,
         HashAlgorithm::Sha256,
         cursor,
-    ).context("Failed to create detached signature")?;
+    ).context("Failed to create detached signature (wrong passphrase? if this key is passphrase-protected, supply it via GITGPG_PASSPHRASE or --passphrase-stdin)")?;
     
     let armored = signature.to_armored_string(Default::default())
         .context("Failed to armor signature")?;

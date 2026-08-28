@@ -30,6 +30,7 @@ pub fn cmd_changes(
     email: &str,
     remote_name: &str,
     gpg_home: &PathBuf,
+    passphrase: Option<&str>,
 ) -> Result<Vec<PathBuf>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
@@ -115,7 +116,7 @@ pub fn cmd_changes(
             .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
 
         // Decrypt
-        let hidden = decrypt_with_gpg_key(&ciphertext, &private_key)?;
+        let hidden = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
 
         if hidden == on_disk {
             println!("unchanged: {}", file.display());

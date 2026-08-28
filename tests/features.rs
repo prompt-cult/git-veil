@@ -42,6 +42,39 @@ fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::compo
     (secret_key, public_key)
 }
 
+/// Like generate_test_key, but the secret material is protected by the given
+/// passphrase (mirroring what a real user's key looks like on disk). BOTH the
+/// primary key and the encryption subkey are protected: reveal/c decrypt via
+/// the subkey, tell signs via the primary key.
+fn generate_protected_test_key(
+    email: &str,
+    passphrase: &str,
+) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+    let mut rng = thread_rng();
+
+    let encrypt_subkey = SubkeyParamsBuilder::default()
+        .key_type(KeyType::X25519)
+        .can_encrypt(EncryptionCaps::All)
+        .passphrase(Some(passphrase.to_string()))
+        .build()
+        .expect("build encrypt subkey params");
+
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id(format!("Test User <{}>", email))
+        .passphrase(Some(passphrase.to_string()))
+        .subkeys(vec![encrypt_subkey])
+        .build()
+        .expect("build key params");
+
+    let secret_key = params.generate(&mut rng).expect("generate key");
+    let public_key = secret_key.to_public_key();
+
+    (secret_key, public_key)
+}
+
 fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
@@ -510,7 +543,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("first tell must succeed");
 
@@ -522,7 +555,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
@@ -674,7 +707,7 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
 
     assert!(
@@ -703,7 +736,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
     let serialized = forged.serialize();
     let content_to_sign = extract_content_to_verify_from_keyring(&serialized)
         .expect("freshly serialized keyring must contain the END marker");
-    let signature = sign_keyring_content(&content_to_sign, &mallory_sec)
+    let signature = sign_keyring_content(&content_to_sign, &mallory_sec, None)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
     std::fs::write(repo_temp.path().join(".git-gpg/keyring"), forged.serialize()).unwrap();
@@ -716,7 +749,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
 
     assert!(
@@ -738,7 +771,7 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
 
     let keyring_text =
@@ -779,18 +812,18 @@ fn removeperson_removes_entry_and_resigns() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("tell alice must succeed");
     cmd_tell(        repo_temp.path(),
         "bob@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("tell bob must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home);
+    let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home, None);
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
@@ -824,11 +857,11 @@ fn removeperson_unknown_email_fails() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("tell alice must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "carol@example.com", "origin", &gpg_home);
+    let remove_result = cmd_removeperson(repo_temp.path(), "carol@example.com", "origin", &gpg_home, None);
 
     let err = remove_result.err().expect("removing an unknown email must fail");
     assert!(
@@ -848,7 +881,7 @@ fn removeperson_requires_trust() {
         repo_temp.path(),
         "alice@example.com",
         "origin",
-        &repo_temp.path().join("gpg-home"),
+        &repo_temp.path().join("gpg-home"), None
     );
 
     assert!(
@@ -871,7 +904,7 @@ fn removeperson_rejects_tampered_keyring() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("tell alice must succeed");
 
@@ -890,12 +923,12 @@ fn removeperson_rejects_tampered_keyring() {
     let serialized = forged.serialize();
     let content_to_sign = extract_content_to_verify_from_keyring(&serialized)
         .expect("freshly serialized keyring must contain the END marker");
-    let signature = sign_keyring_content(&content_to_sign, &mallory_sec)
+    let signature = sign_keyring_content(&content_to_sign, &mallory_sec, None)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
     std::fs::write(repo_temp.path().join(".git-gpg/keyring"), forged.serialize()).unwrap();
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &gpg_home);
+    let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &gpg_home, None);
 
     let keyring_text_after = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
 
@@ -981,7 +1014,7 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
 
     let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
@@ -1042,7 +1075,7 @@ fn setup_repo_with_owner_in_keyring()
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1178,7 +1211,7 @@ fn reveal_refuses_escaping_tracked_path() {
         .join("outside.txt");
     let _ = std::fs::remove_file(&target);
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home);
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
 
     let target_exists = target.exists();
     let _ = std::fs::remove_file(&target);
@@ -1217,7 +1250,7 @@ fn hide_then_reveal_restores_exact_bytes() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1231,7 +1264,7 @@ fn hide_then_reveal_restores_exact_bytes() {
     let ciphertext_after_hide =
         repo_temp.path().join("secret.env.secret").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
     let restored = std::fs::read(repo_temp.path().join("secret.env"));
     let ciphertext_gone_after_reveal =
         !repo_temp.path().join("secret.env.secret").exists();
@@ -1274,7 +1307,7 @@ fn hide_then_reveal_in_subdirectory() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1290,7 +1323,7 @@ fn hide_then_reveal_in_subdirectory() {
     let ciphertext_after_hide = repo_temp.path().join("a/b/c/secret.env.secret")
     .exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
     let restored = std::fs::read(repo_temp.path().join(tracked_rel));
     let ciphertext_gone_after_reveal = !repo_temp.path().join("a/b/c/secret.env.secret")
     .exists();
@@ -1333,7 +1366,7 @@ fn hide_reveal_roundtrip_binary_file() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1345,7 +1378,7 @@ fn hide_reveal_roundtrip_binary_file() {
     let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let plaintext_gone_after_hide = !repo_temp.path().join("blob.bin").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
     let restored = std::fs::read(repo_temp.path().join("blob.bin"));
 
     hide_result.expect("cmd_hide must succeed");
@@ -1439,7 +1472,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1463,7 +1496,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         })
         .collect();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
     let restored: Vec<(String, Option<Vec<u8>>)> = cases
         .iter()
         .map(|(name, _)| (name.to_string(), std::fs::read(repo_temp.path().join(name)).ok()))
@@ -1546,7 +1579,7 @@ fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1562,7 +1595,7 @@ fn cat_returns_exact_bytes_without_touching_disk() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &gpg_home);
+    let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &gpg_home, None);
     let ciphertext_still_exists =
         repo_temp.path().join("secret.env.secret").exists();
     let no_plaintext_on_disk = !repo_temp.path().join("secret.env").exists();
@@ -1590,7 +1623,7 @@ fn cat_returns_exact_bytes_without_touching_disk() {
 fn cat_fails_for_untracked_file() {
     let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
 
-    let result = cmd_cat(repo_temp.path(), "not-tracked.env", "alice@example.com", "origin", &gpg_home);
+    let result = cmd_cat(repo_temp.path(), "not-tracked.env", "alice@example.com", "origin", &gpg_home, None);
 
     let err = result.err().expect("cat of an untracked file must fail");
     assert!(
@@ -1608,7 +1641,7 @@ fn cat_rejects_path_escaping_the_repo() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    let dotdot_result = cmd_cat(repo_temp.path(), "../outside.txt", "alice@example.com", "origin", &gpg_home);
+    let dotdot_result = cmd_cat(repo_temp.path(), "../outside.txt", "alice@example.com", "origin", &gpg_home, None);
     let outside = repo_temp.path().parent().unwrap().join("outside.txt");
     std::fs::write(&outside, "nope").unwrap();
     let absolute_result = cmd_cat(
@@ -1616,7 +1649,7 @@ fn cat_rejects_path_escaping_the_repo() {
         outside.to_str().unwrap(),
         "alice@example.com",
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
     let absolute_exists = outside.exists();
     let _ = std::fs::remove_file(&outside);
@@ -1661,7 +1694,7 @@ fn changes_reports_no_changes_when_plaintext_matches() {
     // Re-create the plaintext with IDENTICAL bytes, as if revealed and untouched.
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
     let ciphertext_still_exists =
         repo_temp.path().join("secret.env.secret").exists();
 
@@ -1691,7 +1724,7 @@ fn changes_reports_modified_file() {
 
     std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=NEW-value\nDB=hunter2\n").unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
 
     let changed = result.expect("cmd_changes must succeed for a modified file");
     assert_eq!(
@@ -1711,7 +1744,7 @@ fn changes_ignores_missing_plaintext() {
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
     // hide deleted the plaintext; it is still hidden but absent on disk.
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
 
     let changed = result.expect("missing plaintext must be skipped, not an error");
     assert!(
@@ -1734,7 +1767,7 @@ fn changes_fails_for_untracked_file() {
         vec!["not-tracked.env".to_string()],
         "owner@github.com",
         "origin",
-        &gpg_home,
+        &gpg_home, None
     );
 
     let err = result.err().expect("changes for an untracked file must fail");
@@ -1757,7 +1790,7 @@ fn changes_detects_binary_difference() {
     let modified: Vec<u8> = vec![0u8, 1, 2, 3, 254, 9];
     std::fs::write(repo_temp.path().join("blob.bin"), &modified).unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
 
     let changed = result.expect("cmd_changes must succeed for a binary file");
     assert_eq!(
@@ -1831,7 +1864,7 @@ fn verify_fails_closed_when_pin_missing() {
         hide_err
     );
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
     let reveal_err = reveal_result
         .err()
         .expect("reveal without a local pin must fail closed");
@@ -1856,7 +1889,7 @@ fn verify_fails_closed_when_pin_missing() {
 
     cmd_hide(repo_temp.path(), "origin", &gpg_home)
         .expect("hide must succeed once the pin is re-established");
-    cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home)
+    cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None)
         .expect("reveal must succeed once the pin is re-established");
 }
 
@@ -1894,7 +1927,7 @@ fn verify_fails_closed_when_pin_mismatches() {
     let serialized = attacker_ring.serialize();
     let content_to_sign = extract_content_to_verify_from_keyring(&serialized)
         .expect("freshly serialized keyring must contain the END marker");
-    let signature = sign_keyring_content(&content_to_sign, &attacker_sec)
+    let signature = sign_keyring_content(&content_to_sign, &attacker_sec, None)
         .expect("the attacker must be able to sign their own keyring");
     attacker_ring.signature = Some(signature);
     let keyring_path = repo_temp.path().join(".git-gpg/keyring");
@@ -1969,7 +2002,7 @@ fn setup_repo_with_owner_and_collaborators(
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &gpg_home, None
     )
     .expect("cmd_tell must succeed for the owner");
 
@@ -1984,7 +2017,7 @@ fn setup_repo_with_owner_and_collaborators(
             email,
             keyfile.to_str().unwrap(),
             "origin",
-            &gpg_home,
+            &gpg_home, None
         )
         .unwrap_or_else(|e| panic!("cmd_tell must succeed for {}: {:?}", email, e));
 
@@ -2017,7 +2050,7 @@ fn hide_encrypts_to_every_key_in_keyring() {
     for email in emails {
         let secret_key = find_private_key_by_email(&gpg_home, email)
             .unwrap_or_else(|e| panic!("secring must hold {}'s secret key: {}", email, e));
-        let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key)
+        let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key, None)
             .unwrap_or_else(|e| panic!("{} must be able to decrypt the shared ciphertext: {}", email, e));
         assert_eq!(
             decrypted,
@@ -2047,7 +2080,7 @@ fn reveal_works_for_each_collaborator_after_hide() {
             email
         );
 
-        cmd_reveal(repo_temp.path(), email, "origin", &gpg_home)
+        cmd_reveal(repo_temp.path(), email, "origin", &gpg_home, None)
             .unwrap_or_else(|e| panic!("{} must be able to cmd_reveal the hidden file: {:?}", email, e));
 
         let restored = std::fs::read(repo_temp.path().join("secret.env"))
@@ -2076,15 +2109,15 @@ fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
         .expect("ciphertext must exist after the first hide");
     for email in emails {
         let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
-        let decrypted = decrypt_with_gpg_key(&ciphertext_before, &secret_key)
+        let decrypted = decrypt_with_gpg_key(&ciphertext_before, &secret_key, None)
             .unwrap_or_else(|e| panic!("before removal, {} must be able to decrypt: {}", email, e));
         assert_eq!(decrypted, plaintext.as_bytes());
     }
 
     // Revoke Bob, then re-hide (reveal as Alice restores the plaintext first).
-    cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home)
+    cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home, None)
         .expect("cmd_removeperson must succeed");
-    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home)
+    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None)
         .expect("reveal as alice must restore the plaintext for the re-hide");
     cmd_hide(repo_temp.path(), "origin", &gpg_home)
         .expect("re-hide after removal must succeed");
@@ -2094,14 +2127,14 @@ fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
     // Bob's key must now FAIL against the new ciphertext.
     let bob_key = find_private_key_by_email(&gpg_home, "bob@example.com").unwrap();
     assert!(
-        decrypt_with_gpg_key(&ciphertext_after, &bob_key).is_err(),
+        decrypt_with_gpg_key(&ciphertext_after, &bob_key, None).is_err(),
         "the removed collaborator must NOT be able to decrypt ciphertext written after their removal"
     );
 
     // Alice and Carol must still decrypt the new ciphertext.
     for email in ["alice@example.com", "carol@example.com"] {
         let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
-        let decrypted = decrypt_with_gpg_key(&ciphertext_after, &secret_key)
+        let decrypted = decrypt_with_gpg_key(&ciphertext_after, &secret_key, None)
             .unwrap_or_else(|e| panic!("after removal, {} must still be able to decrypt: {}", email, e));
         assert_eq!(decrypted, plaintext.as_bytes());
     }
@@ -2217,7 +2250,7 @@ fn reveal_restores_plaintext_and_removes_secret_file() {
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
     assert!(repo_temp.path().join(format!("{}.secret", tracked_rel)).exists());
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
     reveal_result.expect("cmd_reveal must succeed");
 
     let restored = std::fs::read(repo_temp.path().join(tracked_rel))
@@ -2271,7 +2304,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
         "the clone must not contain the plaintext"
     );
 
-    let reveal_result = cmd_reveal(clone.path(), "owner@github.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(clone.path(), "owner@github.com", "origin", &gpg_home, None);
     reveal_result.expect("reveal in a fresh clone holding only .secret files must succeed");
 
     let restored = std::fs::read(clone.path().join("secret.env"))
@@ -2285,4 +2318,141 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
         !clone.path().join("secret.env.secret").exists(),
         "reveal in the clone must delete the .secret file"
     );
+}
+
+// ============================================================================
+// Passphrase-protected private keys
+//
+// Written Red/Green: pre-fix, decrypt_with_gpg_key and sign_keyring_content
+// hardcode an empty passphrase, so a passphrase-protected private key is
+// unusable by this tool. These tests target the NEW signatures (with an
+// Option<&str> passphrase), so their first failure was a compile error.
+// ============================================================================
+
+/// Sets up a trusted repo whose owner key is protected by the given
+/// passphrase (secring holds the protected secret; trust + pubring are
+/// public-key-only, so no passphrase is needed to establish trust).
+/// Returns (repo_temp, gpg_home, owner_keyfile_path).
+fn setup_repo_with_protected_owner(
+    passphrase: &str,
+) -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let repo_temp = setup_git_repo_with_origin_remote();
+
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
+
+    let (owner_sec, owner_pub) = generate_protected_test_key("owner@github.com", passphrase);
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let gpg_home = repo_temp.path().join("gpg-home");
+
+    cmd_trust(
+        repo_temp.path(),
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    write_multi_key_secring(&gpg_home, &[owner_sec]);
+
+    (repo_temp, gpg_home, owner_keyfile)
+}
+
+#[test]
+fn protected_key_cannot_decrypt_with_empty_passphrase() {
+    let (protected_sec, protected_pub) =
+        generate_protected_test_key("protected@example.com", "correct horse");
+    let plaintext = b"locked payload";
+    let ciphertext = encrypt_to_gpg_key(plaintext, &protected_pub)
+        .expect("encrypting to the public key must not need the passphrase");
+
+    let result = decrypt_with_gpg_key(&ciphertext, &protected_sec, None);
+
+    let Err(err) = result else {
+        panic!("a passphrase-protected key must not decrypt with an empty passphrase");
+    };
+    let msg = err.to_string();
+    assert!(
+        msg.contains("passphrase"),
+        "the failure must hint that a passphrase may be missing, got: {}",
+        msg
+    );
+
+    // With the correct passphrase the same ciphertext decrypts.
+    let decrypted =
+        decrypt_with_gpg_key(&ciphertext, &protected_sec, Some("correct horse"))
+            .expect("the correct passphrase must unlock the protected key");
+    assert_eq!(
+        decrypted, plaintext,
+        "decryption with the correct passphrase must restore the exact bytes"
+    );
+}
+
+#[test]
+fn signing_with_protected_key_requires_passphrase() {
+    let (repo_temp, gpg_home, owner_keyfile) = setup_repo_with_protected_owner("correct horse");
+    let owner_key_path = owner_keyfile.to_str().unwrap();
+
+    // No passphrase at all: signing the keyring must fail with a clear hint.
+    let no_passphrase = cmd_tell(
+        repo_temp.path(),
+        "owner@github.com",
+        owner_key_path,
+        "origin",
+        &gpg_home,
+        None
+    );
+    let Err(err) = no_passphrase else {
+        panic!("tell with a passphrase-protected owner key must fail without the passphrase");
+    };
+    assert!(
+        err.to_string().contains("passphrase"),
+        "the failure must hint that a passphrase may be missing, got: {}",
+        err
+    );
+
+    // Wrong passphrase: must fail too (exact-match semantics).
+    let wrong_passphrase = cmd_tell(
+        repo_temp.path(),
+        "owner@github.com",
+        owner_key_path,
+        "origin",
+        &gpg_home,
+        Some("correct horse with typo")
+    );
+    assert!(
+        wrong_passphrase.is_err(),
+        "tell with the WRONG passphrase must not sign the keyring"
+    );
+
+    // Correct passphrase: tell succeeds and the signature verifies.
+    cmd_tell(
+        repo_temp.path(),
+        "owner@github.com",
+        owner_key_path,
+        "origin",
+        &gpg_home,
+        Some("correct horse")
+    )
+    .expect("tell with the correct passphrase must succeed");
+
+    cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home)
+        .expect("the keyring signature made with the correct passphrase must verify");
+}
+
+#[test]
+fn protected_key_in_secring_is_findable_without_passphrase() {
+    // Parsing a passphrase-protected key via SignedSecretKey::from_string
+    // must keep working without the passphrase: finding a key by email never
+    // unlocks it.
+    let (protected_sec, _) =
+        generate_protected_test_key("locked@example.com", "correct horse");
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().to_path_buf();
+    write_multi_key_secring(&gpg_home, &[protected_sec]);
+
+    find_private_key_by_email(&gpg_home, "locked@example.com")
+        .expect("a passphrase-protected key must be findable (parsed) without the passphrase");
 }

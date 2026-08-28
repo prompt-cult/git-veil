@@ -451,7 +451,7 @@ fn test_extract_identities_from_multiple_uids() {
 fn test_sign_keyring_content() {
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key).expect("signing should succeed");
+    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     assert!(signature.contains("-----BEGIN PGP SIGNATURE-----"));
     assert!(signature.contains("-----END PGP SIGNATURE-----"));
 }
@@ -460,7 +460,7 @@ fn test_sign_keyring_content() {
 fn test_verify_keyring_signature_valid() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key).expect("signing should succeed");
+    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     let result = verify_keyring_signature(keyring_content, &signature, &public_key);
     assert!(result.is_ok());
 }
@@ -469,7 +469,7 @@ fn test_verify_keyring_signature_valid() {
 fn test_verify_keyring_signature_invalid_tampering() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key).expect("signing should succeed");
+    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     // Tamper with the content
     let tampered_content = "tampered keyring content";
     let result = verify_keyring_signature(tampered_content, &signature, &public_key);
@@ -481,7 +481,7 @@ fn test_verify_keyring_signature_wrong_key() {
     let (secret_key_alice, _public_key_alice) = generate_test_key("alice@example.com");
     let (_secret_key_bob, public_key_bob) = generate_test_key("bob@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key_alice).expect("signing should succeed");
+    let signature = sign_keyring_content(keyring_content, &secret_key_alice, None).expect("signing should succeed");
     // Try to verify with wrong key
     let result = verify_keyring_signature(keyring_content, &signature, &public_key_bob);
     assert!(result.is_err());
@@ -493,7 +493,7 @@ fn test_sign_and_verify_roundtrip() {
     let keyring_content = "test keyring content for roundtrip";
     
     // Sign
-    let signature = sign_keyring_content(keyring_content, &secret_key).expect("signing should succeed");
+    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     
     // Verify
     let result = verify_keyring_signature(keyring_content, &signature, &public_key);
@@ -521,7 +521,7 @@ fn test_verify_detached_signature() {
     let content = "detached signature test content";
     
     // Create detached signature
-    let signature = sign_keyring_content(content, &secret_key).expect("signing should succeed");
+    let signature = sign_keyring_content(content, &secret_key, None).expect("signing should succeed");
     
     // Verify it's a valid detached signature
     assert!(signature.contains("-----BEGIN PGP SIGNATURE-----"));
@@ -538,7 +538,7 @@ fn test_sign_empty_keyring() {
     let empty_keyring = "-----BEGIN GIT-GPG KEYRING-----\n-----END GIT-GPG KEYRING-----\n";
     
     // Sign empty keyring
-    let signature = sign_keyring_content(empty_keyring, &secret_key).expect("signing empty keyring should succeed");
+    let signature = sign_keyring_content(empty_keyring, &secret_key, None).expect("signing empty keyring should succeed");
     
     // Verify signature
     let result = verify_keyring_signature(empty_keyring, &signature, &public_key);
@@ -616,7 +616,7 @@ fn test_decrypt_with_gpg_key() {
     let plaintext = b"Hello, World!";
     
     let encrypted = encrypt_to_gpg_key(plaintext, &public_key).expect("encryption should succeed");
-    let decrypted = decrypt_with_gpg_key(&encrypted, &secret_key).expect("decryption should succeed");
+    let decrypted = decrypt_with_gpg_key(&encrypted, &secret_key, None).expect("decryption should succeed");
     
     assert_eq!(decrypted, plaintext);
 }
@@ -860,7 +860,7 @@ fn test_tell_validates_email_in_public_key() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -871,7 +871,7 @@ fn test_tell_validates_email_not_in_key_fails() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -882,7 +882,7 @@ fn test_tell_extracts_fingerprint() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -893,7 +893,7 @@ fn test_tell_base64_encodes_key() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -904,7 +904,7 @@ fn test_tell_appends_to_keyring() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -915,7 +915,7 @@ fn test_tell_signs_keyring_after_append() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -926,7 +926,7 @@ fn test_tell_fails_if_trust_not_established() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -937,7 +937,7 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -948,7 +948,7 @@ fn test_tell_with_custom_remote() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "fork", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "fork", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "fork", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -961,7 +961,7 @@ fn test_tell_with_custom_gpg_home() {
     
     let gpg_home = temp.path().join("custom-gpg");
     std::fs::create_dir_all(&gpg_home).unwrap();
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &gpg_home);
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &gpg_home, None);
     assert!(result.is_err());
 }
 
@@ -976,7 +976,7 @@ fn test_tell_preserves_existing_keyring_entries() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1609,7 +1609,7 @@ fn test_reveal_verifies_keyring_signature_first() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1620,7 +1620,7 @@ fn test_reveal_fails_if_signature_invalid() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1631,7 +1631,7 @@ fn test_reveal_fails_if_trust_not_established() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1642,7 +1642,7 @@ fn test_reveal_finds_user_email_in_keyring() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1653,7 +1653,7 @@ fn test_reveal_fails_if_email_not_in_keyring() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "nonexistent@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "nonexistent@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1664,7 +1664,7 @@ fn test_reveal_finds_private_key_in_gpg_home() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1675,7 +1675,7 @@ fn test_reveal_fails_if_private_key_not_found() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1686,7 +1686,7 @@ fn test_reveal_decrypts_files() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1697,7 +1697,7 @@ fn test_reveal_restores_original_filenames() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1708,7 +1708,7 @@ fn test_reveal_removes_encrypted_asc_files() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1719,7 +1719,7 @@ fn test_reveal_with_email_flag_override() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "override@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "override@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1731,7 +1731,7 @@ fn test_reveal_with_git_config_email_default() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["config", "user.email", "test@example.com"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1742,7 +1742,7 @@ fn test_reveal_with_custom_remote() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "fork", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "fork", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "fork", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1755,7 +1755,7 @@ fn test_reveal_with_custom_gpg_home() {
     
     let gpg_home = temp.path().join("custom-gpg");
     std::fs::create_dir_all(&gpg_home).unwrap();
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &gpg_home);
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &gpg_home, None);
     assert!(result.is_err());
 }
 
@@ -1766,7 +1766,7 @@ fn test_reveal_missing_encrypted_file_fails() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_reveal(temp.path(), "test@example.com", "origin", &PathBuf::from("/tmp"), None);
     assert!(result.is_err());
 }
 
@@ -1837,7 +1837,7 @@ fn test_full_workflow_owner_setup() {
     
     // Sign keyring
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret).expect("signing should succeed");
+    let signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
     
     assert!(signature.contains("-----BEGIN PGP SIGNATURE-----"));
 }
@@ -1860,7 +1860,7 @@ fn test_full_workflow_add_collaborator() {
     
     // Sign keyring
     let content = keyring.serialize();
-    let _signature = sign_keyring_content(&content, &owner_secret).expect("signing should succeed");
+    let _signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
     
     assert!(keyring.entries.len() == 2);
 }
@@ -1883,7 +1883,7 @@ fn test_full_workflow_collaborator_clone_and_reveal() {
     
     // Sign and verify
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret).expect("signing should succeed");
+    let signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
     let result = verify_keyring_signature(&content, &signature, &owner_public);
     assert!(result.is_ok());
 }
@@ -1926,7 +1926,7 @@ fn test_multi_collaborator_workflow() {
     
     // Sign and verify
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret).expect("signing should succeed");
+    let signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
     let result = verify_keyring_signature(&content, &signature, &owner_public);
     assert!(result.is_ok());
 }
@@ -1969,7 +1969,7 @@ fn test_tampered_keyring_blocks_reveal() {
     let result = cmd_reveal(temp.path(), 
         "alice@example.com",
         "origin",
-        &default_gpg_home().expect("HOME must be set to resolve the default gpg home"),
+        &default_gpg_home().expect("HOME must be set to resolve the default gpg home"), None
     );
     assert!(result.is_err());
 }
@@ -1990,7 +1990,7 @@ fn test_keyring_signature_rotation() {
     
     // Sign keyring content (without signature)
     let content_without_sig = keyring.serialize();
-    let signature = sign_keyring_content(&content_without_sig, &secret_key).expect("signing should succeed");
+    let signature = sign_keyring_content(&content_without_sig, &secret_key, None).expect("signing should succeed");
     keyring.signature = Some(signature.clone());
     
     // Verify signature using the content without signature

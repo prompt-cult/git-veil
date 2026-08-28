@@ -35,6 +35,35 @@ fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::compo
     (secret_key, public_key)
 }
 
+fn generate_protected_test_key(
+    email: &str,
+    passphrase: &str,
+) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+    let mut rng = thread_rng();
+
+    let encrypt_subkey = SubkeyParamsBuilder::default()
+        .key_type(KeyType::X25519)
+        .can_encrypt(EncryptionCaps::All)
+        .passphrase(Some(passphrase.to_string()))
+        .build()
+        .expect("build encrypt subkey params");
+
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id(format!("Test User <{}>", email))
+        .passphrase(Some(passphrase.to_string()))
+        .subkeys(vec![encrypt_subkey])
+        .build()
+        .expect("build key params");
+
+    let secret_key = params.generate(&mut rng).expect("generate key");
+    let public_key = secret_key.to_public_key();
+
+    (secret_key, public_key)
+}
+
 fn write_multi_key_secring(gpg_home: &Path, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
@@ -66,7 +95,39 @@ fn run(repo: &Path, home: &Path, args: &[&str]) -> std::process::Output {
         .expect("git-gpg binary must be buildable")
         .current_dir(repo)
         .env("HOME", home)
+        .env_remove("GITGPG_PASSPHRASE")
         .args(args)
+        .output()
+        .expect("run git-gpg")
+}
+
+/// Runs the binary with GITGPG_PASSPHRASE set for this invocation only, so
+/// env-var tests cannot leak the passphrase into other child processes.
+fn run_with_passphrase_env(
+    repo: &Path,
+    home: &Path,
+    args: &[&str],
+    passphrase: &str,
+) -> std::process::Output {
+    Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .current_dir(repo)
+        .env("HOME", home)
+        .env("GITGPG_PASSPHRASE", passphrase)
+        .args(args)
+        .output()
+        .expect("run git-gpg")
+}
+
+/// Runs the binary with `input` piped to stdin (for --passphrase-stdin).
+fn run_with_stdin(repo: &Path, home: &Path, args: &[&str], input: &str) -> std::process::Output {
+    Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .current_dir(repo)
+        .env("HOME", home)
+        .env_remove("GITGPG_PASSPHRASE")
+        .args(args)
+        .write_stdin(input)
         .output()
         .expect("run git-gpg")
 }
@@ -281,4 +342,191 @@ fn home_free_subcommands_work_without_home_set() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
+}
+
+// ============================================================================
+// Passphrase-protected private keys: env var + --passphrase-stdin
+//
+// Written Red/Green: pre-fix the binary only unlocked keys with an empty
+// passphrase, so these tests failed at runtime (unknown --passphrase-stdin
+// flag; GITGPG_PASSPHRASE ignored).
+// ============================================================================
+
+/// Builds a temp repo (origin remote + local user.email) plus a fake home
+/// whose key store holds ONLY a passphrase-protected owner key, then runs
+/// CLI init + trust (both public-key-only, no passphrase needed).
+/// Returns (repo_temp, home_temp).
+fn setup_repo_with_protected_owner_key(passphrase: &str) -> (tempfile::TempDir, tempfile::TempDir) {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+
+    git(repo_temp.path(), &["init"]);
+    git(
+        repo_temp.path(),
+        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    );
+    git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
+
+    let (owner_sec, owner_pub) = generate_protected_test_key("owner@github.com", passphrase);
+    write_multi_key_secring(&home_temp.path().join(".gnupg"), &[owner_sec]);
+
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
+    assert!(out.status.success(), "init failed: {:?}", out.stderr);
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["trust", "repo+owner@github.com", "owner.pub"],
+    );
+    assert!(out.status.success(), "trust failed: {:?}", out.stderr);
+
+    (repo_temp, home_temp)
+}
+
+fn track_and_hide(repo: &Path, home: &Path) {
+    std::fs::write(repo.join("secret.env"), "s3cret").unwrap();
+    let out = run(repo, home, &["add", "secret.env"]);
+    assert!(out.status.success(), "add failed: {:?}", out.stderr);
+    let out = run(repo, home, &["hide"]);
+    assert!(out.status.success(), "hide failed: {:?}", out.stderr);
+    assert!(
+        repo.join("secret.env.secret").exists(),
+        "hide must write the ciphertext beside the plaintext"
+    );
+}
+
+#[test]
+fn protected_key_decrypts_with_passphrase_from_env_var() {
+    let (repo_temp, home_temp) = setup_repo_with_protected_owner_key("correct horse");
+
+    // tell signs the keyring with the protected owner key: needs the env var.
+    let out = run_with_passphrase_env(
+        repo_temp.path(),
+        home_temp.path(),
+        &["tell", "owner@github.com", "owner.pub"],
+        "correct horse",
+    );
+    assert!(
+        out.status.success(),
+        "tell with GITGPG_PASSPHRASE must succeed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    track_and_hide(repo_temp.path(), home_temp.path());
+
+    // Reveal with the env var set: must decrypt.
+    let out = run_with_passphrase_env(
+        repo_temp.path(),
+        home_temp.path(),
+        &["reveal"],
+        "correct horse",
+    );
+    assert!(
+        out.status.success(),
+        "reveal with GITGPG_PASSPHRASE set must succeed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
+        b"s3cret",
+        "reveal must restore the original plaintext"
+    );
+
+    // Re-hide, then reveal WITHOUT the env var: must fail with a hint.
+    track_and_hide(repo_temp.path(), home_temp.path());
+    let out = run(repo_temp.path(), home_temp.path(), &["reveal"]);
+    assert!(
+        !out.status.success(),
+        "reveal without the passphrase must fail: stdout={:?}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("passphrase"),
+        "the failure must hint that a passphrase may be missing, got: {}",
+        stderr
+    );
+    assert!(
+        !stderr.contains("correct horse"),
+        "the error output must never echo the passphrase value, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn passphrase_stdin_reads_exactly_one_line() {
+    let (repo_temp, home_temp) = setup_repo_with_protected_owner_key("correct horse");
+
+    // tell reads the passphrase from stdin: exactly the first line.
+    let out = run_with_stdin(
+        repo_temp.path(),
+        home_temp.path(),
+        &["tell", "owner@github.com", "owner.pub", "--passphrase-stdin"],
+        "correct horse\nIGNORED SECOND LINE\n",
+    );
+    assert!(
+        out.status.success(),
+        "tell with --passphrase-stdin must read exactly one line: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    track_and_hide(repo_temp.path(), home_temp.path());
+
+    // Reveal with the exact passphrase on stdin: must decrypt. The extra
+    // second line must be ignored (exactly-one-line semantics).
+    let out = run_with_stdin(
+        repo_temp.path(),
+        home_temp.path(),
+        &["reveal", "--passphrase-stdin"],
+        "correct horse\nIGNORED SECOND LINE\n",
+    );
+    assert!(
+        out.status.success(),
+        "reveal with the exact passphrase on stdin must succeed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
+        b"s3cret",
+        "reveal must restore the original plaintext"
+    );
+
+    // A passphrase containing spaces must match exactly: any difference
+    // (extra trailing words) is a wrong passphrase -> clear failure.
+    track_and_hide(repo_temp.path(), home_temp.path());
+    let out = run_with_stdin(
+        repo_temp.path(),
+        home_temp.path(),
+        &["reveal", "--passphrase-stdin"],
+        "correct horse trailing words\n",
+    );
+    assert!(
+        !out.status.success(),
+        "a passphrase that differs after a space must NOT unlock the key"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("passphrase"),
+        "the failure must hint that a passphrase may be missing, got: {}",
+        stderr
+    );
+
+    // And a plain wrong passphrase fails too.
+    let out = run_with_stdin(
+        repo_temp.path(),
+        home_temp.path(),
+        &["reveal", "--passphrase-stdin"],
+        "hunter2\n",
+    );
+    assert!(
+        !out.status.success(),
+        "a wrong passphrase on stdin must fail"
+    );
 }
