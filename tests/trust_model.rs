@@ -1185,10 +1185,21 @@ fn test_tell_fails_if_trust_not_established() {
 
     let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
     let err = result.err().expect("tell without established trust must fail");
+    let msg = err.to_string();
     assert!(
-        err.to_string().contains("No trust established"),
-        "the failure must be the trust-not-established error, got: {}",
-        err
+        msg.contains("no trust established for repo+user@github.com"),
+        "the failure must name the derived repo_id, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("(from remote 'origin')"),
+        "the failure must name the remote consulted, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("git gpg trust repo+user@github.com <keyfile>"),
+        "the failure must state the trust remedy, got: {}",
+        msg
     );
 }
 
@@ -1424,10 +1435,16 @@ fn test_list_keys_empty_keyring() {
     // gated command, with the existing no-trust message.
     let result = cmd_list_keys(temp.path(), "origin", &PathBuf::from("/tmp"));
     let err = result.err().expect("list-keys on an untrusted repo must fail closed");
+    let msg = err.to_string();
     assert!(
-        err.to_string().contains("No trust established"),
-        "list-keys must fail with the no-trust message, got: {}",
-        err
+        msg.contains("no trust established for repo+user@github.com"),
+        "list-keys must fail with the no-trust message naming the repo_id, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("(from remote 'origin')") && msg.contains("git gpg trust"),
+        "list-keys failure must name the remote and the trust remedy, got: {}",
+        msg
     );
 }
 

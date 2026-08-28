@@ -28,7 +28,7 @@ fn primary_user_id(key: &SignedSecretKey) -> String {
 /// format the reader in gpg_integration.rs supports.
 pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Result<()> {
     if files.is_empty() {
-        anyhow::bail!("No key files given");
+        anyhow::bail!("no key files given; pass one or more armoured private key files, e.g. git gpg import alice.pgp");
     }
     let secret_keys_path = gpg_home.join("secret-keys.pgp");
 

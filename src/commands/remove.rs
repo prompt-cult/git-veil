@@ -31,7 +31,7 @@ pub fn cmd_remove(repo_root: &Path, files: Vec<String>) -> Result<()> {
         )?;
 
         if !tracked.files.contains(&relative) {
-            anyhow::bail!("File not tracked: {}", file);
+            anyhow::bail!("file not tracked: {}; run git gpg add '{}' to track it", file, file);
         }
         tracked.remove(&relative);
         count += 1;

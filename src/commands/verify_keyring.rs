@@ -49,8 +49,18 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     // Load trust store
     let trust_path = repo_root.join(".git-gpg/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
-        .context("No trust established for this repository")?;
+    // Covers both the no-trust.json case (empty store) and the
+    // missing-repo_id case (store without this repo's entry): both name the
+    // repo_id and the remote that produced it, plus the remedy.
+    let trusted_fingerprint = match trust_store.get_trusted_fingerprint(&repo_id) {
+        Some(fingerprint) => fingerprint,
+        None => anyhow::bail!(
+            "no trust established for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            repo_id,
+            remote_name,
+            repo_id
+        ),
+    };
 
     // trust.json is committed to the repo and therefore attacker-writable;
     // it is never a sufficient anchor on its own. Require the per-machine
@@ -58,13 +68,17 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     match TrustPinStore::read_pin(gpg_home, &repo_id)? {
         Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
         Some(pinned) => anyhow::bail!(
-            "trust for {} changed on this machine's record ({} → {}); if you intended this, re-run git gpg trust",
+            "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git gpg trust {} <keyfile>",
             repo_id,
+            remote_name,
             pinned,
-            trusted_fingerprint
+            trusted_fingerprint,
+            repo_id
         ),
         None => anyhow::bail!(
-            "no local pin for {}; run git gpg trust to pin this repository's key before use",
+            "no local pin for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            repo_id,
+            remote_name,
             repo_id
         ),
     }

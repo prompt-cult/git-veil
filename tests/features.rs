@@ -2271,20 +2271,35 @@ fn verify_fails_closed_when_pin_missing() {
     let hide_err = hide_result
         .err()
         .expect("hide without a local pin must fail closed");
+    let hide_msg = hide_err.to_string();
     assert!(
-        hide_err.to_string().contains("no local pin"),
+        hide_msg.contains("no local pin"),
         "hide must fail with the pin-missing message, got: {}",
-        hide_err
+        hide_msg
+    );
+    assert!(
+        hide_msg.contains("repo+owner@github.com") && hide_msg.contains("(from remote 'origin')"),
+        "the pin-missing message must name the repo_id and remote, got: {}",
+        hide_msg
+    );
+    assert!(
+        hide_msg.contains("git gpg trust"),
+        "the pin-missing message must state the remedy, got: {}",
+        hide_msg
     );
 
     let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
     let reveal_err = reveal_result
         .err()
         .expect("reveal without a local pin must fail closed");
+    let reveal_msg = reveal_err.to_string();
     assert!(
-        reveal_err.to_string().contains("no local pin"),
-        "reveal must fail with the pin-missing message, got: {}",
-        reveal_err
+        reveal_msg.contains("no local pin")
+            && reveal_msg.contains("repo+owner@github.com")
+            && reveal_msg.contains("(from remote 'origin')")
+            && reveal_msg.contains("git gpg trust"),
+        "reveal must fail with the pin-missing message naming repo_id, remote and remedy, got: {}",
+        reveal_msg
     );
 
     // Protective completion: re-establishing trust (which re-pins) must make
@@ -2361,6 +2376,16 @@ fn verify_fails_closed_when_pin_mismatches() {
         msg
     );
     assert!(
+        msg.contains("repo+owner@github.com") && msg.contains("(from remote 'origin')"),
+        "the mismatch message must name the repo_id and the remote consulted, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("re-run git gpg trust"),
+        "the mismatch message must state the remedy, got: {}",
+        msg
+    );
+    assert!(
         msg.contains(&owner_fingerprint) && msg.contains(&attacker_fingerprint),
         "the mismatch message must name both the pinned ({}) and the new ({}) fingerprint, got: {}",
         owner_fingerprint,
@@ -2370,6 +2395,82 @@ fn verify_fails_closed_when_pin_mismatches() {
     assert_eq!(
         keyring_before, keyring_after,
         "the keyring file must be untouched by the failed verify"
+    );
+}
+
+#[test]
+fn decrypt_failure_mentions_recipient_or_passphrase_causes() {
+    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    // Replace the owner's secret key with a DIFFERENT valid key that claims
+    // the SAME email. The keyring entry still matches by email, the trust
+    // pin still verifies, but this key was never a recipient of the
+    // ciphertext — the exact case where wrong-recipient and wrong-passphrase
+    // are indistinguishable at the decrypt layer.
+    let wrong_key = generate_test_key("owner@github.com").0;
+    write_multi_key_secret_keys(&gpg_home, &[wrong_key]);
+
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let err = result
+        .err()
+        .expect("decrypting owner ciphertext with a different key must fail");
+    let msg = err.to_string();
+
+    assert!(
+        msg.contains("decryption failed"),
+        "the failure must be the decryption error, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("not encrypted to your key 'owner@github.com'"),
+        "the message must name the key email and the not-a-recipient cause, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("needs a passphrase"),
+        "the message must mention the passphrase cause, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("GITGPG_PASSPHRASE") && msg.contains("--passphrase-stdin"),
+        "the message must point at the passphrase remedies, got: {}",
+        msg
+    );
+}
+
+#[test]
+fn trust_error_names_remote_and_repo_id() {
+    let repo_temp = setup_git_repo_with_origin_remote();
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
+
+    // Remote exists, but no trust was ever established: the gated command
+    // must name the remote consulted, the derived repo_id and the remedy.
+    // The gpg home is never touched — the failure happens at the trust check.
+    let home_temp = tempfile::tempdir().unwrap();
+    let result = cmd_hide(repo_temp.path(), "origin", &home_temp.path().to_path_buf());
+    let err = result
+        .err()
+        .expect("hide on an untrusted repo must fail closed");
+    let msg = err.to_string();
+
+    assert!(
+        msg.contains("no trust established for repo+owner@github.com"),
+        "the error must name the derived repo_id, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("(from remote 'origin')"),
+        "the error must name the remote consulted, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("git gpg trust repo+owner@github.com <keyfile>"),
+        "the error must state the trust remedy, got: {}",
+        msg
     );
 }
 

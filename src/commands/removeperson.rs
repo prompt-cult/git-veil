@@ -13,8 +13,14 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
 
     let trust_path = repo_root.join(".git-gpg/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
-        .context("No trust established for this repository. Run 'git gpg trust' first.")?;
+    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
+        anyhow::anyhow!(
+            "no trust established for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            repo_id,
+            remote_name,
+            repo_id
+        )
+    })?;
 
     // Verify the existing keyring signature against the trusted key BEFORE any
     // mutation. An unsigned keyring is only acceptable when it has zero entries
@@ -31,7 +37,10 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
 
     // Find the entry by exact email
     if keyring.find_by_email(email_to_remove).is_none() {
-        anyhow::bail!("{} not found in keyring", email_to_remove);
+        anyhow::bail!(
+            "'{}' not found in keyring; check the email against git gpg list-keys",
+            email_to_remove
+        );
     }
 
     // Remove entry (this clears signature)

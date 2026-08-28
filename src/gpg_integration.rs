@@ -139,8 +139,23 @@ pub fn decrypt_with_gpg_key(
     let (message, _headers) = Message::from_string(ciphertext)
         .context("Failed to parse encrypted message")?;
 
+    // Name the key in the failure message: the two indistinguishable-at-this-
+    // layer causes are (a) the ciphertext was never encrypted to this key and
+    // (b) the key needs a passphrase that was not supplied (or was wrong).
+    // The underlying pgp cause stays in the anyhow chain; main prints it as a
+    // "Caused by" section. No plaintext or passphrase material is ever echoed.
+    let key_email = private_key
+        .details
+        .users
+        .iter()
+        .find_map(|u| extract_email_from_user_id(&String::from_utf8_lossy(u.id.id())))
+        .unwrap_or_else(|| "<unknown>".to_string());
+
     let mut decrypted = message.decrypt(&passphrase, private_key)
-        .context("Failed to decrypt message (wrong passphrase? if this key is passphrase-protected, supply it via GITGPG_PASSPHRASE or --passphrase-stdin)")?;
+        .with_context(|| format!(
+            "decryption failed: this ciphertext was not encrypted to your key '{}' (it is not a listed recipient), or your key needs a passphrase (set GITGPG_PASSPHRASE or use --passphrase-stdin)",
+            key_email
+        ))?;
     
     let plaintext = decrypted.as_data_vec()
         .context("Failed to extract plaintext")?;

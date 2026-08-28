@@ -18,8 +18,14 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
 
     let trust_path = repo_root.join(".git-gpg/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
-        .context("No trust established for this repository. Run 'git gpg trust' first.")?;
+    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
+        anyhow::anyhow!(
+            "no trust established for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            repo_id,
+            remote_name,
+            repo_id
+        )
+    })?;
 
     // Verify the existing keyring signature against the trusted key BEFORE any
     // mutation. An unsigned keyring is only acceptable when it has zero entries
@@ -30,12 +36,15 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
     let key_content = fs::read_to_string(repo_root.join(collaborator_key_path))
-        .context("Failed to read collaborator key file")?;
+        .with_context(|| format!("failed to read collaborator key file '{}'", collaborator_key_path))?;
     let collaborator_key = parse_armored_public_key(&key_content)?;
 
     // Verify email is in key identities
     if !check_email_in_identities(&collaborator_key, email) {
-        anyhow::bail!("Collaborator key does not contain email: {}", email);
+        anyhow::bail!(
+            "collaborator key does not contain email: {}; pass a key file whose user ID carries that address",
+            email
+        );
     }
 
     // Test-encrypt a canary to the collaborator key to verify it can actually

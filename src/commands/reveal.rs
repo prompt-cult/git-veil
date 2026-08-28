@@ -25,7 +25,7 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
 
     // Find user's entry
     keyring.find_by_email(email)
-        .with_context(|| format!("User {} not found in keyring", email))?;
+        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git gpg tell", email))?;
 
     // Find user's private key
     let private_key = find_private_key_by_email(gpg_home, email)?;
@@ -52,7 +52,7 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
 
         // Check encrypted file exists
         if !encrypted_path.exists() {
-            anyhow::bail!("Encrypted file not found: {}", encrypted_path.display());
+            anyhow::bail!("Encrypted file not found: {}; run git gpg hide to create it", encrypted_path.display());
         }
 
         // Read encrypted content
