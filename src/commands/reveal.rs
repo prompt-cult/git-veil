@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::commands::hide::encrypted_path_for;
 use crate::tracked_files::validate_tracked_path;
 use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email, Keyring, TrackedFiles};
 
@@ -44,9 +45,7 @@ pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
 
         // Compute encrypted path
-        let encrypted_path = PathBuf::from(SECRETS_DIR)
-            .join(file)
-            .with_extension(format!("{}.asc", file.extension().unwrap_or_default().to_string_lossy()));
+        let encrypted_path = encrypted_path_for(file);
 
         // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
         if !encrypted_path.starts_with(SECRETS_DIR) {

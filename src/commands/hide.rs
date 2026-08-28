@@ -7,6 +7,21 @@ use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_key, Ke
 
 const SECRETS_DIR: &str = ".git-gpg/secrets";
 
+/// Computes the ciphertext path for a tracked file.
+///
+/// The ciphertext name is the FULL original file name plus ".asc" so that
+/// extensionless and dot files keep their exact name (notes -> notes.asc,
+/// a.tar.gz -> a.tar.gz.asc, .env -> .env.asc). Shared by hide and reveal
+/// so the two sides cannot drift apart.
+pub(crate) fn encrypted_path_for(file: &std::path::Path) -> PathBuf {
+    PathBuf::from(SECRETS_DIR)
+        .join(file)
+        .with_file_name(format!(
+            "{}.asc",
+            file.file_name().unwrap_or_default().to_string_lossy()
+        ))
+}
+
 /// Encrypts all tracked files to all keys in the keyring.
 ///
 /// Tracked paths are repo-relative (relative to the cwd, which is the repo
@@ -52,9 +67,7 @@ pub fn cmd_hide(remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
         let ciphertext = encrypt_to_gpg_key(&plaintext, &public_keys[0])?;
 
         // Compute encrypted path
-        let encrypted_path = PathBuf::from(SECRETS_DIR)
-            .join(file)
-            .with_extension(format!("{}.asc", file.extension().unwrap_or_default().to_string_lossy()));
+        let encrypted_path = encrypted_path_for(file);
 
         // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
         if !encrypted_path.starts_with(SECRETS_DIR) {

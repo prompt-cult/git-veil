@@ -1263,6 +1263,151 @@ fn hide_reveal_roundtrip_binary_file() {
     );
 }
 
+// ============================================================================
+// L4: ciphertext filename is the FULL original file name plus ".asc"
+//
+// Regression tests written Red/Green: previously the ciphertext path was
+// computed with with_extension(), which for an extensionless file appended
+// a bare second dot (notes -> notes..asc, .env -> .env..asc).
+// ============================================================================
+
+#[test]
+#[serial]
+fn ciphertext_filename_is_full_name_plus_asc() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write("notes", "no extension here\n").unwrap();
+    cmd_add(vec!["notes".to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide("origin", &gpg_home);
+    let ciphertext_exists =
+        repo_temp.path().join(".git-gpg/secrets/notes.asc").exists();
+    let mangled_exists =
+        repo_temp.path().join(".git-gpg/secrets/notes..asc").exists();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    hide_result.expect("cmd_hide must succeed");
+    assert!(
+        ciphertext_exists,
+        "hide must write the ciphertext to .git-gpg/secrets/notes.asc"
+    );
+    assert!(
+        !mangled_exists,
+        "hide must not mangle the ciphertext name to notes..asc"
+    );
+}
+
+#[test]
+#[serial]
+fn ciphertext_filename_for_dotfile() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write(".env", "DOTENV=1\n").unwrap();
+    cmd_add(vec![".env".to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide("origin", &gpg_home);
+    let ciphertext_exists =
+        repo_temp.path().join(".git-gpg/secrets/.env.asc").exists();
+    let mangled_exists =
+        repo_temp.path().join(".git-gpg/secrets/.env..asc").exists();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    hide_result.expect("cmd_hide must succeed");
+    assert!(
+        ciphertext_exists,
+        "hide must write the ciphertext to .git-gpg/secrets/.env.asc"
+    );
+    assert!(
+        !mangled_exists,
+        "hide must not mangle the ciphertext name to .env..asc"
+    );
+}
+
+#[test]
+#[serial]
+fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
+    let cases: Vec<(&str, Vec<u8>)> = vec![
+        ("notes", b"extensionless notes\n".to_vec()),
+        (".env", b"DOTENV_SECRET=topsecret\n".to_vec()),
+        ("a.tar.gz", b"double-extension archive bytes".to_vec()),
+    ];
+
+    let original_dir = std::env::current_dir().unwrap();
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed");
+
+    for (name, bytes) in &cases {
+        std::fs::write(name, bytes).unwrap();
+        cmd_add(vec![name.to_string()])
+            .unwrap_or_else(|e| panic!("cmd_add must succeed for {}: {:?}", name, e));
+    }
+
+    let hide_result = cmd_hide("origin", &gpg_home);
+    let ciphertexts_exist: Vec<(String, bool)> = cases
+        .iter()
+        .map(|(name, _)| {
+            (
+                name.to_string(),
+                repo_temp
+                    .path()
+                    .join(".git-gpg/secrets")
+                    .join(format!("{}.asc", name))
+                    .exists(),
+            )
+        })
+        .collect();
+
+    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
+    let restored: Vec<(String, Option<Vec<u8>>)> = cases
+        .iter()
+        .map(|(name, _)| (name.to_string(), std::fs::read(name).ok()))
+        .collect();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    hide_result.expect("cmd_hide must succeed");
+    for (name, exists) in ciphertexts_exist {
+        assert!(
+            exists,
+            "hide must write the ciphertext to .git-gpg/secrets/{}.asc",
+            name
+        );
+    }
+    reveal_result.expect("cmd_reveal must succeed");
+    for ((name, original), (restored_name, restored_bytes)) in
+        cases.iter().zip(restored.iter())
+    {
+        assert_eq!(name, restored_name, "test bookkeeping must stay in sync");
+        let restored_bytes = restored_bytes.as_ref().unwrap_or_else(|| {
+            panic!("reveal must recreate {}", name)
+        });
+        assert_eq!(
+            restored_bytes, original,
+            "reveal must restore {} byte-exactly under its full original name",
+            name
+        );
+    }
+    assert!(
+        repo_temp.path().join("a.tar.gz").is_file(),
+        "the revealed multi-extension file must keep its full original name"
+    );
+}
+
 #[test]
 #[serial]
 fn symlink_outside_repo_is_rejected() {
