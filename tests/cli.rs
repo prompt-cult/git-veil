@@ -298,9 +298,11 @@ fn cli_reports_nonzero_exit_on_failure() {
 
 #[test]
 fn home_free_subcommands_work_without_home_set() {
-    // init/add/remove/list/list-keys/clean never touch the key store, so
-    // they must succeed even with HOME removed from the environment
-    // (previously default_gpg_home() errored before command dispatch).
+    // init/add/remove/list/clean never touch the key store, so they must
+    // succeed even with HOME removed from the environment (previously
+    // default_gpg_home() errored before command dispatch). list-keys is NOT
+    // in this set any more: it verifies the keyring signature against the
+    // pinned trusted key, so it consumes a gpg_home and requires trust.
     let repo_temp = tempfile::tempdir().unwrap();
 
     git(repo_temp.path(), &["init"]);
@@ -330,7 +332,6 @@ fn home_free_subcommands_work_without_home_set() {
         &["add", "secret.env"][..],
         &["list"][..],
         &["remove", "secret.env"][..],
-        &["list-keys"][..],
         &["clean"][..],
     ] {
         let out = run_without_home(args);

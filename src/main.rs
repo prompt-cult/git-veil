@@ -217,9 +217,16 @@ enum Commands {
         gpg_home: Option<PathBuf>,
     },
 
-    /// List all keys in the keyring
+    /// List all keys in the keyring (requires a verified keyring signature)
     #[command(name = "list-keys")]
-    ListKeys,
+    ListKeys {
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// GPG home directory
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+    },
 
     /// Clean - remove all git-gpg metadata
     Clean {
@@ -243,8 +250,10 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 
 /// Resolves the key store location for commands that consume a gpg_home:
 /// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.gnupg`.
-/// Resolved lazily so HOME-free subcommands (init/add/remove/list/
-/// list-keys/clean/show-repo-id) never fail on an unset HOME.
+/// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
+/// show-repo-id) never fail on an unset HOME. list-keys is no longer in this
+/// set: it verifies the keyring signature against the pinned key, so it
+/// consumes a gpg_home like every other gated command.
 fn resolve_gpg_home(gpg_home: Option<PathBuf>) -> Result<PathBuf> {
     gpg_home.map(Ok).unwrap_or_else(default_gpg_home)
 }
@@ -331,7 +340,9 @@ fn main() -> Result<()> {
         Commands::VerifyKeyring { remote, gpg_home: opt } => {
             cmd_verify_keyring(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
         }
-        Commands::ListKeys => cmd_list_keys(&repo_root)?,
+        Commands::ListKeys { remote, gpg_home: opt } => {
+            cmd_list_keys(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
+        }
         Commands::Clean { yes } => cmd_clean(&repo_root, yes)?,
     }
 

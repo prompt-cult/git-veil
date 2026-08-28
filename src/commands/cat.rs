@@ -16,7 +16,7 @@ use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verif
 /// root.
 pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<Vec<u8>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
-    let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     // Find user's entry
     keyring.find_by_email(email)

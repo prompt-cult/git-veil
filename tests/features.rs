@@ -6,10 +6,11 @@
 use git_gpg::{
     base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
     cmd_cat, cmd_changes, cmd_hide, cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_unhide, cmd_verify_keyring, decrypt_with_gpg_key, default_gpg_home,
+    cmd_trust, cmd_unhide, cmd_verify_keyring, cmd_list_keys, decrypt_with_gpg_key, default_gpg_home,
     encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
     find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_gpg_home,
-    sign_keyring_content, Keyring, KeyringEntry, TrustPinStore, TrustStore, TrackedFiles,
+    sign_keyring_content, verify_keyring_against_trust, Keyring, KeyringEntry, TrustPinStore,
+    TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -774,6 +775,118 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
     assert!(
         result.is_err(),
         "tell must reject an unsigned keyring that already contains entries"
+    );
+}
+
+// ============================================================================
+// list-keys is gated on keyring signature verification (docs-vs-code #15)
+// ============================================================================
+
+/// Sets up a trusted repo whose signed keyring contains only alice, and
+/// tampers the keyring file by appending an attacker entry plus a bogus
+/// signature. Returns (repo_temp, gpg_home, keyring_path).
+fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::PathBuf) {
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("cmd_tell must succeed");
+
+    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    let mut tampered =
+        Keyring::parse(&std::fs::read_to_string(&keyring_path).unwrap()).unwrap();
+    tampered
+        .add_entry(
+            "attacker@evil.com".to_string(),
+            "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+            "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234".to_string(),
+        )
+        .unwrap();
+    tampered.signature = Some(
+        "-----BEGIN PGP SIGNATURE-----\nbogus\n-----END PGP SIGNATURE-----".to_string(),
+    );
+    std::fs::write(&keyring_path, tampered.serialize()).unwrap();
+
+    (repo_temp, gpg_home, keyring_path)
+}
+
+#[test]
+fn list_keys_on_tampered_keyring_fails_closed() {
+    let (repo_temp, gpg_home, keyring_path) = setup_tampered_keyring_repo();
+    let keyring_before = std::fs::read(&keyring_path).unwrap();
+
+    let result = cmd_list_keys(repo_temp.path(), "origin", &gpg_home);
+    let keyring_after = std::fs::read(&keyring_path).unwrap();
+
+    let err = result
+        .err()
+        .expect("list-keys over a tampered keyring must fail closed");
+    assert!(
+        err.to_string().to_lowercase().contains("signature"),
+        "the error must be the underlying signature verification failure, got: {}",
+        err
+    );
+    assert_eq!(
+        keyring_before, keyring_after,
+        "a failed list-keys must leave the keyring file untouched"
+    );
+}
+
+#[test]
+fn list_keys_on_valid_keyring_succeeds_and_reports_verification() {
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("cmd_tell must succeed");
+
+    cmd_list_keys(repo_temp.path(), "origin", &gpg_home)
+        .expect("list-keys over a validly signed keyring must succeed");
+}
+
+// ============================================================================
+// verify-keyring reports the signer identity (docs-vs-code #7)
+// ============================================================================
+
+#[test]
+fn verify_keyring_reports_trusted_fingerprint() {
+    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let owner_fingerprint = extract_key_fingerprint(&owner_pub);
+
+    let (repo_id, fingerprint, _keyring) =
+        verify_keyring_against_trust(repo_temp.path(), "origin", &gpg_home)
+            .expect("verification must succeed on a trusted repo");
+
+    assert_eq!(
+        repo_id, "repo+owner@github.com",
+        "the returned repo id must match the trusted repo"
+    );
+    assert_eq!(
+        fingerprint, owner_fingerprint,
+        "the returned fingerprint must be the trusted owner key's fingerprint"
+    );
+    let pin = TrustPinStore::read_pin(&gpg_home, &repo_id)
+        .expect("reading the pin must not error")
+        .expect("cmd_trust must have pinned this repo on this machine");
+    assert_eq!(
+        fingerprint, pin,
+        "the returned fingerprint must match the pin cmd_trust wrote"
     );
 }
 

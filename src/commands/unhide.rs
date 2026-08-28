@@ -33,7 +33,7 @@ pub fn cmd_unhide(
     passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify keyring signature first: never decrypt against an unverified keyring
-    let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     // Find user's entry
     keyring

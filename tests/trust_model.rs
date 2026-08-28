@@ -1326,9 +1326,17 @@ fn test_list_keys_empty_keyring() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
-    
-    let result = cmd_list_keys(temp.path());
-    assert!(result.is_ok());
+
+    // list-keys is gated on keyring signature verification: on a repo where
+    // no trust was ever established it must fail closed like every other
+    // gated command, with the existing no-trust message.
+    let result = cmd_list_keys(temp.path(), "origin", &PathBuf::from("/tmp"));
+    let err = result.err().expect("list-keys on an untrusted repo must fail closed");
+    assert!(
+        err.to_string().contains("No trust established"),
+        "list-keys must fail with the no-trust message, got: {}",
+        err
+    );
 }
 
 // test_list_keys_multiple_entries, test_list_keys_displays_email_and_fingerprint
@@ -1340,7 +1348,7 @@ fn test_list_keys_empty_keyring() {
 fn test_list_keys_single_entry() {
     let (repo_temp, _gpg_home) = setup_trusted_repo_with_owner_in_keyring();
 
-    let result = cmd_list_keys(repo_temp.path());
+    let result = cmd_list_keys(repo_temp.path(), "origin", &_gpg_home);
     assert!(
         result.is_ok(),
         "list-keys over a populated keyring must succeed: {:?}",
@@ -1964,7 +1972,7 @@ fn test_git_gpg_not_initialized_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     
-    let result = cmd_list_keys(temp.path());
+    let result = cmd_list_keys(temp.path(), "origin", &PathBuf::from("/tmp"));
     assert!(result.is_err());
 }
 

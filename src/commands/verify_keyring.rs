@@ -42,8 +42,8 @@ fn load_public_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Resu
 /// (the fresh-init state); a keyring containing entries must carry a valid
 /// signature made by the trusted key.
 ///
-/// Returns the repository ID and the parsed keyring.
-pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<(String, Keyring)> {
+/// Returns the repository ID, the trusted signer fingerprint, and the parsed keyring.
+pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<(String, String, Keyring)> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
 
@@ -93,14 +93,16 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
         );
     }
 
-    Ok((repo_id, keyring))
+    Ok((repo_id, trusted_fingerprint.to_string(), keyring))
 }
 
 /// Verifies the keyring signature against the trusted signing key.
 pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
-    let (repo_id, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+    let (repo_id, fingerprint, keyring) =
+        verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     println!("✓ Keyring signature verified");
+    println!("Signed by fingerprint: {}", fingerprint);
     println!("Repository ID: {}", repo_id);
     println!("Keys in keyring: {}", keyring.entries.len());
     Ok(())
