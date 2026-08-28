@@ -58,6 +58,9 @@ _git__gpg() {
             git__gpg,remove)
                 cmd="git__gpg__subcmd__remove"
                 ;;
+            git__gpg,removekey)
+                cmd="git__gpg__subcmd__removekey"
+                ;;
             git__gpg,removeperson)
                 cmd="git__gpg__subcmd__removeperson"
                 ;;
@@ -124,6 +127,9 @@ _git__gpg() {
             git__gpg__subcmd__help,remove)
                 cmd="git__gpg__subcmd__help__subcmd__remove"
                 ;;
+            git__gpg__subcmd__help,removekey)
+                cmd="git__gpg__subcmd__help__subcmd__removekey"
+                ;;
             git__gpg__subcmd__help,removeperson)
                 cmd="git__gpg__subcmd__help__subcmd__removeperson"
                 ;;
@@ -155,7 +161,7 @@ _git__gpg() {
 
     case "${cmd}" in
         git__gpg)
-            opts="-h -V --help --version init import export trust tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys clean completions manpages help"
+            opts="-h -V --help --version init import export removekey trust tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -285,7 +291,7 @@ _git__gpg() {
             return 0
             ;;
         git__subcmd__gpg__subcmd__help)
-            opts="init import export trust tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys clean completions manpages help"
+            opts="init import export removekey trust tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -481,6 +487,20 @@ _git__gpg() {
             return 0
             ;;
         git__subcmd__gpg__subcmd__help__subcmd__remove)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        git__subcmd__gpg__subcmd__help__subcmd__removekey)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -717,6 +737,24 @@ _git__gpg() {
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        git__subcmd__gpg__subcmd__removekey)
+            opts="-h --yes --gpg-home --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --gpg-home)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;

@@ -95,6 +95,51 @@ EXAMPLES
         gpg_home: Option<PathBuf>,
     },
 
+    /// Remove a key from the local key store (destructive, local-only)
+    #[command(name = "removekey")]
+    #[command(after_long_help = "\
+Drops key material from the LOCAL key store: every armoured block in
+$HOME/.git-gpg/secret-keys.pgp and public-keys.pgp whose key's
+fingerprint matches the identifier, or whose exact case-insensitive email
+matches, is removed from both stores. Prefer the FINGERPRINT when it is
+not unambiguous which key you mean — a shared email that matches several
+keys is refused unless --yes confirms removing ALL of them.
+
+This is destructive and LOCAL-ONLY: it does not touch any repository,
+keyring or trust state, and it does NOT revoke anything. Removing a key
+from the store does not stop old ciphertext that was encrypted to it from
+being decryptable by whoever holds the key. Revoking a departing
+collaborator is removeperson + re-hide (docs/departing.md); removekey is
+the departing user's housekeeping step for their own machine's store.
+
+Danger guard: if the target key is the only private key in
+secret-keys.pgp, removekey refuses without --yes — this is your only
+private key, and without it you cannot decrypt anything.
+
+The store rewrite is atomic and lossless for the retained blocks. A
+corrupt (e.g. truncated) store is refused untouched — repair it by hand;
+removekey never deletes a corrupt store. On success a per-store summary
+prints the fingerprints removed.
+
+EXAMPLES
+  $ git-gpg removekey 9A1F...                     # by fingerprint (preferred)
+  $ git-gpg removekey bob@example.com             # exact case-insensitive email
+  $ git-gpg removekey bob@example.com --yes       # confirm only-private-key removal
+  $ git-gpg removekey bob@example.com --gpg-home /path/to/store
+")]
+    RemoveKey {
+        /// Fingerprint or exact case-insensitive email of the key(s) to remove
+        identifier: String,
+        /// Confirm destructive removals: required when the target is the only
+        /// private key in the store, and to remove ALL keys when the email
+        /// matches several.
+        #[arg(long)]
+        yes: bool,
+        /// Key store directory (default: $HOME/.git-gpg)
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+    },
+
     /// Verify and pin the repository owner's signing key (per machine)
     #[command(after_long_help = "\
 Verifies the repository owner's public signing key and pins it in your

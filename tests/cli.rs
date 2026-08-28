@@ -929,3 +929,81 @@ fn cli_export_round_trip_into_tell() {
         keyring_text
     );
 }
+
+#[test]
+fn cli_removekey_round_trip() {
+    // A departing user's flow: import two keys, export still works, removekey
+    // drops the departing key from the local store, export now errors while
+    // the retained key keeps working.
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
+    let bob_fingerprint = git_gpg::extract_key_fingerprint(&bob_pub);
+    for (name, key) in [
+        ("alice-priv.asc", &alice_sec),
+        ("bob-priv.asc", &bob_sec),
+    ] {
+        std::fs::write(
+            repo_temp.path().join(name),
+            key.to_armored_string(Default::default()).unwrap(),
+        )
+        .unwrap();
+    }
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["import", "alice-priv.asc", "bob-priv.asc"],
+    );
+    assert!(
+        out.status.success(),
+        "import failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["export", "bob@example.com"],
+    );
+    assert!(
+        out.status.success(),
+        "export of the to-be-removed key must work before removekey: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["removekey", &bob_fingerprint],
+    );
+    assert!(
+        out.status.success(),
+        "removekey by fingerprint failed: {:?} {:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["export", "bob@example.com"],
+    );
+    assert!(
+        !out.status.success(),
+        "export must fail for a key removed from the store"
+    );
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["export", "alice@example.com"],
+    );
+    assert!(
+        out.status.success(),
+        "export of the retained key must still work after removekey: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

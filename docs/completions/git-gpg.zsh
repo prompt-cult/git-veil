@@ -51,6 +51,15 @@ _arguments "${_arguments_options[@]}" : \
 ':identifier -- Email or fingerprint of the key to export:_default' \
 && ret=0
 ;;
+(removekey)
+_arguments "${_arguments_options[@]}" : \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--yes[Confirm destructive removals\: required when the target is the only private key in the store, and to remove ALL keys when the email matches several]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':identifier -- Fingerprint or exact case-insensitive email of the key(s) to remove:_default' \
+&& ret=0
+;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
@@ -229,6 +238,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(removekey)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -320,6 +333,7 @@ _git-gpg_commands() {
 'init:Initialize git-gpg state (.git-gpg/) in the current repository' \
 'import:Import your private key(s) into the git-gpg key store' \
 'export:Export an armoured public key from the local key store' \
+'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Verify and pin the repository owner'\''s signing key (per machine)' \
 'tell:Add a collaborator'\''s public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
@@ -378,6 +392,7 @@ _git-gpg__subcmd__help_commands() {
 'init:Initialize git-gpg state (.git-gpg/) in the current repository' \
 'import:Import your private key(s) into the git-gpg key store' \
 'export:Export an armoured public key from the local key store' \
+'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Verify and pin the repository owner'\''s signing key (per machine)' \
 'tell:Add a collaborator'\''s public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
@@ -470,6 +485,11 @@ _git-gpg__subcmd__help__subcmd__remove_commands() {
     local commands; commands=()
     _describe -t commands 'git-gpg help remove commands' commands "$@"
 }
+(( $+functions[_git-gpg__subcmd__help__subcmd__removekey_commands] )) ||
+_git-gpg__subcmd__help__subcmd__removekey_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-gpg help removekey commands' commands "$@"
+}
 (( $+functions[_git-gpg__subcmd__help__subcmd__removeperson_commands] )) ||
 _git-gpg__subcmd__help__subcmd__removeperson_commands() {
     local commands; commands=()
@@ -544,6 +564,11 @@ _git-gpg__subcmd__manpages_commands() {
 _git-gpg__subcmd__remove_commands() {
     local commands; commands=()
     _describe -t commands 'git-gpg remove commands' commands "$@"
+}
+(( $+functions[_git-gpg__subcmd__removekey_commands] )) ||
+_git-gpg__subcmd__removekey_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-gpg removekey commands' commands "$@"
 }
 (( $+functions[_git-gpg__subcmd__removeperson_commands] )) ||
 _git-gpg__subcmd__removeperson_commands() {

@@ -1,6 +1,7 @@
 pub mod init;
 pub mod import;
 pub mod export;
+pub mod removekey;
 pub mod trust;
 pub mod tell;
 pub mod removeperson;

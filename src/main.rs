@@ -6,7 +6,8 @@ use git_gpg::{
     cli::{Cli, Commands},
     cmd_init, cmd_import, cmd_export, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove,
     cmd_list, cmd_hide, cmd_reveal, cmd_unhide, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id,
-    cmd_whoami, cmd_verify_keyring, cmd_list_keys, default_gpg_home, get_git_config_email,
+    cmd_whoami, cmd_verify_keyring, cmd_list_keys, cmd_removekey, default_gpg_home,
+    get_git_config_email,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -99,6 +100,9 @@ fn main() -> Result<()> {
         }
         Commands::Export { identifier, output, gpg_home: opt } => {
             cmd_export(&resolve_gpg_home(opt)?, &identifier, output.as_deref())?;
+        }
+        Commands::RemoveKey { identifier, yes, gpg_home: opt } => {
+            cmd_removekey(&resolve_gpg_home(opt)?, &identifier, yes)?;
         }
         Commands::Trust { repo_id, signing_key, remote, gpg_home: opt } => {
             cmd_trust(&repo_root, &repo_id, &signing_key, &remote, &resolve_gpg_home(opt)?)?;

@@ -1,0 +1,51 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-removekey 1  "git-gpg-removekey " 
+.SH NAME
+git\-gpg\-removekey \- Remove a key from the local key store (destructive, local\-only)
+.SH SYNOPSIS
+\fBgit\-gpg removekey\fR [\fB\-\-yes\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+.SH DESCRIPTION
+Remove a key from the local key store (destructive, local\-only)
+.SH OPTIONS
+.TP
+\fB\-\-yes\fR
+Confirm destructive removals: required when the target is the only private key in the store, and to remove ALL keys when the email matches several
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIIDENTIFIER\fR>
+Fingerprint or exact case\-insensitive email of the key(s) to remove
+.SH EXTRA
+Drops key material from the LOCAL key store: every armoured block in
+$HOME/.git\-gpg/secret\-keys.pgp and public\-keys.pgp whose key\*(Aqs
+fingerprint matches the identifier, or whose exact case\-insensitive email
+matches, is removed from both stores. Prefer the FINGERPRINT when it is
+not unambiguous which key you mean — a shared email that matches several
+keys is refused unless \-\-yes confirms removing ALL of them.
+
+This is destructive and LOCAL\-ONLY: it does not touch any repository,
+keyring or trust state, and it does NOT revoke anything. Removing a key
+from the store does not stop old ciphertext that was encrypted to it from
+being decryptable by whoever holds the key. Revoking a departing
+collaborator is removeperson + re\-hide (docs/departing.md); removekey is
+the departing user\*(Aqs housekeeping step for their own machine\*(Aqs store.
+
+Danger guard: if the target key is the only private key in
+secret\-keys.pgp, removekey refuses without \-\-yes — this is your only
+private key, and without it you cannot decrypt anything.
+
+The store rewrite is atomic and lossless for the retained blocks. A
+corrupt (e.g. truncated) store is refused untouched — repair it by hand;
+removekey never deletes a corrupt store. On success a per\-store summary
+prints the fingerprints removed.
+
+EXAMPLES
+  $ git\-gpg removekey 9A1F...                     # by fingerprint (preferred)
+  $ git\-gpg removekey bob@example.com             # exact case\-insensitive email
+  $ git\-gpg removekey bob@example.com \-\-yes       # confirm only\-private\-key removal
+  $ git\-gpg removekey bob@example.com \-\-gpg\-home /path/to/store

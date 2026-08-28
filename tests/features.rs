@@ -6,12 +6,13 @@
 use git_gpg::{
     base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
     cmd_cat, cmd_changes, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_remove,
-    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
-    cmd_list_keys, decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key, export_public_key,
-    extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_email,
-    find_private_key_by_fingerprint, import_key_to_gpg_home, parse_armored_public_key,
-    sign_keyring_content, verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry,
-    TrustPinStore, TrustStore, TrackedFiles,
+    cmd_removekey, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide,
+    cmd_verify_keyring, cmd_list_keys, decrypt_with_gpg_key, default_gpg_home,
+    encrypt_to_gpg_key, export_public_key, extract_content_to_verify_from_keyring,
+    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
+    import_key_to_gpg_home, parse_armored_public_key, sign_keyring_content,
+    verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry, TrustPinStore, TrustStore,
+    TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -3864,5 +3865,306 @@ fn export_by_fingerprint_selects_the_exact_key() {
         extract_key_fingerprint(&reparsed),
         bob_fingerprint,
         "export by fingerprint must return bob's key, not another key from the store"
+    );
+}
+
+// ============================================================================
+// removekey: remove a key from the local key store (destructive, local-only)
+// ============================================================================
+
+/// Writes the given public keys as the armoured public-keys.pgp store,
+/// mirroring the format import_key_to_gpg_home accumulates.
+fn write_public_keys_store(gpg_home: &PathBuf, keys: &[&pgp::composed::SignedPublicKey]) {
+    std::fs::create_dir_all(gpg_home).unwrap();
+    let mut content = String::new();
+    for key in keys {
+        content.push_str(&key.to_armored_string(Default::default()).unwrap());
+        content.push('\n');
+    }
+    std::fs::write(gpg_home.join("public-keys.pgp"), content).unwrap();
+}
+
+/// Splits an armoured key store file into its blocks and returns each
+/// block key's fingerprint — the test-side twin of the store splitters.
+fn fingerprints_in_store(gpg_home: &PathBuf, file: &str, private: bool) -> Vec<String> {
+    use pgp::composed::Deserializable;
+
+    let content =
+        std::fs::read_to_string(gpg_home.join(file)).expect("store file must exist to be read");
+    let (begin, end_marker) = if private {
+        (
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+            "-----END PGP PRIVATE KEY BLOCK-----",
+        )
+    } else {
+        (
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----",
+            "-----END PGP PUBLIC KEY BLOCK-----",
+        )
+    };
+    let mut fps = Vec::new();
+    let mut rest = content.as_str();
+    while let Some(start) = rest.find(begin) {
+        let after = &rest[start..];
+        let end = after.find(end_marker).expect("test helper needs complete blocks") + end_marker.len();
+        let block = &after[..end];
+        if private {
+            let (key, _) = pgp::composed::SignedSecretKey::from_string(block).unwrap();
+            fps.push(extract_key_fingerprint(&key.to_public_key()));
+        } else {
+            let (key, _) = pgp::composed::SignedPublicKey::from_string(block).unwrap();
+            fps.push(extract_key_fingerprint(&key));
+        }
+        rest = &after[end..];
+    }
+    fps
+}
+
+#[test]
+fn removekey_drops_only_matching_blocks() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
+    let alice_fingerprint = extract_key_fingerprint(&alice_pub);
+    let bob_fingerprint = extract_key_fingerprint(&bob_pub);
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &gpg_home, &bob_sec, "bob-priv.asc");
+    write_public_keys_store(&gpg_home, &[&alice_pub, &bob_pub]);
+
+    cmd_removekey(&gpg_home, &bob_fingerprint, false)
+        .expect("removekey by fingerprint must succeed");
+
+    let secret_fps = fingerprints_in_store(&gpg_home, "secret-keys.pgp", true);
+    assert!(
+        secret_fps.contains(&alice_fingerprint),
+        "secret-keys.pgp must retain alice's key after removing bob, got: {:?}",
+        secret_fps
+    );
+    assert!(
+        !secret_fps.contains(&bob_fingerprint),
+        "secret-keys.pgp must drop bob's key, got: {:?}",
+        secret_fps
+    );
+    let public_fps = fingerprints_in_store(&gpg_home, "public-keys.pgp", false);
+    assert!(
+        public_fps.contains(&alice_fingerprint) && !public_fps.contains(&bob_fingerprint),
+        "public-keys.pgp must retain alice and drop bob, got: {:?}",
+        public_fps
+    );
+
+    let alice = find_private_key_by_email(&gpg_home, "alice@example.com")
+        .expect("the retained key must still parse out of the store and be findable");
+    assert_eq!(
+        extract_key_fingerprint(&alice.to_public_key()),
+        alice_fingerprint,
+        "the retained key must be alice's key"
+    );
+
+    assert_no_temp_files(&gpg_home, "after removekey");
+}
+
+#[test]
+fn removekey_by_email_removes_case_insensitively() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
+    let alice_fingerprint = extract_key_fingerprint(&alice_pub);
+    let bob_fingerprint = extract_key_fingerprint(&bob_pub);
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &gpg_home, &bob_sec, "bob-priv.asc");
+    write_public_keys_store(&gpg_home, &[&alice_pub, &bob_pub]);
+
+    cmd_removekey(&gpg_home, "BOB@Example.COM", false)
+        .expect("removekey by email must match case-insensitively");
+
+    let secret_fps = fingerprints_in_store(&gpg_home, "secret-keys.pgp", true);
+    let public_fps = fingerprints_in_store(&gpg_home, "public-keys.pgp", false);
+    assert!(
+        !secret_fps.contains(&bob_fingerprint) && !public_fps.contains(&bob_fingerprint),
+        "bob's key must be gone from both stores, secret: {:?}, public: {:?}",
+        secret_fps,
+        public_fps
+    );
+    assert!(
+        secret_fps.contains(&alice_fingerprint) && public_fps.contains(&alice_fingerprint),
+        "alice's key must be retained in both stores, secret: {:?}, public: {:?}",
+        secret_fps,
+        public_fps
+    );
+}
+
+#[test]
+fn removekey_ambiguous_email_requires_yes() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
+    let (carol_second, carol_second_pub) = generate_test_key("carol@example.com");
+    let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
+    let second_fingerprint = extract_key_fingerprint(&carol_second_pub);
+    import_secret_key(temp.path(), &gpg_home, &carol_first, "carol1-priv.asc");
+    import_secret_key(temp.path(), &gpg_home, &carol_second, "carol2-priv.asc");
+    write_public_keys_store(&gpg_home, &[&carol_first_pub, &carol_second_pub]);
+
+    let secret_before = std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap();
+    let public_before = std::fs::read_to_string(gpg_home.join("public-keys.pgp")).unwrap();
+
+    let result = cmd_removekey(&gpg_home, "carol@example.com", false);
+
+    let err = result
+        .err()
+        .expect("an ambiguous email without --yes must not silently remove one of several keys");
+    assert!(
+        err.to_string().contains(first_fingerprint.as_str())
+            && err.to_string().contains(second_fingerprint.as_str()),
+        "the ambiguity error must list BOTH matching fingerprints, got: {}",
+        err
+    );
+    assert_eq!(
+        std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap(),
+        secret_before,
+        "a refused removekey must leave secret-keys.pgp untouched"
+    );
+    assert_eq!(
+        std::fs::read_to_string(gpg_home.join("public-keys.pgp")).unwrap(),
+        public_before,
+        "a refused removekey must leave public-keys.pgp untouched"
+    );
+
+    cmd_removekey(&gpg_home, "carol@example.com", true)
+        .expect("removekey with --yes must remove ALL ambiguous matches");
+
+    let secret_fps = fingerprints_in_store(&gpg_home, "secret-keys.pgp", true);
+    let public_fps = fingerprints_in_store(&gpg_home, "public-keys.pgp", false);
+    assert!(
+        secret_fps.is_empty(),
+        "with --yes both carol keys must be gone from secret-keys.pgp, got: {:?}",
+        secret_fps
+    );
+    assert!(
+        public_fps.is_empty(),
+        "with --yes both carol keys must be gone from public-keys.pgp, got: {:?}",
+        public_fps
+    );
+}
+
+#[test]
+fn removekey_refuses_to_destroy_last_private_key_without_yes() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+
+    let before = std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap();
+
+    let result = cmd_removekey(&gpg_home, "alice@example.com", false);
+
+    let err = result.err().expect(
+        "removing the only private key without --yes must refuse",
+    );
+    assert!(
+        err.to_string().contains("only private key"),
+        "the refusal must name the only-private-key risk, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("cannot decrypt"),
+        "the refusal must explain the consequence, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("--yes"),
+        "the refusal must say how to confirm, got: {}",
+        err
+    );
+    assert_eq!(
+        std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap(),
+        before,
+        "a refused removekey must leave the store untouched"
+    );
+
+    cmd_removekey(&gpg_home, "alice@example.com", true)
+        .expect("removekey --yes must proceed on the only private key");
+
+    let after = std::fs::read_to_string(gpg_home.join("secret-keys.pgp"))
+        .expect("the store file must still exist after removing its only key");
+    assert!(
+        after.is_empty(),
+        "with --yes the single-key store must become empty, got: {}",
+        after
+    );
+    let find_result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let find_err = find_result
+        .err()
+        .expect("an empty store must not yield any key");
+    assert!(
+        find_err.to_string().contains("No private key blocks found"),
+        "the empty-store error must be the clear no-blocks message, got: {}",
+        find_err
+    );
+}
+
+#[test]
+fn removekey_leaves_corrupt_store_untouched() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (bob_sec, _) = generate_test_key("bob@example.com");
+    let alice_armored = alice_sec.to_armored_string(Default::default()).unwrap();
+    let bob_armored = bob_sec.to_armored_string(Default::default()).unwrap();
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    write_public_keys_store(&gpg_home, &[&alice_pub]);
+    // Corrupt the secret store with an unterminated (truncated) block.
+    let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
+    let truncated_bob = bob_armored[..bob_armored.find(end_marker).unwrap()].to_string();
+    let corrupt = format!("{}\n{}", alice_armored, truncated_bob);
+    std::fs::write(gpg_home.join("secret-keys.pgp"), &corrupt).unwrap();
+    let before = std::fs::read(gpg_home.join("secret-keys.pgp")).unwrap();
+    let public_before = std::fs::read(gpg_home.join("public-keys.pgp")).unwrap();
+
+    let result = cmd_removekey(&gpg_home, "alice@example.com", true);
+
+    let err = result
+        .err()
+        .expect("removekey must refuse a corrupt store instead of rewriting it");
+    assert!(
+        err.to_string().contains("Unterminated private key block"),
+        "the error must name the unterminated block, got: {}",
+        err
+    );
+    assert_eq!(
+        std::fs::read(gpg_home.join("secret-keys.pgp")).unwrap(),
+        before,
+        "a corrupt store must be left byte-identical"
+    );
+    assert_eq!(
+        std::fs::read(gpg_home.join("public-keys.pgp")).unwrap(),
+        public_before,
+        "no other store may be rewritten when one store is corrupt"
+    );
+}
+
+#[test]
+fn removekey_unknown_identifier_errors() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+
+    let result = cmd_removekey(&gpg_home, "carol@example.com", false);
+
+    let err = result
+        .err()
+        .expect("an unknown identifier must not remove anything");
+    assert!(
+        err.to_string().contains("carol@example.com"),
+        "the error must name the identifier, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("secret-keys.pgp") && err.to_string().contains("public-keys.pgp"),
+        "the error must name both store paths, got: {}",
+        err
     );
 }
