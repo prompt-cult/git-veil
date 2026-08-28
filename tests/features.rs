@@ -853,6 +853,120 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
     );
 }
 
+fn generate_subkeyless_test_key(email: &str) -> pgp::composed::SignedPublicKey {
+    let mut rng = thread_rng();
+
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id(format!("Test User <{}>", email))
+        .passphrase(None)
+        .build()
+        .expect("build subkeyless key params");
+
+    params
+        .generate(&mut rng)
+        .expect("generate subkeyless key")
+        .to_public_key()
+}
+
+// ============================================================================
+// tell test-encrypts a canary to the collaborator key before signing it in
+// ============================================================================
+
+/// The canary bytes cmd_tell test-encrypts with. Must match
+/// TELL_CANARY in src/commands/tell.rs; the contract under test is that
+/// these bytes never reach disk.
+const TELL_CANARY: &[u8] = b"git-gpg tell canary";
+
+#[test]
+#[serial]
+fn tell_fails_when_collaborator_key_cannot_encrypt() {
+    // A malformed-but-parseable key: only the primary certification/signing
+    // key, no encryption subkey at all.
+    let alice_pub = generate_subkeyless_test_key("alice@example.com");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    let keyring_before = std::fs::read(&keyring_path).unwrap();
+
+    let result = cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    );
+
+    let keyring_after = std::fs::read(&keyring_path).unwrap();
+
+    let err = result.expect_err(
+        "tell must refuse a collaborator key that cannot encrypt",
+    );
+    let msg = format!("{}", err);
+    assert!(
+        msg.contains("collaborator key cannot encrypt for alice@example.com"),
+        "failure must name the collaborator email, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("No encryption subkey found in public key"),
+        "failure must include the underlying cause, got: {}",
+        msg
+    );
+    assert_eq!(
+        keyring_before, keyring_after,
+        "keyring must remain byte-identical after a failed tell"
+    );
+}
+
+#[test]
+#[serial]
+fn tell_canary_does_not_appear_anywhere() {
+    fn contains_canary(dir: &std::path::Path) -> Vec<PathBuf> {
+        let mut hits = Vec::new();
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                hits.extend(contains_canary(&path));
+            } else if std::fs::read(&path).map(|b| {
+                b.windows(TELL_CANARY.len()).any(|w| w == TELL_CANARY)
+            }).unwrap_or(false) {
+                hits.push(path);
+            }
+        }
+        hits
+    }
+
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("tell with an encryptable key must succeed");
+
+    let hits = contains_canary(repo_temp.path());
+    assert!(
+        hits.is_empty(),
+        "tell canary bytes must never be written anywhere under the repo, found in: {:?}",
+        hits
+    );
+}
+
 // ============================================================================
 // removeperson: revoking a collaborator from the keyring
 // ============================================================================
