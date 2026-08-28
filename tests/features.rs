@@ -1501,6 +1501,96 @@ fn remove_rejects_file_outside_repo() {
 }
 
 #[test]
+fn remove_works_on_currently_hidden_file() {
+    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write(repo_temp.path().join("a.env"), "alpha").unwrap();
+    std::fs::write(repo_temp.path().join("b.env"), "beta").unwrap();
+    cmd_add(
+        repo_temp.path(),
+        vec!["a.env".to_string(), "b.env".to_string()],
+    )
+    .expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    // hide deleted the plaintexts and left ciphertexts beside them
+    assert!(
+        !repo_temp.path().join("a.env").exists(),
+        "hide must have deleted the plaintext a.env"
+    );
+    assert!(
+        !repo_temp.path().join("b.env").exists(),
+        "hide must have deleted the plaintext b.env"
+    );
+    let a_secret = repo_temp.path().join("a.env.secret");
+    let b_secret = repo_temp.path().join("b.env.secret");
+    assert!(a_secret.exists(), "hide must have written a.env.secret");
+    assert!(b_secret.exists(), "hide must have written b.env.secret");
+    let a_secret_before = std::fs::read(&a_secret).unwrap();
+
+    // The plaintext does not exist, yet the user must be able to untrack it
+    // WITHOUT revealing it first (reveal would write plaintext back to disk).
+    let result = cmd_remove(repo_temp.path(), vec!["a.env".to_string()]);
+
+    result.expect(
+        "cmd_remove must untrack a currently hidden file; revealing the secret \
+         just to untrack it defeats the purpose",
+    );
+
+    let tracked_content =
+        std::fs::read_to_string(repo_temp.path().join(".git-gpg/tracked.json"))
+            .expect("tracked.json must exist after remove");
+    assert!(
+        !tracked_content.contains("\"a.env\""),
+        "tracked.json must no longer list a.env, got: {}",
+        tracked_content
+    );
+    assert!(
+        tracked_content.contains("\"b.env\""),
+        "tracked.json must still list b.env, got: {}",
+        tracked_content
+    );
+
+    // Untracking is not decrypting: the ciphertext must be untouched.
+    assert!(
+        a_secret.exists(),
+        "remove must not delete the a.env.secret ciphertext"
+    );
+    assert_eq!(
+        std::fs::read(&a_secret).unwrap(),
+        a_secret_before,
+        "remove must not modify the a.env.secret ciphertext"
+    );
+    assert!(
+        b_secret.exists(),
+        "remove must not delete the b.env.secret ciphertext"
+    );
+}
+
+#[test]
+fn remove_still_rejects_paths_outside_the_repo() {
+    let repo_temp = tempfile::tempdir().unwrap();
+    init_git_repo(repo_temp.path());
+
+    // A sibling directory outside the repository, holding an existing file:
+    // even though the path exists, it must be rejected.
+    let outside = tempfile::tempdir_in(repo_temp.path().parent().unwrap()).unwrap();
+    let outside_file = outside.path().join("outside.env");
+    std::fs::write(&outside_file, "nope").unwrap();
+
+    let result = cmd_remove(
+        repo_temp.path(),
+        vec![outside_file.to_str().unwrap().to_string()],
+    );
+
+    assert!(
+        result.is_err(),
+        "cmd_remove must reject a path outside the repository: {:?}",
+        result.err()
+    );
+}
+
+#[test]
 fn reveal_refuses_escaping_tracked_path() {
     let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
 
