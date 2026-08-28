@@ -134,9 +134,15 @@ fn run_with_stdin(repo: &Path, home: &Path, args: &[&str], input: &str) -> std::
 }
 
 /// Builds a temp repo (with origin remote and local user.email) plus a fake
-/// home holding the owner + collaborator secret keys, runs the full CLI flow
-/// init -> trust -> tell -> add -> hide, and returns (repo_temp, home_temp).
-fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
+/// home holding the owner + collaborator secret keys, runs the CLI flow
+/// init -> trust -> tell, and returns (repo_temp, home_temp, owner_pub,
+/// alice_pub) so stdout-contract tests can assert fingerprints.
+fn setup_told_repo() -> (
+    tempfile::TempDir,
+    tempfile::TempDir,
+    pgp::composed::SignedPublicKey,
+    pgp::composed::SignedPublicKey,
+) {
     let repo_temp = tempfile::tempdir().unwrap();
     let home_temp = tempfile::tempdir().unwrap();
 
@@ -173,6 +179,15 @@ fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
         &["tell", "alice@example.com", "alice.pub"],
     );
     assert!(out.status.success(), "tell failed: {:?}", out.stderr);
+
+    (repo_temp, home_temp, owner_pub, alice_pub)
+}
+
+/// Builds a temp repo (with origin remote and local user.email) plus a fake
+/// home holding the owner + collaborator secret keys, runs the full CLI flow
+/// init -> trust -> tell -> add -> hide, and returns (repo_temp, home_temp).
+fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
+    let (repo_temp, home_temp, _owner_pub, _alice_pub) = setup_told_repo();
 
     std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
     let out = run(repo_temp.path(), home_temp.path(), &["add", "secret.env"]);
@@ -1139,5 +1154,203 @@ fn cli_removekey_round_trip() {
         out.status.success(),
         "export of the retained key must still work after removekey: {:?}",
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// ============================================================================
+// stdout contracts for the informational commands. println! output is only
+// capturable by spawning the binary, so these protective assertions live
+// here in cli.rs rather than in the in-process feature suite.
+// ============================================================================
+
+#[test]
+fn cli_show_repo_id_prints_repo_id() {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+    git(repo_temp.path(), &["init"]);
+    git(
+        repo_temp.path(),
+        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    );
+
+    let out = run(repo_temp.path(), home_temp.path(), &["show-repo-id"]);
+
+    assert!(
+        out.status.success(),
+        "show-repo-id must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("repo+owner@github.com"),
+        "show-repo-id must print the repo id derived from the origin push URL, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Remote: origin"),
+        "show-repo-id must print the remote name, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn cli_whoami_prints_email_and_key_store() {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+    git(repo_temp.path(), &["init"]);
+    git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
+    std::fs::create_dir_all(home_temp.path().join(".git-gpg")).unwrap();
+
+    let out = run(repo_temp.path(), home_temp.path(), &["whoami"]);
+
+    assert!(
+        out.status.success(),
+        "whoami must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("alice@example.com"),
+        "whoami must print the git config user.email identity, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Key store:"),
+        "whoami must print the key store location, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains(&home_temp.path().join(".git-gpg").to_string_lossy().to_string()),
+        "whoami must print the resolved $HOME/.git-gpg key store path, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn cli_list_keys_prints_entries_and_count() {
+    let (repo_temp, home_temp, _owner_pub, alice_pub) = setup_told_repo();
+    let alice_fingerprint = git_gpg::extract_key_fingerprint(&alice_pub);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["list-keys"]);
+
+    assert!(
+        out.status.success(),
+        "list-keys must exit 0 after a valid tell: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Keyring signature verified"),
+        "list-keys must print the verification banner, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("alice@example.com"),
+        "list-keys must print the collaborator email, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains(&alice_fingerprint),
+        "list-keys must print the collaborator fingerprint, got: {}",
+        stdout
+    );
+
+    // The count line must agree with the keyring actually on disk.
+    let keyring = git_gpg::Keyring::parse(
+        &std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        !keyring.entries.is_empty(),
+        "the told repo's keyring must contain entries"
+    );
+    assert!(
+        stdout.contains(&format!("Total: {} keys", keyring.entries.len())),
+        "list-keys must print the on-disk key count, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn cli_verify_keyring_prints_repo_id_and_signer() {
+    let (repo_temp, home_temp, owner_pub, _alice_pub) = setup_told_repo();
+    let owner_fingerprint = git_gpg::extract_key_fingerprint(&owner_pub);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["verify-keyring"]);
+
+    assert!(
+        out.status.success(),
+        "verify-keyring must exit 0 after trust+tell: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Keyring signature verified"),
+        "verify-keyring must print the verification banner, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("repo+owner@github.com"),
+        "verify-keyring must print the repository ID, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("Signed by fingerprint:") && stdout.contains(&owner_fingerprint),
+        "verify-keyring must name the trusted signer fingerprint {owner_fingerprint}, got: {}",
+        stdout
+    );
+    let keyring = git_gpg::Keyring::parse(
+        &std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        stdout.contains(&format!("Keys in keyring: {}", keyring.entries.len())),
+        "verify-keyring must print the on-disk key count, got: {}",
+        stdout
+    );
+}
+
+#[test]
+fn cli_init_and_clean_output_shapes() {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+    git(repo_temp.path(), &["init"]);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
+    assert!(
+        out.status.success(),
+        "init must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("✓ git-gpg initialized"),
+        "init must print its success line, got: {}",
+        stdout
+    );
+
+    // Nothing tracked, no ciphertext: clean --yes must proceed and print
+    // its confirmation line.
+    let out = run(repo_temp.path(), home_temp.path(), &["clean", "--yes"]);
+    assert!(
+        out.status.success(),
+        "clean --yes on an empty repo must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("✓ Cleaned"),
+        "clean --yes must print its confirmation line, got: {}",
+        stdout
+    );
+    assert!(
+        !repo_temp.path().join(".git-gpg").exists(),
+        "clean --yes must remove .git-gpg"
     );
 }
