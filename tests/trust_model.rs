@@ -45,7 +45,7 @@ fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Pat
     std::fs::write(path, armored).unwrap();
 }
 
-fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
+fn write_multi_key_secret_keys(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
         if !content.is_empty() {
@@ -54,7 +54,7 @@ fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecr
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
     std::fs::create_dir_all(gpg_home).unwrap();
-    std::fs::write(gpg_home.join("secring.pgp"), content).unwrap();
+    std::fs::write(gpg_home.join("secret-keys.pgp"), content).unwrap();
 }
 
 fn setup_git_repo_with_origin_remote() -> tempfile::TempDir {
@@ -95,7 +95,7 @@ fn setup_trusted_repo_with_owner_in_keyring() -> (tempfile::TempDir, PathBuf) {
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secring(&gpg_home, &[owner_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[owner_sec]);
 
     cmd_tell(
         repo_temp.path(),
@@ -880,7 +880,7 @@ fn test_import_key_to_gpg_home() {
     
     let result = import_key_to_gpg_home(&gpg_home, &armored);
     assert!(result.is_ok());
-    assert!(gpg_home.join("pubring.pgp").exists());
+    assert!(gpg_home.join("public-keys.pgp").exists());
 }
 
 #[test]
@@ -891,8 +891,8 @@ fn test_find_private_key_by_email() {
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
     
-    // Write to secring.pgp
-    std::fs::write(gpg_home.join("secring.pgp"), &armored).unwrap();
+    // Write to secret-keys.pgp
+    std::fs::write(gpg_home.join("secret-keys.pgp"), &armored).unwrap();
     
     let result = find_private_key_by_email(&gpg_home, "alice@example.com");
     assert!(result.is_ok());
@@ -907,8 +907,8 @@ fn test_find_private_key_by_fingerprint() {
     let fingerprint = extract_key_fingerprint(&public_key);
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
     
-    // Write to secring.pgp
-    std::fs::write(gpg_home.join("secring.pgp"), &armored).unwrap();
+    // Write to secret-keys.pgp
+    std::fs::write(gpg_home.join("secret-keys.pgp"), &armored).unwrap();
     
     let result = find_private_key_by_fingerprint(&gpg_home, &fingerprint);
     assert!(result.is_ok());
@@ -947,7 +947,7 @@ fn test_decrypt_with_gpg_key() {
 fn test_custom_gpg_home_location() {
     let _temp = tempfile::tempdir().unwrap();
     let home = default_gpg_home().expect("HOME must be set to resolve the default gpg home");
-    assert!(home.exists() || home.to_str().unwrap().contains(".gnupg"));
+    assert!(home.exists() || home.to_str().unwrap().contains(".git-gpg"));
 }
 
 // ============================================================================
@@ -1224,7 +1224,7 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
     cmd_init(repo_temp.path()).unwrap();
 
     // Trust is established (the owner PUBLIC key is imported and pinned), but
-    // the owner SECRET key is deliberately absent from the secring, so tell
+    // the owner SECRET key is deliberately absent from the secret key store, so tell
     // cannot sign the updated keyring.
     let (_owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let owner_keyfile = repo_temp.path().join("owner.pub");
@@ -1243,9 +1243,9 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
 
-    // The secring holds only the COLLABORATOR's secret key, not the trusted
+    // The secret key store holds only the COLLABORATOR's secret key, not the trusted
     // owner key tell must sign with.
-    write_multi_key_secring(&gpg_home, &[alice_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[alice_sec]);
 
     let result = cmd_tell(
         repo_temp.path(),
@@ -2017,7 +2017,7 @@ fn test_custom_gpg_home_workflow() {
     
     // Import to custom GPG home
     import_key_to_gpg_home(&custom_gpg_home, &armored).unwrap();
-    assert!(custom_gpg_home.join("pubring.pgp").exists());
+    assert!(custom_gpg_home.join("public-keys.pgp").exists());
 }
 
 #[test]

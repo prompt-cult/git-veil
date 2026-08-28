@@ -75,7 +75,7 @@ fn generate_protected_test_key(
     (secret_key, public_key)
 }
 
-fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
+fn write_multi_key_secret_keys(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
         if !content.is_empty() {
@@ -83,12 +83,12 @@ fn write_multi_key_secring(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecr
         }
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
-    write_secring_content(gpg_home, &content);
+    write_secret_keys_content(gpg_home, &content);
 }
 
-fn write_secring_content(gpg_home: &PathBuf, content: &str) {
+fn write_secret_keys_content(gpg_home: &PathBuf, content: &str) {
     std::fs::create_dir_all(gpg_home).unwrap();
-    std::fs::write(gpg_home.join("secring.pgp"), content).unwrap();
+    std::fs::write(gpg_home.join("secret-keys.pgp"), content).unwrap();
 }
 
 fn setup_git_repo_with_origin_remote() -> tempfile::TempDir {
@@ -141,7 +141,7 @@ fn default_gpg_home_errors_when_home_unset() {
 
 #[test]
 #[serial]
-fn default_gpg_home_uses_home_when_set() {
+fn default_key_store_is_home_git_gpg() {
     let saved = std::env::var("HOME").ok();
     let temp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", temp.path());
@@ -154,24 +154,24 @@ fn default_gpg_home_uses_home_when_set() {
     }
 
     assert_eq!(
-        result.expect("a set HOME must resolve to $HOME/.gnupg"),
-        temp.path().join(".gnupg"),
-        "default_gpg_home must be $HOME/.gnupg"
+        result.expect("a set HOME must resolve to $HOME/.git-gpg"),
+        temp.path().join(".git-gpg"),
+        "default key store must be $HOME/.git-gpg"
     );
 }
 
 // ============================================================================
-// Secret key selection from a multi-key secring
+// Secret key selection from a multi-key secret key store
 // ============================================================================
 
 #[test]
-fn find_private_key_by_email_selects_matching_key_when_not_first_in_secring() {
+fn find_private_key_by_email_selects_matching_key_when_not_first_in_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let (bob, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    write_multi_key_secring(&gpg_home, &[alice, bob]);
+    write_multi_key_secret_keys(&gpg_home, &[alice, bob]);
 
     let key = find_private_key_by_email(&gpg_home, "bob@example.com").expect(
         "bob's key should be found even though alice's key comes first",
@@ -179,18 +179,18 @@ fn find_private_key_by_email_selects_matching_key_when_not_first_in_secring() {
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
         bob_fingerprint,
-        "the key returned for bob@example.com must be bob's key, not another key from the secring"
+        "the key returned for bob@example.com must be bob's key, not another key from the secret key store"
     );
 }
 
 #[test]
-fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secring() {
+fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let (bob, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    write_multi_key_secring(&gpg_home, &[alice, bob]);
+    write_multi_key_secret_keys(&gpg_home, &[alice, bob]);
 
     let key = find_private_key_by_fingerprint(&gpg_home, &bob_fingerprint).expect(
         "bob's key should be found even though alice's key comes first",
@@ -198,7 +198,7 @@ fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secrin
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
         bob_fingerprint,
-        "the key returned for bob's fingerprint must be bob's key, not another key from the secring"
+        "the key returned for bob's fingerprint must be bob's key, not another key from the secret key store"
     );
 }
 
@@ -207,29 +207,29 @@ fn find_private_key_by_email_fails_when_no_key_matches() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
-    write_multi_key_secring(&gpg_home, &[alice]);
+    write_multi_key_secret_keys(&gpg_home, &[alice]);
 
     let result = find_private_key_by_email(&gpg_home, "carol@example.com");
     assert!(result.is_err(), "unknown email must not match any key");
 }
 
 #[test]
-fn find_private_key_by_email_errors_on_empty_secring() {
+fn find_private_key_by_email_errors_on_empty_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
-    write_secring_content(&gpg_home, "");
+    write_secret_keys_content(&gpg_home, "");
 
     let result = find_private_key_by_email(&gpg_home, "alice@example.com");
 
-    let err = result.err().expect("an empty secring must not yield any key");
+    let err = result.err().expect("an empty secret key store must not yield any key");
     assert!(
         err.to_string().contains("No private key blocks found"),
         "the error must state that no private key blocks were found, got: {}",
         err
     );
     assert!(
-        err.to_string().contains("secring.pgp"),
-        "the error must mention the secring file, got: {}",
+        err.to_string().contains("secret-keys.pgp"),
+        "the error must mention the secret key store file, got: {}",
         err
     );
 }
@@ -247,7 +247,7 @@ fn find_private_key_by_email_ignores_garbage_between_blocks() {
         "this leading text is not a key at all\n{}\n>>> random junk between blocks <<<\n{}\ntrailing junk",
         alice_armored, bob_armored
     );
-    write_secring_content(&gpg_home, &content);
+    write_secret_keys_content(&gpg_home, &content);
 
     let key = find_private_key_by_email(&gpg_home, "bob@example.com")
         .expect("bob's key must be found despite junk text around the blocks");
@@ -269,12 +269,12 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
     let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
     let truncated_bob = bob_armored[..bob_armored.find(end_marker).unwrap()].to_string();
     let content = format!("{}\n{}", alice_armored, truncated_bob);
-    write_secring_content(&gpg_home, &content);
+    write_secret_keys_content(&gpg_home, &content);
 
     let bob_result = find_private_key_by_email(&gpg_home, "bob@example.com");
 
     let bob_err = bob_result.err().expect(
-        "a secring whose final block is truncated must not yield any key",
+        "a secret key store whose final block is truncated must not yield any key",
     );
     assert!(
         bob_err.to_string().contains("Unterminated private key block"),
@@ -282,13 +282,13 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
         bob_err
     );
     assert!(
-        bob_err.to_string().contains("corrupt secring"),
-        "the error must state the secring is corrupt, got: {}",
+        bob_err.to_string().contains("corrupt secret key store"),
+        "the error must state the secret key store is corrupt, got: {}",
         bob_err
     );
     assert!(
-        bob_err.to_string().contains("secring.pgp"),
-        "the error must mention the secring file, got: {}",
+        bob_err.to_string().contains("secret-keys.pgp"),
+        "the error must mention the secret key store file, got: {}",
         bob_err
     );
     assert!(
@@ -297,38 +297,38 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
         bob_err
     );
 
-    // A corrupt tail invalidates the whole secring: for a secrets tool the
+    // A corrupt tail invalidates the whole secret key store: for a secrets tool the
     // safe choice is to reject every key rather than silently serve the
     // healthy-looking prefix, because truncation may itself be an attack
-    // (an attacker who can truncate the secring must not be able to quietly
+    // (an attacker who can truncate the secret key store must not be able to quietly
     // remove keys from use).
     let alice_result = find_private_key_by_email(&gpg_home, "alice@example.com");
 
     let alice_err = alice_result.err().expect(
-        "a corrupt secring must be rejected in full: even keys before the truncated tail must not be served",
+        "a corrupt secret key store must be rejected in full: even keys before the truncated tail must not be served",
     );
     assert!(
         alice_err.to_string().contains("Unterminated private key block"),
-        "alice's lookup must fail with the corrupt-secring error too, got: {}",
+        "alice's lookup must fail with the corrupt secret key store error too, got: {}",
         alice_err
     );
 }
 
 #[test]
-fn find_private_key_by_email_errors_on_truncated_only_secring() {
+fn find_private_key_by_email_errors_on_truncated_only_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let alice_armored = alice.to_armored_string(Default::default()).unwrap();
     let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
     let truncated = alice_armored[..alice_armored.find(end_marker).unwrap()].to_string();
-    write_secring_content(&gpg_home, &truncated);
+    write_secret_keys_content(&gpg_home, &truncated);
 
     let result = find_private_key_by_email(&gpg_home, "alice@example.com");
 
     let err = result
         .err()
-        .expect("a secring holding only a truncated block must not yield any key");
+        .expect("a secret key store holding only a truncated block must not yield any key");
     assert!(
         err.to_string().contains("Unterminated private key block"),
         "the error must name the unterminated block, got: {}",
@@ -348,9 +348,9 @@ fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated
     let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
     let (carol_second, _) = generate_test_key("carol@example.com");
     let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
-    write_multi_key_secring(&gpg_home, &[carol_first, carol_second]);
+    write_multi_key_secret_keys(&gpg_home, &[carol_first, carol_second]);
 
-    // Documented current behaviour: when two keys in the secring claim the
+    // Documented current behaviour: when two keys in the secret key store claim the
     // same email, the first matching key in file order wins. Treating
     // duplicated emails as an ambiguity error is out of scope here and is
     // reviewed under a separate task.
@@ -359,7 +359,7 @@ fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
         first_fingerprint,
-        "the first key in secring order must win when the email is duplicated"
+        "the first key in the secret key store's order must win when the email is duplicated"
     );
 }
 
@@ -426,7 +426,7 @@ fn find_private_key_by_email_requires_exact_address() {
     let (evil, _) = generate_test_key("xalice@example.com.evil.net");
     let (alice, alice_pub) = generate_test_key("alice@example.com");
     let alice_fingerprint = extract_key_fingerprint(&alice_pub);
-    write_multi_key_secring(&gpg_home, &[evil, alice]);
+    write_multi_key_secret_keys(&gpg_home, &[evil, alice]);
 
     let result = find_private_key_by_email(&gpg_home, "alice@example.com");
     let key = result.expect(
@@ -444,7 +444,7 @@ fn find_private_key_by_email_rejects_substring_only_match() {
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
     let (evil, _) = generate_test_key("xalice@example.com.evil.net");
-    write_multi_key_secring(&gpg_home, &[evil]);
+    write_multi_key_secret_keys(&gpg_home, &[evil]);
 
     let result = find_private_key_by_email(&gpg_home, "alice@example.com");
     assert!(
@@ -470,10 +470,10 @@ fn bare_user_id_without_angle_brackets_still_matches() {
     let gpg_home = temp.path().to_path_buf();
     let (plain_sec, plain_sec_pub) = generate_test_key_with_uid("plain@example.com");
     let stored_fingerprint = extract_key_fingerprint(&plain_sec_pub);
-    write_multi_key_secring(&gpg_home, &[plain_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[plain_sec]);
 
     let found = find_private_key_by_email(&gpg_home, "plain@example.com")
-        .expect("a bare user-ID secring key must be findable by exact email");
+        .expect("a bare user-ID key in the secret key store must be findable by exact email");
     assert_eq!(
         extract_key_fingerprint(&found.to_public_key()),
         stored_fingerprint,
@@ -552,7 +552,7 @@ fn keyring_find_by_email_is_case_insensitive() {
 #[test]
 fn tell_twice_same_email_updates_rather_than_duplicates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -609,7 +609,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
 #[test]
 fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@x.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -713,9 +713,9 @@ fn trust_rejects_key_without_owner_email() {
 // ============================================================================
 
 /// Sets up a repo with trust established for owner@github.com and a gpg home
-/// containing the owner key (pubring, via cmd_trust) plus the given secret keys
-/// in the secring. Returns (repo_temp, gpg_home).
-fn setup_trusted_repo_with_secring(
+/// containing the owner key (public-keys.pgp, via cmd_trust) plus the given secret keys
+/// in the secret key store. Returns (repo_temp, gpg_home).
+fn setup_trusted_repo_with_secret_keys(
     secret_keys: &[pgp::composed::SignedSecretKey],
 ) -> (tempfile::TempDir, PathBuf) {
     let repo_temp = setup_git_repo_with_origin_remote();
@@ -737,9 +737,9 @@ fn setup_trusted_repo_with_secring(
     )
     .expect("cmd_trust must succeed");
 
-    let mut secring_keys: Vec<pgp::composed::SignedSecretKey> = vec![owner_sec];
-    secring_keys.extend_from_slice(secret_keys);
-    write_multi_key_secring(&gpg_home, &secring_keys);
+    let mut store_keys: Vec<pgp::composed::SignedSecretKey> = vec![owner_sec];
+    store_keys.extend_from_slice(secret_keys);
+    write_multi_key_secret_keys(&gpg_home, &store_keys);
 
     (repo_temp, gpg_home)
 }
@@ -747,7 +747,7 @@ fn setup_trusted_repo_with_secring(
 #[test]
 fn tell_rejects_unsigned_keyring_containing_entries() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     // Overwrite the keyring with a well-formed but UNSIGNED keyring that
     // already contains an attacker entry.
@@ -787,7 +787,7 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
 /// signature. Returns (repo_temp, gpg_home, keyring_path).
 fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::PathBuf) {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -843,7 +843,7 @@ fn list_keys_on_tampered_keyring_fails_closed() {
 #[test]
 fn list_keys_on_valid_keyring_succeeds_and_reports_verification() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -893,7 +893,7 @@ fn verify_keyring_reports_trusted_fingerprint() {
 #[test]
 fn tell_rejects_keyring_signed_by_wrong_key() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     // Forge a keyring containing a third-party entry, signed by a key that is
     // NOT the trusted owner key. Sign the canonical content verify_keyring
@@ -935,7 +935,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
 #[test]
 fn tell_first_entry_on_fresh_repo_succeeds() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1000,7 +1000,7 @@ fn tell_fails_when_collaborator_key_cannot_encrypt() {
     // key, no encryption subkey at all.
     let alice_pub = generate_subkeyless_test_key("alice@example.com");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1058,7 +1058,7 @@ fn tell_canary_does_not_appear_anywhere() {
     }
 
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1088,7 +1088,7 @@ fn tell_canary_does_not_appear_anywhere() {
 fn removeperson_removes_entry_and_resigns() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
     let (_, bob_pub) = generate_test_key("bob@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1135,7 +1135,7 @@ fn removeperson_removes_entry_and_resigns() {
 #[test]
 fn removeperson_removes_entry_regardless_of_email_case() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1169,7 +1169,7 @@ fn removeperson_removes_entry_regardless_of_email_case() {
 #[test]
 fn removeperson_unknown_email_fails() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1216,7 +1216,7 @@ fn removeperson_requires_trust() {
 #[test]
 fn removeperson_rejects_tampered_keyring() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1326,7 +1326,7 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
     );
 
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    write_multi_key_secring(&gpg_home, &[owner_sec, alice_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[owner_sec, alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1390,7 +1390,7 @@ fn setup_repo_with_owner_in_keyring()
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secring(&gpg_home, &[owner_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[owner_sec]);
 
     cmd_tell(
         repo_temp.path(),
@@ -1652,7 +1652,7 @@ fn reveal_refuses_escaping_tracked_path() {
 #[test]
 fn hide_then_reveal_restores_exact_bytes() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1709,7 +1709,7 @@ fn hide_then_reveal_restores_exact_bytes() {
 #[test]
 fn hide_then_reveal_in_subdirectory() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1768,7 +1768,7 @@ fn hide_then_reveal_in_subdirectory() {
 #[test]
 fn hide_reveal_roundtrip_binary_file() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1874,7 +1874,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         ("a.tar.gz", b"double-extension archive bytes".to_vec()),
     ];
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1978,10 +1978,10 @@ fn symlink_outside_repo_is_rejected() {
 // ============================================================================
 
 /// Full flow: init -> trust -> tell(alice) -> add -> hide, with alice's key
-/// in the secring. Returns (repo_temp, gpg_home).
+/// in the secret key store. Returns (repo_temp, gpg_home).
 fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -2382,7 +2382,7 @@ fn verify_fails_closed_when_pin_mismatches() {
 
 /// Sets up a trusted repo whose keyring contains the owner plus the given
 /// collaborators (each added via cmd_tell, the keyring signed by the trusted
-/// owner key), and whose secring holds every secret key (owner + all
+/// owner key), and whose secret key store holds every secret key (owner + all
 /// collaborators). Returns (repo_temp, gpg_home).
 fn setup_repo_with_owner_and_collaborators(
     collaborator_emails: &[&str],
@@ -2407,8 +2407,8 @@ fn setup_repo_with_owner_and_collaborators(
     .expect("cmd_trust must succeed");
 
     // tell signs with the trusted owner key, so the owner's secret must be
-    // in the secring before any tell runs.
-    write_multi_key_secring(&gpg_home, std::slice::from_ref(&owner_sec));
+    // in the secret key store before any tell runs.
+    write_multi_key_secret_keys(&gpg_home, std::slice::from_ref(&owner_sec));
 
     cmd_tell(
         repo_temp.path(),
@@ -2437,11 +2437,11 @@ fn setup_repo_with_owner_and_collaborators(
         collaborator_secrets.push(sec);
     }
 
-    // Replace the secring with one holding every secret key (owner + all
+    // Replace the secret key store with one holding every secret key (owner + all
     // collaborators) so each participant can decrypt/verify locally.
-    let mut secring_keys = vec![owner_sec];
-    secring_keys.extend(collaborator_secrets);
-    write_multi_key_secring(&gpg_home, &secring_keys);
+    let mut secret_keys = vec![owner_sec];
+    secret_keys.extend(collaborator_secrets);
+    write_multi_key_secret_keys(&gpg_home, &secret_keys);
 
     (repo_temp, gpg_home)
 }
@@ -2462,7 +2462,7 @@ fn hide_encrypts_to_every_key_in_keyring() {
 
     for email in emails {
         let secret_key = find_private_key_by_email(&gpg_home, email)
-            .unwrap_or_else(|e| panic!("secring must hold {}'s secret key: {}", email, e));
+            .unwrap_or_else(|e| panic!("secret key store must hold {}'s secret key: {}", email, e));
         let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key, None)
             .unwrap_or_else(|e| panic!("{} must be able to decrypt the shared ciphertext: {}", email, e));
         assert_eq!(
@@ -2743,7 +2743,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
 // ============================================================================
 
 /// Sets up a trusted repo whose owner key is protected by the given
-/// passphrase (secring holds the protected secret; trust + pubring are
+/// passphrase (secret key store holds the protected secret; trust + public-keys.pgp are
 /// public-key-only, so no passphrase is needed to establish trust).
 /// Returns (repo_temp, gpg_home, owner_keyfile_path).
 fn setup_repo_with_protected_owner(
@@ -2768,7 +2768,7 @@ fn setup_repo_with_protected_owner(
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secring(&gpg_home, &[owner_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[owner_sec]);
 
     (repo_temp, gpg_home, owner_keyfile)
 }
@@ -2856,7 +2856,7 @@ fn signing_with_protected_key_requires_passphrase() {
 }
 
 #[test]
-fn protected_key_in_secring_is_findable_without_passphrase() {
+fn protected_key_in_secret_key_store_is_findable_without_passphrase() {
     // Parsing a passphrase-protected key via SignedSecretKey::from_string
     // must keep working without the passphrase: finding a key by email never
     // unlocks it.
@@ -2864,7 +2864,7 @@ fn protected_key_in_secring_is_findable_without_passphrase() {
         generate_protected_test_key("locked@example.com", "correct horse");
     let temp = tempfile::tempdir().unwrap();
     let gpg_home = temp.path().to_path_buf();
-    write_multi_key_secring(&gpg_home, &[protected_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[protected_sec]);
 
     find_private_key_by_email(&gpg_home, "locked@example.com")
         .expect("a passphrase-protected key must be findable (parsed) without the passphrase");
@@ -3165,7 +3165,7 @@ fn expired_key_is_rejected_by_trust() {
 
 #[test]
 fn revoked_key_is_rejected_by_tell() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
 
     let (_sec, revoked_pub) = revoked_public_key("bob@example.com", RevocationCode::KeyCompromised);
     let fingerprint = extract_key_fingerprint(&revoked_pub);
@@ -3226,7 +3226,7 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secring(&gpg_home, &[owner_sec.clone(), alice_sec]);
+    write_multi_key_secret_keys(&gpg_home, &[owner_sec.clone(), alice_sec]);
 
     // Craft a SIGNED keyring containing the valid alice entry plus the
     // expired bob entry (as a stolen/colluding keyring commit would).
@@ -3288,7 +3288,7 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
 #[test]
 fn valid_keys_still_pass_all_gates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);

@@ -7,47 +7,49 @@ use rand::thread_rng;
 use std::fs;
 use std::path::PathBuf;
 
-/// Returns the default GPG home directory (`$HOME/.gnupg`).
+/// Returns the default key store directory (`$HOME/.git-gpg`).
 ///
 /// Errors when `HOME` is unset or empty instead of silently falling back to
 /// a world-writable location such as `/tmp`, where an attacker on a
 /// multi-user system could plant or tamper with key material.
 pub fn default_gpg_home() -> Result<PathBuf> {
     match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".gnupg")),
-        _ => anyhow::bail!("HOME is not set; cannot locate the key store; pass --gpg-home"),
+        Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".git-gpg")),
+        _ => anyhow::bail!(
+            "HOME is not set; cannot locate the key store ($HOME/.git-gpg); pass --gpg-home"
+        ),
     }
 }
 
-/// Imports an armoured public key to the GPG home directory.
+/// Imports an armoured public key to the key store (public-keys.pgp).
 pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<()> {
-    fs::create_dir_all(gpg_home).context("Failed to create GPG home directory")?;
-    let pubring_path = gpg_home.join("pubring.pgp");
-    
-    let mut existing = if pubring_path.exists() {
-        fs::read_to_string(&pubring_path)?
+    fs::create_dir_all(gpg_home).context("Failed to create key store directory")?;
+    let public_keys_path = gpg_home.join("public-keys.pgp");
+
+    let mut existing = if public_keys_path.exists() {
+        fs::read_to_string(&public_keys_path)?
     } else {
         String::new()
     };
-    
+
     if !existing.is_empty() && !existing.ends_with('\n') {
         existing.push('\n');
     }
     existing.push_str(armored_key);
-    fs::write(&pubring_path, existing).context("Failed to write pubring.pgp")?;
+    fs::write(&public_keys_path, existing).context("Failed to write public-keys.pgp")?;
     Ok(())
 }
 
 /// Splits file content into individual armoured private key blocks.
 ///
-/// A secring may hold several keys, each as its own armoured block.
-/// Garbage between complete blocks is ignored, but a block with a BEGIN
-/// marker and no END marker means the secring is corrupt (e.g. truncated
+/// The secret key store may hold several keys, each as its own armoured
+/// block. Garbage between complete blocks is ignored, but a block with a
+/// BEGIN marker and no END marker means the store is corrupt (e.g. truncated
 /// by a partial write or bad merge), which is a hard error: silently
 /// dropping the tail would let an attacker remove keys by truncation.
 pub(crate) fn split_armored_private_key_blocks(
     content: &str,
-    secring_path: &std::path::Path,
+    secret_keys_path: &std::path::Path,
 ) -> Result<Vec<String>> {
     let mut blocks = Vec::new();
     let mut rest = content;
@@ -56,8 +58,8 @@ pub(crate) fn split_armored_private_key_blocks(
         let end = match after.find(PRIVATE_KEY_END) {
             Some(e) => e + PRIVATE_KEY_END.len(),
             None => anyhow::bail!(
-                "Unterminated private key block in {} (corrupt secring)",
-                secring_path.display()
+                "Unterminated private key block in {} (corrupt secret key store)",
+                secret_keys_path.display()
             ),
         };
         blocks.push(after[..end].to_string());
@@ -66,15 +68,15 @@ pub(crate) fn split_armored_private_key_blocks(
     Ok(blocks)
 }
 
-/// Loads and parses every private key in the GPG home directory.
+/// Loads and parses every private key in the key store.
 fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
-    let secring_path = gpg_home.join("secring.pgp");
-    let content = fs::read_to_string(&secring_path)
-        .context("Failed to read secring.pgp")?;
+    let secret_keys_path = gpg_home.join("secret-keys.pgp");
+    let content = fs::read_to_string(&secret_keys_path)
+        .context("Failed to read secret-keys.pgp")?;
 
-    let blocks = split_armored_private_key_blocks(&content, &secring_path)?;
+    let blocks = split_armored_private_key_blocks(&content, &secret_keys_path)?;
     if blocks.is_empty() {
-        anyhow::bail!("No private key blocks found in {}", secring_path.display());
+        anyhow::bail!("No private key blocks found in {}", secret_keys_path.display());
     }
 
     blocks
@@ -87,7 +89,7 @@ fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
         .collect()
 }
 
-/// Finds a private key by email in the GPG home directory.
+/// Finds a private key by email in the key store.
 ///
 /// Matching is exact equality (case-insensitive) between the requested email
 /// and the address extracted from each user-ID — never substring matching.
@@ -105,7 +107,7 @@ pub fn find_private_key_by_email(gpg_home: &PathBuf, email: &str) -> Result<Sign
         .ok_or_else(|| anyhow::anyhow!("No secret key found for email: {}", email))
 }
 
-/// Finds a private key by fingerprint in the GPG home directory.
+/// Finds a private key by fingerprint in the key store.
 pub fn find_private_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Result<SignedSecretKey> {
     let keys = load_secret_keys(gpg_home)?;
 

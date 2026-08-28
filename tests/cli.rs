@@ -2,7 +2,7 @@
 //!
 //! These spawn the real `git-gpg` binary via assert_cmd. Each test builds its
 //! own temporary git repository and fake $HOME, so every child process gets an
-//! isolated GNUPGHOME ($HOME/.gnupg) without touching the test process's
+//! isolated GNUPGHOME ($HOME/.git-gpg) without touching the test process's
 //! working directory or environment — hence no #[serial] is needed.
 
 use assert_cmd::Command;
@@ -64,7 +64,7 @@ fn generate_protected_test_key(
     (secret_key, public_key)
 }
 
-fn write_multi_key_secring(gpg_home: &Path, keys: &[pgp::composed::SignedSecretKey]) {
+fn write_multi_key_secret_keys(gpg_home: &Path, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
         if !content.is_empty() {
@@ -73,7 +73,7 @@ fn write_multi_key_secring(gpg_home: &Path, keys: &[pgp::composed::SignedSecretK
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
     std::fs::create_dir_all(gpg_home).unwrap();
-    std::fs::write(gpg_home.join("secring.pgp"), content).unwrap();
+    std::fs::write(gpg_home.join("secret-keys.pgp"), content).unwrap();
 }
 
 fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Path) {
@@ -133,7 +133,7 @@ fn run_with_stdin(repo: &Path, home: &Path, args: &[&str], input: &str) -> std::
 }
 
 /// Builds a temp repo (with origin remote and local user.email) plus a fake
-/// home holding the owner + collaborator secring, runs the full CLI flow
+/// home holding the owner + collaborator secret keys, runs the full CLI flow
 /// init -> trust -> tell -> add -> hide, and returns (repo_temp, home_temp).
 fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
     let repo_temp = tempfile::tempdir().unwrap();
@@ -149,7 +149,7 @@ fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
 
-    write_multi_key_secring(&home_temp.path().join(".gnupg"), &[owner_sec, alice_sec]);
+    write_multi_key_secret_keys(&home_temp.path().join(".git-gpg"), &[owner_sec, alice_sec]);
 
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
@@ -443,7 +443,7 @@ fn setup_repo_with_protected_owner_key(passphrase: &str) -> (tempfile::TempDir, 
     git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
 
     let (owner_sec, owner_pub) = generate_protected_test_key("owner@github.com", passphrase);
-    write_multi_key_secring(&home_temp.path().join(".gnupg"), &[owner_sec]);
+    write_multi_key_secret_keys(&home_temp.path().join(".git-gpg"), &[owner_sec]);
 
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);

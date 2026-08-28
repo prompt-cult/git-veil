@@ -27,7 +27,7 @@ enum Commands {
         /// File(s) containing armoured private key blocks
         #[arg(required = true)]
         files: Vec<String>,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },
@@ -41,7 +41,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },
@@ -55,7 +55,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -73,7 +73,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -105,7 +105,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },
@@ -118,7 +118,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -138,7 +138,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -158,7 +158,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -178,7 +178,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -201,7 +201,7 @@ enum Commands {
         /// Email override
         #[arg(long)]
         email: Option<String>,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },
@@ -212,7 +212,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },
@@ -223,7 +223,7 @@ enum Commands {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// GPG home directory
+        /// Key store directory (default: $HOME/.git-gpg)
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },
@@ -249,7 +249,7 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 }
 
 /// Resolves the key store location for commands that consume a gpg_home:
-/// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.gnupg`.
+/// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.git-gpg`.
 /// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
 /// show-repo-id) never fail on an unset HOME. list-keys is no longer in this
 /// set: it verifies the keyring signature against the pinned key, so it

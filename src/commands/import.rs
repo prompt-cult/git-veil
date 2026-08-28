@@ -17,30 +17,30 @@ fn primary_user_id(key: &SignedSecretKey) -> String {
 }
 
 /// Imports armoured private key blocks from one or more files into the
-/// tool-owned key store (<gpg_home>/secring.pgp).
+/// tool-owned key store (<gpg_home>/secret-keys.pgp).
 ///
 /// Relative key-file paths resolve against `repo_root`. Each file must
 /// contain at least one parseable private key block, or the command refuses
-/// it. Keys whose fingerprint is already present in the secring are skipped
-/// rather than duplicated. On success the secring is written as
+/// it. Keys whose fingerprint is already present in the secret key store are
+/// skipped rather than duplicated. On success the store is written as
 /// newline-separated armoured private key blocks, the exact multi-block
 /// format the reader in gpg_integration.rs supports.
 pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Result<()> {
     if files.is_empty() {
         anyhow::bail!("No key files given");
     }
-    let secring_path = gpg_home.join("secring.pgp");
+    let secret_keys_path = gpg_home.join("secret-keys.pgp");
 
-    let mut secring_content = if secring_path.exists() {
-        fs::read_to_string(&secring_path).context("Failed to read secring.pgp")?
+    let mut secret_keys_content = if secret_keys_path.exists() {
+        fs::read_to_string(&secret_keys_path).context("Failed to read secret-keys.pgp")?
     } else {
         String::new()
     };
 
-    // Fingerprints already present in the secring (uppercase hex for
+    // Fingerprints already present in the secret key store (uppercase hex for
     // case-insensitive comparison).
     let mut known: HashSet<String> = HashSet::new();
-    for block in split_armored_private_key_blocks(&secring_content, &secring_path)? {
+    for block in split_armored_private_key_blocks(&secret_keys_content, &secret_keys_path)? {
         if let Ok((key, _)) = SignedSecretKey::from_string(&block) {
             known.insert(key.fingerprint().to_string().to_uppercase());
         }
@@ -80,11 +80,11 @@ pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Res
                 skipped += 1;
                 println!("= skipped (already imported): {} ({})", display, fingerprint);
             } else {
-                if !secring_content.is_empty() && !secring_content.ends_with('\n') {
-                    secring_content.push('\n');
+                if !secret_keys_content.is_empty() && !secret_keys_content.ends_with('\n') {
+                    secret_keys_content.push('\n');
                 }
-                secring_content.push_str(block);
-                secring_content.push('\n');
+                secret_keys_content.push_str(block);
+                secret_keys_content.push('\n');
                 known.insert(fingerprint.clone());
                 imported += 1;
                 println!("+ imported: {} ({})", display, fingerprint);
@@ -96,8 +96,9 @@ pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Res
         }
     }
 
-    fs::create_dir_all(gpg_home).context("Failed to create GPG home directory")?;
-    fs::write(&secring_path, &secring_content).context("Failed to write secring.pgp")?;
+    fs::create_dir_all(gpg_home).context("Failed to create key store directory")?;
+    fs::write(&secret_keys_path, &secret_keys_content)
+        .context("Failed to write secret-keys.pgp")?;
 
     println!("Summary: {} imported, {} skipped", imported, skipped);
     Ok(())
