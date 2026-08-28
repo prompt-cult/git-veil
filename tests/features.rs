@@ -4,7 +4,7 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    check_email_in_identities, cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_removeperson,
+    check_email_in_identities, cmd_add, cmd_cat, cmd_hide, cmd_init, cmd_remove, cmd_removeperson,
     cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring, default_gpg_home, encrypt_to_gpg_key,
     extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_email,
     find_private_key_by_fingerprint, sign_keyring_content, Keyring, KeyringEntry, TrustStore,
@@ -1606,5 +1606,132 @@ fn symlink_outside_repo_is_rejected() {
         !tracked_content.contains("link.env"),
         "escaping symlink must not be tracked, got: {}",
         tracked_content
+    );
+}
+
+// ============================================================================
+// cat: decrypt a single tracked file to stdout without touching disk state
+// ============================================================================
+
+/// Full flow: init -> trust -> tell(alice) -> add -> hide, with alice's key
+/// in the secring. Returns (repo_temp, gpg_home).
+fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed");
+
+    (repo_temp, gpg_home)
+}
+
+#[test]
+#[serial]
+fn cat_returns_exact_bytes_without_touching_disk() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+
+    let plaintext: &str = "API_KEY=cat-s3cr3t\nDB_PASSWORD=hunter2\n# unicode: héllo — 日本語\n";
+    std::fs::write("secret.env", plaintext).unwrap();
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+
+    let cat_result = cmd_cat("secret.env", "alice@example.com", "origin", &gpg_home);
+    let ciphertext_still_exists =
+        std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
+    let no_plaintext_on_disk = !std::path::Path::new("secret.env").exists();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let bytes = cat_result.expect("cmd_cat must decrypt the tracked file");
+    assert_eq!(
+        bytes, plaintext.as_bytes(),
+        "cat must return the exact original plaintext bytes"
+    );
+    assert!(
+        ciphertext_still_exists,
+        "cat must not delete the ciphertext"
+    );
+    assert!(
+        no_plaintext_on_disk,
+        "cat must not write a plaintext file to disk"
+    );
+    assert!(
+        !repo_temp.path().join("secret.env").exists(),
+        "cat must leave no plaintext at the tracked path"
+    );
+}
+
+#[test]
+#[serial]
+fn cat_fails_for_untracked_file() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+
+    let result = cmd_cat("not-tracked.env", "alice@example.com", "origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let err = result.err().expect("cat of an untracked file must fail");
+    assert!(
+        err.to_string().contains("not tracked"),
+        "the error must say the file is not tracked, got: {}",
+        err
+    );
+}
+
+#[test]
+#[serial]
+fn cat_rejects_path_escaping_the_repo() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+
+    std::fs::write("secret.env", "s3cret").unwrap();
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+
+    let dotdot_result = cmd_cat("../outside.txt", "alice@example.com", "origin", &gpg_home);
+    let outside = repo_temp.path().parent().unwrap().join("outside.txt");
+    std::fs::write(&outside, "nope").unwrap();
+    let absolute_result = cmd_cat(
+        outside.to_str().unwrap(),
+        "alice@example.com",
+        "origin",
+        &gpg_home,
+    );
+    let absolute_exists = outside.exists();
+    let _ = std::fs::remove_file(&outside);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let dotdot_err = dotdot_result
+        .err()
+        .expect("cat of a ../ path must be rejected");
+    assert!(
+        dotdot_err.to_string().contains("../outside.txt"),
+        "the error must name the escaping path, got: {}",
+        dotdot_err
+    );
+    let absolute_err = absolute_result
+        .err()
+        .expect("cat of an absolute path outside the repo must be rejected");
+    assert!(
+        absolute_err.to_string().contains("outside the repository")
+            || absolute_err.to_string().contains("not tracked")
+            || absolute_err.to_string().contains("outside.txt"),
+        "the error must explain the rejection, got: {}",
+        absolute_err
+    );
+    assert!(
+        absolute_exists,
+        "the outside file must be untouched by the rejected cat"
     );
 }

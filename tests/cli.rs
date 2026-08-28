@@ -171,6 +171,39 @@ fn reveal_with_explicit_email_succeeds() {
 }
 
 #[test]
+fn cat_outputs_plaintext_to_stdout() {
+    let (repo_temp, home_temp) = setup_hidden_repo();
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["cat", "secret.env", "--email", "alice@example.com"],
+    );
+
+    assert!(
+        out.status.success(),
+        "cat must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        out.stdout, b"s3cret",
+        "cat must write the exact plaintext bytes to stdout"
+    );
+    assert!(
+        !repo_temp.path().join("secret.env").exists(),
+        "cat must not write a plaintext file to disk"
+    );
+    assert!(
+        repo_temp
+            .path()
+            .join(".git-gpg/secrets/secret.env.asc")
+            .exists(),
+        "cat must not delete the ciphertext"
+    );
+}
+
+#[test]
 fn cli_help_and_version_exit_zero() {
     for args in [&["--help"][..], &["--version"][..]] {
         let out = Command::cargo_bin("git-gpg")

@@ -12,6 +12,7 @@ mod tracked_files;
 mod commands;
 
 pub use commands::add::cmd_add;
+pub use commands::cat::cmd_cat;
 pub use commands::clean::cmd_clean;
 pub use commands::hide::cmd_hide;
 pub use commands::init::cmd_init;
