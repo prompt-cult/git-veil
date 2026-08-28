@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input};
 use crate::{
@@ -84,7 +85,10 @@ pub fn cmd_unhide(
             fs::create_dir_all(repo_root.join(parent))?;
         }
     }
-    fs::write(repo_root.join(&relative), plaintext)
+    // Write plaintext back atomically to the tracked path BEFORE deleting
+    // the ciphertext: a crash mid-unhide leaves at worst both copies
+    // (zero loss), never neither.
+    write_atomic(&repo_root.join(&relative), &plaintext)
         .with_context(|| format!("Failed to write decrypted file: {}", relative.display()))?;
 
     // Delete the ciphertext

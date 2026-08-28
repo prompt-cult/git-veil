@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::validate_tracked_path;
 use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email, Keyring, TrackedFiles};
@@ -67,7 +68,10 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
                 fs::create_dir_all(repo_root.join(parent))?;
             }
         }
-        fs::write(repo_root.join(file), plaintext)
+        // Write plaintext atomically BEFORE deleting the ciphertext: a
+        // crash mid-reveal leaves at worst both copies (zero loss),
+        // never neither.
+        write_atomic(&repo_root.join(file), &plaintext)
             .with_context(|| format!("Failed to write decrypted file: {}", file.display()))?;
 
         // Delete encrypted file

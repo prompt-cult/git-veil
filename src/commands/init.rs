@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
+use crate::fs_atomic::write_atomic;
 use crate::{Keyring, TrackedFiles, TrustStore};
 
 /// Initialises a new git-gpg repository structure under `repo_root`.
@@ -37,7 +38,7 @@ pub fn cmd_init(repo_root: &Path) -> Result<()> {
     // Create empty keyring
     let keyring = Keyring::new();
     let keyring_content = keyring.serialize();
-    fs::write(git_gpg_dir.join("keyring"), keyring_content)
+    write_atomic(&git_gpg_dir.join("keyring"), keyring_content.as_bytes())
         .context("Failed to create keyring file")?;
 
     // Create empty trust.json via the type's own API (single source of truth

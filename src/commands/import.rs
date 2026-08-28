@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
 use crate::gpg_integration::split_armored_private_key_blocks;
 use crate::pubkey::extract_email_from_user_id;
 use pgp::types::KeyDetails;
@@ -97,7 +98,12 @@ pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Res
     }
 
     fs::create_dir_all(gpg_home).context("Failed to create key store directory")?;
-    fs::write(&secret_keys_path, &secret_keys_content)
+    // Atomic append = read-existing (above) + write_atomic(whole content).
+    // The O(n) rewrite of the accumulated store is the accepted trade at
+    // this scale (a handful of armoured blocks); a torn secret-keys store
+    // would brick ALL private-key access (fail-closed), so a partial
+    // write must never be possible.
+    write_atomic(&secret_keys_path, secret_keys_content.as_bytes())
         .context("Failed to write secret-keys.pgp")?;
 
     println!("Summary: {} imported, {} skipped", imported, skipped);

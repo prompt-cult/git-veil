@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
 use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key, sign_keyring_content, validate_public_key_for_use, verify_keyring_against_trust, KeyUse, Keyring, TrustStore};
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
@@ -82,7 +83,7 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
     keyring.signature = Some(signature);
 
     // Save keyring
-    fs::write(&keyring_path, keyring.serialize())
+    write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
     println!("✓ Added {} to keyring", email);

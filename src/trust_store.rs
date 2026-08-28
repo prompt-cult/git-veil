@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrustStore {
     #[serde(default)]
@@ -36,7 +38,7 @@ impl TrustStore {
 
     pub fn save_to_file(&self, path: &PathBuf) -> Result<()> {
         let content = self.serialize()?;
-        fs::write(path, content)?;
+        write_atomic(path, content.as_bytes())?;
         Ok(())
     }
 
@@ -98,7 +100,7 @@ impl TrustPinStore {
     pub fn write_pin(gpg_home: &Path, repo_id: &str, fingerprint: &str) -> Result<()> {
         let path = Self::pin_path(gpg_home, repo_id);
         fs::create_dir_all(path.parent().expect("pin path always has a parent"))?;
-        fs::write(&path, fingerprint)?;
+        write_atomic(&path, fingerprint.as_bytes())?;
         Ok(())
     }
 

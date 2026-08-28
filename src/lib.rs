@@ -3,6 +3,7 @@
 //! Pure Rust OpenPGP implementation using the `pgp` crate.
 
 mod armour;
+mod fs_atomic;
 mod repo_identity;
 mod keyring;
 mod trust_store;
@@ -30,6 +31,7 @@ pub use commands::trust::cmd_trust;
 pub use commands::unhide::cmd_unhide;
 pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
 pub use armour::{SIG_BEGIN, SIG_END};
+pub use fs_atomic::write_atomic;
 pub use commands::whoami::cmd_whoami;
 pub use gpg_integration::{decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key, encrypt_to_gpg_keys, find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_gpg_home};
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};

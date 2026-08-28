@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
 use crate::{derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint, get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
@@ -54,7 +55,7 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
     keyring.signature = Some(signature);
 
     // Save keyring
-    fs::write(&keyring_path, keyring.serialize())
+    write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
     println!("✓ Removed {} from keyring", email_to_remove);

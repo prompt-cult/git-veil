@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::fs_atomic::write_atomic;
 use crate::tracked_files::validate_tracked_path;
 use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, validate_public_key_for_use, KeyUse, Keyring, TrackedFiles};
 
@@ -118,8 +119,11 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
             fs::create_dir_all(parent)?;
         }
 
-        // Write encrypted content
-        fs::write(&encrypted_path, ciphertext)
+        // Write encrypted content atomically: a torn ciphertext is never
+        // visible under the target name. The plaintext is deleted only
+        // AFTER the ciphertext write succeeded, so a crash mid-hide
+        // leaves at worst both copies (zero loss), never neither.
+        write_atomic(&encrypted_path, ciphertext.as_bytes())
             .with_context(|| format!("Failed to write encrypted file: {}", encrypted_path.display()))?;
 
         // Delete original

@@ -1,4 +1,5 @@
 use crate::armour::{PRIVATE_KEY_BEGIN, PRIVATE_KEY_END};
+use crate::fs_atomic::write_atomic;
 use crate::pubkey::extract_email_from_user_id;
 use anyhow::{Context, Result};
 use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
@@ -36,7 +37,11 @@ pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<(
         existing.push('\n');
     }
     existing.push_str(armored_key);
-    fs::write(&public_keys_path, existing).context("Failed to write public-keys.pgp")?;
+    // Atomic append = read-existing (above) + write_atomic(whole content).
+    // The O(n) rewrite is the accepted trade — see fs_atomic::append_atomic —
+    // a torn key store must never be possible.
+    write_atomic(&public_keys_path, existing.as_bytes())
+        .context("Failed to write public-keys.pgp")?;
     Ok(())
 }
 

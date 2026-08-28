@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+use crate::fs_atomic::write_atomic;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrackedFiles {
     pub files: Vec<PathBuf>,
@@ -222,7 +224,7 @@ impl TrackedFiles {
     pub fn save(&self, path: &PathBuf) -> Result<()> {
         let content = serde_json::to_string_pretty(self)
             .context("Failed to serialize tracked files")?;
-        fs::write(path, content).context("Failed to write tracked files")?;
+        write_atomic(path, content.as_bytes()).context("Failed to write tracked files")?;
         Ok(())
     }
 
