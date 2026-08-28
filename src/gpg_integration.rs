@@ -134,26 +134,42 @@ pub fn decrypt_with_gpg_key(ciphertext: &str, private_key: &SignedSecretKey) -> 
     Ok(plaintext)
 }
 
-/// Encrypts plaintext to a public key.
+/// Encrypts plaintext to a single public key.
+///
+/// Convenience wrapper around [`encrypt_to_gpg_keys`] for the common
+/// single-recipient case.
 pub fn encrypt_to_gpg_key(plaintext: &[u8], public_key: &SignedPublicKey) -> Result<String> {
+    encrypt_to_gpg_keys(plaintext, std::slice::from_ref(public_key))
+}
+
+/// Encrypts plaintext to ALL the given public keys as ONE OpenPGP message.
+///
+/// Each recipient gets its own PKESK packet wrapping the same session key,
+/// so every listed key can decrypt the identical ciphertext. For each
+/// recipient the encryption subkey is selected by key flags exactly as for
+/// a single recipient. SEIPD v1 with AES-256 and an empty literal filename.
+pub fn encrypt_to_gpg_keys(plaintext: &[u8], public_keys: &[SignedPublicKey]) -> Result<String> {
     use pgp::composed::MessageBuilder;
     use pgp::crypto::sym::SymmetricKeyAlgorithm;
-    
+
     let mut rng = thread_rng();
-    
-    // Find encryption subkey
-    let encryption_subkey = public_key.public_subkeys.iter()
-        .find(|sk| sk.signatures.iter()
-            .any(|sig| sig.key_flags().encrypt_comms() || sig.key_flags().encrypt_storage()))
-        .context("No encryption subkey found in public key")?;
-    
+
     let builder = MessageBuilder::from_bytes("", plaintext.to_vec());
     let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-    builder.encrypt_to_key(&mut rng, &encryption_subkey.key)
-        .context("Failed to encrypt to key")?;
-    
+
+    for public_key in public_keys {
+        // Find encryption subkey
+        let encryption_subkey = public_key.public_subkeys.iter()
+            .find(|sk| sk.signatures.iter()
+                .any(|sig| sig.key_flags().encrypt_comms() || sig.key_flags().encrypt_storage()))
+            .context("No encryption subkey found in public key")?;
+
+        builder.encrypt_to_key(&mut rng, &encryption_subkey.key)
+            .context("Failed to encrypt to key")?;
+    }
+
     let armored = builder.to_armored_string(&mut rng, Default::default())
         .context("Failed to armor encrypted message")?;
-    
+
     Ok(armored)
 }

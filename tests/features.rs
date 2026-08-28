@@ -6,7 +6,8 @@
 use git_gpg::{
     base64_encode_public_key, check_email_in_identities, cmd_add, cmd_cat, cmd_changes, cmd_hide,
     cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring,
-    default_gpg_home, encrypt_to_gpg_key, extract_content_to_verify_from_keyring,
+    decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key,
+    extract_content_to_verify_from_keyring,
     extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
     import_key_to_gpg_home, sign_keyring_content, Keyring, KeyringEntry, TrustPinStore, TrustStore,
     TrackedFiles,
@@ -1917,6 +1918,187 @@ fn verify_fails_closed_when_pin_mismatches() {
         keyring_before, keyring_after,
         "the keyring file must be untouched by the failed verify"
     );
+}
+
+// ============================================================================
+// Multi-recipient hide: encrypt to ALL keyring keys, revocation end-to-end
+//
+// The collaboration promise is "any collaborator can reveal". These tests
+// were written Red: pre-fix, cmd_hide encrypts only to the first keyring
+// entry, so collaborators 2..n cannot decrypt.
+// ============================================================================
+
+/// Sets up a trusted repo whose keyring contains the owner plus the given
+/// collaborators (each added via cmd_tell, the keyring signed by the trusted
+/// owner key), and whose secring holds every secret key (owner + all
+/// collaborators). Returns (repo_temp, gpg_home).
+fn setup_repo_with_owner_and_collaborators(
+    collaborator_emails: &[&str],
+) -> (tempfile::TempDir, PathBuf) {
+    let repo_temp = setup_git_repo_with_origin_remote();
+
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let gpg_home = repo_temp.path().join("gpg-home");
+
+    cmd_trust(
+        repo_temp.path(),
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    // tell signs with the trusted owner key, so the owner's secret must be
+    // in the secring before any tell runs.
+    write_multi_key_secring(&gpg_home, std::slice::from_ref(&owner_sec));
+
+    cmd_tell(
+        repo_temp.path(),
+        "owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_tell must succeed for the owner");
+
+    let mut collaborator_secrets = Vec::new();
+    for (i, email) in collaborator_emails.iter().enumerate() {
+        let (sec, pub_key) = generate_test_key(email);
+        let keyfile = repo_temp.path().join(format!("collaborator-{}.pub", i));
+        write_public_key_file(&pub_key, &keyfile);
+
+        cmd_tell(
+            repo_temp.path(),
+            email,
+            keyfile.to_str().unwrap(),
+            "origin",
+            &gpg_home,
+        )
+        .unwrap_or_else(|e| panic!("cmd_tell must succeed for {}: {:?}", email, e));
+
+        collaborator_secrets.push(sec);
+    }
+
+    // Replace the secring with one holding every secret key (owner + all
+    // collaborators) so each participant can decrypt/verify locally.
+    let mut secring_keys = vec![owner_sec];
+    secring_keys.extend(collaborator_secrets);
+    write_multi_key_secring(&gpg_home, &secring_keys);
+
+    (repo_temp, gpg_home)
+}
+
+#[test]
+fn hide_encrypts_to_every_key_in_keyring() {
+    let emails = ["alice@example.com", "bob@example.com", "carol@example.com"];
+    let (repo_temp, gpg_home) = setup_repo_with_owner_and_collaborators(&emails);
+
+    let plaintext: &str = "SHARED_SECRET=every-collaborator-can-reveal\n";
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    let ciphertext = std::fs::read_to_string(repo_temp.path().join(".git-gpg/secrets/secret.env.asc"))
+        .expect("hide must write the ciphertext into .git-gpg/secrets");
+
+    for email in emails {
+        let secret_key = find_private_key_by_email(&gpg_home, email)
+            .unwrap_or_else(|e| panic!("secring must hold {}'s secret key: {}", email, e));
+        let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key)
+            .unwrap_or_else(|e| panic!("{} must be able to decrypt the shared ciphertext: {}", email, e));
+        assert_eq!(
+            decrypted,
+            plaintext.as_bytes(),
+            "{} must recover the exact original plaintext from the ONE shared ciphertext",
+            email
+        );
+    }
+}
+
+#[test]
+fn reveal_works_for_each_collaborator_after_hide() {
+    let emails = ["alice@example.com", "bob@example.com", "carol@example.com"];
+    let (repo_temp, gpg_home) = setup_repo_with_owner_and_collaborators(&emails);
+
+    let plaintext: &str = "ROUND_TRIP=per-collaborator-reveal\n";
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    for email in emails {
+        cmd_hide(repo_temp.path(), "origin", &gpg_home)
+            .unwrap_or_else(|e| panic!("cmd_hide must succeed before {}'s reveal: {:?}", email, e));
+        assert!(
+            !repo_temp.path().join("secret.env").exists()
+                && repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
+            "hide must have replaced the plaintext with ciphertext before {}'s reveal",
+            email
+        );
+
+        cmd_reveal(repo_temp.path(), email, "origin", &gpg_home)
+            .unwrap_or_else(|e| panic!("{} must be able to cmd_reveal the hidden file: {:?}", email, e));
+
+        let restored = std::fs::read(repo_temp.path().join("secret.env"))
+            .unwrap_or_else(|e| panic!("reveal must restore the plaintext for {}: {}", email, e));
+        assert_eq!(
+            restored,
+            plaintext.as_bytes(),
+            "{}'s reveal must restore the exact original bytes",
+            email
+        );
+    }
+}
+
+#[test]
+fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
+    let emails = ["alice@example.com", "bob@example.com", "carol@example.com"];
+    let (repo_temp, gpg_home) = setup_repo_with_owner_and_collaborators(&emails);
+
+    let plaintext: &str = "REVOCATION=boot-the-removed-collaborator\n";
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    // Before removal: ALL three collaborators decrypt the SAME ciphertext.
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("first hide must succeed");
+    let ciphertext_before = std::fs::read_to_string(repo_temp.path().join(".git-gpg/secrets/secret.env.asc"))
+        .expect("ciphertext must exist after the first hide");
+    for email in emails {
+        let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
+        let decrypted = decrypt_with_gpg_key(&ciphertext_before, &secret_key)
+            .unwrap_or_else(|e| panic!("before removal, {} must be able to decrypt: {}", email, e));
+        assert_eq!(decrypted, plaintext.as_bytes());
+    }
+
+    // Revoke Bob, then re-hide (reveal as Alice restores the plaintext first).
+    cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home)
+        .expect("cmd_removeperson must succeed");
+    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home)
+        .expect("reveal as alice must restore the plaintext for the re-hide");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home)
+        .expect("re-hide after removal must succeed");
+    let ciphertext_after = std::fs::read_to_string(repo_temp.path().join(".git-gpg/secrets/secret.env.asc"))
+        .expect("ciphertext must exist after the re-hide");
+
+    // Bob's key must now FAIL against the new ciphertext.
+    let bob_key = find_private_key_by_email(&gpg_home, "bob@example.com").unwrap();
+    assert!(
+        decrypt_with_gpg_key(&ciphertext_after, &bob_key).is_err(),
+        "the removed collaborator must NOT be able to decrypt ciphertext written after their removal"
+    );
+
+    // Alice and Carol must still decrypt the new ciphertext.
+    for email in ["alice@example.com", "carol@example.com"] {
+        let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
+        let decrypted = decrypt_with_gpg_key(&ciphertext_after, &secret_key)
+            .unwrap_or_else(|e| panic!("after removal, {} must still be able to decrypt: {}", email, e));
+        assert_eq!(decrypted, plaintext.as_bytes());
+    }
 }
 
 #[test]

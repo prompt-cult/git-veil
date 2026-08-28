@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::tracked_files::validate_tracked_path;
-use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_key, Keyring, TrackedFiles};
+use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, Keyring, TrackedFiles};
 
 const SECRETS_DIR: &str = ".git-gpg/secrets";
 
@@ -66,8 +66,10 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
         let plaintext = fs::read(repo_root.join(file))
             .with_context(|| format!("Failed to read file: {}", file.display()))?;
 
-        // Encrypt to first public key (simplified - in production would encrypt to all)
-        let ciphertext = encrypt_to_gpg_key(&plaintext, &public_keys[0])?;
+        // Encrypt to EVERY key in the keyring: the collaboration promise is
+        // that any collaborator can reveal, so the one ciphertext carries a
+        // PKESK per recipient.
+        let ciphertext = encrypt_to_gpg_keys(&plaintext, &public_keys)?;
 
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
