@@ -195,10 +195,7 @@ fn cat_outputs_plaintext_to_stdout() {
         "cat must not write a plaintext file to disk"
     );
     assert!(
-        repo_temp
-            .path()
-            .join(".git-gpg/secrets/secret.env.asc")
-            .exists(),
+        repo_temp.path().join("secret.env.secret").exists(),
         "cat must not delete the ciphertext"
     );
 }

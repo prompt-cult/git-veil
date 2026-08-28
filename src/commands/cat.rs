@@ -3,18 +3,17 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::commands::hide::encrypted_path_for;
+use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::validate_tracked_path;
 use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
-
-const SECRETS_DIR: &str = ".git-gpg/secrets";
 
 /// Decrypts a single tracked file to stdout without touching disk state.
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
 /// cmd_add/cmd_remove resolve paths (canonicalise-and-strip). Relative paths
 /// resolve against `repo_root`; tracked paths are stored repo-relative and
-/// are validated, so the ciphertext path can never escape .git-gpg/secrets.
+/// are validated, so the ciphertext path can never escape the repository
+/// root.
 pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<Vec<u8>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
@@ -64,15 +63,10 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
 
     // Compute encrypted path
     let encrypted_path = encrypted_path_for(repo_root, &relative);
-    let secrets_dir = repo_root.join(SECRETS_DIR);
 
-    // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-    if !encrypted_path.starts_with(&secrets_dir) {
-        anyhow::bail!(
-            "Encrypted path escaped the secrets directory: {}",
-            encrypted_path.display()
-        );
-    }
+    // Defence in depth: the ciphertext must stay inside the repository
+    // root, beside its plaintext
+    ensure_ciphertext_beside_plaintext(repo_root, &relative, &encrypted_path)?;
 
     // Check encrypted file exists
     if !encrypted_path.exists() {

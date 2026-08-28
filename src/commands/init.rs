@@ -5,13 +5,17 @@ use std::path::Path;
 use crate::{Keyring, TrackedFiles, TrustStore};
 
 /// Initialises a new git-gpg repository structure under `repo_root`.
+///
+/// Creates only the internal state directory `.git-gpg/` (keyring,
+/// trust.json, tracked.json). It never touches `.gitignore`: ciphertext is
+/// stored in place beside the plaintext as `<name>.secret`, and those files
+/// are meant to be COMMITTED, so gitignoring them would defeat the
+/// fresh-clone decryptability contract.
 pub fn cmd_init(repo_root: &Path) -> Result<()> {
     let git_gpg_dir = repo_root.join(".git-gpg");
-    let secrets_dir = git_gpg_dir.join("secrets");
 
-    // Create directories
+    // Create the internal state directory
     fs::create_dir_all(&git_gpg_dir).context("Failed to create .git-gpg directory")?;
-    fs::create_dir_all(&secrets_dir).context("Failed to create .git-gpg/secrets directory")?;
 
     // Create empty keyring
     let keyring = Keyring::new();
@@ -30,23 +34,6 @@ pub fn cmd_init(repo_root: &Path) -> Result<()> {
     TrackedFiles::default()
         .save(&git_gpg_dir.join("tracked.json"))
         .context("Failed to create tracked.json")?;
-
-    // Add .git-gpg/secrets to .gitignore if not already present
-    let gitignore_path = repo_root.join(".gitignore");
-    let gitignore_content = if gitignore_path.exists() {
-        fs::read_to_string(&gitignore_path)?
-    } else {
-        String::new()
-    };
-
-    if !gitignore_content.contains(".git-gpg/secrets") {
-        let mut updated = gitignore_content;
-        if !updated.is_empty() && !updated.ends_with('\n') {
-            updated.push('\n');
-        }
-        updated.push_str(".git-gpg/secrets\n");
-        fs::write(&gitignore_path, updated).context("Failed to update .gitignore")?;
-    }
 
     println!("✓ git-gpg initialized");
     Ok(())

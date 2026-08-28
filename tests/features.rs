@@ -1153,17 +1153,23 @@ fn reveal_refuses_escaping_tracked_path() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
     assert!(
-        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
-        "hide must write the ciphertext into .git-gpg/secrets"
+        repo_temp.path().join("secret.env.secret").exists(),
+        "hide must write the ciphertext beside the plaintext"
     );
 
     // Attacker (any repo writer) tampers with the committed tracked.json to
     // point one level above the repo root, and commits a ciphertext that
-    // decrypts with the victim's key. join("../outside.txt") under
-    // .git-gpg/secrets lands at .git-gpg/outside.txt.asc.
+    // decrypts with the victim's key. Under the in-place naming the
+    // ciphertext for ../outside.txt would land beside the repo as
+    // outside.txt.secret.
     write_tracked_json(repo_temp.path(), &["../outside.txt"]);
     let ciphertext = encrypt_to_gpg_key(b"pwned", &owner_pub).unwrap();
-    std::fs::write(repo_temp.path().join(".git-gpg/outside.txt.asc"), ciphertext).unwrap();
+    let planted = repo_temp
+        .path()
+        .parent()
+        .unwrap()
+        .join("outside.txt.secret");
+    std::fs::write(&planted, ciphertext).unwrap();
 
     let target = repo_temp
         .path()
@@ -1176,6 +1182,7 @@ fn reveal_refuses_escaping_tracked_path() {
 
     let target_exists = target.exists();
     let _ = std::fs::remove_file(&target);
+    let _ = std::fs::remove_file(&planted);
 
     assert!(
         result.is_err(),
@@ -1222,12 +1229,12 @@ fn hide_then_reveal_restores_exact_bytes() {
     let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let plaintext_gone_after_hide = !repo_temp.path().join("secret.env").exists();
     let ciphertext_after_hide =
-        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
+        repo_temp.path().join("secret.env.secret").exists();
 
     let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
     let restored = std::fs::read(repo_temp.path().join("secret.env"));
     let ciphertext_gone_after_reveal =
-        !repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
+        !repo_temp.path().join("secret.env.secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1236,7 +1243,7 @@ fn hide_then_reveal_restores_exact_bytes() {
     );
     assert!(
         ciphertext_after_hide,
-        "hide must write the ciphertext into .git-gpg/secrets/secret.env.asc"
+        "hide must write the ciphertext beside the plaintext as secret.env.secret"
     );
     reveal_result.expect("cmd_reveal must succeed");
     assert_eq!(
@@ -1280,12 +1287,12 @@ fn hide_then_reveal_in_subdirectory() {
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let plaintext_gone_after_hide = !repo_temp.path().join(tracked_rel).exists();
-    let ciphertext_after_hide = repo_temp.path().join(".git-gpg/secrets/a/b/c/secret.env.asc")
+    let ciphertext_after_hide = repo_temp.path().join("a/b/c/secret.env.secret")
     .exists();
 
     let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
     let restored = std::fs::read(repo_temp.path().join(tracked_rel));
-    let ciphertext_gone_after_reveal = !repo_temp.path().join(".git-gpg/secrets/a/b/c/secret.env.asc")
+    let ciphertext_gone_after_reveal = !repo_temp.path().join("a/b/c/secret.env.secret")
     .exists();
 
     hide_result.expect("cmd_hide must succeed");
@@ -1295,7 +1302,7 @@ fn hide_then_reveal_in_subdirectory() {
     );
     assert!(
         ciphertext_after_hide,
-        "hide must preserve the directory structure under .git-gpg/secrets"
+        "hide must write the ciphertext beside the plaintext in its subdirectory"
     );
     reveal_result.expect("cmd_reveal must succeed");
     assert_eq!(
@@ -1359,15 +1366,15 @@ fn hide_reveal_roundtrip_binary_file() {
 }
 
 // ============================================================================
-// L4: ciphertext filename is the FULL original file name plus ".asc"
+// L4: ciphertext filename is the FULL original file name plus ".secret"
 //
-// Regression tests written Red/Green: previously the ciphertext path was
-// computed with with_extension(), which for an extensionless file appended
-// a bare second dot (notes -> notes..asc, .env -> .env..asc).
+// Regression tests: the ciphertext name must never be derived by replacing
+// the extension (notes -> notes..secret, .env -> .env..secret) — it is the
+// full original name plus the .secret suffix, written beside the plaintext.
 // ============================================================================
 
 #[test]
-fn ciphertext_filename_is_full_name_plus_asc() {
+fn ciphertext_filename_is_full_name_plus_secret() {
     let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("notes"), "no extension here\n").unwrap();
@@ -1375,18 +1382,18 @@ fn ciphertext_filename_is_full_name_plus_asc() {
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let ciphertext_exists =
-        repo_temp.path().join(".git-gpg/secrets/notes.asc").exists();
+        repo_temp.path().join("notes.secret").exists();
     let mangled_exists =
-        repo_temp.path().join(".git-gpg/secrets/notes..asc").exists();
+        repo_temp.path().join("notes..secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
         ciphertext_exists,
-        "hide must write the ciphertext to .git-gpg/secrets/notes.asc"
+        "hide must write the ciphertext beside the plaintext as notes.secret"
     );
     assert!(
         !mangled_exists,
-        "hide must not mangle the ciphertext name to notes..asc"
+        "hide must not mangle the ciphertext name to notes..secret"
     );
 }
 
@@ -1399,18 +1406,18 @@ fn ciphertext_filename_for_dotfile() {
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let ciphertext_exists =
-        repo_temp.path().join(".git-gpg/secrets/.env.asc").exists();
+        repo_temp.path().join(".env.secret").exists();
     let mangled_exists =
-        repo_temp.path().join(".git-gpg/secrets/.env..asc").exists();
+        repo_temp.path().join(".env..secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
         ciphertext_exists,
-        "hide must write the ciphertext to .git-gpg/secrets/.env.asc"
+        "hide must write the ciphertext beside the plaintext as .env.secret"
     );
     assert!(
         !mangled_exists,
-        "hide must not mangle the ciphertext name to .env..asc"
+        "hide must not mangle the ciphertext name to .env..secret"
     );
 }
 
@@ -1450,8 +1457,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
                 name.to_string(),
                 repo_temp
                     .path()
-                    .join(".git-gpg/secrets")
-                    .join(format!("{}.asc", name))
+                    .join(format!("{}.secret", name))
                     .exists(),
             )
         })
@@ -1467,7 +1473,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
     for (name, exists) in ciphertexts_exist {
         assert!(
             exists,
-            "hide must write the ciphertext to .git-gpg/secrets/{}.asc",
+            "hide must write the ciphertext beside the plaintext as {}.secret",
             name
         );
     }
@@ -1558,7 +1564,7 @@ fn cat_returns_exact_bytes_without_touching_disk() {
 
     let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &gpg_home);
     let ciphertext_still_exists =
-        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
+        repo_temp.path().join("secret.env.secret").exists();
     let no_plaintext_on_disk = !repo_temp.path().join("secret.env").exists();
 
     let bytes = cat_result.expect("cmd_cat must decrypt the tracked file");
@@ -1657,7 +1663,7 @@ fn changes_reports_no_changes_when_plaintext_matches() {
 
     let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
     let ciphertext_still_exists =
-        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
+        repo_temp.path().join("secret.env.secret").exists();
 
     let changed = result.expect("cmd_changes must succeed when plaintext matches");
     assert!(
@@ -1714,7 +1720,7 @@ fn changes_ignores_missing_plaintext() {
         changed
     );
     assert!(
-        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
+        repo_temp.path().join("secret.env.secret").exists(),
         "the ciphertext must remain in place after the skipped file"
     );
 }
@@ -2005,8 +2011,8 @@ fn hide_encrypts_to_every_key_in_keyring() {
 
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    let ciphertext = std::fs::read_to_string(repo_temp.path().join(".git-gpg/secrets/secret.env.asc"))
-        .expect("hide must write the ciphertext into .git-gpg/secrets");
+    let ciphertext = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
+        .expect("hide must write the ciphertext beside the plaintext");
 
     for email in emails {
         let secret_key = find_private_key_by_email(&gpg_home, email)
@@ -2036,8 +2042,8 @@ fn reveal_works_for_each_collaborator_after_hide() {
             .unwrap_or_else(|e| panic!("cmd_hide must succeed before {}'s reveal: {:?}", email, e));
         assert!(
             !repo_temp.path().join("secret.env").exists()
-                && repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
-            "hide must have replaced the plaintext with ciphertext before {}'s reveal",
+                && repo_temp.path().join("secret.env.secret").exists(),
+            "hide must have replaced the plaintext with ciphertext beside it before {}'s reveal",
             email
         );
 
@@ -2066,7 +2072,7 @@ fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
 
     // Before removal: ALL three collaborators decrypt the SAME ciphertext.
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("first hide must succeed");
-    let ciphertext_before = std::fs::read_to_string(repo_temp.path().join(".git-gpg/secrets/secret.env.asc"))
+    let ciphertext_before = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
         .expect("ciphertext must exist after the first hide");
     for email in emails {
         let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
@@ -2082,7 +2088,7 @@ fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
         .expect("reveal as alice must restore the plaintext for the re-hide");
     cmd_hide(repo_temp.path(), "origin", &gpg_home)
         .expect("re-hide after removal must succeed");
-    let ciphertext_after = std::fs::read_to_string(repo_temp.path().join(".git-gpg/secrets/secret.env.asc"))
+    let ciphertext_after = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
         .expect("ciphertext must exist after the re-hide");
 
     // Bob's key must now FAIL against the new ciphertext.
@@ -2141,4 +2147,142 @@ fn sanitized_pin_filename_is_stable() {
             name
         );
     }
+}
+
+// ============================================================================
+// In-place ciphertext storage: hide writes <plaintext>.secret BESIDE the
+// plaintext, not into a gitignored mirror tree. Written Red/Green: the old
+// .git-gpg/secrets/<path>/<name>.asc scheme fails every test below.
+// ============================================================================
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let to = dst.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir_all(&entry.path(), &to);
+        } else {
+            std::fs::copy(entry.path(), &to).unwrap();
+        }
+    }
+}
+
+#[test]
+fn hide_writes_ciphertext_next_to_plaintext() {
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    let cases: Vec<(&str, &str)> = vec![
+        ("sub/dir/secret.env", "NESTED=1\n"),
+        (".env", "DOTENV=2\n"),
+        ("notes", "extensionless\n"),
+    ];
+    for (name, bytes) in &cases {
+        std::fs::create_dir_all(repo_temp.path().join(name).parent().unwrap()).unwrap();
+        std::fs::write(repo_temp.path().join(name), bytes).unwrap();
+        cmd_add(repo_temp.path(), vec![name.to_string()])
+            .unwrap_or_else(|e| panic!("cmd_add must succeed for {}: {:?}", name, e));
+    }
+
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    hide_result.expect("cmd_hide must succeed");
+
+    for (name, _) in &cases {
+        assert!(
+            repo_temp.path().join(format!("{}.secret", name)).exists(),
+            "hide must write the ciphertext beside the plaintext as {}.secret",
+            name
+        );
+        assert!(
+            !repo_temp.path().join(name).exists(),
+            "hide must delete the plaintext {}",
+            name
+        );
+    }
+    assert!(
+        !repo_temp.path().join(".git-gpg/secrets").exists(),
+        "hide must not create a mirror secrets tree"
+    );
+}
+
+#[test]
+fn reveal_restores_plaintext_and_removes_secret_file() {
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    let plaintext = "INVERSE=exact-bytes-restored\n";
+    std::fs::create_dir_all(repo_temp.path().join("sub/dir")).unwrap();
+    let tracked_rel = "sub/dir/secret.env";
+    std::fs::write(repo_temp.path().join(tracked_rel), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    assert!(repo_temp.path().join(format!("{}.secret", tracked_rel)).exists());
+
+    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home);
+    reveal_result.expect("cmd_reveal must succeed");
+
+    let restored = std::fs::read(repo_temp.path().join(tracked_rel))
+        .expect("reveal must restore the plaintext at the original path");
+    assert_eq!(
+        restored,
+        plaintext.as_bytes(),
+        "reveal must restore the exact original bytes"
+    );
+    assert!(
+        !repo_temp.path().join(format!("{}.secret", tracked_rel)).exists(),
+        "reveal must delete the .secret file"
+    );
+}
+
+#[test]
+fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    let plaintext = "FRESH_CLONE=decryptable-by-design\n";
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    // Simulate a clone: copy .git-gpg/ and every .secret ciphertext into a
+    // NEW directory, but not the plaintext (hide deleted it) and not the
+    // gpg-home. Reveal runs with the SAME gpg_home, so the per-machine trust
+    // pin is already present — the pin is keyed by the repo_id derived from
+    // the origin URL, which the clone shares, so no re-run of cmd_trust is
+    // needed (this is the documented "gpg-home already holds the pin" path).
+    let clone = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["init"],
+        vec!["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    ] {
+        let status = std::process::Command::new("git")
+            .current_dir(clone.path())
+            .args(&args)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git {:?} failed", args);
+    }
+    copy_dir_all(&repo_temp.path().join(".git-gpg"), &clone.path().join(".git-gpg"));
+    std::fs::copy(
+        repo_temp.path().join("secret.env.secret"),
+        clone.path().join("secret.env.secret"),
+    )
+    .expect("clone must carry the committed .secret ciphertext");
+    assert!(
+        !clone.path().join("secret.env").exists(),
+        "the clone must not contain the plaintext"
+    );
+
+    let reveal_result = cmd_reveal(clone.path(), "owner@github.com", "origin", &gpg_home);
+    reveal_result.expect("reveal in a fresh clone holding only .secret files must succeed");
+
+    let restored = std::fs::read(clone.path().join("secret.env"))
+        .expect("reveal must restore the plaintext in the clone");
+    assert_eq!(
+        restored,
+        plaintext.as_bytes(),
+        "the fresh clone must be decryptable-by-design from the committed ciphertext alone"
+    );
+    assert!(
+        !clone.path().join("secret.env.secret").exists(),
+        "reveal in the clone must delete the .secret file"
+    );
 }

@@ -5,22 +5,43 @@ use std::path::{Path, PathBuf};
 use crate::tracked_files::validate_tracked_path;
 use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, Keyring, TrackedFiles};
 
-const SECRETS_DIR: &str = ".git-gpg/secrets";
-
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
-/// The ciphertext name is the FULL original file name plus ".asc" so that
-/// extensionless and dot files keep their exact name (notes -> notes.asc,
-/// a.tar.gz -> a.tar.gz.asc, .env -> .env.asc). Shared by hide and reveal
-/// so the two sides cannot drift apart.
+/// The ciphertext lives BESIDE the plaintext, named after git-secret's
+/// convention: the FULL original file name plus ".secret" (notes ->
+/// notes.secret, a.tar.gz -> a.tar.gz.secret, .env -> .env.secret,
+/// sub/dir/x -> sub/dir/x.secret). Shared by hide, reveal, cat and changes
+/// so the sides cannot drift apart.
 pub(crate) fn encrypted_path_for(repo_root: &Path, file: &Path) -> PathBuf {
     repo_root
-        .join(SECRETS_DIR)
         .join(file)
         .with_file_name(format!(
-            "{}.asc",
+            "{}.secret",
             file.file_name().unwrap_or_default().to_string_lossy()
         ))
+}
+
+/// Defence in depth: the ciphertext must stay inside the repository root,
+/// exactly beside its plaintext — i.e. it must be `<plaintext>.secret`.
+/// Call this after computing the ciphertext path with `encrypted_path_for`;
+/// never re-invent per-call-site path math.
+pub(crate) fn ensure_ciphertext_beside_plaintext(
+    repo_root: &Path,
+    file: &Path,
+    encrypted_path: &Path,
+) -> Result<()> {
+    let plaintext_path = repo_root.join(file);
+    let beside_plaintext = plaintext_path.with_file_name(format!(
+        "{}.secret",
+        file.file_name().unwrap_or_default().to_string_lossy()
+    ));
+    if encrypted_path != beside_plaintext || !encrypted_path.starts_with(repo_root) {
+        anyhow::bail!(
+            "Encrypted path escaped the repository root: {}",
+            encrypted_path.display()
+        );
+    }
+    Ok(())
 }
 
 /// Encrypts all tracked files to all keys in the keyring.
@@ -56,8 +77,6 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
         return Ok(());
     }
 
-    let secrets_dir = repo_root.join(SECRETS_DIR);
-
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
@@ -74,13 +93,9 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
 
-        // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-        if !encrypted_path.starts_with(&secrets_dir) {
-            anyhow::bail!(
-                "Encrypted path escaped the secrets directory: {}",
-                encrypted_path.display()
-            );
-        }
+        // Defence in depth: the ciphertext must stay inside the repository
+        // root, beside its plaintext
+        ensure_ciphertext_beside_plaintext(repo_root, file, &encrypted_path)?;
 
         // Create parent dirs
         if let Some(parent) = encrypted_path.parent() {

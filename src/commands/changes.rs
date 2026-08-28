@@ -2,11 +2,9 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::commands::hide::encrypted_path_for;
+use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::validate_tracked_path;
 use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
-
-const SECRETS_DIR: &str = ".git-gpg/secrets";
 
 /// Splits bytes into lines on '\n' for the compact text diff.
 fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
@@ -25,7 +23,7 @@ fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
 /// same way cmd_cat resolves them (canonicalise-and-strip; relative paths
 /// resolve against `repo_root`), and must match entries in tracked.json.
 /// Tracked paths are stored repo-relative and are validated, so the
-/// ciphertext path can never escape .git-gpg/secrets.
+/// ciphertext path can never escape the repository root.
 pub fn cmd_changes(
     repo_root: &Path,
     files: Vec<String>,
@@ -88,20 +86,14 @@ pub fn cmd_changes(
         resolved
     };
 
-    let secrets_dir = repo_root.join(SECRETS_DIR);
-
     let mut changed = Vec::new();
     for file in &targets {
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
 
-        // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-        if !encrypted_path.starts_with(&secrets_dir) {
-            anyhow::bail!(
-                "Encrypted path escaped the secrets directory: {}",
-                encrypted_path.display()
-            );
-        }
+        // Defence in depth: the ciphertext must stay inside the repository
+        // root, beside its plaintext
+        ensure_ciphertext_beside_plaintext(repo_root, file, &encrypted_path)?;
 
         // No ciphertext yet: the file was never hidden
         if !encrypted_path.exists() {

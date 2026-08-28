@@ -668,20 +668,29 @@ fn test_init_creates_empty_tracked_json() {
 }
 
 #[test]
-fn test_init_creates_secrets_directory() {
+fn init_no_longer_creates_secrets_dir_or_gitignore_entry() {
     let temp = tempfile::tempdir().unwrap();
-    cmd_init(temp.path()).unwrap();
-    assert!(temp.path().join(".git-gpg").join("secrets").exists());
-}
+    std::fs::write(temp.path().join(".gitignore"), "/target\n*.log\n").unwrap();
+    let gitignore_before =
+        std::fs::read(temp.path().join(".gitignore")).unwrap();
 
-#[test]
-fn test_init_adds_gitignore_entry() {
-    let temp = tempfile::tempdir().unwrap();
     cmd_init(temp.path()).unwrap();
-    let gitignore = temp.path().join(".gitignore");
-    assert!(gitignore.exists());
-    let content = std::fs::read_to_string(gitignore).unwrap();
-    assert!(content.contains(".git-gpg/secrets"));
+
+    assert!(
+        !temp.path().join(".git-gpg").join("secrets").exists(),
+        "init must not create a .git-gpg/secrets directory"
+    );
+    let gitignore_after =
+        std::fs::read(temp.path().join(".gitignore")).unwrap();
+    assert_eq!(
+        gitignore_before, gitignore_after,
+        ".gitignore must be byte-identical after init"
+    );
+    assert!(
+        !gitignore_after.windows(b".git-gpg".len()).any(|w| w == b".git-gpg"),
+        ".gitignore must gain no git-gpg entry, got: {:?}",
+        String::from_utf8_lossy(&gitignore_after)
+    );
 }
 
 #[test]
@@ -692,13 +701,17 @@ fn test_init_idempotent() {
 }
 
 #[test]
-fn test_init_appends_to_existing_gitignore() {
+fn test_init_leaves_existing_gitignore_untouched() {
     let temp = tempfile::tempdir().unwrap();
     std::fs::write(temp.path().join(".gitignore"), "/target\n").unwrap();
     cmd_init(temp.path()).unwrap();
     let content = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
     assert!(content.contains("/target"));
-    assert!(content.contains(".git-gpg/secrets"));
+    assert!(
+        !content.contains(".git-gpg"),
+        "init must not append any .git-gpg line, got: {}",
+        content
+    );
 }
 
 // ============================================================================
@@ -1773,17 +1786,20 @@ fn test_clean_removes_git_gpg_directory() {
 }
 
 #[test]
-fn test_clean_removes_gitignore_entry() {
+fn clean_keeps_gitignore_untouched() {
     let temp = tempfile::tempdir().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::fs::write(temp.path().join(".gitignore"), "/target\n").unwrap();
+    std::fs::write(temp.path().join(".gitignore"), "/target\n*.log\n").unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let result = cmd_clean(temp.path());
     assert!(result.is_ok());
-    
+
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
-    assert!(!gitignore.contains(".git-gpg/secrets"));
+    assert_eq!(
+        gitignore, "/target\n*.log\n",
+        "clean must not rewrite .gitignore"
+    );
 }
 
 #[test]

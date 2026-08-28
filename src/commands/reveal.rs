@@ -2,11 +2,9 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::commands::hide::encrypted_path_for;
+use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::validate_tracked_path;
 use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email, Keyring, TrackedFiles};
-
-const SECRETS_DIR: &str = ".git-gpg/secrets";
 
 /// Decrypts all tracked files using the user's private key.
 ///
@@ -40,8 +38,6 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
         return Ok(());
     }
 
-    let secrets_dir = repo_root.join(SECRETS_DIR);
-
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
@@ -49,13 +45,9 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
 
-        // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-        if !encrypted_path.starts_with(&secrets_dir) {
-            anyhow::bail!(
-                "Encrypted path escaped the secrets directory: {}",
-                encrypted_path.display()
-            );
-        }
+        // Defence in depth: the ciphertext must stay inside the repository
+        // root, beside its plaintext
+        ensure_ciphertext_beside_plaintext(repo_root, file, &encrypted_path)?;
 
         // Check encrypted file exists
         if !encrypted_path.exists() {

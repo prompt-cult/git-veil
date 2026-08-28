@@ -4,8 +4,6 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
-const SECRETS_DIR: &str = ".git-gpg/secrets";
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrackedFiles {
     pub files: Vec<PathBuf>,
@@ -15,10 +13,12 @@ pub struct TrackedFiles {
 ///
 /// Tracked paths must be relative, must contain no `..` (or other
 /// non-normal) components, and — as defence in depth — must stay inside
-/// `.git-gpg/secrets` when joined under it. This is the shared boundary
-/// check used when loading tracked.json and before any path use in
-/// hide/reveal, so a malicious tracked.json (committed by any repo writer)
-/// cannot make git-gpg read or write outside the repository.
+/// the repository root when joined under it (ciphertext lives beside the
+/// plaintext as `<name>.secret`, so every tracked path is used both for
+/// reads and for sibling writes). This is the shared boundary check used
+/// when loading tracked.json and before any path use in hide/reveal, so a
+/// malicious tracked.json (committed by any repo writer) cannot make git-gpg
+/// read or write outside the repository.
 pub fn validate_tracked_path(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty() {
         anyhow::bail!("Tracked path is empty");
@@ -39,14 +39,39 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
             ),
         }
     }
-    let joined = PathBuf::from(SECRETS_DIR).join(path);
-    if !joined.starts_with(SECRETS_DIR) {
+    if !stays_inside_repo_root(path) {
         anyhow::bail!(
-            "Tracked path escapes the secrets directory: {}",
+            "Tracked path escapes the repository root: {}",
             path.display()
         );
     }
     Ok(())
+}
+
+/// Defence in depth: lexically joins `path` under a repository root and
+/// resolves `.`/`..` components; the result must still be inside that root.
+/// The component check in `validate_tracked_path` already rejects `..`, so
+/// this names and enforces the repo-root containment guarantee on its own:
+/// if the component rule is ever relaxed, this check still holds the line.
+fn stays_inside_repo_root(path: &Path) -> bool {
+    // A single representative root suffices: containment under an absolute
+    // root is a lexical property independent of the root's exact name.
+    let repo_root = PathBuf::from("/repo");
+    let mut normalized = PathBuf::new();
+    for component in repo_root.join(path).components() {
+        match component {
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::Prefix(_) => return false,
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return false;
+                }
+            }
+            Component::Normal(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized.starts_with(&repo_root)
 }
 
 impl TrackedFiles {
