@@ -115,6 +115,10 @@ Step-by-step guides are in `docs/`:
 - Migrating from git-secret: [docs/migrating-from-git-secret.md](docs/migrating-from-git-secret.md)
 - Migrating from git-crypt: [docs/migrating-from-git-crypt.md](docs/migrating-from-git-crypt.md)
 
+The specification of the underlying mechanisms (repository identity, trust
+anchoring, key validity, crash safety, path safety) is in
+[docs/design.md](docs/design.md).
+
 ## Compatibility with git-secret
 
 git-veil does NOT maintain compatibility with git-secret's cryptographic
