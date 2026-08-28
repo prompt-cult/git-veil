@@ -922,11 +922,91 @@ fn init_no_longer_creates_secrets_dir_or_gitignore_entry() {
     );
 }
 
+/// Since the fresh-init guard, "idempotent" only holds while trust.json is
+/// empty: a re-init over an empty trust store still resets the degenerate
+/// state, but a re-init over established trust is refused (see
+/// init_refuses_to_reset_existing_trust below).
 #[test]
 fn test_init_idempotent() {
     let temp = tempfile::tempdir().unwrap();
     cmd_init(temp.path()).unwrap();
     cmd_init(temp.path()).unwrap();
+}
+
+#[test]
+fn init_refuses_to_reset_existing_trust() {
+    let temp = setup_git_repo_with_origin_remote();
+    cmd_init(temp.path()).unwrap();
+
+    let (_owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let owner_keyfile = temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let gpg_home = temp.path().join("gpg-home");
+    cmd_trust(
+        temp.path(),
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    let snapshot = |name: &str| {
+        std::fs::read(temp.path().join(".git-gpg").join(name))
+            .unwrap_or_else(|e| panic!("{} must exist before the second init: {}", name, e))
+    };
+    let keyring_before = snapshot("keyring");
+    let trust_before = snapshot("trust.json");
+    let tracked_before = snapshot("tracked.json");
+
+    let result = cmd_init(temp.path());
+
+    let err = result
+        .expect_err("a second init over established trust must be refused");
+    assert!(
+        err.to_string().contains("already initialized"),
+        "the refusal must say the repo is already initialized, got: {}",
+        err
+    );
+    assert_eq!(
+        snapshot("keyring"),
+        keyring_before,
+        "keyring must be byte-identical after the refused init"
+    );
+    assert_eq!(
+        snapshot("trust.json"),
+        trust_before,
+        "trust.json must be byte-identical after the refused init"
+    );
+    assert_eq!(
+        snapshot("tracked.json"),
+        tracked_before,
+        "tracked.json must be byte-identical after the refused init"
+    );
+}
+
+#[test]
+fn init_still_works_on_fresh_repo_and_half_initialized_repo() {
+    // Fresh repo: init must succeed.
+    let fresh = tempfile::tempdir().unwrap();
+    cmd_init(fresh.path()).expect("fresh init must succeed");
+    assert!(fresh.path().join(".git-gpg/trust.json").exists());
+
+    // Half-initialised repo A: .git-gpg/ exists, trust.json absent.
+    let half_a = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(half_a.path().join(".git-gpg")).unwrap();
+    cmd_init(half_a.path()).expect("init with .git-gpg/ but no trust.json must succeed");
+
+    // Half-initialised repo B: .git-gpg/ exists, trust.json present but empty.
+    let half_b = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(half_b.path().join(".git-gpg")).unwrap();
+    std::fs::write(
+        half_b.path().join(".git-gpg/trust.json"),
+        "{\"trusted_keys\":{}}",
+    )
+    .unwrap();
+    cmd_init(half_b.path()).expect("init with an empty trust.json must succeed");
 }
 
 #[test]
@@ -1536,7 +1616,7 @@ fn test_clean_removes_git_gpg_directory() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    let result = cmd_clean(temp.path());
+    let result = cmd_clean(temp.path(), false);
     assert!(result.is_ok());
     assert!(!temp.path().join(".git-gpg").exists());
 }
@@ -1548,7 +1628,7 @@ fn clean_keeps_gitignore_untouched() {
     std::fs::write(temp.path().join(".gitignore"), "/target\n*.log\n").unwrap();
     cmd_init(temp.path()).unwrap();
 
-    let result = cmd_clean(temp.path());
+    let result = cmd_clean(temp.path(), false);
     assert!(result.is_ok());
 
     let gitignore = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
@@ -1564,9 +1644,100 @@ fn test_clean_idempotent() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    cmd_clean(temp.path()).unwrap();
-    let result = cmd_clean(temp.path());
+    cmd_clean(temp.path(), false).unwrap();
+    let result = cmd_clean(temp.path(), false);
     assert!(result.is_ok());
+}
+
+// ============================================================================
+// Phase 6: Clean Command — --yes safety gate
+//
+// Written Red/Green: pre-fix, cmd_clean took no `yes` argument and removed
+// .git-gpg/ unconditionally, so these tests failed to compile (missing
+// argument) and the refusal contracts had no implementation.
+// ============================================================================
+
+#[test]
+fn clean_without_yes_refuses_to_destroy_ciphertext() {
+    let (temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+
+    std::fs::write(temp.path().join("secret.env"), "s3cret").unwrap();
+    cmd_add(temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    assert!(temp.path().join("secret.env.secret").exists());
+
+    let result = cmd_clean(temp.path(), false);
+
+    let err = result
+        .expect_err("clean without --yes must refuse to destroy ciphertext");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("--yes"),
+        "the refusal must explain that --yes is required, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains("secret.env.secret"),
+        "the refusal must list the ciphertext that would be destroyed, got: {}",
+        msg
+    );
+    assert!(
+        temp.path().join(".git-gpg").exists(),
+        "a refused clean must leave .git-gpg intact"
+    );
+    assert!(
+        temp.path().join("secret.env.secret").exists(),
+        "a refused clean must leave the ciphertext intact"
+    );
+}
+
+#[test]
+fn clean_without_yes_refuses_when_tracked_files_exist() {
+    let (temp, _gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+
+    std::fs::write(temp.path().join("plain.env"), "not yet hidden").unwrap();
+    cmd_add(temp.path(), vec!["plain.env".to_string()]).expect("cmd_add must succeed");
+
+    let result = cmd_clean(temp.path(), false);
+
+    let err = result
+        .expect_err("clean without --yes must refuse while tracked files exist");
+    assert!(
+        err.to_string().contains("--yes"),
+        "the refusal must explain that --yes is required, got: {}",
+        err
+    );
+    assert!(
+        temp.path().join(".git-gpg").exists(),
+        "a refused clean must leave .git-gpg intact"
+    );
+}
+
+#[test]
+fn clean_with_yes_destroys_state() {
+    let (temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+
+    std::fs::write(temp.path().join("secret.env"), "s3cret").unwrap();
+    cmd_add(temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    cmd_clean(temp.path(), true).expect("clean --yes must proceed");
+
+    assert!(
+        !temp.path().join(".git-gpg").exists(),
+        "clean --yes must remove .git-gpg"
+    );
+}
+
+#[test]
+fn clean_without_yes_succeeds_when_nothing_tracked() {
+    let temp = setup_git_repo_with_origin_remote();
+    cmd_init(temp.path()).unwrap();
+
+    cmd_clean(temp.path(), false)
+        .expect("clean of a repo with nothing tracked must not require --yes");
+
+    assert!(!temp.path().join(".git-gpg").exists());
 }
 
 // ============================================================================

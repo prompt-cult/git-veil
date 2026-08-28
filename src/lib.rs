@@ -26,6 +26,7 @@ pub use commands::reveal::cmd_reveal;
 pub use commands::show_repo_id::cmd_show_repo_id;
 pub use commands::tell::cmd_tell;
 pub use commands::trust::cmd_trust;
+pub use commands::unhide::cmd_unhide;
 pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
 pub use gpg_integration::{decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key, encrypt_to_gpg_keys, find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_gpg_home};

@@ -345,6 +345,80 @@ fn home_free_subcommands_work_without_home_set() {
 }
 
 // ============================================================================
+// Safety/UX: clean requires --yes before destroying secret material;
+// unhide restores one hidden file
+// ============================================================================
+
+#[test]
+fn cli_clean_requires_yes_flag() {
+    let (repo_temp, home_temp) = setup_hidden_repo();
+    assert!(repo_temp.path().join("secret.env.secret").exists());
+
+    let out = run(repo_temp.path(), home_temp.path(), &["clean"]);
+    assert!(
+        !out.status.success(),
+        "clean without --yes must refuse to destroy ciphertext, got success"
+    );
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        combined.contains("--yes"),
+        "the refusal must explain that --yes is required, got: {}",
+        combined
+    );
+    assert!(
+        repo_temp.path().join(".git-gpg").exists(),
+        "a refused clean must leave .git-gpg intact"
+    );
+    assert!(
+        repo_temp.path().join("secret.env.secret").exists(),
+        "a refused clean must leave the ciphertext intact"
+    );
+
+    let out = run(repo_temp.path(), home_temp.path(), &["clean", "--yes"]);
+    assert!(
+        out.status.success(),
+        "clean --yes must proceed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !repo_temp.path().join(".git-gpg").exists(),
+        "clean --yes must remove .git-gpg"
+    );
+}
+
+#[test]
+fn cli_unhide_decrypts_one_file() {
+    let (repo_temp, home_temp) = setup_hidden_repo();
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["unhide", "secret.env", "--email", "alice@example.com"],
+    );
+
+    assert!(
+        out.status.success(),
+        "unhide must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("secret.env")).expect("plaintext must be restored"),
+        b"s3cret",
+        "unhide must restore the original plaintext"
+    );
+    assert!(
+        !repo_temp.path().join("secret.env.secret").exists(),
+        "unhide must delete the ciphertext"
+    );
+}
+
+// ============================================================================
 // Passphrase-protected private keys: env var + --passphrase-stdin
 //
 // Written Red/Green: pre-fix the binary only unlocked keys with an empty

@@ -14,6 +14,23 @@ use crate::{Keyring, TrackedFiles, TrustStore};
 pub fn cmd_init(repo_root: &Path) -> Result<()> {
     let git_gpg_dir = repo_root.join(".git-gpg");
 
+    // Fresh init only: a re-init over an established trust anchor would
+    // silently destroy the user's trust.json and tracked-file manifest, so
+    // refuse while real trust state exists. A `.git-gpg/` directory with an
+    // absent or empty trust.json is a degenerate half-initialised state and
+    // keeps the old reset behaviour.
+    let trust_path = git_gpg_dir.join("trust.json");
+    if git_gpg_dir.is_dir() && trust_path.exists() {
+        let existing_trust = TrustStore::load_from_file(&trust_path)
+            .context("Failed to read existing trust.json")?;
+        if !existing_trust.trusted_keys.is_empty() {
+            anyhow::bail!(
+                "git-gpg is already initialized here; refusing to reset existing trust state \
+                 — remove .git-gpg/ explicitly if you really want a fresh start"
+            );
+        }
+    }
+
     // Create the internal state directory
     fs::create_dir_all(&git_gpg_dir).context("Failed to create .git-gpg directory")?;
 

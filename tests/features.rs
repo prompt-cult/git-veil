@@ -5,7 +5,8 @@
 
 use git_gpg::{
     base64_encode_public_key, check_email_in_identities, cmd_add, cmd_cat, cmd_changes, cmd_hide,
-    cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring,
+    cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide,
+    cmd_verify_keyring,
     decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key,
     extract_content_to_verify_from_keyring,
     extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
@@ -2455,4 +2456,110 @@ fn protected_key_in_secring_is_findable_without_passphrase() {
 
     find_private_key_by_email(&gpg_home, "locked@example.com")
         .expect("a passphrase-protected key must be findable (parsed) without the passphrase");
+}
+
+// ============================================================================
+// Unhide — inverse of hide for ONE file
+//
+// Written Red/Green: pre-fix cmd_unhide did not exist, so these tests failed
+// to compile (unresolved import) against the unmodified source.
+// ============================================================================
+
+#[test]
+fn unhide_restores_plaintext_and_removes_secret_for_one_file() {
+    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write(repo_temp.path().join("a.env"), "alpha secret").unwrap();
+    std::fs::write(repo_temp.path().join("b.env"), "beta secret").unwrap();
+    cmd_add(
+        repo_temp.path(),
+        vec!["a.env".to_string(), "b.env".to_string()],
+    )
+    .expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    cmd_unhide(
+        repo_temp.path(),
+        "a.env",
+        "owner@github.com",
+        "origin",
+        &gpg_home,
+        None,
+    )
+    .expect("cmd_unhide must succeed for a tracked, hidden file");
+
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("a.env")).expect("a.env must be restored"),
+        b"alpha secret",
+        "unhide must restore the plaintext byte-exact"
+    );
+    assert!(
+        !repo_temp.path().join("a.env.secret").exists(),
+        "unhide must delete the ciphertext of the unhidden file"
+    );
+    assert!(
+        repo_temp.path().join("b.env.secret").exists(),
+        "unhide must leave other tracked files hidden"
+    );
+    assert!(
+        !repo_temp.path().join("b.env").exists(),
+        "unhide must not reveal files it was not asked to unhide"
+    );
+}
+
+#[test]
+fn unhide_fails_for_untracked_file() {
+    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write(repo_temp.path().join("tracked.env"), "s3cret").unwrap();
+    cmd_add(repo_temp.path(), vec!["tracked.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    let result = cmd_unhide(
+        repo_temp.path(),
+        "untracked.env",
+        "owner@github.com",
+        "origin",
+        &gpg_home,
+        None,
+    );
+
+    let err = result
+        .expect_err("unhide of an untracked file must fail closed");
+    assert!(
+        err.to_string().contains("not tracked"),
+        "the failure must name the untracked path, got: {}",
+        err
+    );
+    assert!(
+        repo_temp.path().join("tracked.env.secret").exists(),
+        "a failed unhide must leave the ciphertext intact"
+    );
+}
+
+#[test]
+fn unhide_fails_when_secret_missing() {
+    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write(repo_temp.path().join("tracked.env"), "s3cret").unwrap();
+    cmd_add(repo_temp.path(), vec!["tracked.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::remove_file(repo_temp.path().join("tracked.env.secret")).unwrap();
+
+    let result = cmd_unhide(
+        repo_temp.path(),
+        "tracked.env",
+        "owner@github.com",
+        "origin",
+        &gpg_home,
+        None,
+    );
+
+    let err = result
+        .expect_err("unhide without the ciphertext must fail");
+    assert!(
+        err.to_string().contains("Encrypted file not found"),
+        "the failure must name the missing ciphertext, got: {}",
+        err
+    );
 }

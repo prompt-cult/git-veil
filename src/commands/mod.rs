@@ -12,6 +12,7 @@ pub mod remove;
 pub mod list;
 pub mod hide;
 pub mod reveal;
+pub mod unhide;
 pub mod cat;
 pub mod changes;
 pub mod clean;

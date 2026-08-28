@@ -4,8 +4,8 @@ use anyhow::{Context as _, Result};
 
 use git_gpg::{
     cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove, cmd_list,
-    cmd_hide, cmd_reveal, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id, cmd_whoami,
-    cmd_verify_keyring, cmd_list_keys, default_gpg_home, get_git_config_email,
+    cmd_hide, cmd_reveal, cmd_unhide, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id,
+    cmd_whoami, cmd_verify_keyring, cmd_list_keys, default_gpg_home, get_git_config_email,
 };
 
 #[derive(Debug, clap::Parser)]
@@ -148,6 +148,26 @@ enum Commands {
         passphrase_stdin: bool,
     },
 
+    /// Unhide - decrypt a single tracked file back to plaintext and delete its ciphertext
+    Unhide {
+        /// File to unhide
+        file: String,
+        /// Your email address
+        #[arg(long)]
+        email: Option<String>,
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// GPG home directory
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+        /// Read the passphrase for a passphrase-protected private key from
+        /// stdin (exactly one line). Wins over the GITGPG_PASSPHRASE
+        /// environment variable; never pass a passphrase as a CLI argument.
+        #[arg(long)]
+        passphrase_stdin: bool,
+    },
+
     /// Changes - report where plaintext differs from the last hidden version
     Changes {
         /// File(s) to check (default: all tracked files)
@@ -202,7 +222,13 @@ enum Commands {
     ListKeys,
 
     /// Clean - remove all git-gpg metadata
-    Clean,
+    Clean {
+        /// Confirm destruction of tracked state and any ciphertext. Required
+        /// when the clean would destroy tracked files or their in-place
+        /// `<name>.secret` ciphertext (which may be the only remaining copy).
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -288,6 +314,11 @@ fn main() -> Result<()> {
             let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_cat(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
         }
+        Commands::Unhide { file, email, remote, gpg_home: opt, passphrase_stdin } => {
+            let email = resolve_email(&repo_root, email)?;
+            let passphrase = resolve_passphrase(passphrase_stdin)?;
+            cmd_unhide(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+        }
         Commands::Changes { files, email, remote, gpg_home: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
@@ -301,7 +332,7 @@ fn main() -> Result<()> {
             cmd_verify_keyring(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::ListKeys => cmd_list_keys(&repo_root)?,
-        Commands::Clean => cmd_clean(&repo_root)?,
+        Commands::Clean { yes } => cmd_clean(&repo_root, yes)?,
     }
 
     Ok(())
