@@ -930,6 +930,140 @@ fn cli_export_round_trip_into_tell() {
     );
 }
 
+// ============================================================================
+// tell hints to re-hide: after telling a new collaborator, existing
+// ciphertext (hidden before the tell) does not include their key, so the
+// owner must be reminded to run `git-gpg hide` again.
+// ============================================================================
+
+#[test]
+fn cli_tell_hints_to_rehide_when_ciphertext_exists() {
+    // setup_hidden_repo runs init/trust/tell(alice)/add/hide, so a ciphertext
+    // exists that was encrypted to owner+alice only.
+    let (repo_temp, home_temp) = setup_hidden_repo();
+
+    let (_, bob_pub) = generate_test_key("bob@example.com");
+    let bob_keyfile = repo_temp.path().join("bob.pub");
+    write_public_key_file(&bob_pub, &bob_keyfile);
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["tell", "bob@example.com", "bob.pub"],
+    );
+
+    assert!(
+        out.status.success(),
+        "tell must still exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("re-encrypt"),
+        "tell must hint that existing ciphertext needs re-encryption, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("git-gpg hide"),
+        "the hint must name the hide command, got: {}",
+        stdout
+    );
+
+    let keyring_text =
+        std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    assert!(
+        keyring_text.contains("alice@example.com") && keyring_text.contains("bob@example.com"),
+        "the keyring must contain both entries after the tell, got: {}",
+        keyring_text
+    );
+}
+
+#[test]
+fn cli_tell_no_hint_when_nothing_hidden() {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+
+    git(repo_temp.path(), &["init"]);
+    git(
+        repo_temp.path(),
+        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    );
+    git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (_, bob_pub) = generate_test_key("bob@example.com");
+
+    write_multi_key_secret_keys(
+        &home_temp.path().join(".git-gpg"),
+        &[owner_sec, alice_sec],
+    );
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+    let bob_keyfile = repo_temp.path().join("bob.pub");
+    write_public_key_file(&bob_pub, &bob_keyfile);
+
+    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
+    assert!(out.status.success(), "init failed: {:?}", out.stderr);
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["trust", "repo+owner@github.com", "owner.pub"],
+    );
+    assert!(out.status.success(), "trust failed: {:?}", out.stderr);
+
+    // No tracked files at all: tell must succeed with NO hint.
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["tell", "alice@example.com", "alice.pub"],
+    );
+    assert!(
+        out.status.success(),
+        "tell must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("✓ Added alice@example.com to keyring"),
+        "tell must still print its success line, got: {}",
+        stdout
+    );
+    assert!(
+        !stdout.contains("re-encrypt"),
+        "tell must not hint when there is nothing to re-encrypt, got: {}",
+        stdout
+    );
+
+    // Tracked but NOT yet hidden (plaintext still present, no ciphertext):
+    // the next hide will include everyone, so still no hint.
+    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
+    let out = run(repo_temp.path(), home_temp.path(), &["add", "secret.env"]);
+    assert!(out.status.success(), "add failed: {:?}", out.stderr);
+
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["tell", "bob@example.com", "bob.pub"],
+    );
+    assert!(
+        out.status.success(),
+        "tell must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.contains("re-encrypt"),
+        "tell must not hint when nothing has been hidden yet, got: {}",
+        stdout
+    );
+}
+
 #[test]
 fn cli_removekey_round_trip() {
     // A departing user's flow: import two keys, export still works, removekey

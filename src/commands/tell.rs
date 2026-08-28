@@ -2,8 +2,9 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::commands::hide::encrypted_path_for;
 use crate::fs_atomic::write_atomic;
-use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key, sign_keyring_content, validate_public_key_for_use, verify_keyring_against_trust, KeyUse, Keyring, TrustStore};
+use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key, sign_keyring_content, validate_public_key_for_use, verify_keyring_against_trust, KeyUse, Keyring, TrackedFiles, TrustStore};
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
 /// signed into the keyring. It is discarded immediately and never written to
@@ -96,5 +97,24 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
         .context("Failed to write keyring file")?;
 
     println!("✓ Added {} to keyring", email);
+
+    // UX hint: any ciphertext hidden BEFORE this tell was encrypted to the
+    // previous keyring and does not include the new collaborator's key, so
+    // their first reveal would fail. Point the owner at `git-gpg hide`.
+    // Informational only: a load failure or empty tracked list means there
+    // is nothing (yet) to re-encrypt, so no hint and never an error.
+    let tracked = TrackedFiles::load(&repo_root.join(".git-gpg/tracked.json"));
+    if let Ok(tracked) = tracked {
+        let has_ciphertext = tracked
+            .files
+            .iter()
+            .any(|file| encrypted_path_for(repo_root, file).exists());
+        if has_ciphertext {
+            println!(
+                "note: existing ciphertext does not include {}; run git-gpg hide to re-encrypt all tracked files to the current keyring",
+                email
+            );
+        }
+    }
     Ok(())
 }
