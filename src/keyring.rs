@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 
+use crate::armour::{SIG_BEGIN, SIG_END};
+
 pub const BEGIN_MARKER: &str = "-----BEGIN GIT-GPG KEYRING-----";
 pub const END_MARKER: &str = "-----END GIT-GPG KEYRING-----";
-pub const SIG_BEGIN: &str = "-----BEGIN PGP SIGNATURE-----";
-pub const SIG_END: &str = "-----END PGP SIGNATURE-----";
 
 #[derive(Debug, Clone)]
 pub struct KeyringEntry {

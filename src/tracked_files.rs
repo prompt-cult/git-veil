@@ -74,6 +74,135 @@ fn stays_inside_repo_root(path: &Path) -> bool {
     normalized.starts_with(&repo_root)
 }
 
+/// How a user-supplied path is resolved to its repo-relative tracked form.
+///
+/// The commands share one canonicalise-and-strip shape but deliberately
+/// differ in two documented ways:
+///
+/// - whether the plaintext may be absent: `cmd_add`, `cmd_cat` and
+///   `cmd_changes` require existence for the paths they canonicalise,
+///   while `cmd_remove` and `cmd_unhide` must work while the file is
+///   hidden (hide deleted the plaintext, only the `.secret` ciphertext
+///   remains);
+/// - which path `validate_tracked_path` guards: `cmd_add`/`cmd_remove`
+///   validate the resolved result (it is about to be stored in
+///   tracked.json), while `cmd_cat`/`cmd_changes`/`cmd_unhide` validate
+///   only the literal relative input.
+///
+/// The variants pin down each caller's exact contract;
+/// [`resolve_repo_relative_input`] enforces it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathResolveMode {
+    /// `cmd_add`: the input must exist. Both absolute and relative inputs
+    /// are canonicalised against the canonical repo root (symlinks
+    /// resolved, `..` collapsed) before stripping, and the resolved path
+    /// is validated.
+    CanonicaliseRequireExists,
+    /// `cmd_remove`: no existence requirement. Absolute inputs are
+    /// stripped lexically against the canonical repo root, relative inputs
+    /// are taken as-is, and the resolved path is validated.
+    LexicalStripValidateResolved,
+    /// `cmd_cat` / `cmd_changes`: absolute inputs must exist and are
+    /// canonicalised before stripping; relative inputs are taken as-is
+    /// after validation. The stripped absolute-derived path is NOT
+    /// re-validated: the caller's tracked-file membership check guards it.
+    CanonicaliseAbsoluteValidateRelative,
+    /// `cmd_unhide`: no existence requirement. Absolute inputs are
+    /// stripped lexically; relative inputs are taken as-is after
+    /// validation; the stripped path is not re-validated.
+    LexicalStripValidateRelative,
+}
+
+/// Resolves a user-supplied path to its repo-relative tracked form,
+/// according to `mode`.
+///
+/// `root_verb` names the command's action for the "cannot operate on the
+/// repository root itself" error (e.g. `"track"`, `"remove"`, `"cat"`,
+/// `"unhide"`, `"check"`).
+pub(crate) fn resolve_repo_relative_input(
+    repo_root: &Path,
+    user_path: &str,
+    mode: PathResolveMode,
+    root_verb: &str,
+) -> Result<PathBuf> {
+    let canonical_root = fs::canonicalize(repo_root)
+        .context("Failed to canonicalise repository root")?;
+    let path = PathBuf::from(user_path);
+
+    match mode {
+        PathResolveMode::CanonicaliseRequireExists => {
+            let canonical = fs::canonicalize(canonical_root.join(&path))
+                .with_context(|| format!("File not found: {}", user_path))?;
+            let relative = canonical
+                .strip_prefix(&canonical_root)
+                .with_context(|| format!(
+                    "File is outside the repository: {} (resolves to {})",
+                    user_path,
+                    canonical.display()
+                ))?
+                .to_path_buf();
+            if relative.as_os_str().is_empty() {
+                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+            }
+            validate_tracked_path(&relative)
+                .with_context(|| format!("Invalid path for tracked file: {}", user_path))?;
+            Ok(relative)
+        }
+        PathResolveMode::LexicalStripValidateResolved => {
+            let relative: PathBuf = if path.is_absolute() {
+                path.strip_prefix(&canonical_root)
+                    .with_context(|| format!("File is outside the repository: {}", user_path))?
+                    .to_path_buf()
+            } else {
+                path
+            };
+            if relative.as_os_str().is_empty() {
+                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+            }
+            validate_tracked_path(&relative)
+                .with_context(|| format!("Invalid path for tracked file: {}", user_path))?;
+            Ok(relative)
+        }
+        PathResolveMode::CanonicaliseAbsoluteValidateRelative => {
+            let relative: PathBuf = if path.is_absolute() {
+                let canonical = fs::canonicalize(&path)
+                    .with_context(|| format!("File not found: {}", user_path))?;
+                canonical
+                    .strip_prefix(&canonical_root)
+                    .with_context(|| format!(
+                        "File is outside the repository: {} (resolves to {})",
+                        user_path,
+                        canonical.display()
+                    ))?
+                    .to_path_buf()
+            } else {
+                validate_tracked_path(&path)
+                    .with_context(|| format!("Invalid path: {}", user_path))?;
+                path
+            };
+            if relative.as_os_str().is_empty() {
+                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+            }
+            Ok(relative)
+        }
+        PathResolveMode::LexicalStripValidateRelative => {
+            let relative: PathBuf = if path.is_absolute() {
+                path.strip_prefix(&canonical_root)
+                    .with_context(|| format!("File is outside the repository: {}", user_path))?
+                    .to_path_buf()
+            } else {
+                validate_tracked_path(&path)
+                    .with_context(|| format!("Invalid path: {}", user_path))?;
+                path
+            };
+            if relative.as_os_str().is_empty() {
+                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+            }
+            Ok(relative)
+        }
+    }
+}
+
 impl TrackedFiles {
     pub fn load(path: &PathBuf) -> Result<Self> {
         if !path.exists() {

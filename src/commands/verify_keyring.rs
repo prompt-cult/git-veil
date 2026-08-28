@@ -3,10 +3,8 @@ use pgp::composed::SignedPublicKey;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustPinStore, TrustStore, Keyring, SIG_BEGIN, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
-
-const PUBKEY_BEGIN: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----";
-const PUBKEY_END: &str = "-----END PGP PUBLIC KEY BLOCK-----";
+use crate::armour::{PUBLIC_KEY_BEGIN, PUBLIC_KEY_END, SIG_BEGIN};
+use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustPinStore, TrustStore, Keyring, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
 
 /// Loads the public key matching `fingerprint` from the gpg home pubring.
 fn load_public_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Result<SignedPublicKey> {
@@ -16,12 +14,12 @@ fn load_public_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Resu
 
     let wanted = fingerprint.to_uppercase();
     let mut rest = content.as_str();
-    while let Some(begin) = rest.find(PUBKEY_BEGIN) {
+    while let Some(begin) = rest.find(PUBLIC_KEY_BEGIN) {
         let after = &rest[begin..];
         let end = after
-            .find(PUBKEY_END)
+            .find(PUBLIC_KEY_END)
             .context("Malformed public key block in pubring.pgp")?
-            + PUBKEY_END.len();
+            + PUBLIC_KEY_END.len();
         let key = parse_armored_public_key(&after[..end])?;
         if extract_key_fingerprint(&key).to_uppercase() == wanted {
             return Ok(key);

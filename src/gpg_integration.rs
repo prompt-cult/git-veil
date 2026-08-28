@@ -1,3 +1,4 @@
+use crate::armour::{PRIVATE_KEY_BEGIN, PRIVATE_KEY_END};
 use crate::pubkey::extract_email_from_user_id;
 use anyhow::{Context, Result};
 use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
@@ -37,9 +38,6 @@ pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<(
     Ok(())
 }
 
-const PRIVATE_KEY_BEGIN_MARKER: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----";
-const PRIVATE_KEY_END_MARKER: &str = "-----END PGP PRIVATE KEY BLOCK-----";
-
 /// Splits file content into individual armoured private key blocks.
 ///
 /// A secring may hold several keys, each as its own armoured block.
@@ -53,10 +51,10 @@ pub(crate) fn split_armored_private_key_blocks(
 ) -> Result<Vec<String>> {
     let mut blocks = Vec::new();
     let mut rest = content;
-    while let Some(start) = rest.find(PRIVATE_KEY_BEGIN_MARKER) {
+    while let Some(start) = rest.find(PRIVATE_KEY_BEGIN) {
         let after = &rest[start..];
-        let end = match after.find(PRIVATE_KEY_END_MARKER) {
-            Some(e) => e + PRIVATE_KEY_END_MARKER.len(),
+        let end = match after.find(PRIVATE_KEY_END) {
+            Some(e) => e + PRIVATE_KEY_END.len(),
             None => anyhow::bail!(
                 "Unterminated private key block in {} (corrupt secring)",
                 secring_path.display()

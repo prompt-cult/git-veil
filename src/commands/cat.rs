@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
-use crate::tracked_files::validate_tracked_path;
+use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input};
 use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
 
 /// Decrypts a single tracked file to stdout without touching disk state.
@@ -29,33 +29,13 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
     let tracked_path = repo_root.join(".git-gpg/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
-    // Canonicalise the repository root once
-    let canonical_root = fs::canonicalize(repo_root)
-        .context("Failed to canonicalise repository root")?;
-
     // Resolve the user-supplied path to its repo-relative form
-    let path = PathBuf::from(file);
-
-    let relative: PathBuf = if path.is_absolute() {
-        let canonical = fs::canonicalize(&path)
-            .with_context(|| format!("File not found: {}", file))?;
-        canonical
-            .strip_prefix(&canonical_root)
-            .with_context(|| format!(
-                "File is outside the repository: {} (resolves to {})",
-                file,
-                canonical.display()
-            ))?
-            .to_path_buf()
-    } else {
-        validate_tracked_path(&path)
-            .with_context(|| format!("Invalid path: {}", file))?;
-        path
-    };
-
-    if relative.as_os_str().is_empty() {
-        anyhow::bail!("Cannot cat the repository root itself: {}", file);
-    }
+    let relative = resolve_repo_relative_input(
+        repo_root,
+        file,
+        PathResolveMode::CanonicaliseAbsoluteValidateRelative,
+        "cat",
+    )?;
 
     if !tracked.files.contains(&relative) {
         anyhow::bail!("File not tracked: {}", file);

@@ -5,7 +5,8 @@ use pgp::types::Password;
 use rand::thread_rng;
 use std::io::Cursor;
 
-use crate::keyring::{SIG_BEGIN, SIG_END};
+use crate::armour::{SIG_BEGIN, SIG_END};
+use crate::keyring::END_MARKER;
 
 /// Signs keyring content with a private key and returns an armored signature.
 ///
@@ -73,9 +74,8 @@ pub fn extract_signature_from_keyring(keyring_text: &str) -> Result<String> {
 
 /// Extracts the content to verify (everything up to and including END GIT-GPG KEYRING marker).
 pub fn extract_content_to_verify_from_keyring(keyring_text: &str) -> Result<String> {
-    let end_marker = "-----END GIT-GPG KEYRING-----";
     let end_idx = keyring_text
-        .find(end_marker)
+        .find(END_MARKER)
         .context("No END GIT-GPG KEYRING marker found")?;
-    Ok(keyring_text[..end_idx + end_marker.len()].to_string())
+    Ok(keyring_text[..end_idx + END_MARKER.len()].to_string())
 }
