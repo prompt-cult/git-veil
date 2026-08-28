@@ -84,9 +84,10 @@ impl TrackedFiles {
 }
 
 /// Gets the email configured in git config user.email.
-pub fn get_git_config_email() -> Result<String> {
+pub fn get_git_config_email(repo_root: &Path) -> Result<String> {
     let output = Command::new("git")
         .args(["config", "user.email"])
+        .current_dir(repo_root)
         .output()
         .context("Failed to execute git config user.email")?;
 

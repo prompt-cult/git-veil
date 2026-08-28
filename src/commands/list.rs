@@ -1,13 +1,13 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::TrackedFiles;
 
 /// Lists all tracked files.
-pub fn cmd_list() -> Result<()> {
-    let tracked_path = PathBuf::from(".git-gpg/tracked.json");
+pub fn cmd_list(repo_root: &Path) -> Result<()> {
+    let tracked_path = repo_root.join(".git-gpg/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
-    
+
     if tracked.files.is_empty() {
         println!("No files tracked");
     } else {

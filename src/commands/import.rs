@@ -19,12 +19,13 @@ fn primary_user_id(key: &SignedSecretKey) -> String {
 /// Imports armoured private key blocks from one or more files into the
 /// tool-owned key store (<gpg_home>/secring.pgp).
 ///
-/// Each file must contain at least one parseable private key block, or the
-/// command refuses it. Keys whose fingerprint is already present in the
-/// secring are skipped rather than duplicated. On success the secring is
-/// written as newline-separated armoured private key blocks, the exact
-/// multi-block format the reader in gpg_integration.rs supports.
-pub fn cmd_import(files: &[String], gpg_home: &PathBuf) -> Result<()> {
+/// Relative key-file paths resolve against `repo_root`. Each file must
+/// contain at least one parseable private key block, or the command refuses
+/// it. Keys whose fingerprint is already present in the secring are skipped
+/// rather than duplicated. On success the secring is written as
+/// newline-separated armoured private key blocks, the exact multi-block
+/// format the reader in gpg_integration.rs supports.
+pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Result<()> {
     if files.is_empty() {
         anyhow::bail!("No key files given");
     }
@@ -49,9 +50,10 @@ pub fn cmd_import(files: &[String], gpg_home: &PathBuf) -> Result<()> {
     let mut skipped = 0usize;
 
     for file in files {
-        let content = fs::read_to_string(file)
+        let resolved = repo_root.join(file);
+        let content = fs::read_to_string(&resolved)
             .with_context(|| format!("Failed to read key file {}", file))?;
-        let blocks = split_armored_private_key_blocks(&content, Path::new(file))?;
+        let blocks = split_armored_private_key_blocks(&content, &resolved)?;
         if blocks.is_empty() {
             anyhow::bail!("No private key blocks found in {}", file);
         }

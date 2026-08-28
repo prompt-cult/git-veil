@@ -1,8 +1,3 @@
-//! git-gpg - A Rust-based Git secret management tool using pure Rust OpenPGP
-//!
-//! This tool provides a bash-free, zero-C-dependency alternative to git-secret.
-//! It uses the `pgp` crate which implements RFC 4880 / RFC 9580 (OpenPGP) with pure Rust.
-
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use anyhow::Result;
@@ -187,11 +182,11 @@ enum Commands {
 
 /// Resolves the email for commands that accept --email: an explicit,
 /// non-empty value wins; otherwise fall back to `git config user.email`.
-fn resolve_email(email: Option<String>) -> Result<String> {
+fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<String> {
     match email {
         Some(e) if !e.trim().is_empty() => Ok(e),
         Some(_) => anyhow::bail!("--email must not be empty"),
-        None => get_git_config_email(),
+        None => get_git_config_email(repo_root),
     }
 }
 
@@ -205,48 +200,49 @@ fn resolve_gpg_home(gpg_home: Option<PathBuf>) -> Result<PathBuf> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let repo_root = std::env::current_dir()?;
 
     match cli.command {
-        Commands::Init => cmd_init()?,
+        Commands::Init => cmd_init(&repo_root)?,
         Commands::Import { files, gpg_home: opt } => {
-            cmd_import(&files, &resolve_gpg_home(opt)?)?;
+            cmd_import(&repo_root, &files, &resolve_gpg_home(opt)?)?;
         }
         Commands::Trust { repo_id, signing_key, remote, gpg_home: opt } => {
-            cmd_trust(&repo_id, &signing_key, &remote, &resolve_gpg_home(opt)?)?;
+            cmd_trust(&repo_root, &repo_id, &signing_key, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Tell { email, public_key, remote, gpg_home: opt } => {
-            cmd_tell(&email, &public_key, &remote, &resolve_gpg_home(opt)?)?;
+            cmd_tell(&repo_root, &email, &public_key, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::RemovePerson { email, remote, gpg_home: opt } => {
-            cmd_removeperson(&email, &remote, &resolve_gpg_home(opt)?)?;
+            cmd_removeperson(&repo_root, &email, &remote, &resolve_gpg_home(opt)?)?;
         }
-        Commands::Add { files } => cmd_add(files)?,
-        Commands::Remove { files } => cmd_remove(files)?,
-        Commands::List => cmd_list()?,
+        Commands::Add { files } => cmd_add(&repo_root, files)?,
+        Commands::Remove { files } => cmd_remove(&repo_root, files)?,
+        Commands::List => cmd_list(&repo_root)?,
         Commands::Hide { remote, gpg_home: opt } => {
-            cmd_hide(&remote, &resolve_gpg_home(opt)?)?;
+            cmd_hide(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Reveal { email, remote, gpg_home: opt } => {
-            let email = resolve_email(email)?;
-            cmd_reveal(&email, &remote, &resolve_gpg_home(opt)?)?;
+            let email = resolve_email(&repo_root, email)?;
+            cmd_reveal(&repo_root, &email, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Cat { file, email, remote, gpg_home: opt } => {
-            let email = resolve_email(email)?;
-            cmd_cat(&file, &email, &remote, &resolve_gpg_home(opt)?)?;
+            let email = resolve_email(&repo_root, email)?;
+            cmd_cat(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Changes { files, email, remote, gpg_home: opt } => {
-            let email = resolve_email(email)?;
-            cmd_changes(files, &email, &remote, &resolve_gpg_home(opt)?)?;
+            let email = resolve_email(&repo_root, email)?;
+            cmd_changes(&repo_root, files, &email, &remote, &resolve_gpg_home(opt)?)?;
         }
-        Commands::ShowRepoId { remote } => cmd_show_repo_id(&remote)?,
+        Commands::ShowRepoId { remote } => cmd_show_repo_id(&repo_root, &remote)?,
         Commands::Whoami { email, gpg_home: opt } => {
-            cmd_whoami(email.as_deref(), &resolve_gpg_home(opt)?)?;
+            cmd_whoami(&repo_root, email.as_deref(), &resolve_gpg_home(opt)?)?;
         }
         Commands::VerifyKeyring { remote, gpg_home: opt } => {
-            cmd_verify_keyring(&remote, &resolve_gpg_home(opt)?)?;
+            cmd_verify_keyring(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
         }
-        Commands::ListKeys => cmd_list_keys()?,
-        Commands::Clean => cmd_clean()?,
+        Commands::ListKeys => cmd_list_keys(&repo_root)?,
+        Commands::Clean => cmd_clean(&repo_root)?,
     }
 
     Ok(())

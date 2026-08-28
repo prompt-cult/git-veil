@@ -1,17 +1,16 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint, get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
-pub fn cmd_removeperson(email_to_remove: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
     // Verify trust is established
-    let repo_path = std::env::current_dir().context("Failed to get current directory")?;
-    let push_url = get_remote_push_url(&repo_path, remote_name)?;
+    let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
 
-    let trust_path = PathBuf::from(".git-gpg/trust.json");
+    let trust_path = repo_root.join(".git-gpg/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
         .context("No trust established for this repository. Run 'git gpg trust' first.")?;
@@ -21,10 +20,10 @@ pub fn cmd_removeperson(email_to_remove: &str, remote_name: &str, gpg_home: &Pat
     // (the fresh-init state); a keyring containing entries must already carry a
     // valid signature from the trusted key, otherwise removeperson would launder
     // trust by re-signing attacker-supplied content.
-    verify_keyring_against_trust(remote_name, gpg_home)?;
+    verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     // Load keyring
-    let keyring_path = PathBuf::from(".git-gpg/keyring");
+    let keyring_path = repo_root.join(".git-gpg/keyring");
     let keyring_content = fs::read_to_string(&keyring_path)
         .context("Failed to read keyring file")?;
     let mut keyring = Keyring::parse(&keyring_content)?;

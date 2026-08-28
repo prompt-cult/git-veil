@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
-use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::commands::hide::encrypted_path_for;
 use crate::tracked_files::validate_tracked_path;
@@ -13,12 +12,12 @@ const SECRETS_DIR: &str = ".git-gpg/secrets";
 /// Decrypts a single tracked file to stdout without touching disk state.
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
-/// cmd_add/cmd_remove resolve paths (canonicalise-and-strip), and must match
-/// an entry in tracked.json. Tracked paths are stored repo-relative and are
-/// validated, so the ciphertext path can never escape .git-gpg/secrets.
-pub fn cmd_cat(file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<Vec<u8>> {
+/// cmd_add/cmd_remove resolve paths (canonicalise-and-strip). Relative paths
+/// resolve against `repo_root`; tracked paths are stored repo-relative and
+/// are validated, so the ciphertext path can never escape .git-gpg/secrets.
+pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<Vec<u8>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
-    let (_, keyring) = verify_keyring_against_trust(remote_name, gpg_home)?;
+    let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     // Find user's entry
     keyring.find_by_email(email)
@@ -28,20 +27,21 @@ pub fn cmd_cat(file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf) -
     let private_key = find_private_key_by_email(gpg_home, email)?;
 
     // Load tracked files
-    let tracked_path = PathBuf::from(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-gpg/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
+
+    // Canonicalise the repository root once
+    let canonical_root = fs::canonicalize(repo_root)
+        .context("Failed to canonicalise repository root")?;
 
     // Resolve the user-supplied path to its repo-relative form
     let path = PathBuf::from(file);
-    let repo_root = env::current_dir().context("Failed to get current directory")?;
-    let repo_root = fs::canonicalize(&repo_root)
-        .context("Failed to canonicalise repository root")?;
 
     let relative: PathBuf = if path.is_absolute() {
         let canonical = fs::canonicalize(&path)
             .with_context(|| format!("File not found: {}", file))?;
         canonical
-            .strip_prefix(&repo_root)
+            .strip_prefix(&canonical_root)
             .with_context(|| format!(
                 "File is outside the repository: {} (resolves to {})",
                 file,
@@ -63,10 +63,11 @@ pub fn cmd_cat(file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf) -
     }
 
     // Compute encrypted path
-    let encrypted_path = encrypted_path_for(&relative);
+    let encrypted_path = encrypted_path_for(repo_root, &relative);
+    let secrets_dir = repo_root.join(SECRETS_DIR);
 
     // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-    if !encrypted_path.starts_with(SECRETS_DIR) {
+    if !encrypted_path.starts_with(&secrets_dir) {
         anyhow::bail!(
             "Encrypted path escaped the secrets directory: {}",
             encrypted_path.display()

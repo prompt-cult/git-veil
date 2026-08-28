@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::tracked_files::validate_tracked_path;
 use crate::TrackedFiles;
@@ -11,17 +10,17 @@ use crate::TrackedFiles;
 /// Paths are stored relative to the repository root. The file is
 /// canonicalised first, so a symlink whose target resolves outside the repo
 /// is rejected (the target could otherwise be read and deleted by hide).
-pub fn cmd_add(files: Vec<String>) -> Result<()> {
-    let tracked_path = PathBuf::from(".git-gpg/tracked.json");
+/// Relative user-supplied paths resolve against `repo_root`.
+pub fn cmd_add(repo_root: &Path, files: Vec<String>) -> Result<()> {
+    let tracked_path = repo_root.join(".git-gpg/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
 
-    let repo_root = env::current_dir().context("Failed to get current directory")?;
-    let repo_root = fs::canonicalize(&repo_root)
+    let repo_root = fs::canonicalize(repo_root)
         .context("Failed to canonicalise repository root")?;
 
     let mut count = 0;
     for file in &files {
-        let path = PathBuf::from(file);
+        let path = repo_root.join(file);
         let canonical = fs::canonicalize(&path)
             .with_context(|| format!("File not found: {}", file))?;
         let relative = canonical

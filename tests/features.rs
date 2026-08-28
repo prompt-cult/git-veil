@@ -496,9 +496,7 @@ fn add_entry_updates_existing_email_and_clears_signature() {
 }
 
 #[test]
-#[serial]
 fn tell_twice_same_email_updates_rather_than_duplicates() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -506,6 +504,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -514,25 +513,24 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
     .expect("first tell must succeed");
 
     let keyring_after_first =
-        Keyring::parse(&std::fs::read_to_string(".git-gpg/keyring").unwrap()).unwrap();
+        Keyring::parse(&std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap()).unwrap();
 
     let second_tell = cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
         &gpg_home,
     );
 
-    let keyring_text = std::fs::read_to_string(".git-gpg/keyring").unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
     let keyring_after_second = Keyring::parse(&keyring_text).unwrap();
     let alice_count = keyring_after_second
         .entries
         .iter()
         .filter(|e| e.email == "alice@example.com")
         .count();
-    let verify_result = cmd_verify_keyring("origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
 
     second_tell.expect("second tell for the same email must succeed");
     assert_eq!(
@@ -559,13 +557,10 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn trust_accepts_owner_key_matching_user_at_service_email() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
     let (_, owner_pub) = generate_test_key("owner@github.com");
     let keyfile = repo_temp.path().join("owner.pub");
@@ -574,13 +569,12 @@ fn trust_accepts_owner_key_matching_user_at_service_email() {
     let gpg_temp = tempfile::tempdir().unwrap();
 
     let result = cmd_trust(
+        repo_temp.path(),
         "repo+owner@github.com",
         keyfile.to_str().unwrap(),
         "origin",
         &gpg_temp.path().to_path_buf(),
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     assert!(
         result.is_ok(),
@@ -590,13 +584,10 @@ fn trust_accepts_owner_key_matching_user_at_service_email() {
 }
 
 #[test]
-#[serial]
 fn trust_rejects_key_without_owner_email() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
     let (_, evil_pub) = generate_test_key("evil@attacker.com");
     let keyfile = repo_temp.path().join("evil.pub");
@@ -605,13 +596,12 @@ fn trust_rejects_key_without_owner_email() {
     let gpg_temp = tempfile::tempdir().unwrap();
 
     let result = cmd_trust(
+        repo_temp.path(),
         "repo+owner@github.com",
         keyfile.to_str().unwrap(),
         "origin",
         &gpg_temp.path().to_path_buf(),
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     let err = result.err().expect("evil key must not be trusted");
     assert!(
@@ -632,9 +622,8 @@ fn setup_trusted_repo_with_secring(
     secret_keys: &[pgp::composed::SignedSecretKey],
 ) -> (tempfile::TempDir, PathBuf) {
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let owner_keyfile = repo_temp.path().join("owner.pub");
@@ -643,6 +632,7 @@ fn setup_trusted_repo_with_secring(
     let gpg_home = repo_temp.path().join("gpg-home");
 
     cmd_trust(
+        repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
@@ -658,9 +648,7 @@ fn setup_trusted_repo_with_secring(
 }
 
 #[test]
-#[serial]
 fn tell_rejects_unsigned_keyring_containing_entries() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -674,19 +662,18 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
         }],
         signature: None,
     };
-    std::fs::write(".git-gpg/keyring", unsigned_keyring.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), unsigned_keyring.serialize()).unwrap();
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     let result = cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
         &gpg_home,
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     assert!(
         result.is_err(),
@@ -695,9 +682,7 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
 }
 
 #[test]
-#[serial]
 fn tell_rejects_keyring_signed_by_wrong_key() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -719,19 +704,18 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
     let signature = sign_keyring_content(&content_to_sign, &mallory_sec)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
-    std::fs::write(".git-gpg/keyring", forged.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), forged.serialize()).unwrap();
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     let result = cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
         &gpg_home,
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     assert!(
         result.is_err(),
@@ -740,9 +724,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
 }
 
 #[test]
-#[serial]
 fn tell_first_entry_on_fresh_repo_succeeds() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -750,6 +732,7 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     let result = cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -757,9 +740,7 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
     );
 
     let keyring_text =
-        std::fs::read_to_string(".git-gpg/keyring").expect("keyring must exist after tell");
-
-    std::env::set_current_dir(original_dir).unwrap();
+        std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).expect("keyring must exist after tell");
 
     assert!(
         result.is_ok(),
@@ -781,9 +762,7 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn removeperson_removes_entry_and_resigns() {
-    let original_dir = std::env::current_dir().unwrap();
     let (_, alice_pub) = generate_test_key("alice@example.com");
     let (_, bob_pub) = generate_test_key("bob@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
@@ -794,13 +773,14 @@ fn removeperson_removes_entry_and_resigns() {
     write_public_key_file(&bob_pub, &bob_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
         &gpg_home,
     )
     .expect("tell alice must succeed");
-    cmd_tell(
+    cmd_tell(        repo_temp.path(),
         "bob@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
@@ -808,13 +788,11 @@ fn removeperson_removes_entry_and_resigns() {
     )
     .expect("tell bob must succeed");
 
-    let remove_result = cmd_removeperson("bob@example.com", "origin", &gpg_home);
+    let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home);
 
-    let keyring_text = std::fs::read_to_string(".git-gpg/keyring").unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
-    let verify_result = cmd_verify_keyring("origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
 
     remove_result.expect("removeperson must succeed for an existing collaborator");
     assert_eq!(
@@ -832,9 +810,7 @@ fn removeperson_removes_entry_and_resigns() {
 }
 
 #[test]
-#[serial]
 fn removeperson_unknown_email_fails() {
-    let original_dir = std::env::current_dir().unwrap();
     let (_, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
 
@@ -842,6 +818,7 @@ fn removeperson_unknown_email_fails() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -849,9 +826,7 @@ fn removeperson_unknown_email_fails() {
     )
     .expect("tell alice must succeed");
 
-    let remove_result = cmd_removeperson("carol@example.com", "origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let remove_result = cmd_removeperson(repo_temp.path(), "carol@example.com", "origin", &gpg_home);
 
     let err = remove_result.err().expect("removing an unknown email must fail");
     assert!(
@@ -862,21 +837,17 @@ fn removeperson_unknown_email_fails() {
 }
 
 #[test]
-#[serial]
 fn removeperson_requires_trust() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
     let remove_result = cmd_removeperson(
+        repo_temp.path(),
         "alice@example.com",
         "origin",
         &repo_temp.path().join("gpg-home"),
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     assert!(
         remove_result.is_err(),
@@ -886,9 +857,7 @@ fn removeperson_requires_trust() {
 }
 
 #[test]
-#[serial]
 fn removeperson_rejects_tampered_keyring() {
-    let original_dir = std::env::current_dir().unwrap();
     let (_, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
 
@@ -896,6 +865,7 @@ fn removeperson_rejects_tampered_keyring() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -921,13 +891,11 @@ fn removeperson_rejects_tampered_keyring() {
     let signature = sign_keyring_content(&content_to_sign, &mallory_sec)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
-    std::fs::write(".git-gpg/keyring", forged.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), forged.serialize()).unwrap();
 
-    let remove_result = cmd_removeperson("mallory@evil.com", "origin", &gpg_home);
+    let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &gpg_home);
 
-    let keyring_text_after = std::fs::read_to_string(".git-gpg/keyring").unwrap();
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let keyring_text_after = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
 
     assert!(
         remove_result.is_err(),
@@ -946,17 +914,12 @@ fn removeperson_rejects_tampered_keyring() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn init_creates_loadable_trust_store() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
-    let loaded = TrustStore::load_from_file(&PathBuf::from(".git-gpg/trust.json"));
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let loaded = TrustStore::load_from_file(&repo_temp.path().join(".git-gpg/trust.json"));
 
     let store = loaded.expect("trust.json written by init must load via TrustStore");
     assert!(
@@ -986,13 +949,10 @@ fn trust_store_load_from_file_accepts_empty_object() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn fresh_repo_init_trust_tell_verify_happy_path() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let owner_keyfile = repo_temp.path().join("owner.pub");
@@ -1001,6 +961,7 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
     let gpg_home = repo_temp.path().join("gpg-home");
 
     let trust_result = cmd_trust(
+        repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
@@ -1014,15 +975,14 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     let tell_result = cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
         &gpg_home,
     );
 
-    let verify_result = cmd_verify_keyring("origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
 
     trust_result.expect("cmd_trust must succeed on a fresh repo");
     tell_result.expect("cmd_tell must succeed on a fresh repo");
@@ -1033,20 +993,21 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
 // C2/M4: tracked paths are repo-relative and validated at every boundary
 // ============================================================================
 
-fn init_git_repo_in_cwd() {
+fn init_git_repo(repo_root: &std::path::Path) {
     let status = std::process::Command::new("git")
+        .current_dir(repo_root)
         .args(["init"])
         .status()
         .expect("run git init");
     assert!(status.success(), "git init failed");
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_root).expect("cmd_init must succeed");
 }
 
-fn write_tracked_json(files: &[&str]) {
+fn write_tracked_json(repo_root: &std::path::Path, files: &[&str]) {
     let entries: Vec<String> = files.iter().map(|f| format!("\"{}\"", f)).collect();
     let content = format!("{{\n  \"files\": [{}]\n}}", entries.join(", "));
-    std::fs::create_dir_all(".git-gpg").unwrap();
-    std::fs::write(".git-gpg/tracked.json", content).unwrap();
+    std::fs::create_dir_all(repo_root.join(".git-gpg")).unwrap();
+    std::fs::write(repo_root.join(".git-gpg/tracked.json"), content).unwrap();
 }
 
 /// Sets up a repo where the trusted owner key is also a keyring entry, so a
@@ -1054,9 +1015,8 @@ fn write_tracked_json(files: &[&str]) {
 fn setup_repo_with_owner_in_keyring()
 -> (tempfile::TempDir, PathBuf, pgp::composed::SignedPublicKey) {
     let repo_temp = setup_git_repo_with_origin_remote();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
 
-    cmd_init().expect("cmd_init must succeed");
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let owner_keyfile = repo_temp.path().join("owner.pub");
@@ -1065,6 +1025,7 @@ fn setup_repo_with_owner_in_keyring()
     let gpg_home = repo_temp.path().join("gpg-home");
 
     cmd_trust(
+        repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
@@ -1075,6 +1036,7 @@ fn setup_repo_with_owner_in_keyring()
     write_multi_key_secring(&gpg_home, &[owner_sec]);
 
     cmd_tell(
+        repo_temp.path(),
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
@@ -1086,7 +1048,6 @@ fn setup_repo_with_owner_in_keyring()
 }
 
 #[test]
-#[serial]
 fn tracked_files_load_rejects_absolute_paths() {
     let temp = tempfile::tempdir().unwrap();
     let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
@@ -1104,7 +1065,6 @@ fn tracked_files_load_rejects_absolute_paths() {
 }
 
 #[test]
-#[serial]
 fn tracked_files_load_rejects_dotdot_components() {
     let temp = tempfile::tempdir().unwrap();
     let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
@@ -1124,20 +1084,15 @@ fn tracked_files_load_rejects_dotdot_components() {
 }
 
 #[test]
-#[serial]
 fn add_stores_repo_relative_paths() {
-    let original_dir = std::env::current_dir().unwrap();
     let temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(temp.path()).unwrap();
-    init_git_repo_in_cwd();
+    init_git_repo(temp.path());
 
-    std::fs::write("secret.env", "s3cret").unwrap();
-    let result = cmd_add(vec!["secret.env".to_string()]);
+    std::fs::write(temp.path().join("secret.env"), "s3cret").unwrap();
+    let result = cmd_add(temp.path(), vec!["secret.env".to_string()]);
 
     let tracked_content = std::fs::read_to_string(temp.path().join(".git-gpg/tracked.json"))
         .expect("tracked.json must exist after add");
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     result.expect("cmd_add must succeed for a file inside the repo");
     assert!(
@@ -1153,20 +1108,15 @@ fn add_stores_repo_relative_paths() {
 }
 
 #[test]
-#[serial]
 fn add_rejects_file_outside_repo() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
-    init_git_repo_in_cwd();
+    init_git_repo(repo_temp.path());
 
     let outside = tempfile::tempdir().unwrap();
     let outside_file = outside.path().join("outside.env");
     std::fs::write(&outside_file, "nope").unwrap();
 
-    let result = cmd_add(vec![outside_file.to_str().unwrap().to_string()]);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_add(repo_temp.path(), vec![outside_file.to_str().unwrap().to_string()]);
 
     assert!(
         result.is_err(),
@@ -1176,20 +1126,15 @@ fn add_rejects_file_outside_repo() {
 }
 
 #[test]
-#[serial]
 fn remove_rejects_file_outside_repo() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
-    init_git_repo_in_cwd();
+    init_git_repo(repo_temp.path());
 
     let outside = tempfile::tempdir().unwrap();
     let outside_file = outside.path().join("outside.env");
     std::fs::write(&outside_file, "nope").unwrap();
 
-    let result = cmd_remove(vec![outside_file.to_str().unwrap().to_string()]);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_remove(repo_temp.path(), vec![outside_file.to_str().unwrap().to_string()]);
 
     assert!(
         result.is_err(),
@@ -1199,14 +1144,12 @@ fn remove_rejects_file_outside_repo() {
 }
 
 #[test]
-#[serial]
 fn reveal_refuses_escaping_tracked_path() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
 
-    std::fs::write("secret.env", "topsecret").unwrap();
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("secret.env"), "topsecret").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
     assert!(
         repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
         "hide must write the ciphertext into .git-gpg/secrets"
@@ -1216,9 +1159,9 @@ fn reveal_refuses_escaping_tracked_path() {
     // point one level above the repo root, and commits a ciphertext that
     // decrypts with the victim's key. join("../outside.txt") under
     // .git-gpg/secrets lands at .git-gpg/outside.txt.asc.
-    write_tracked_json(&["../outside.txt"]);
+    write_tracked_json(repo_temp.path(), &["../outside.txt"]);
     let ciphertext = encrypt_to_gpg_key(b"pwned", &owner_pub).unwrap();
-    std::fs::write(".git-gpg/outside.txt.asc", ciphertext).unwrap();
+    std::fs::write(repo_temp.path().join(".git-gpg/outside.txt.asc"), ciphertext).unwrap();
 
     let target = repo_temp
         .path()
@@ -1227,9 +1170,7 @@ fn reveal_refuses_escaping_tracked_path() {
         .join("outside.txt");
     let _ = std::fs::remove_file(&target);
 
-    let result = cmd_reveal("owner@github.com", "origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home);
 
     let target_exists = target.exists();
     let _ = std::fs::remove_file(&target);
@@ -1255,9 +1196,7 @@ fn reveal_refuses_escaping_tracked_path() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn hide_then_reveal_restores_exact_bytes() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -1265,6 +1204,7 @@ fn hide_then_reveal_restores_exact_bytes() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -1273,21 +1213,19 @@ fn hide_then_reveal_restores_exact_bytes() {
     .expect("cmd_tell must succeed");
 
     let plaintext: &str = "API_KEY=s3cr3t-value\nDB_PASSWORD=hunter2\n# unicode: héllo wörld — 日本語 🌍\nline with trailing spaces   \n";
-    std::fs::write("secret.env", plaintext).unwrap();
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
 
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide("origin", &gpg_home);
-    let plaintext_gone_after_hide = !std::path::Path::new("secret.env").exists();
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let plaintext_gone_after_hide = !repo_temp.path().join("secret.env").exists();
     let ciphertext_after_hide =
-        std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
+        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
 
-    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
-    let restored = std::fs::read("secret.env");
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let restored = std::fs::read(repo_temp.path().join("secret.env"));
     let ciphertext_gone_after_reveal =
-        !std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
-
-    std::env::set_current_dir(original_dir).unwrap();
+        !repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1315,9 +1253,7 @@ fn hide_then_reveal_restores_exact_bytes() {
 }
 
 #[test]
-#[serial]
 fn hide_then_reveal_in_subdirectory() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -1325,6 +1261,7 @@ fn hide_then_reveal_in_subdirectory() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -1334,26 +1271,20 @@ fn hide_then_reveal_in_subdirectory() {
 
     let tracked_rel = "a/b/c/secret.env";
     let plaintext: &str = "NESTED_SECRET=prüne\ntrailing newline follows\n";
-    std::fs::create_dir_all("a/b/c").unwrap();
-    std::fs::write(tracked_rel, plaintext).unwrap();
+    std::fs::create_dir_all(repo_temp.path().join("a/b/c")).unwrap();
+    std::fs::write(repo_temp.path().join(tracked_rel), plaintext).unwrap();
 
-    cmd_add(vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
+    cmd_add(repo_temp.path(), vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide("origin", &gpg_home);
-    let plaintext_gone_after_hide = !std::path::Path::new(tracked_rel).exists();
-    let ciphertext_after_hide = std::path::Path::new(
-        ".git-gpg/secrets/a/b/c/secret.env.asc",
-    )
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let plaintext_gone_after_hide = !repo_temp.path().join(tracked_rel).exists();
+    let ciphertext_after_hide = repo_temp.path().join(".git-gpg/secrets/a/b/c/secret.env.asc")
     .exists();
 
-    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
-    let restored = std::fs::read(tracked_rel);
-    let ciphertext_gone_after_reveal = !std::path::Path::new(
-        ".git-gpg/secrets/a/b/c/secret.env.asc",
-    )
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let restored = std::fs::read(repo_temp.path().join(tracked_rel));
+    let ciphertext_gone_after_reveal = !repo_temp.path().join(".git-gpg/secrets/a/b/c/secret.env.asc")
     .exists();
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1381,9 +1312,7 @@ fn hide_then_reveal_in_subdirectory() {
 }
 
 #[test]
-#[serial]
 fn hide_reveal_roundtrip_binary_file() {
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -1391,6 +1320,7 @@ fn hide_reveal_roundtrip_binary_file() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -1399,17 +1329,15 @@ fn hide_reveal_roundtrip_binary_file() {
     .expect("cmd_tell must succeed");
 
     let plaintext: Vec<u8> = (0..=255u8).collect();
-    std::fs::write("blob.bin", &plaintext).unwrap();
+    std::fs::write(repo_temp.path().join("blob.bin"), &plaintext).unwrap();
 
-    cmd_add(vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
+    cmd_add(repo_temp.path(), vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide("origin", &gpg_home);
-    let plaintext_gone_after_hide = !std::path::Path::new("blob.bin").exists();
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let plaintext_gone_after_hide = !repo_temp.path().join("blob.bin").exists();
 
-    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
-    let restored = std::fs::read("blob.bin");
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
+    let restored = std::fs::read(repo_temp.path().join("blob.bin"));
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1437,21 +1365,17 @@ fn hide_reveal_roundtrip_binary_file() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn ciphertext_filename_is_full_name_plus_asc() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
-    std::fs::write("notes", "no extension here\n").unwrap();
-    cmd_add(vec!["notes".to_string()]).expect("cmd_add must succeed");
+    std::fs::write(repo_temp.path().join("notes"), "no extension here\n").unwrap();
+    cmd_add(repo_temp.path(), vec!["notes".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide("origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let ciphertext_exists =
         repo_temp.path().join(".git-gpg/secrets/notes.asc").exists();
     let mangled_exists =
         repo_temp.path().join(".git-gpg/secrets/notes..asc").exists();
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1465,21 +1389,17 @@ fn ciphertext_filename_is_full_name_plus_asc() {
 }
 
 #[test]
-#[serial]
 fn ciphertext_filename_for_dotfile() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
-    std::fs::write(".env", "DOTENV=1\n").unwrap();
-    cmd_add(vec![".env".to_string()]).expect("cmd_add must succeed");
+    std::fs::write(repo_temp.path().join(".env"), "DOTENV=1\n").unwrap();
+    cmd_add(repo_temp.path(), vec![".env".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide("origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let ciphertext_exists =
         repo_temp.path().join(".git-gpg/secrets/.env.asc").exists();
     let mangled_exists =
         repo_temp.path().join(".git-gpg/secrets/.env..asc").exists();
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1493,15 +1413,12 @@ fn ciphertext_filename_for_dotfile() {
 }
 
 #[test]
-#[serial]
 fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
     let cases: Vec<(&str, Vec<u8>)> = vec![
         ("notes", b"extensionless notes\n".to_vec()),
         (".env", b"DOTENV_SECRET=topsecret\n".to_vec()),
         ("a.tar.gz", b"double-extension archive bytes".to_vec()),
     ];
-
-    let original_dir = std::env::current_dir().unwrap();
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
 
@@ -1509,6 +1426,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -1517,12 +1435,12 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
     .expect("cmd_tell must succeed");
 
     for (name, bytes) in &cases {
-        std::fs::write(name, bytes).unwrap();
-        cmd_add(vec![name.to_string()])
+        std::fs::write(repo_temp.path().join(name), bytes).unwrap();
+        cmd_add(repo_temp.path(), vec![name.to_string()])
             .unwrap_or_else(|e| panic!("cmd_add must succeed for {}: {:?}", name, e));
     }
 
-    let hide_result = cmd_hide("origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
     let ciphertexts_exist: Vec<(String, bool)> = cases
         .iter()
         .map(|(name, _)| {
@@ -1537,13 +1455,11 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         })
         .collect();
 
-    let reveal_result = cmd_reveal("alice@example.com", "origin", &gpg_home);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home);
     let restored: Vec<(String, Option<Vec<u8>>)> = cases
         .iter()
-        .map(|(name, _)| (name.to_string(), std::fs::read(name).ok()))
+        .map(|(name, _)| (name.to_string(), std::fs::read(repo_temp.path().join(name)).ok()))
         .collect();
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     hide_result.expect("cmd_hide must succeed");
     for (name, exists) in ciphertexts_exist {
@@ -1574,24 +1490,19 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
 }
 
 #[test]
-#[serial]
 fn symlink_outside_repo_is_rejected() {
-    let original_dir = std::env::current_dir().unwrap();
     let repo_temp = tempfile::tempdir().unwrap();
-    std::env::set_current_dir(repo_temp.path()).unwrap();
-    init_git_repo_in_cwd();
+    init_git_repo(repo_temp.path());
 
     let outside = tempfile::tempdir().unwrap();
     let outside_file = outside.path().join("target.env");
     std::fs::write(&outside_file, "outside").unwrap();
     std::os::unix::fs::symlink(&outside_file, repo_temp.path().join("link.env")).unwrap();
 
-    let result = cmd_add(vec!["link.env".to_string()]);
+    let result = cmd_add(repo_temp.path(), vec!["link.env".to_string()]);
 
     let tracked_content = std::fs::read_to_string(repo_temp.path().join(".git-gpg/tracked.json"))
         .expect("tracked.json must exist");
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     assert!(
         result.is_err(),
@@ -1623,6 +1534,7 @@ fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
     write_public_key_file(&alice_pub, &alice_keyfile);
 
     cmd_tell(
+        repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
@@ -1634,22 +1546,18 @@ fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
 }
 
 #[test]
-#[serial]
 fn cat_returns_exact_bytes_without_touching_disk() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
 
     let plaintext: &str = "API_KEY=cat-s3cr3t\nDB_PASSWORD=hunter2\n# unicode: héllo — 日本語\n";
-    std::fs::write("secret.env", plaintext).unwrap();
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    let cat_result = cmd_cat("secret.env", "alice@example.com", "origin", &gpg_home);
+    let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &gpg_home);
     let ciphertext_still_exists =
-        std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
-    let no_plaintext_on_disk = !std::path::Path::new("secret.env").exists();
-
-    std::env::set_current_dir(original_dir).unwrap();
+        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
+    let no_plaintext_on_disk = !repo_temp.path().join("secret.env").exists();
 
     let bytes = cat_result.expect("cmd_cat must decrypt the tracked file");
     assert_eq!(
@@ -1671,14 +1579,10 @@ fn cat_returns_exact_bytes_without_touching_disk() {
 }
 
 #[test]
-#[serial]
 fn cat_fails_for_untracked_file() {
-    let original_dir = std::env::current_dir().unwrap();
-    let (_repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+    let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
 
-    let result = cmd_cat("not-tracked.env", "alice@example.com", "origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_cat(repo_temp.path(), "not-tracked.env", "alice@example.com", "origin", &gpg_home);
 
     let err = result.err().expect("cat of an untracked file must fail");
     assert!(
@@ -1689,19 +1593,18 @@ fn cat_fails_for_untracked_file() {
 }
 
 #[test]
-#[serial]
 fn cat_rejects_path_escaping_the_repo() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
 
-    std::fs::write("secret.env", "s3cret").unwrap();
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    let dotdot_result = cmd_cat("../outside.txt", "alice@example.com", "origin", &gpg_home);
+    let dotdot_result = cmd_cat(repo_temp.path(), "../outside.txt", "alice@example.com", "origin", &gpg_home);
     let outside = repo_temp.path().parent().unwrap().join("outside.txt");
     std::fs::write(&outside, "nope").unwrap();
     let absolute_result = cmd_cat(
+        repo_temp.path(),
         outside.to_str().unwrap(),
         "alice@example.com",
         "origin",
@@ -1709,8 +1612,6 @@ fn cat_rejects_path_escaping_the_repo() {
     );
     let absolute_exists = outside.exists();
     let _ = std::fs::remove_file(&outside);
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     let dotdot_err = dotdot_result
         .err()
@@ -1741,24 +1642,20 @@ fn cat_rejects_path_escaping_the_repo() {
 // ============================================================================
 
 #[test]
-#[serial]
 fn changes_reports_no_changes_when_plaintext_matches() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
     let plaintext = "API_KEY=s3cr3t-value\nDB_PASSWORD=hunter2\n";
-    std::fs::write("secret.env", plaintext).unwrap();
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
     // Re-create the plaintext with IDENTICAL bytes, as if revealed and untouched.
-    std::fs::write("secret.env", plaintext).unwrap();
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
 
-    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
     let ciphertext_still_exists =
-        std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
-
-    std::env::set_current_dir(original_dir).unwrap();
+        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists();
 
     let changed = result.expect("cmd_changes must succeed when plaintext matches");
     assert!(
@@ -1777,20 +1674,16 @@ fn changes_reports_no_changes_when_plaintext_matches() {
 }
 
 #[test]
-#[serial]
 fn changes_reports_modified_file() {
-    let original_dir = std::env::current_dir().unwrap();
-    let (_repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
-    std::fs::write("secret.env", "API_KEY=old-value\n").unwrap();
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=old-value\n").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    std::fs::write("secret.env", "API_KEY=NEW-value\nDB=hunter2\n").unwrap();
+    std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=NEW-value\nDB=hunter2\n").unwrap();
 
-    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
 
     let changed = result.expect("cmd_changes must succeed for a modified file");
     assert_eq!(
@@ -1802,19 +1695,15 @@ fn changes_reports_modified_file() {
 }
 
 #[test]
-#[serial]
 fn changes_ignores_missing_plaintext() {
-    let original_dir = std::env::current_dir().unwrap();
     let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
-    std::fs::write("secret.env", "API_KEY=s3cr3t\n").unwrap();
-    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=s3cr3t\n").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
     // hide deleted the plaintext; it is still hidden but absent on disk.
 
-    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
 
     let changed = result.expect("missing plaintext must be skipped, not an error");
     assert!(
@@ -1829,19 +1718,16 @@ fn changes_ignores_missing_plaintext() {
 }
 
 #[test]
-#[serial]
 fn changes_fails_for_untracked_file() {
-    let original_dir = std::env::current_dir().unwrap();
-    let (_repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
     let result = cmd_changes(
+        repo_temp.path(),
         vec!["not-tracked.env".to_string()],
         "owner@github.com",
         "origin",
         &gpg_home,
     );
-
-    std::env::set_current_dir(original_dir).unwrap();
 
     let err = result.err().expect("changes for an untracked file must fail");
     assert!(
@@ -1852,22 +1738,18 @@ fn changes_fails_for_untracked_file() {
 }
 
 #[test]
-#[serial]
 fn changes_detects_binary_difference() {
-    let original_dir = std::env::current_dir().unwrap();
-    let (_repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
 
     let original: Vec<u8> = vec![0u8, 1, 2, 3, 255];
-    std::fs::write("blob.bin", &original).unwrap();
-    cmd_add(vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
-    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    std::fs::write(repo_temp.path().join("blob.bin"), &original).unwrap();
+    cmd_add(repo_temp.path(), vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
     let modified: Vec<u8> = vec![0u8, 1, 2, 3, 254, 9];
-    std::fs::write("blob.bin", &modified).unwrap();
+    std::fs::write(repo_temp.path().join("blob.bin"), &modified).unwrap();
 
-    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
-
-    std::env::set_current_dir(original_dir).unwrap();
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home);
 
     let changed = result.expect("cmd_changes must succeed for a binary file");
     assert_eq!(

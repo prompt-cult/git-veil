@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use regex::Regex;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::Command;
 
 /// Parses a git remote URL and extracts (repo_name, user_or_org, service).
@@ -47,7 +47,7 @@ pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
 /// Gets the push URL for a given remote from a git repository.
 ///
 /// Runs `git -C <repo_path> remote get-url --push <remote_name>` and returns the URL.
-pub fn get_remote_push_url(repo_path: &PathBuf, remote_name: &str) -> Result<String> {
+pub fn get_remote_push_url(repo_path: &Path, remote_name: &str) -> Result<String> {
     let output = Command::new("git")
         .current_dir(repo_path)
         .args(["remote", "get-url", "--push", remote_name])

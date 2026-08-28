@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::commands::hide::encrypted_path_for;
 use crate::tracked_files::validate_tracked_path;
@@ -10,16 +10,16 @@ const SECRETS_DIR: &str = ".git-gpg/secrets";
 
 /// Decrypts all tracked files using the user's private key.
 ///
-/// Tracked paths are repo-relative (relative to the cwd, which is the repo
-/// root) and are validated before any use, so a malicious committed
-/// tracked.json cannot make reveal write attacker-chosen plaintext to an
-/// arbitrary path outside the repository.
-pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+/// Tracked paths are repo-relative (relative to `repo_root`) and are
+/// validated before any use, so a malicious committed tracked.json cannot
+/// make reveal write attacker-chosen plaintext to an arbitrary path outside
+/// the repository.
+pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
     // Verify keyring signature first
-    cmd_verify_keyring(remote_name, gpg_home)?;
+    cmd_verify_keyring(repo_root, remote_name, gpg_home)?;
 
     // Load keyring
-    let keyring_path = PathBuf::from(".git-gpg/keyring");
+    let keyring_path = repo_root.join(".git-gpg/keyring");
     let keyring_text = fs::read_to_string(&keyring_path)
         .context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
@@ -32,7 +32,7 @@ pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<
     let private_key = find_private_key_by_email(gpg_home, email)?;
 
     // Load tracked files
-    let tracked_path = PathBuf::from(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-gpg/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     if tracked.files.is_empty() {
@@ -40,15 +40,17 @@ pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<
         return Ok(());
     }
 
+    let secrets_dir = repo_root.join(SECRETS_DIR);
+
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
 
         // Compute encrypted path
-        let encrypted_path = encrypted_path_for(file);
+        let encrypted_path = encrypted_path_for(repo_root, file);
 
         // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-        if !encrypted_path.starts_with(SECRETS_DIR) {
+        if !encrypted_path.starts_with(&secrets_dir) {
             anyhow::bail!(
                 "Encrypted path escaped the secrets directory: {}",
                 encrypted_path.display()
@@ -70,10 +72,10 @@ pub fn cmd_reveal(email: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<
         // Write plaintext
         if let Some(parent) = file.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
+                fs::create_dir_all(repo_root.join(parent))?;
             }
         }
-        fs::write(file, plaintext)
+        fs::write(repo_root.join(file), plaintext)
             .with_context(|| format!("Failed to write decrypted file: {}", file.display()))?;
 
         // Delete encrypted file

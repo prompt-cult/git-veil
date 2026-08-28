@@ -115,7 +115,7 @@ fn roundtrips_gpg_generated_key(primary: &str, subkey: &str) -> anyhow::Result<(
 
     // Import through the new acquisition command.
     let files = vec![key_file.to_string_lossy().to_string()];
-    cmd_import(&files, &tool_home).expect("import gpg-generated secret key");
+    cmd_import(temp.path(), &files, &tool_home).expect("import gpg-generated secret key");
 
     // cmd_reveal-style: look the key up by email and decrypt with it.
     let secret_key = find_private_key_by_email(&tool_home, "interop@example.com")

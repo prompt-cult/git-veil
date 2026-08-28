@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
-use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::commands::hide::encrypted_path_for;
 use crate::tracked_files::validate_tracked_path;
@@ -23,18 +22,19 @@ fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
 /// are not counted as changed.
 ///
 /// The user-supplied paths are resolved to their repo-relative forms the
-/// same way cmd_cat resolves them (canonicalise-and-strip for absolute
-/// paths, validate_tracked_path for relative ones), and must match entries
-/// in tracked.json. Tracked paths are stored repo-relative and are
-/// validated, so the ciphertext path can never escape .git-gpg/secrets.
+/// same way cmd_cat resolves them (canonicalise-and-strip; relative paths
+/// resolve against `repo_root`), and must match entries in tracked.json.
+/// Tracked paths are stored repo-relative and are validated, so the
+/// ciphertext path can never escape .git-gpg/secrets.
 pub fn cmd_changes(
+    repo_root: &Path,
     files: Vec<String>,
     email: &str,
     remote_name: &str,
     gpg_home: &PathBuf,
 ) -> Result<Vec<PathBuf>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
-    let (_, keyring) = verify_keyring_against_trust(remote_name, gpg_home)?;
+    let (_, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     // Find user's entry
     keyring.find_by_email(email)
@@ -44,14 +44,14 @@ pub fn cmd_changes(
     let private_key = find_private_key_by_email(gpg_home, email)?;
 
     // Load tracked files
-    let tracked_path = PathBuf::from(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-gpg/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
-    // Resolve the requested files to their repo-relative tracked forms
-    let repo_root = env::current_dir().context("Failed to get current directory")?;
-    let repo_root = fs::canonicalize(&repo_root)
+    // Canonicalise the repository root once
+    let canonical_root = fs::canonicalize(repo_root)
         .context("Failed to canonicalise repository root")?;
 
+    // Resolve the requested files to their repo-relative tracked forms
     let targets: Vec<PathBuf> = if files.is_empty() {
         tracked.files.clone()
     } else {
@@ -62,7 +62,7 @@ pub fn cmd_changes(
                 let canonical = fs::canonicalize(&path)
                     .with_context(|| format!("File not found: {}", file))?;
                 canonical
-                    .strip_prefix(&repo_root)
+                    .strip_prefix(&canonical_root)
                     .with_context(|| format!(
                         "File is outside the repository: {} (resolves to {})",
                         file,
@@ -88,13 +88,15 @@ pub fn cmd_changes(
         resolved
     };
 
+    let secrets_dir = repo_root.join(SECRETS_DIR);
+
     let mut changed = Vec::new();
     for file in &targets {
         // Compute encrypted path
-        let encrypted_path = encrypted_path_for(file);
+        let encrypted_path = encrypted_path_for(repo_root, file);
 
         // Defence in depth: the ciphertext must stay inside .git-gpg/secrets
-        if !encrypted_path.starts_with(SECRETS_DIR) {
+        if !encrypted_path.starts_with(&secrets_dir) {
             anyhow::bail!(
                 "Encrypted path escaped the secrets directory: {}",
                 encrypted_path.display()
@@ -108,7 +110,7 @@ pub fn cmd_changes(
         }
 
         // Plaintext absent: the file is still hidden
-        let on_disk = match fs::read(file) {
+        let on_disk = match fs::read(repo_root.join(file)) {
             Ok(bytes) => bytes,
             Err(_) => {
                 println!("not present on disk (hidden): {}", file.display());

@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
 use pgp::composed::SignedPublicKey;
-use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustStore, Keyring, SIG_BEGIN, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
 
@@ -44,13 +43,12 @@ fn load_public_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Resu
 /// signature made by the trusted key.
 ///
 /// Returns the repository ID and the parsed keyring.
-pub fn verify_keyring_against_trust(remote_name: &str, gpg_home: &PathBuf) -> Result<(String, Keyring)> {
-    let repo_path = env::current_dir().context("Failed to get current directory")?;
-    let push_url = get_remote_push_url(&repo_path, remote_name)?;
+pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<(String, Keyring)> {
+    let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
 
     // Load trust store
-    let trust_path = PathBuf::from(".git-gpg/trust.json");
+    let trust_path = repo_root.join(".git-gpg/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
         .context("No trust established for this repository")?;
@@ -59,7 +57,7 @@ pub fn verify_keyring_against_trust(remote_name: &str, gpg_home: &PathBuf) -> Re
     let public_key = load_public_key_by_fingerprint(gpg_home, trusted_fingerprint)?;
 
     // Load keyring
-    let keyring_path = PathBuf::from(".git-gpg/keyring");
+    let keyring_path = repo_root.join(".git-gpg/keyring");
     let keyring_text = fs::read_to_string(&keyring_path)
         .context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
@@ -82,8 +80,8 @@ pub fn verify_keyring_against_trust(remote_name: &str, gpg_home: &PathBuf) -> Re
 }
 
 /// Verifies the keyring signature against the trusted signing key.
-pub fn cmd_verify_keyring(remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
-    let (repo_id, keyring) = verify_keyring_against_trust(remote_name, gpg_home)?;
+pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+    let (repo_id, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
 
     println!("✓ Keyring signature verified");
     println!("Repository ID: {}", repo_id);
