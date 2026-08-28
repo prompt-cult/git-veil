@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_gpg_home, TrustStore};
+use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_gpg_home, TrustPinStore, TrustStore};
 
 /// Establishes trust for a repository by verifying the owner's signing key.
 pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
@@ -45,6 +45,15 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
     trust_store.add_trust(repo_id.to_string(), fingerprint.clone());
     trust_store.save_to_file(&trust_path)?;
 
+    // Pin the fingerprint on this machine, outside the repo: trust.json is
+    // committed (attacker-writable), so the local pin is the real anchor.
+    TrustPinStore::write_pin(gpg_home, repo_id, &fingerprint)
+        .context("Failed to write local trust pin")?;
+
     println!("✓ Trusted key for {} (fingerprint: {})", repo_id, fingerprint);
+    println!(
+        "✓ Pinned {} for {} on this machine",
+        fingerprint, repo_id
+    );
     Ok(())
 }

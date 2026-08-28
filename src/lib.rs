@@ -34,5 +34,5 @@ pub use pubkey::{base64_decode_public_key, base64_encode_public_key, check_email
 pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};
 pub use signature::{extract_content_to_verify_from_keyring, extract_signature_from_keyring, sign_keyring_content, verify_keyring_signature};
 pub use tracked_files::{get_git_config_email, TrackedFiles};
-pub use trust_store::TrustStore;
+pub use trust_store::{TrustPinStore, TrustStore};
 

@@ -3,7 +3,7 @@ use pgp::composed::SignedPublicKey;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustStore, Keyring, SIG_BEGIN, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
+use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustPinStore, TrustStore, Keyring, SIG_BEGIN, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
 
 const PUBKEY_BEGIN: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----";
 const PUBKEY_END: &str = "-----END PGP PUBLIC KEY BLOCK-----";
@@ -52,6 +52,23 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id)
         .context("No trust established for this repository")?;
+
+    // trust.json is committed to the repo and therefore attacker-writable;
+    // it is never a sufficient anchor on its own. Require the per-machine
+    // pin written by cmd_trust, and fail closed on any disagreement.
+    match TrustPinStore::read_pin(gpg_home, &repo_id)? {
+        Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
+        Some(pinned) => anyhow::bail!(
+            "trust for {} changed on this machine's record ({} → {}); if you intended this, re-run git gpg trust",
+            repo_id,
+            pinned,
+            trusted_fingerprint
+        ),
+        None => anyhow::bail!(
+            "no local pin for {}; run git gpg trust to pin this repository's key before use",
+            repo_id
+        ),
+    }
 
     // Load signing public key
     let public_key = load_public_key_by_fingerprint(gpg_home, trusted_fingerprint)?;

@@ -4,11 +4,12 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    check_email_in_identities, cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_init, cmd_remove,
-    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring, default_gpg_home,
-    encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
-    find_private_key_by_email, find_private_key_by_fingerprint, sign_keyring_content, Keyring,
-    KeyringEntry, TrustStore, TrackedFiles,
+    base64_encode_public_key, check_email_in_identities, cmd_add, cmd_cat, cmd_changes, cmd_hide,
+    cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring,
+    default_gpg_home, encrypt_to_gpg_key, extract_content_to_verify_from_keyring,
+    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
+    import_key_to_gpg_home, sign_keyring_content, Keyring, KeyringEntry, TrustPinStore, TrustStore,
+    TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -1758,4 +1759,204 @@ fn changes_detects_binary_difference() {
         "the binary difference must be detected in the changed list, got: {:?}",
         changed
     );
+}
+
+// ============================================================================
+// Local key pinning (H4): trust.json is committed and attacker-writable, so
+// it must never be the sole trust anchor. cmd_trust pins the fingerprint in
+// the tool-owned key store OUTSIDE the repo; verify fails closed unless the
+// pin exists and matches.
+// ============================================================================
+
+#[test]
+fn trust_writes_local_pin() {
+    let repo_temp = setup_git_repo_with_origin_remote();
+
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
+
+    let (_, owner_pub) = generate_test_key("owner@github.com");
+    let keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &keyfile);
+
+    let gpg_home = tempfile::tempdir().unwrap().path().to_path_buf();
+
+    cmd_trust(
+        repo_temp.path(),
+        "repo+owner@github.com",
+        keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    assert!(
+        gpg_home.join("trust-pins").is_dir(),
+        "the pin must live in the tool-owned key store, not inside the repo"
+    );
+    let pin = TrustPinStore::read_pin(&gpg_home, "repo+owner@github.com")
+        .expect("reading the pin must not error");
+    assert_eq!(
+        pin.as_deref(),
+        Some(extract_key_fingerprint(&owner_pub).as_str()),
+        "cmd_trust must pin the trusted fingerprint for this repo on this machine"
+    );
+}
+
+#[test]
+fn verify_fails_closed_when_pin_missing() {
+    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+
+    // A fresh clone arrives with trust.json + signed keyring committed but
+    // NO per-machine pin: simulate that by deleting the pin this machine
+    // wrote during cmd_trust.
+    std::fs::remove_dir_all(gpg_home.join("trust-pins")).unwrap();
+
+    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_err = hide_result
+        .err()
+        .expect("hide without a local pin must fail closed");
+    assert!(
+        hide_err.to_string().contains("no local pin"),
+        "hide must fail with the pin-missing message, got: {}",
+        hide_err
+    );
+
+    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home);
+    let reveal_err = reveal_result
+        .err()
+        .expect("reveal without a local pin must fail closed");
+    assert!(
+        reveal_err.to_string().contains("no local pin"),
+        "reveal must fail with the pin-missing message, got: {}",
+        reveal_err
+    );
+
+    // Protective completion: re-establishing trust (which re-pins) must make
+    // the normal flow work again.
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+    cmd_trust(
+        repo_temp.path(),
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("re-running cmd_trust must succeed");
+
+    cmd_hide(repo_temp.path(), "origin", &gpg_home)
+        .expect("hide must succeed once the pin is re-established");
+    cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home)
+        .expect("reveal must succeed once the pin is re-established");
+}
+
+#[test]
+fn verify_fails_closed_when_pin_mismatches() {
+    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let owner_fingerprint = extract_key_fingerprint(&owner_pub);
+
+    // FULL ATTACK SIMULATION: the attacker's key already exists in the
+    // victim's local key store (imported for an unrelated repo).
+    let (attacker_sec, attacker_pub) = generate_test_key("attacker@evil.com");
+    import_key_to_gpg_home(
+        &gpg_home,
+        &attacker_pub.to_armored_string(Default::default()).unwrap(),
+    )
+    .unwrap();
+    let attacker_fingerprint = extract_key_fingerprint(&attacker_pub);
+
+    // (a) rewrite the committed trust.json to map the repo's repo_id to the
+    // attacker's fingerprint...
+    let trust_path = repo_temp.path().join(".git-gpg/trust.json");
+    let mut tampered_trust = TrustStore::load_from_file(&trust_path).unwrap();
+    tampered_trust.add_trust("repo+owner@github.com".to_string(), attacker_fingerprint.clone());
+    tampered_trust.save_to_file(&trust_path).unwrap();
+
+    // ...and (b) ship a keyring validly signed by that key.
+    let mut attacker_ring = Keyring {
+        entries: vec![KeyringEntry {
+            email: "attacker@evil.com".to_string(),
+            base64_key: base64_encode_public_key(&attacker_pub),
+            fingerprint: attacker_fingerprint.clone(),
+        }],
+        signature: None,
+    };
+    let serialized = attacker_ring.serialize();
+    let content_to_sign = extract_content_to_verify_from_keyring(&serialized)
+        .expect("freshly serialized keyring must contain the END marker");
+    let signature = sign_keyring_content(&content_to_sign, &attacker_sec)
+        .expect("the attacker must be able to sign their own keyring");
+    attacker_ring.signature = Some(signature);
+    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    std::fs::write(&keyring_path, attacker_ring.serialize()).unwrap();
+    let keyring_before = std::fs::read(&keyring_path).unwrap();
+
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let keyring_after = std::fs::read(&keyring_path).unwrap();
+
+    let err = hide_result.err().expect(
+        "the trust.json-rewrite attack must be blocked: the signature verifies but the pin does not match",
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("changed on this machine's record"),
+        "hide must fail with the pin-mismatch message, got: {}",
+        msg
+    );
+    assert!(
+        msg.contains(&owner_fingerprint) && msg.contains(&attacker_fingerprint),
+        "the mismatch message must name both the pinned ({}) and the new ({}) fingerprint, got: {}",
+        owner_fingerprint,
+        attacker_fingerprint,
+        msg
+    );
+    assert_eq!(
+        keyring_before, keyring_after,
+        "the keyring file must be untouched by the failed verify"
+    );
+}
+
+#[test]
+fn sanitized_pin_filename_is_stable() {
+    assert_eq!(
+        TrustPinStore::sanitize_repo_id("repo+owner@github.com"),
+        "repo%2Bowner%40github.com",
+        "'+' and '@' must be percent-encoded"
+    );
+    assert_eq!(
+        TrustPinStore::sanitize_repo_id("répo+owner@x.com"),
+        "r%C3%A9po%2Bowner%40x.com",
+        "non-ASCII characters must be percent-encoded as UTF-8 bytes"
+    );
+    assert_eq!(
+        TrustPinStore::sanitize_repo_id("a+b@c"),
+        TrustPinStore::sanitize_repo_id("a+b@c"),
+        "sanitization must be deterministic"
+    );
+    for repo_id in ["../../etc/passwd", "a/b", "a\\b", "a b", "a\nb", ".", ".."] {
+        let name = TrustPinStore::sanitize_repo_id(repo_id);
+        assert!(
+            !name.contains('/') && !name.contains('\\'),
+            "sanitized name for {:?} must contain no path separators, got: {:?}",
+            repo_id,
+            name
+        );
+        assert!(
+            name != "." && name != "..",
+            "sanitized name for {:?} must never be a directory alias, got: {:?}",
+            repo_id,
+            name
+        );
+        assert!(
+            name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '%')),
+            "sanitized name for {:?} must only use safe characters, got: {:?}",
+            repo_id,
+            name
+        );
+    }
 }
