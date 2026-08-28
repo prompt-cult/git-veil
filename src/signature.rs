@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use pgp::composed::{SignedSecretKey, SignedPublicKey, Deserializable, DetachedSignature};
+use pgp::composed::{Deserializable, DetachedSignature, SignedPublicKey, SignedSecretKey};
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::types::Password;
 use rand::thread_rng;
@@ -18,7 +18,9 @@ pub fn sign_keyring_content(
     passphrase: Option<&str>,
 ) -> Result<String> {
     let mut rng = thread_rng();
-    let passphrase = passphrase.map(Password::from).unwrap_or_else(Password::empty);
+    let passphrase = passphrase
+        .map(Password::from)
+        .unwrap_or_else(Password::empty);
 
     // Get the primary key for signing
     let primary_key = &signing_key.primary_key;
@@ -31,21 +33,26 @@ pub fn sign_keyring_content(
         HashAlgorithm::Sha256,
         cursor,
     ).context("Failed to create detached signature (wrong passphrase? if this key is passphrase-protected, supply it via GITVEIL_PASSPHRASE or --passphrase-stdin)")?;
-    
-    let armored = signature.to_armored_string(Default::default())
+
+    let armored = signature
+        .to_armored_string(Default::default())
         .context("Failed to armor signature")?;
-    
+
     Ok(armored)
 }
 
 /// Verifies a keyring signature against the content using a public key.
-pub fn verify_keyring_signature(keyring_content: &str, signature: &str, signing_key: &SignedPublicKey) -> Result<()> {
-    let (sig, _headers) = DetachedSignature::from_string(signature)
-        .context("Failed to parse signature")?;
-    
+pub fn verify_keyring_signature(
+    keyring_content: &str,
+    signature: &str,
+    signing_key: &SignedPublicKey,
+) -> Result<()> {
+    let (sig, _headers) =
+        DetachedSignature::from_string(signature).context("Failed to parse signature")?;
+
     sig.verify(&signing_key.primary_key, keyring_content.as_bytes())
         .context("Signature verification failed")?;
-    
+
     Ok(())
 }
 
@@ -65,9 +72,7 @@ pub fn extract_signature_from_keyring(keyring_text: &str) -> Result<String> {
         .rfind(SIG_END)
         .context("No PGP signature end marker found")?;
     if sig_begin >= sig_end {
-        anyhow::bail!(
-            "Malformed PGP signature block: BEGIN marker found at or after END marker"
-        );
+        anyhow::bail!("Malformed PGP signature block: BEGIN marker found at or after END marker");
     }
     Ok(keyring_text[sig_begin..sig_end + SIG_END.len()].to_string())
 }

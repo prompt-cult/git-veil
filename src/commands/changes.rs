@@ -3,8 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
-use crate::tracked_files::{ensure_regular_file, PathResolveMode, resolve_repo_relative_input};
-use crate::{decrypt_with_private_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
+use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
+use crate::{
+    decrypt_with_private_key, find_private_key_by_email, verify_keyring_against_trust, TrackedFiles,
+};
 
 /// Splits bytes into lines on '\n' for the compact text diff.
 fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
@@ -60,7 +62,11 @@ pub fn cmd_changes(
             )?;
 
             if !tracked.files.contains(&relative) {
-                anyhow::bail!("file not tracked: {}; run git-veil add '{}' to track it", file, file);
+                anyhow::bail!(
+                    "file not tracked: {}; run git-veil add '{}' to track it",
+                    file,
+                    file
+                );
             }
 
             resolved.push(relative);
@@ -98,8 +104,12 @@ pub fn cmd_changes(
         };
 
         // Read encrypted content
-        let ciphertext = fs::read_to_string(&encrypted_path)
-            .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
+        let ciphertext = fs::read_to_string(&encrypted_path).with_context(|| {
+            format!(
+                "Failed to read encrypted file: {}",
+                encrypted_path.display()
+            )
+        })?;
 
         // Decrypt
         let hidden = decrypt_with_private_key(&ciphertext, &private_key, passphrase)?;

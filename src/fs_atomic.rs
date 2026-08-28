@@ -35,9 +35,12 @@ use std::path::Path;
 /// removed. Note the temp name is per-target (`<name>.tmp-<pid>`), so
 /// two different files never collide even within one process.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let file_name = path
-        .file_name()
-        .with_context(|| format!("Cannot atomically write to a path with no file name: {}", path.display()))?;
+    let file_name = path.file_name().with_context(|| {
+        format!(
+            "Cannot atomically write to a path with no file name: {}",
+            path.display()
+        )
+    })?;
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let tmp_path = parent.join(format!(
         "{}.tmp-{}",

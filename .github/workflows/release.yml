@@ -1,0 +1,186 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-release:
+    name: Build Release - ${{ matrix.asset_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # blacksmith-6vcpu-macos-15 is an arm64 (Apple Silicon) runner, so
+          # macos-aarch64 is a native build and macos-x86_64 is a
+          # cross-compile via the installed target.
+          - os: blacksmith-4vcpu-ubuntu-2404
+            target: x86_64-unknown-linux-gnu
+            asset_name: git-veil-linux-x86_64
+          - os: blacksmith-6vcpu-macos-15
+            target: x86_64-apple-darwin
+            asset_name: git-veil-macos-x86_64
+          - os: blacksmith-6vcpu-macos-15
+            target: aarch64-apple-darwin
+            asset_name: git-veil-macos-aarch64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo git
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-build-release-
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Strip binary
+        run: strip target/${{ matrix.target }}/release/git-veil
+
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/release/git-veil ${{ matrix.asset_name }}
+
+      - name: Generate checksum
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          else
+            sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          fi
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          files: |
+            ${{ matrix.asset_name }}
+            ${{ matrix.asset_name }}.sha256
+
+  man-pages:
+    name: Man Pages
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo git
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-manpages-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-manpages-
+
+      - name: Generate man pages
+        run: ./scripts/gen-docs.sh
+
+      - name: Package man pages
+        run: |
+          tar -czf git-veil-man-pages.tar.gz -C docs man
+          sha256sum git-veil-man-pages.tar.gz > git-veil-man-pages.tar.gz.sha256
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          files: |
+            git-veil-man-pages.tar.gz
+            git-veil-man-pages.tar.gz.sha256
+
+  create-release:
+    name: Create Release
+    needs: [build-release, man-pages]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # softprops/action-gh-release@v2 replaces the deprecated
+      # actions/create-release@v1 + actions/upload-release-asset@v1 pair from
+      # the graphlite prior art. Assets are attached by the build and
+      # man-pages jobs against the same tag; this final pass attaches the
+      # release body. Files already uploaded are left untouched.
+      - name: Create / annotate release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          body: |
+            ## git-veil ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
+            ### Downloads
+            - Linux (x86_64): `git-veil-linux-x86_64`
+            - macOS (x86_64): `git-veil-macos-x86_64`
+            - macOS (Apple Silicon): `git-veil-macos-aarch64`
+            - Man pages: `git-veil-man-pages.tar.gz`
+
+            SHA-256 checksums are provided for every asset (`*.sha256`).
+
+            ### Installation
+            ```bash
+            chmod +x git-veil-*
+            sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
+            ```
+
+            ### Documentation
+            Tutorials and guides live in [docs/](https://github.com/prompt-cult/git-veil/tree/main/docs):
+            solo workflows, two-collaborator setup, joining and departing
+            repos, and migrations from git-crypt / git-secret.

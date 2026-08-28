@@ -87,17 +87,16 @@ plan §4B for licence/provenance notes):
   mis-scoped harness oracles (BEGIN-count invariant on the splitters, bare
   serde parse instead of `TrackedFiles::load`'s validate step, echo check on
   the empty string). Harnesses corrected; library unchanged.
-- **OPEN — Andon, fix outside fuzzing lane**: `parse_git_remote_url` accepts
+- **RESOLVED (was OPEN — Andon)**: `parse_git_remote_url` accepted
   `'@'`/`':'` inside the user/repo capture groups, so credential-shaped
-  material lands IN the derived repo_id
-  (`https://github.com/user:pass@evil/repo` ⇒ user = `"user:pass@evil"`;
-  artifact `fuzz/artifacts/parse_git_remote_url/crash-c38b1035…`). The fix
-  belongs in `src/repo_identity.rs` (SSH_SCP_RE / SCHEME_USERINFO_RE user and
-  repo groups must exclude `'@'` and `':'`). Red half of the pair pinned as
-  `repo_id_components_never_contain_credential_shaped_material` (ignored) in
-  `tests/features.rs`; un-ignore when the fix lands. Until then
-  `fuzz_parse_git_remote_url` aborts on this known finding; all its other
-  oracles (lowercase, idempotence, redaction) held across exploration runs.
+  material landed IN the derived repo_id
+  (`https://github.com/user:pass@evil/repo` ⇒ user = `"user:pass@evil"`).
+  Fixed in commit 560aa98: the SSH_SCP_RE / SCHEME_USERINFO_RE user and
+  repo groups now exclude `'@'` and `':'`, and 9629f27 made parse errors
+  never echo the input (the follow-up redaction finding, clean at 5000
+  fuzz runs). The regression test
+  `repo_id_components_never_contain_credential_shaped_material` is
+  un-ignored and green; the target is a blocking CI smoke job again.
 
 ## CI (follow-on)
 

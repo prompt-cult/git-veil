@@ -80,7 +80,10 @@ impl Keyring {
         result.push_str(BEGIN_MARKER);
         result.push('\n');
         for entry in &self.entries {
-            result.push_str(&format!("{}:{}:{}\n", entry.email, entry.base64_key, entry.fingerprint));
+            result.push_str(&format!(
+                "{}:{}:{}\n",
+                entry.email, entry.base64_key, entry.fingerprint
+            ));
         }
         result.push_str(END_MARKER);
         result.push('\n');
@@ -104,7 +107,12 @@ impl Keyring {
     /// [`Keyring::parse`] rejects with "Malformed keyring entry", bricking
     /// the signed keyring. This is rejected here with an error naming the
     /// offending email; on rejection nothing is mutated.
-    pub fn add_entry(&mut self, email: String, base64_key: String, fingerprint: String) -> Result<()> {
+    pub fn add_entry(
+        &mut self,
+        email: String,
+        base64_key: String,
+        fingerprint: String,
+    ) -> Result<()> {
         if email.contains(':') {
             anyhow::bail!(
                 "Invalid keyring email '{}': emails must not contain ':' \
@@ -158,6 +166,9 @@ impl Keyring {
     }
 
     pub fn extract_fingerprints(&self) -> Vec<&str> {
-        self.entries.iter().map(|e| e.fingerprint.as_str()).collect()
+        self.entries
+            .iter()
+            .map(|e| e.fingerprint.as_str())
+            .collect()
     }
 }

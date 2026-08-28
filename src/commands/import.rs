@@ -74,12 +74,14 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Re
             let user_id = primary_user_id(&key);
             // Print the extracted email when the UID carries one; otherwise
             // fall back to the raw UID so the output stays informative.
-            let display = extract_email_from_user_id(&user_id)
-                .unwrap_or_else(|| user_id.clone());
+            let display = extract_email_from_user_id(&user_id).unwrap_or_else(|| user_id.clone());
 
             if known.contains(&fingerprint) {
                 skipped += 1;
-                println!("= skipped (already imported): {} ({})", display, fingerprint);
+                println!(
+                    "= skipped (already imported): {} ({})",
+                    display, fingerprint
+                );
             } else {
                 if !secret_keys_content.is_empty() && !secret_keys_content.ends_with('\n') {
                     secret_keys_content.push('\n');

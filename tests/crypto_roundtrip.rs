@@ -31,9 +31,7 @@ fn generate_ed25519_test_key() -> (SignedSecretKey, SignedPublicKey) {
         .build()
         .expect("build key params");
 
-    let signed_secret_key = secret_key_params
-        .generate(&mut rng)
-        .expect("generate key");
+    let signed_secret_key = secret_key_params.generate(&mut rng).expect("generate key");
 
     let public_key = signed_secret_key.to_public_key();
 
@@ -60,9 +58,7 @@ fn generate_rsa_test_key() -> (SignedSecretKey, SignedPublicKey) {
         .build()
         .expect("build key params");
 
-    let signed_secret_key = secret_key_params
-        .generate(&mut rng)
-        .expect("generate key");
+    let signed_secret_key = secret_key_params.generate(&mut rng).expect("generate key");
 
     let public_key = signed_secret_key.to_public_key();
 
@@ -103,9 +99,7 @@ fn encrypt_to_key(plaintext: &[u8], public_key: &SignedPublicKey) -> String {
 fn decrypt_with_key(ciphertext: &str, secret_key: &SignedSecretKey) -> Vec<u8> {
     let passphrase = Password::empty();
 
-    let message = Message::from_string(ciphertext)
-        .expect("parse message")
-        .0;
+    let message = Message::from_string(ciphertext).expect("parse message").0;
 
     let mut decrypted = message
         .decrypt(&passphrase, secret_key)

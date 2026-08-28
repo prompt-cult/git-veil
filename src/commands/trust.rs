@@ -2,10 +2,20 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_store, validate_public_key_for_use, KeyUse, TrustPinStore, TrustStore};
+use crate::{
+    check_email_in_identities, derive_repo_id, extract_key_fingerprint, get_remote_push_url,
+    import_key_to_store, parse_armored_public_key, validate_public_key_for_use, KeyUse,
+    TrustPinStore, TrustStore,
+};
 
 /// Establishes trust for a repository by verifying the owner's signing key.
-pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote_name: &str, key_store: &PathBuf) -> Result<()> {
+pub fn cmd_trust(
+    repo_root: &Path,
+    repo_id: &str,
+    signing_key_path: &str,
+    remote_name: &str,
+    key_store: &PathBuf,
+) -> Result<()> {
     // Get push URL and derive repo ID
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let computed_repo_id = derive_repo_id(&push_url)?;
@@ -77,10 +87,10 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
     TrustPinStore::write_pin(key_store, repo_id, &fingerprint)
         .context("Failed to write local trust pin")?;
 
-    println!("✓ Trusted key for {} (fingerprint: {})", repo_id, fingerprint);
     println!(
-        "✓ Pinned {} for {} on this machine",
-        fingerprint, repo_id
+        "✓ Trusted key for {} (fingerprint: {})",
+        repo_id, fingerprint
     );
+    println!("✓ Pinned {} for {} on this machine", fingerprint, repo_id);
     Ok(())
 }

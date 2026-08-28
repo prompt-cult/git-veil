@@ -5,21 +5,26 @@
 
 use git_veil::{
     base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
-    cmd_cat, cmd_changes, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_remove,
+    cmd_cat, cmd_changes, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_list_keys, cmd_remove,
     cmd_removekey, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide,
-    cmd_verify_keyring, cmd_list_keys, decrypt_with_private_key, default_key_store,
-    encrypt_to_public_key, export_public_key, extract_content_to_verify_from_keyring,
-    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
-    import_key_to_store, parse_armored_public_key, parse_git_remote_url,
-    sign_keyring_content, verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry,
-    TrustPinStore, TrustStore, TrackedFiles,
+    cmd_verify_keyring, decrypt_with_private_key, default_key_store, encrypt_to_public_key,
+    export_public_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
+    find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_store,
+    parse_armored_public_key, parse_git_remote_url, sign_keyring_content,
+    verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry, TrackedFiles, TrustPinStore,
+    TrustStore,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use serial_test::serial;
 use std::path::PathBuf;
 
-fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+fn generate_test_key(
+    email: &str,
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let mut rng = thread_rng();
 
     let encrypt_subkey = SubkeyParamsBuilder::default()
@@ -51,7 +56,10 @@ fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::compo
 fn generate_protected_test_key(
     email: &str,
     passphrase: &str,
-) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let mut rng = thread_rng();
 
     let encrypt_subkey = SubkeyParamsBuilder::default()
@@ -175,9 +183,8 @@ fn find_private_key_by_email_selects_matching_key_when_not_first_in_secret_key_s
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
     write_multi_key_secret_keys(&key_store, &[alice, bob]);
 
-    let key = find_private_key_by_email(&key_store, "bob@example.com").expect(
-        "bob's key should be found even though alice's key comes first",
-    );
+    let key = find_private_key_by_email(&key_store, "bob@example.com")
+        .expect("bob's key should be found even though alice's key comes first");
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
         bob_fingerprint,
@@ -194,9 +201,8 @@ fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secret
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
     write_multi_key_secret_keys(&key_store, &[alice, bob]);
 
-    let key = find_private_key_by_fingerprint(&key_store, &bob_fingerprint).expect(
-        "bob's key should be found even though alice's key comes first",
-    );
+    let key = find_private_key_by_fingerprint(&key_store, &bob_fingerprint)
+        .expect("bob's key should be found even though alice's key comes first");
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
         bob_fingerprint,
@@ -223,7 +229,9 @@ fn find_private_key_by_email_errors_on_empty_secret_key_store() {
 
     let result = find_private_key_by_email(&key_store, "alice@example.com");
 
-    let err = result.err().expect("an empty secret key store must not yield any key");
+    let err = result
+        .err()
+        .expect("an empty secret key store must not yield any key");
     assert!(
         err.to_string().contains("No private key blocks found"),
         "the error must state that no private key blocks were found, got: {}",
@@ -275,9 +283,9 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
 
     let bob_result = find_private_key_by_email(&key_store, "bob@example.com");
 
-    let bob_err = bob_result.err().expect(
-        "a secret key store whose final block is truncated must not yield any key",
-    );
+    let bob_err = bob_result
+        .err()
+        .expect("a secret key store whose final block is truncated must not yield any key");
     assert!(
         bob_err.to_string().contains("Unterminated private key block"),
         "the error must name the unterminated block, not the misleading 'No secret key found for email', got: {}",
@@ -294,7 +302,9 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
         bob_err
     );
     assert!(
-        !bob_err.to_string().contains("No secret key found for email"),
+        !bob_err
+            .to_string()
+            .contains("No secret key found for email"),
         "the error must not be indistinguishable from 'email never existed', got: {}",
         bob_err
     );
@@ -310,7 +320,9 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
         "a corrupt secret key store must be rejected in full: even keys before the truncated tail must not be served",
     );
     assert!(
-        alice_err.to_string().contains("Unterminated private key block"),
+        alice_err
+            .to_string()
+            .contains("Unterminated private key block"),
         "alice's lookup must fail with the corrupt secret key store error too, got: {}",
         alice_err
     );
@@ -369,7 +381,12 @@ fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated
 // Email matching requires exact address equality (M1)
 // ============================================================================
 
-fn generate_test_key_with_uid(uid: &str) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+fn generate_test_key_with_uid(
+    uid: &str,
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let mut rng = thread_rng();
 
     let encrypt_subkey = SubkeyParamsBuilder::default()
@@ -396,8 +413,7 @@ fn generate_test_key_with_uid(uid: &str) -> (pgp::composed::SignedSecretKey, pgp
 
 #[test]
 fn email_matching_requires_exact_address() {
-    let (_, evil_pub) =
-        generate_test_key_with_uid("Evil <evil-bob@x.com.attacker.net>");
+    let (_, evil_pub) = generate_test_key_with_uid("Evil <evil-bob@x.com.attacker.net>");
 
     // A UID whose address merely *contains* the requested email as a
     // substring must NOT match: trusting/adding for bob@x.com must not
@@ -490,23 +506,30 @@ fn bare_user_id_without_angle_brackets_still_matches() {
 #[test]
 fn add_entry_updates_existing_email_and_clears_signature() {
     let mut keyring = Keyring::new();
-    keyring.add_entry(
-        "alice@example.com".to_string(),
-        "QUJDREVGR0hJSktMTU5PUA==".to_string(),
-        "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
-    ).unwrap();
-    keyring.add_entry(
-        "bob@example.com".to_string(),
-        "QkNERUVGR0hJSktMTU5PUFI=".to_string(),
-        "BBBB2222BBBB2222BBBB2222BBBB2222BBBB2222".to_string(),
-    ).unwrap();
-    keyring.signature = Some("-----BEGIN PGP SIGNATURE-----\nstale\n-----END PGP SIGNATURE-----".to_string());
+    keyring
+        .add_entry(
+            "alice@example.com".to_string(),
+            "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+            "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
+        )
+        .unwrap();
+    keyring
+        .add_entry(
+            "bob@example.com".to_string(),
+            "QkNERUVGR0hJSktMTU5PUFI=".to_string(),
+            "BBBB2222BBBB2222BBBB2222BBBB2222BBBB2222".to_string(),
+        )
+        .unwrap();
+    keyring.signature =
+        Some("-----BEGIN PGP SIGNATURE-----\nstale\n-----END PGP SIGNATURE-----".to_string());
 
-    keyring.add_entry(
-        "alice@example.com".to_string(),
-        "REVGREdISklLTE1OT1BSU1Q=".to_string(),
-        "CCCC3333CCCC3333CCCC3333CCCC3333CCCC3333".to_string(),
-    ).unwrap();
+    keyring
+        .add_entry(
+            "alice@example.com".to_string(),
+            "REVGREdISklLTE1OT1BSU1Q=".to_string(),
+            "CCCC3333CCCC3333CCCC3333CCCC3333CCCC3333".to_string(),
+        )
+        .unwrap();
 
     assert_eq!(
         keyring.entries.len(),
@@ -514,8 +537,14 @@ fn add_entry_updates_existing_email_and_clears_signature() {
         "re-adding an existing email must not append a duplicate entry, got: {:?}",
         keyring.entries
     );
-    assert_eq!(keyring.entries[0].email, "alice@example.com", "order must be preserved: alice first");
-    assert_eq!(keyring.entries[1].email, "bob@example.com", "order must be preserved: bob second");
+    assert_eq!(
+        keyring.entries[0].email, "alice@example.com",
+        "order must be preserved: alice first"
+    );
+    assert_eq!(
+        keyring.entries[1].email, "bob@example.com",
+        "order must be preserved: bob second"
+    );
     assert_eq!(
         keyring.entries[0].fingerprint, "CCCC3333CCCC3333CCCC3333CCCC3333CCCC3333",
         "alice's fingerprint must be updated in place, got: {:?}",
@@ -538,11 +567,7 @@ fn keyring_parse_rejects_end_marker_before_begin() {
     // precedes (or overlaps) the BEGIN marker must yield a proper parse
     // error, never a panic (this input used to panic with
     // "byte range starts at .. but ends at 0" in the marker slicing).
-    let inverted = format!(
-        "{}\n{}\n",
-        git_veil::END_MARKER,
-        git_veil::BEGIN_MARKER
-    );
+    let inverted = format!("{}\n{}\n", git_veil::END_MARKER, git_veil::BEGIN_MARKER);
     let err = Keyring::parse(&inverted)
         .err()
         .expect("END-before-BEGIN keyring must be rejected, not panic");
@@ -597,11 +622,13 @@ fn repo_id_components_never_contain_credential_shaped_material() {
 #[test]
 fn keyring_find_by_email_is_case_insensitive() {
     let mut keyring = Keyring::new();
-    keyring.add_entry(
-        "alice@example.com".to_string(),
-        "QUJDREVGR0hJSktMTU5PUA==".to_string(),
-        "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
-    ).unwrap();
+    keyring
+        .add_entry(
+            "alice@example.com".to_string(),
+            "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+            "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
+        )
+        .unwrap();
 
     let found = keyring
         .find_by_email("ALICE@EXAMPLE.COM")
@@ -626,19 +653,23 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("first tell must succeed");
 
-    let keyring_after_first =
-        Keyring::parse(&std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap()).unwrap();
+    let keyring_after_first = Keyring::parse(
+        &std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap(),
+    )
+    .unwrap();
 
     let second_tell = cmd_tell(
         repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
@@ -663,7 +694,8 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         alice_count, keyring_text
     );
     assert_eq!(
-        keyring_after_second.entries.len(), 1,
+        keyring_after_second.entries.len(),
+        1,
         "keyring must hold exactly one entry total after duplicate tell, got: {:?}",
         keyring_after_second.entries
     );
@@ -683,7 +715,8 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
         "alice@x.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("first tell must succeed");
 
@@ -692,7 +725,8 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
         "ALICE@X.COM",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("second tell with different email case must succeed");
 
@@ -700,9 +734,11 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
     let keyring = Keyring::parse(&keyring_text).unwrap();
 
     assert_eq!(
-        keyring.entries.len(), 1,
+        keyring.entries.len(),
+        1,
         "telling with a different email case must update, not duplicate: got {:?} in {}",
-        keyring.entries, keyring_text
+        keyring.entries,
+        keyring_text
     );
     assert_eq!(
         keyring.entries[0].email, "alice@x.com",
@@ -823,7 +859,11 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
         }],
         signature: None,
     };
-    std::fs::write(repo_temp.path().join(".git-veil/keyring"), unsigned_keyring.serialize()).unwrap();
+    std::fs::write(
+        repo_temp.path().join(".git-veil/keyring"),
+        unsigned_keyring.serialize(),
+    )
+    .unwrap();
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -833,7 +873,8 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
     assert!(
@@ -860,13 +901,13 @@ fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::Path
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
     let keyring_path = repo_temp.path().join(".git-veil/keyring");
-    let mut tampered =
-        Keyring::parse(&std::fs::read_to_string(&keyring_path).unwrap()).unwrap();
+    let mut tampered = Keyring::parse(&std::fs::read_to_string(&keyring_path).unwrap()).unwrap();
     tampered
         .add_entry(
             "attacker@evil.com".to_string(),
@@ -874,9 +915,8 @@ fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::Path
             "ABCD1234ABCD1234ABCD1234ABCD1234ABCD1234".to_string(),
         )
         .unwrap();
-    tampered.signature = Some(
-        "-----BEGIN PGP SIGNATURE-----\nbogus\n-----END PGP SIGNATURE-----".to_string(),
-    );
+    tampered.signature =
+        Some("-----BEGIN PGP SIGNATURE-----\nbogus\n-----END PGP SIGNATURE-----".to_string());
     std::fs::write(&keyring_path, tampered.serialize()).unwrap();
 
     (repo_temp, key_store, keyring_path)
@@ -916,7 +956,8 @@ fn list_keys_on_valid_keyring_succeeds_and_reports_verification() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -977,7 +1018,11 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
     let signature = sign_keyring_content(&content_to_sign, &mallory_sec, None)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
-    std::fs::write(repo_temp.path().join(".git-veil/keyring"), forged.serialize()).unwrap();
+    std::fs::write(
+        repo_temp.path().join(".git-veil/keyring"),
+        forged.serialize(),
+    )
+    .unwrap();
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -987,7 +1032,8 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
     assert!(
@@ -1009,11 +1055,12 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
-    let keyring_text =
-        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).expect("keyring must exist after tell");
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring"))
+        .expect("keyring must exist after tell");
 
     assert!(
         result.is_ok(),
@@ -1077,14 +1124,13 @@ fn tell_fails_when_collaborator_key_cannot_encrypt() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
     let keyring_after = std::fs::read(&keyring_path).unwrap();
 
-    let err = result.expect_err(
-        "tell must refuse a collaborator key that cannot encrypt",
-    );
+    let err = result.expect_err("tell must refuse a collaborator key that cannot encrypt");
     let msg = format!("{}", err);
     assert!(
         msg.contains("collaborator key cannot encrypt for alice@example.com"),
@@ -1112,9 +1158,10 @@ fn tell_canary_does_not_appear_anywhere() {
             let path = entry.path();
             if path.is_dir() {
                 hits.extend(contains_canary(&path));
-            } else if std::fs::read(&path).map(|b| {
-                b.windows(TELL_CANARY.len()).any(|w| w == TELL_CANARY)
-            }).unwrap_or(false) {
+            } else if std::fs::read(&path)
+                .map(|b| b.windows(TELL_CANARY.len()).any(|w| w == TELL_CANARY))
+                .unwrap_or(false)
+            {
                 hits.push(path);
             }
         }
@@ -1132,7 +1179,8 @@ fn tell_canary_does_not_appear_anywhere() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("tell with an encryptable key must succeed");
 
@@ -1164,18 +1212,27 @@ fn removeperson_removes_entry_and_resigns() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("tell alice must succeed");
-    cmd_tell(        repo_temp.path(),
+    cmd_tell(
+        repo_temp.path(),
         "bob@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("tell bob must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &key_store, None);
+    let remove_result = cmd_removeperson(
+        repo_temp.path(),
+        "bob@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
@@ -1209,11 +1266,18 @@ fn removeperson_removes_entry_regardless_of_email_case() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("tell alice must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "ALICE@EXAMPLE.COM", "origin", &key_store, None);
+    let remove_result = cmd_removeperson(
+        repo_temp.path(),
+        "ALICE@EXAMPLE.COM",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
@@ -1243,13 +1307,22 @@ fn removeperson_unknown_email_fails() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("tell alice must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "carol@example.com", "origin", &key_store, None);
+    let remove_result = cmd_removeperson(
+        repo_temp.path(),
+        "carol@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
-    let err = remove_result.err().expect("removing an unknown email must fail");
+    let err = remove_result
+        .err()
+        .expect("removing an unknown email must fail");
     assert!(
         err.to_string().contains("carol@example.com"),
         "the error must name the missing email, got: {}",
@@ -1267,7 +1340,8 @@ fn removeperson_requires_trust() {
         repo_temp.path(),
         "alice@example.com",
         "origin",
-        &repo_temp.path().join("key-store"), None
+        &repo_temp.path().join("key-store"),
+        None,
     );
 
     assert!(
@@ -1290,7 +1364,8 @@ fn removeperson_rejects_tampered_keyring() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("tell alice must succeed");
 
@@ -1312,11 +1387,22 @@ fn removeperson_rejects_tampered_keyring() {
     let signature = sign_keyring_content(&content_to_sign, &mallory_sec, None)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
-    std::fs::write(repo_temp.path().join(".git-veil/keyring"), forged.serialize()).unwrap();
+    std::fs::write(
+        repo_temp.path().join(".git-veil/keyring"),
+        forged.serialize(),
+    )
+    .unwrap();
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &key_store, None);
+    let remove_result = cmd_removeperson(
+        repo_temp.path(),
+        "mallory@evil.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
-    let keyring_text_after = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
+    let keyring_text_after =
+        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
 
     assert!(
         remove_result.is_err(),
@@ -1400,7 +1486,8 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
     let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &key_store);
@@ -1433,8 +1520,8 @@ fn write_tracked_json(repo_root: &std::path::Path, files: &[&str]) {
 
 /// Sets up a repo where the trusted owner key is also a keyring entry, so a
 /// full add -> hide -> reveal flow can run with the owner's own keypair.
-fn setup_repo_with_owner_in_keyring()
--> (tempfile::TempDir, PathBuf, pgp::composed::SignedPublicKey) {
+fn setup_repo_with_owner_in_keyring() -> (tempfile::TempDir, PathBuf, pgp::composed::SignedPublicKey)
+{
     let repo_temp = setup_git_repo_with_origin_remote();
 
     cmd_init(repo_temp.path()).expect("cmd_init must succeed");
@@ -1461,7 +1548,8 @@ fn setup_repo_with_owner_in_keyring()
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -1477,7 +1565,9 @@ fn tracked_files_load_rejects_absolute_paths() {
 
     let result = TrackedFiles::load(&tracked_path);
 
-    let err = result.err().expect("absolute tracked path must be rejected");
+    let err = result
+        .err()
+        .expect("absolute tracked path must be rejected");
     assert!(
         err.to_string().contains("/etc/passwd"),
         "error must name the offending path, got: {}",
@@ -1537,7 +1627,10 @@ fn add_rejects_file_outside_repo() {
     let outside_file = outside.path().join("outside.env");
     std::fs::write(&outside_file, "nope").unwrap();
 
-    let result = cmd_add(repo_temp.path(), vec![outside_file.to_str().unwrap().to_string()]);
+    let result = cmd_add(
+        repo_temp.path(),
+        vec![outside_file.to_str().unwrap().to_string()],
+    );
 
     assert!(
         result.is_err(),
@@ -1555,7 +1648,10 @@ fn remove_rejects_file_outside_repo() {
     let outside_file = outside.path().join("outside.env");
     std::fs::write(&outside_file, "nope").unwrap();
 
-    let result = cmd_remove(repo_temp.path(), vec![outside_file.to_str().unwrap().to_string()]);
+    let result = cmd_remove(
+        repo_temp.path(),
+        vec![outside_file.to_str().unwrap().to_string()],
+    );
 
     assert!(
         result.is_err(),
@@ -1601,9 +1697,8 @@ fn remove_works_on_currently_hidden_file() {
          just to untrack it defeats the purpose",
     );
 
-    let tracked_content =
-        std::fs::read_to_string(repo_temp.path().join(".git-veil/tracked.json"))
-            .expect("tracked.json must exist after remove");
+    let tracked_content = std::fs::read_to_string(repo_temp.path().join(".git-veil/tracked.json"))
+        .expect("tracked.json must exist after remove");
     assert!(
         !tracked_content.contains("\"a.env\""),
         "tracked.json must no longer list a.env, got: {}",
@@ -1680,14 +1775,16 @@ fn reveal_refuses_escaping_tracked_path() {
         .join("outside.txt.secret");
     std::fs::write(&planted, ciphertext).unwrap();
 
-    let target = repo_temp
-        .path()
-        .parent()
-        .unwrap()
-        .join("outside.txt");
+    let target = repo_temp.path().parent().unwrap().join("outside.txt");
     let _ = std::fs::remove_file(&target);
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
+    let result = cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let target_exists = target.exists();
     let _ = std::fs::remove_file(&target);
@@ -1726,7 +1823,8 @@ fn hide_then_reveal_restores_exact_bytes() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -1737,13 +1835,17 @@ fn hide_then_reveal_restores_exact_bytes() {
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let plaintext_gone_after_hide = !repo_temp.path().join("secret.env").exists();
-    let ciphertext_after_hide =
-        repo_temp.path().join("secret.env.secret").exists();
+    let ciphertext_after_hide = repo_temp.path().join("secret.env.secret").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
+    let reveal_result = cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let restored = std::fs::read(repo_temp.path().join("secret.env"));
-    let ciphertext_gone_after_reveal =
-        !repo_temp.path().join("secret.env.secret").exists();
+    let ciphertext_gone_after_reveal = !repo_temp.path().join("secret.env.secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1783,7 +1885,8 @@ fn hide_then_reveal_in_subdirectory() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -1796,13 +1899,17 @@ fn hide_then_reveal_in_subdirectory() {
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let plaintext_gone_after_hide = !repo_temp.path().join(tracked_rel).exists();
-    let ciphertext_after_hide = repo_temp.path().join("a/b/c/secret.env.secret")
-    .exists();
+    let ciphertext_after_hide = repo_temp.path().join("a/b/c/secret.env.secret").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
+    let reveal_result = cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let restored = std::fs::read(repo_temp.path().join(tracked_rel));
-    let ciphertext_gone_after_reveal = !repo_temp.path().join("a/b/c/secret.env.secret")
-    .exists();
+    let ciphertext_gone_after_reveal = !repo_temp.path().join("a/b/c/secret.env.secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1842,7 +1949,8 @@ fn hide_reveal_roundtrip_binary_file() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -1854,7 +1962,13 @@ fn hide_reveal_roundtrip_binary_file() {
     let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let plaintext_gone_after_hide = !repo_temp.path().join("blob.bin").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
+    let reveal_result = cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let restored = std::fs::read(repo_temp.path().join("blob.bin"));
 
     hide_result.expect("cmd_hide must succeed");
@@ -1890,10 +2004,8 @@ fn ciphertext_filename_is_full_name_plus_secret() {
     cmd_add(repo_temp.path(), vec!["notes".to_string()]).expect("cmd_add must succeed");
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
-    let ciphertext_exists =
-        repo_temp.path().join("notes.secret").exists();
-    let mangled_exists =
-        repo_temp.path().join("notes..secret").exists();
+    let ciphertext_exists = repo_temp.path().join("notes.secret").exists();
+    let mangled_exists = repo_temp.path().join("notes..secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1914,10 +2026,8 @@ fn ciphertext_filename_for_dotfile() {
     cmd_add(repo_temp.path(), vec![".env".to_string()]).expect("cmd_add must succeed");
 
     let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
-    let ciphertext_exists =
-        repo_temp.path().join(".env.secret").exists();
-    let mangled_exists =
-        repo_temp.path().join(".env..secret").exists();
+    let ciphertext_exists = repo_temp.path().join(".env.secret").exists();
+    let mangled_exists = repo_temp.path().join(".env..secret").exists();
 
     hide_result.expect("cmd_hide must succeed");
     assert!(
@@ -1948,7 +2058,8 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -1964,18 +2075,26 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         .map(|(name, _)| {
             (
                 name.to_string(),
-                repo_temp
-                    .path()
-                    .join(format!("{}.secret", name))
-                    .exists(),
+                repo_temp.path().join(format!("{}.secret", name)).exists(),
             )
         })
         .collect();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
+    let reveal_result = cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let restored: Vec<(String, Option<Vec<u8>>)> = cases
         .iter()
-        .map(|(name, _)| (name.to_string(), std::fs::read(repo_temp.path().join(name)).ok()))
+        .map(|(name, _)| {
+            (
+                name.to_string(),
+                std::fs::read(repo_temp.path().join(name)).ok(),
+            )
+        })
         .collect();
 
     hide_result.expect("cmd_hide must succeed");
@@ -1987,13 +2106,11 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         );
     }
     reveal_result.expect("cmd_reveal must succeed");
-    for ((name, original), (restored_name, restored_bytes)) in
-        cases.iter().zip(restored.iter())
-    {
+    for ((name, original), (restored_name, restored_bytes)) in cases.iter().zip(restored.iter()) {
         assert_eq!(name, restored_name, "test bookkeeping must stay in sync");
-        let restored_bytes = restored_bytes.as_ref().unwrap_or_else(|| {
-            panic!("reveal must recreate {}", name)
-        });
+        let restored_bytes = restored_bytes
+            .as_ref()
+            .unwrap_or_else(|| panic!("reveal must recreate {}", name));
         assert_eq!(
             restored_bytes, original,
             "reveal must restore {} byte-exactly under its full original name",
@@ -2055,7 +2172,8 @@ fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -2071,14 +2189,21 @@ fn cat_returns_exact_bytes_without_touching_disk() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
-    let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &key_store, None);
-    let ciphertext_still_exists =
-        repo_temp.path().join("secret.env.secret").exists();
+    let cat_result = cmd_cat(
+        repo_temp.path(),
+        "secret.env",
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
+    let ciphertext_still_exists = repo_temp.path().join("secret.env.secret").exists();
     let no_plaintext_on_disk = !repo_temp.path().join("secret.env").exists();
 
     let bytes = cat_result.expect("cmd_cat must decrypt the tracked file");
     assert_eq!(
-        bytes, plaintext.as_bytes(),
+        bytes,
+        plaintext.as_bytes(),
         "cat must return the exact original plaintext bytes"
     );
     assert!(
@@ -2099,7 +2224,14 @@ fn cat_returns_exact_bytes_without_touching_disk() {
 fn cat_fails_for_untracked_file() {
     let (repo_temp, key_store) = setup_hidden_repo_with_alice_key();
 
-    let result = cmd_cat(repo_temp.path(), "not-tracked.env", "alice@example.com", "origin", &key_store, None);
+    let result = cmd_cat(
+        repo_temp.path(),
+        "not-tracked.env",
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let err = result.err().expect("cat of an untracked file must fail");
     assert!(
@@ -2117,7 +2249,14 @@ fn cat_rejects_path_escaping_the_repo() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
-    let dotdot_result = cmd_cat(repo_temp.path(), "../outside.txt", "alice@example.com", "origin", &key_store, None);
+    let dotdot_result = cmd_cat(
+        repo_temp.path(),
+        "../outside.txt",
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let outside = repo_temp.path().parent().unwrap().join("outside.txt");
     std::fs::write(&outside, "nope").unwrap();
     let absolute_result = cmd_cat(
@@ -2125,7 +2264,8 @@ fn cat_rejects_path_escaping_the_repo() {
         outside.to_str().unwrap(),
         "alice@example.com",
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
     let absolute_exists = outside.exists();
     let _ = std::fs::remove_file(&outside);
@@ -2374,7 +2514,13 @@ fn reveal_refuses_to_write_through_symlink() {
     )
     .unwrap();
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
+    let result = cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let err = result
         .err()
@@ -2423,9 +2569,15 @@ fn changes_reports_no_changes_when_plaintext_matches() {
     // Re-create the plaintext with IDENTICAL bytes, as if revealed and untouched.
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
-    let ciphertext_still_exists =
-        repo_temp.path().join("secret.env.secret").exists();
+    let result = cmd_changes(
+        repo_temp.path(),
+        vec![],
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
+    let ciphertext_still_exists = repo_temp.path().join("secret.env.secret").exists();
 
     let changed = result.expect("cmd_changes must succeed when plaintext matches");
     assert!(
@@ -2451,9 +2603,20 @@ fn changes_reports_modified_file() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
-    std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=NEW-value\nDB=hunter2\n").unwrap();
+    std::fs::write(
+        repo_temp.path().join("secret.env"),
+        "API_KEY=NEW-value\nDB=hunter2\n",
+    )
+    .unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
+    let result = cmd_changes(
+        repo_temp.path(),
+        vec![],
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let changed = result.expect("cmd_changes must succeed for a modified file");
     assert_eq!(
@@ -2473,7 +2636,14 @@ fn changes_ignores_missing_plaintext() {
     cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     // hide deleted the plaintext; it is still hidden but absent on disk.
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
+    let result = cmd_changes(
+        repo_temp.path(),
+        vec![],
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let changed = result.expect("missing plaintext must be skipped, not an error");
     assert!(
@@ -2496,10 +2666,13 @@ fn changes_fails_for_untracked_file() {
         vec!["not-tracked.env".to_string()],
         "owner@github.com",
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
 
-    let err = result.err().expect("changes for an untracked file must fail");
+    let err = result
+        .err()
+        .expect("changes for an untracked file must fail");
     assert!(
         err.to_string().contains("not tracked"),
         "the error must say the file is not tracked, got: {}",
@@ -2519,7 +2692,14 @@ fn changes_detects_binary_difference() {
     let modified: Vec<u8> = vec![0u8, 1, 2, 3, 254, 9];
     std::fs::write(repo_temp.path().join("blob.bin"), &modified).unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
+    let result = cmd_changes(
+        repo_temp.path(),
+        vec![],
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let changed = result.expect("cmd_changes must succeed for a binary file");
     assert_eq!(
@@ -2604,7 +2784,13 @@ fn verify_fails_closed_when_pin_missing() {
         hide_msg
     );
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
+    let reveal_result = cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let reveal_err = reveal_result
         .err()
         .expect("reveal without a local pin must fail closed");
@@ -2633,8 +2819,14 @@ fn verify_fails_closed_when_pin_missing() {
 
     cmd_hide(repo_temp.path(), "origin", &key_store)
         .expect("hide must succeed once the pin is re-established");
-    cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None)
-        .expect("reveal must succeed once the pin is re-established");
+    cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    )
+    .expect("reveal must succeed once the pin is re-established");
 }
 
 #[test]
@@ -2656,7 +2848,10 @@ fn verify_fails_closed_when_pin_mismatches() {
     // attacker's fingerprint...
     let trust_path = repo_temp.path().join(".git-veil/trust.json");
     let mut tampered_trust = TrustStore::load_from_file(&trust_path).unwrap();
-    tampered_trust.add_trust("repo+owner@github.com".to_string(), attacker_fingerprint.clone());
+    tampered_trust.add_trust(
+        "repo+owner@github.com".to_string(),
+        attacker_fingerprint.clone(),
+    );
     tampered_trust.save_to_file(&trust_path).unwrap();
 
     // ...and (b) ship a keyring validly signed by that key.
@@ -2730,7 +2925,13 @@ fn decrypt_failure_mentions_recipient_or_passphrase_causes() {
     let wrong_key = generate_test_key("owner@github.com").0;
     write_multi_key_secret_keys(&key_store, &[wrong_key]);
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
+    let result = cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let err = result
         .err()
         .expect("decrypting owner ciphertext with a different key must fail");
@@ -2833,7 +3034,8 @@ fn setup_repo_with_owner_and_collaborators(
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed for the owner");
 
@@ -2848,7 +3050,8 @@ fn setup_repo_with_owner_and_collaborators(
             email,
             keyfile.to_str().unwrap(),
             "origin",
-            &key_store, None
+            &key_store,
+            None,
         )
         .unwrap_or_else(|e| panic!("cmd_tell must succeed for {}: {:?}", email, e));
 
@@ -2881,8 +3084,13 @@ fn hide_encrypts_to_every_key_in_keyring() {
     for email in emails {
         let secret_key = find_private_key_by_email(&key_store, email)
             .unwrap_or_else(|e| panic!("secret key store must hold {}'s secret key: {}", email, e));
-        let decrypted = decrypt_with_private_key(&ciphertext, &secret_key, None)
-            .unwrap_or_else(|e| panic!("{} must be able to decrypt the shared ciphertext: {}", email, e));
+        let decrypted =
+            decrypt_with_private_key(&ciphertext, &secret_key, None).unwrap_or_else(|e| {
+                panic!(
+                    "{} must be able to decrypt the shared ciphertext: {}",
+                    email, e
+                )
+            });
         assert_eq!(
             decrypted,
             plaintext.as_bytes(),
@@ -2911,8 +3119,12 @@ fn reveal_works_for_each_collaborator_after_hide() {
             email
         );
 
-        cmd_reveal(repo_temp.path(), email, "origin", &key_store, None)
-            .unwrap_or_else(|e| panic!("{} must be able to cmd_reveal the hidden file: {:?}", email, e));
+        cmd_reveal(repo_temp.path(), email, "origin", &key_store, None).unwrap_or_else(|e| {
+            panic!(
+                "{} must be able to cmd_reveal the hidden file: {:?}",
+                email, e
+            )
+        });
 
         let restored = std::fs::read(repo_temp.path().join("secret.env"))
             .unwrap_or_else(|e| panic!("reveal must restore the plaintext for {}: {}", email, e));
@@ -2946,12 +3158,23 @@ fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
     }
 
     // Revoke Bob, then re-hide (reveal as Alice restores the plaintext first).
-    cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &key_store, None)
-        .expect("cmd_removeperson must succeed");
-    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None)
-        .expect("reveal as alice must restore the plaintext for the re-hide");
-    cmd_hide(repo_temp.path(), "origin", &key_store)
-        .expect("re-hide after removal must succeed");
+    cmd_removeperson(
+        repo_temp.path(),
+        "bob@example.com",
+        "origin",
+        &key_store,
+        None,
+    )
+    .expect("cmd_removeperson must succeed");
+    cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    )
+    .expect("reveal as alice must restore the plaintext for the re-hide");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("re-hide after removal must succeed");
     let ciphertext_after = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
         .expect("ciphertext must exist after the re-hide");
 
@@ -2966,7 +3189,12 @@ fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
     for email in ["alice@example.com", "carol@example.com"] {
         let secret_key = find_private_key_by_email(&key_store, email).unwrap();
         let decrypted = decrypt_with_private_key(&ciphertext_after, &secret_key, None)
-            .unwrap_or_else(|e| panic!("after removal, {} must still be able to decrypt: {}", email, e));
+            .unwrap_or_else(|e| {
+                panic!(
+                    "after removal, {} must still be able to decrypt: {}",
+                    email, e
+                )
+            });
         assert_eq!(decrypted, plaintext.as_bytes());
     }
 }
@@ -3003,8 +3231,7 @@ fn sanitized_pin_filename_is_stable() {
             name
         );
         assert!(
-            name
-                .chars()
+            name.chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '%')),
             "sanitized name for {:?} must only use safe characters, got: {:?}",
             repo_id,
@@ -3079,9 +3306,18 @@ fn reveal_restores_plaintext_and_removes_secret_file() {
     std::fs::write(repo_temp.path().join(tracked_rel), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
-    assert!(repo_temp.path().join(format!("{}.secret", tracked_rel)).exists());
+    assert!(repo_temp
+        .path()
+        .join(format!("{}.secret", tracked_rel))
+        .exists());
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
+    let reveal_result = cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
     reveal_result.expect("cmd_reveal must succeed");
 
     let restored = std::fs::read(repo_temp.path().join(tracked_rel))
@@ -3092,7 +3328,10 @@ fn reveal_restores_plaintext_and_removes_secret_file() {
         "reveal must restore the exact original bytes"
     );
     assert!(
-        !repo_temp.path().join(format!("{}.secret", tracked_rel)).exists(),
+        !repo_temp
+            .path()
+            .join(format!("{}.secret", tracked_rel))
+            .exists(),
         "reveal must delete the .secret file"
     );
 }
@@ -3124,7 +3363,10 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
             .expect("run git");
         assert!(status.success(), "git {:?} failed", args);
     }
-    copy_dir_all(&repo_temp.path().join(".git-veil"), &clone.path().join(".git-veil"));
+    copy_dir_all(
+        &repo_temp.path().join(".git-veil"),
+        &clone.path().join(".git-veil"),
+    );
     std::fs::copy(
         repo_temp.path().join("secret.env.secret"),
         clone.path().join("secret.env.secret"),
@@ -3164,9 +3406,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
 /// passphrase (secret key store holds the protected secret; trust + public-keys.pgp are
 /// public-key-only, so no passphrase is needed to establish trust).
 /// Returns (repo_temp, key_store, owner_keyfile_path).
-fn setup_repo_with_protected_owner(
-    passphrase: &str,
-) -> (tempfile::TempDir, PathBuf, PathBuf) {
+fn setup_repo_with_protected_owner(passphrase: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
     let repo_temp = setup_git_repo_with_origin_remote();
 
     cmd_init(repo_temp.path()).expect("cmd_init must succeed");
@@ -3212,9 +3452,8 @@ fn protected_key_cannot_decrypt_with_empty_passphrase() {
     );
 
     // With the correct passphrase the same ciphertext decrypts.
-    let decrypted =
-        decrypt_with_private_key(&ciphertext, &protected_sec, Some("correct horse"))
-            .expect("the correct passphrase must unlock the protected key");
+    let decrypted = decrypt_with_private_key(&ciphertext, &protected_sec, Some("correct horse"))
+        .expect("the correct passphrase must unlock the protected key");
     assert_eq!(
         decrypted, plaintext,
         "decryption with the correct passphrase must restore the exact bytes"
@@ -3233,7 +3472,7 @@ fn signing_with_protected_key_requires_passphrase() {
         owner_key_path,
         "origin",
         &key_store,
-        None
+        None,
     );
     let Err(err) = no_passphrase else {
         panic!("tell with a passphrase-protected owner key must fail without the passphrase");
@@ -3251,7 +3490,7 @@ fn signing_with_protected_key_requires_passphrase() {
         owner_key_path,
         "origin",
         &key_store,
-        Some("correct horse with typo")
+        Some("correct horse with typo"),
     );
     assert!(
         wrong_passphrase.is_err(),
@@ -3265,7 +3504,7 @@ fn signing_with_protected_key_requires_passphrase() {
         owner_key_path,
         "origin",
         &key_store,
-        Some("correct horse")
+        Some("correct horse"),
     )
     .expect("tell with the correct passphrase must succeed");
 
@@ -3278,8 +3517,7 @@ fn protected_key_in_secret_key_store_is_findable_without_passphrase() {
     // Parsing a passphrase-protected key via SignedSecretKey::from_string
     // must keep working without the passphrase: finding a key by email never
     // unlocks it.
-    let (protected_sec, _) =
-        generate_protected_test_key("locked@example.com", "correct horse");
+    let (protected_sec, _) = generate_protected_test_key("locked@example.com", "correct horse");
     let temp = tempfile::tempdir().unwrap();
     let key_store = temp.path().to_path_buf();
     write_multi_key_secret_keys(&key_store, &[protected_sec]);
@@ -3354,8 +3592,7 @@ fn unhide_fails_for_untracked_file() {
         None,
     );
 
-    let err = result
-        .expect_err("unhide of an untracked file must fail closed");
+    let err = result.expect_err("unhide of an untracked file must fail closed");
     assert!(
         err.to_string().contains("not tracked"),
         "the failure must name the untracked path, got: {}",
@@ -3385,8 +3622,7 @@ fn unhide_fails_when_secret_missing() {
         None,
     );
 
-    let err = result
-        .expect_err("unhide without the ciphertext must fail");
+    let err = result.expect_err("unhide without the ciphertext must fail");
     assert!(
         err.to_string().contains("Encrypted file not found"),
         "the failure must name the missing ciphertext, got: {}",
@@ -3398,9 +3634,8 @@ fn unhide_fails_when_secret_missing() {
 fn base64_encode_public_key_round_trips_through_decode() {
     let (_secret, public_key) = generate_test_key("roundtrip@example.com");
 
-    let encoded = base64_encode_public_key(&public_key).expect(
-        "armouring a freshly generated key must never silently degrade to an empty blob",
-    );
+    let encoded = base64_encode_public_key(&public_key)
+        .expect("armouring a freshly generated key must never silently degrade to an empty blob");
     assert!(
         !encoded.is_empty(),
         "the encoded keyring entry must not be an empty blob"
@@ -3437,7 +3672,10 @@ const DAY_SECS: u64 = 86_400;
 /// secret key (cryptographically valid, just past its expiry).
 fn expired_public_key(
     email: &str,
-) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let (secret, public) = generate_test_key(email);
     let mut rng = thread_rng();
     let primary = secret.primary_key.public_key().clone();
@@ -3449,12 +3687,9 @@ fn expired_public_key(
     key_flags.set_sign(true);
 
     let user_id = public.details.users[0].id.clone();
-    let mut config = SignatureConfig::from_key(
-        &mut rng,
-        &secret.primary_key,
-        SignatureType::CertPositive,
-    )
-    .expect("build signature config");
+    let mut config =
+        SignatureConfig::from_key(&mut rng, &secret.primary_key, SignatureType::CertPositive)
+            .expect("build signature config");
     config.hashed_subpackets = vec![
         Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::from_secs(
             created as u32,
@@ -3466,9 +3701,9 @@ fn expired_public_key(
         .expect("issuer fingerprint subpacket"),
         Subpacket::regular(SubpacketData::KeyFlags(key_flags)).expect("key flags subpacket"),
         Subpacket::regular(SubpacketData::IsPrimary(true)).expect("is-primary subpacket"),
-        Subpacket::regular(SubpacketData::KeyExpirationTime(pgp::types::Duration::from_secs(
-            (30 * DAY_SECS) as u32,
-        )))
+        Subpacket::regular(SubpacketData::KeyExpirationTime(
+            pgp::types::Duration::from_secs((30 * DAY_SECS) as u32),
+        ))
         .expect("key expiration subpacket"),
     ];
     let sig = config
@@ -3499,17 +3734,17 @@ fn expired_public_key(
 fn revoked_public_key(
     email: &str,
     reason: RevocationCode,
-) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let (secret, public) = generate_test_key(email);
     let mut rng = thread_rng();
     let primary = secret.primary_key.public_key().clone();
 
-    let mut config = SignatureConfig::from_key(
-        &mut rng,
-        &secret.primary_key,
-        SignatureType::KeyRevocation,
-    )
-    .expect("build revocation config");
+    let mut config =
+        SignatureConfig::from_key(&mut rng, &secret.primary_key, SignatureType::KeyRevocation)
+            .expect("build revocation config");
     config.hashed_subpackets = vec![
         Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))
             .expect("creation time subpacket"),
@@ -3611,8 +3846,7 @@ fn revoked_key_is_rejected_by_tell() {
         err
     );
 
-    let keyring_text =
-        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
     assert!(
         keyring.entries.iter().all(|e| e.email != "bob@example.com"),
@@ -3670,7 +3904,11 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
         extract_content_to_verify_from_keyring(&keyring.serialize()).expect("extract content");
     keyring.signature =
         Some(sign_keyring_content(&content, &owner_sec, None).expect("sign keyring"));
-    std::fs::write(repo_temp.path().join(".git-veil/keyring"), keyring.serialize()).unwrap();
+    std::fs::write(
+        repo_temp.path().join(".git-veil/keyring"),
+        keyring.serialize(),
+    )
+    .unwrap();
 
     let plaintext = "API_KEY=s3cr3t-value\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
@@ -3730,8 +3968,14 @@ fn valid_keys_still_pass_all_gates() {
         "hide must produce ciphertext for valid keys"
     );
 
-    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None)
-        .expect("cmd_reveal must succeed");
+    cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    )
+    .expect("cmd_reveal must succeed");
     assert_eq!(
         std::fs::read_to_string(repo_temp.path().join("secret.env")).unwrap(),
         "API_KEY=s3cr3t\n",
@@ -3781,12 +4025,9 @@ fn validate_rejects_hard_revocation_but_allows_soft() {
         let (secret, public) = generate_test_key("noreason@example.com");
         let mut rng = thread_rng();
         let primary = secret.primary_key.public_key().clone();
-        let mut config = SignatureConfig::from_key(
-            &mut rng,
-            &secret.primary_key,
-            SignatureType::KeyRevocation,
-        )
-        .unwrap();
+        let mut config =
+            SignatureConfig::from_key(&mut rng, &secret.primary_key, SignatureType::KeyRevocation)
+                .unwrap();
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
             Subpacket::regular(SubpacketData::IssuerFingerprint(
@@ -3803,7 +4044,10 @@ fn validate_rejects_hard_revocation_but_allows_soft() {
             public.details.users.clone(),
             public.details.user_attributes.clone(),
         );
-        (SignedPublicKey::new(primary, details, public.public_subkeys), ())
+        (
+            SignedPublicKey::new(primary, details, public.public_subkeys),
+            (),
+        )
     };
     assert!(
         validate_public_key_for_use(&reasonless, KeyUse::Certify).is_err(),
@@ -3925,7 +4169,10 @@ fn write_atomic_failure_leaves_original_intact() {
     std::fs::write(&original, "original-content").unwrap();
 
     let result = write_atomic(&temp.path().join("target"), b"new-content");
-    assert!(result.is_err(), "renaming a file over a directory must fail");
+    assert!(
+        result.is_err(),
+        "renaming a file over a directory must fail"
+    );
 
     assert_eq!(
         std::fs::read_to_string(&original).unwrap(),
@@ -3948,7 +4195,10 @@ fn write_atomic_failure_leaves_original_intact() {
         let result = write_atomic(&original_in_ro, b"overwritten");
         std::fs::set_permissions(&ro_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        assert!(result.is_err(), "writing through a read-only directory must fail");
+        assert!(
+            result.is_err(),
+            "writing through a read-only directory must fail"
+        );
         assert_eq!(
             std::fs::read_to_string(&original_in_ro).unwrap(),
             "original-content",
@@ -4031,10 +4281,12 @@ fn import_secret_key(
     file_name: &str,
 ) {
     let key_file = repo_root.join(file_name);
-    std::fs::write(&key_file, secret_key.to_armored_string(Default::default()).unwrap())
-        .expect("write armoured private key file");
-    cmd_import(repo_root, &[file_name.to_string()], key_store)
-        .expect("cmd_import must succeed");
+    std::fs::write(
+        &key_file,
+        secret_key.to_armored_string(Default::default()).unwrap(),
+    )
+    .expect("write armoured private key file");
+    cmd_import(repo_root, &[file_name.to_string()], key_store).expect("cmd_import must succeed");
 }
 
 #[test]
@@ -4045,16 +4297,16 @@ fn export_writes_armoured_public_key_by_email() {
     let alice_fingerprint = extract_key_fingerprint(&alice_pub);
     import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let armored = export_public_key(&key_store, "alice@example.com")
-        .expect("export by email must succeed");
+    let armored =
+        export_public_key(&key_store, "alice@example.com").expect("export by email must succeed");
 
     assert!(
         armored.contains("BEGIN PGP PUBLIC KEY BLOCK"),
         "exported text must be an armoured public key block, got: {}",
         armored
     );
-    let reparsed = parse_armored_public_key(&armored)
-        .expect("exported armour must re-parse as a public key");
+    let reparsed =
+        parse_armored_public_key(&armored).expect("exported armour must re-parse as a public key");
     assert_eq!(
         extract_key_fingerprint(&reparsed),
         alice_fingerprint,
@@ -4105,7 +4357,9 @@ fn export_errors_for_unknown_identifier() {
 
     let result = export_public_key(&key_store, "carol@example.com");
 
-    let err = result.err().expect("an unknown identifier must not export any key");
+    let err = result
+        .err()
+        .expect("an unknown identifier must not export any key");
     assert!(
         err.to_string().contains("carol@example.com"),
         "the error must name the identifier, got: {}",
@@ -4174,8 +4428,7 @@ fn export_by_fingerprint_selects_the_exact_key() {
     let armored = export_public_key(&key_store, &bob_fingerprint)
         .expect("export by fingerprint must succeed");
 
-    let reparsed =
-        parse_armored_public_key(&armored).expect("exported armour must re-parse");
+    let reparsed = parse_armored_public_key(&armored).expect("exported armour must re-parse");
     assert_eq!(
         extract_key_fingerprint(&reparsed),
         bob_fingerprint,
@@ -4221,7 +4474,10 @@ fn fingerprints_in_store(key_store: &PathBuf, file: &str, private: bool) -> Vec<
     let mut rest = content.as_str();
     while let Some(start) = rest.find(begin) {
         let after = &rest[start..];
-        let end = after.find(end_marker).expect("test helper needs complete blocks") + end_marker.len();
+        let end = after
+            .find(end_marker)
+            .expect("test helper needs complete blocks")
+            + end_marker.len();
         let block = &after[..end];
         if private {
             let (key, _) = pgp::composed::SignedSecretKey::from_string(block).unwrap();
@@ -4375,9 +4631,9 @@ fn removekey_refuses_to_destroy_last_private_key_without_yes() {
 
     let result = cmd_removekey(&key_store, "alice@example.com", false);
 
-    let err = result.err().expect(
-        "removing the only private key without --yes must refuse",
-    );
+    let err = result
+        .err()
+        .expect("removing the only private key without --yes must refuse");
     assert!(
         err.to_string().contains("only private key"),
         "the refusal must name the only-private-key risk, got: {}",
@@ -4508,7 +4764,8 @@ fn hide_failure_leaves_everything_unchanged() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -4558,7 +4815,8 @@ fn reveal_failure_leaves_everything_unchanged() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -4572,7 +4830,13 @@ fn reveal_failure_leaves_everything_unchanged() {
     // missing-ciphertext failure hit, leaving a mixed state.
     std::fs::remove_file(repo_temp.path().join("two.env.secret")).unwrap();
 
-    let result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
+    let result = cmd_reveal(
+        repo_temp.path(),
+        "alice@example.com",
+        "origin",
+        &key_store,
+        None,
+    );
 
     let err = result
         .err()

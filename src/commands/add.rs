@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input, TrackedFiles};
+use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, TrackedFiles};
 
 /// Adds files to the tracked files list.
 ///

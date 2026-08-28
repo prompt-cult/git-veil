@@ -1,0 +1,60 @@
+name: Fuzz Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Mondays 06:00 UTC
+    - cron: '0 6 * * 1'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz-smoke:
+    name: Fuzz Smoke - ${{ matrix.target }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [keyring_parse, parse_git_remote_url]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      # Version pinned to match fuzz/README.md (cargo-fuzz 0.13.2 has no
+      # config-file support; libFuzzer flags are passed per invocation).
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-fuzz-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-fuzz-registry-
+
+      - name: Cache fuzz build
+        uses: actions/cache@v4
+        with:
+          path: fuzz/target
+          key: ${{ runner.os }}-cargo-fuzz-build-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-fuzz-build-${{ matrix.target }}-
+
+      - name: Fuzz ${{ matrix.target }} (smoke)
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -runs=2000 -timeout=25 -max_len=65536
+
+      - name: Upload fuzz artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/
+          retention-days: 7

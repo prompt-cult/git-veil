@@ -5,9 +5,9 @@
 //! definition (`Cli::command()`) with zero duplication — no build.rs
 //! copy of the parser is needed.
 
-use clap::{Parser, Subcommand, CommandFactory};
-use std::path::PathBuf;
 use anyhow::{Context as _, Result};
+use clap::{CommandFactory, Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "git-veil")]
@@ -634,22 +634,21 @@ pub fn run_manpages(output_dir: &std::path::Path) -> Result<()> {
 
     let root_page = output_dir.join(format!("{}.1", bin_name));
     let man = clap_mangen::Man::new(root.clone());
-    man.render(&mut std::fs::File::create(&root_page).with_context(|| {
-        format!("failed to create {}", root_page.display())
-    })?)
+    man.render(
+        &mut std::fs::File::create(&root_page)
+            .with_context(|| format!("failed to create {}", root_page.display()))?,
+    )
     .with_context(|| format!("failed to render {}", root_page.display()))?;
 
     for sub in root.get_subcommands() {
         let full_name = format!("{}-{}", bin_name, sub.get_name());
         let page = output_dir.join(format!("{}.1", full_name));
         let usage_bin_name = format!("{} {}", bin_name, sub.get_name());
-        let man = clap_mangen::Man::new(
-            sub.clone()
-                .name(full_name)
-                .bin_name(usage_bin_name),
-        );
-        man.render(&mut std::fs::File::create(&page)
-            .with_context(|| format!("failed to create {}", page.display()))?)
+        let man = clap_mangen::Man::new(sub.clone().name(full_name).bin_name(usage_bin_name));
+        man.render(
+            &mut std::fs::File::create(&page)
+                .with_context(|| format!("failed to create {}", page.display()))?,
+        )
         .with_context(|| format!("failed to render {}", page.display()))?;
     }
 

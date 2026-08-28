@@ -21,8 +21,10 @@ static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// exclude `@` and `:` so credential-shaped material can never land in the
 /// derived identity (fails closed instead).
 static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
-        .expect("valid scheme URL regex")
+    Regex::new(
+        r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/@:]+)/([^/@:]+?)(?:\.git)?/?$",
+    )
+    .expect("valid scheme URL regex")
 });
 
 /// Lowercases service, owner and repo so that `GitHub.com/Owner/Repo` and

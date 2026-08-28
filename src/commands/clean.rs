@@ -57,8 +57,7 @@ pub fn cmd_clean(repo_root: &Path, yes: bool) -> Result<()> {
     }
 
     if git_veil_dir.exists() {
-        fs::remove_dir_all(&git_veil_dir)
-            .context("Failed to remove .git-veil directory")?;
+        fs::remove_dir_all(&git_veil_dir).context("Failed to remove .git-veil directory")?;
     }
 
     println!("✓ Cleaned");

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::Path;
 
-use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input, TrackedFiles};
+use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, TrackedFiles};
 
 /// Removes files from the tracked files list.
 ///
@@ -31,7 +31,11 @@ pub fn cmd_remove(repo_root: &Path, files: Vec<String>) -> Result<()> {
         )?;
 
         if !tracked.files.contains(&relative) {
-            anyhow::bail!("file not tracked: {}; run git-veil add '{}' to track it", file, file);
+            anyhow::bail!(
+                "file not tracked: {}; run git-veil add '{}' to track it",
+                file,
+                file
+            );
         }
         tracked.remove(&relative);
         count += 1;

@@ -233,7 +233,11 @@ pub fn cmd_removekey(key_store: &PathBuf, identifier: &str, yes: bool) -> Result
         }
         write_atomic(&store.path, retained.as_bytes())
             .with_context(|| format!("Failed to rewrite {}", store.path.display()))?;
-        println!("Removed from {}: {}", store.path.display(), removed.join(", "));
+        println!(
+            "Removed from {}: {}",
+            store.path.display(),
+            removed.join(", ")
+        );
     }
 
     Ok(())

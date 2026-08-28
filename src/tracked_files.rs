@@ -80,10 +80,7 @@ pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
         );
     }
     if !metadata.is_file() {
-        anyhow::bail!(
-            "tracked path is not a regular file: {}",
-            file.display()
-        );
+        anyhow::bail!("tracked path is not a regular file: {}", file.display());
     }
     Ok(())
 }
@@ -165,8 +162,8 @@ pub(crate) fn resolve_repo_relative_input(
     mode: PathResolveMode,
     root_verb: &str,
 ) -> Result<PathBuf> {
-    let canonical_root = fs::canonicalize(repo_root)
-        .context("Failed to canonicalise repository root")?;
+    let canonical_root =
+        fs::canonicalize(repo_root).context("Failed to canonicalise repository root")?;
     let path = PathBuf::from(user_path);
 
     match mode {
@@ -175,14 +172,20 @@ pub(crate) fn resolve_repo_relative_input(
                 .with_context(|| format!("File not found: {}", user_path))?;
             let relative = canonical
                 .strip_prefix(&canonical_root)
-                .with_context(|| format!(
-                    "File is outside the repository: {} (resolves to {})",
-                    user_path,
-                    canonical.display()
-                ))?
+                .with_context(|| {
+                    format!(
+                        "File is outside the repository: {} (resolves to {})",
+                        user_path,
+                        canonical.display()
+                    )
+                })?
                 .to_path_buf();
             if relative.as_os_str().is_empty() {
-                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+                anyhow::bail!(
+                    "Cannot {} the repository root itself: {}",
+                    root_verb,
+                    user_path
+                );
             }
             validate_tracked_path(&relative)
                 .with_context(|| format!("Invalid path for tracked file: {}", user_path))?;
@@ -197,7 +200,11 @@ pub(crate) fn resolve_repo_relative_input(
                 path
             };
             if relative.as_os_str().is_empty() {
-                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+                anyhow::bail!(
+                    "Cannot {} the repository root itself: {}",
+                    root_verb,
+                    user_path
+                );
             }
             validate_tracked_path(&relative)
                 .with_context(|| format!("Invalid path for tracked file: {}", user_path))?;
@@ -209,11 +216,13 @@ pub(crate) fn resolve_repo_relative_input(
                     .with_context(|| format!("File not found: {}", user_path))?;
                 canonical
                     .strip_prefix(&canonical_root)
-                    .with_context(|| format!(
-                        "File is outside the repository: {} (resolves to {})",
-                        user_path,
-                        canonical.display()
-                    ))?
+                    .with_context(|| {
+                        format!(
+                            "File is outside the repository: {} (resolves to {})",
+                            user_path,
+                            canonical.display()
+                        )
+                    })?
                     .to_path_buf()
             } else {
                 validate_tracked_path(&path)
@@ -221,7 +230,11 @@ pub(crate) fn resolve_repo_relative_input(
                 path
             };
             if relative.as_os_str().is_empty() {
-                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+                anyhow::bail!(
+                    "Cannot {} the repository root itself: {}",
+                    root_verb,
+                    user_path
+                );
             }
             Ok(relative)
         }
@@ -236,7 +249,11 @@ pub(crate) fn resolve_repo_relative_input(
                 path
             };
             if relative.as_os_str().is_empty() {
-                anyhow::bail!("Cannot {} the repository root itself: {}", root_verb, user_path);
+                anyhow::bail!(
+                    "Cannot {} the repository root itself: {}",
+                    root_verb,
+                    user_path
+                );
             }
             Ok(relative)
         }
@@ -248,10 +265,9 @@ impl TrackedFiles {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let content = fs::read_to_string(path)
-            .context("Failed to read tracked files")?;
-        let tracked: TrackedFiles = serde_json::from_str(&content)
-            .context("Failed to parse tracked files JSON")?;
+        let content = fs::read_to_string(path).context("Failed to read tracked files")?;
+        let tracked: TrackedFiles =
+            serde_json::from_str(&content).context("Failed to parse tracked files JSON")?;
         for file in &tracked.files {
             validate_tracked_path(file)
                 .with_context(|| format!("Invalid tracked file entry: {}", file.display()))?;
@@ -260,8 +276,8 @@ impl TrackedFiles {
     }
 
     pub fn save(&self, path: &PathBuf) -> Result<()> {
-        let content = serde_json::to_string_pretty(self)
-            .context("Failed to serialize tracked files")?;
+        let content =
+            serde_json::to_string_pretty(self).context("Failed to serialize tracked files")?;
         write_atomic(path, content.as_bytes()).context("Failed to write tracked files")?;
         Ok(())
     }

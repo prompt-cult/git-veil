@@ -3,16 +3,23 @@ use pgp::composed::SignedPublicKey;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::armour::{SIG_BEGIN};
+use crate::armour::SIG_BEGIN;
 use crate::openpgp::split_armored_public_key_blocks;
-use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustPinStore, TrustStore, Keyring, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
+use crate::{
+    derive_repo_id, extract_content_to_verify_from_keyring, extract_key_fingerprint,
+    extract_signature_from_keyring, get_remote_push_url, parse_armored_public_key,
+    verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
+};
 
 /// Loads the public key matching `fingerprint` from the key store
 /// (public-keys.pgp).
-fn load_public_key_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Result<SignedPublicKey> {
+fn load_public_key_by_fingerprint(
+    key_store: &PathBuf,
+    fingerprint: &str,
+) -> Result<SignedPublicKey> {
     let public_keys_path = key_store.join("public-keys.pgp");
-    let content = fs::read_to_string(&public_keys_path)
-        .context("Failed to read public-keys.pgp")?;
+    let content =
+        fs::read_to_string(&public_keys_path).context("Failed to read public-keys.pgp")?;
 
     let wanted = fingerprint.to_uppercase();
     for block in split_armored_public_key_blocks(&content, &public_keys_path)? {
@@ -36,7 +43,11 @@ fn load_public_key_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Res
 /// signature made by the trusted key.
 ///
 /// Returns the repository ID, the trusted signer fingerprint, and the parsed keyring.
-pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<(String, String, Keyring)> {
+pub fn verify_keyring_against_trust(
+    repo_root: &Path,
+    remote_name: &str,
+    key_store: &PathBuf,
+) -> Result<(String, String, Keyring)> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
 
@@ -82,8 +93,7 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, key_sto
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_text = fs::read_to_string(&keyring_path)
-        .context("Failed to read keyring file")?;
+    let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
 
     if keyring_text.contains(SIG_BEGIN) {

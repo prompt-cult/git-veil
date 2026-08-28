@@ -4,7 +4,13 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::hide::encrypted_path_for;
 use crate::fs_atomic::write_atomic;
-use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id, encrypt_to_public_key, extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key, sign_keyring_content, validate_public_key_for_use, verify_keyring_against_trust, KeyUse, Keyring, TrackedFiles, TrustStore};
+use crate::{
+    base64_encode_public_key, check_email_in_identities, derive_repo_id, encrypt_to_public_key,
+    extract_content_to_verify_from_keyring, extract_key_fingerprint,
+    find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key,
+    sign_keyring_content, validate_public_key_for_use, verify_keyring_against_trust, KeyUse,
+    Keyring, TrackedFiles, TrustStore,
+};
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
 /// signed into the keyring. It is discarded immediately and never written to
@@ -12,7 +18,14 @@ use crate::{base64_encode_public_key, check_email_in_identities, derive_repo_id,
 const TELL_CANARY: &[u8] = b"git-veil tell canary";
 
 /// Adds a collaborator's public key to the keyring and signs it.
-pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remote_name: &str, key_store: &PathBuf, passphrase: Option<&str>) -> Result<()> {
+pub fn cmd_tell(
+    repo_root: &Path,
+    email: &str,
+    collaborator_key_path: &str,
+    remote_name: &str,
+    key_store: &PathBuf,
+    passphrase: Option<&str>,
+) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -36,8 +49,13 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
     verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
-    let key_content = fs::read_to_string(repo_root.join(collaborator_key_path))
-        .with_context(|| format!("failed to read collaborator key file '{}'", collaborator_key_path))?;
+    let key_content =
+        fs::read_to_string(repo_root.join(collaborator_key_path)).with_context(|| {
+            format!(
+                "failed to read collaborator key file '{}'",
+                collaborator_key_path
+            )
+        })?;
     let collaborator_key = parse_armored_public_key(&key_content)?;
 
     // Verify email is in key identities
@@ -69,8 +87,8 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_content = fs::read_to_string(&keyring_path)
-        .context("Failed to read keyring file")?;
+    let keyring_content =
+        fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let mut keyring = Keyring::parse(&keyring_content)?;
 
     // Add entry (this clears signature)

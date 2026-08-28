@@ -32,7 +32,10 @@ pub fn cmd_list_keys(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -
             {
                 Ok(keyring) => print_keyring(&keyring),
                 Err(display_error) => {
-                    println!("Unverified keyring content could not be displayed: {}", display_error)
+                    println!(
+                        "Unverified keyring content could not be displayed: {}",
+                        display_error
+                    )
                 }
             }
 

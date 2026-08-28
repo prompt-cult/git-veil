@@ -121,8 +121,8 @@ pub fn load_public_keys_from_store(key_store: &PathBuf) -> Result<Vec<SignedPubl
 
     let public_keys_path = key_store.join("public-keys.pgp");
     if public_keys_path.exists() {
-        let content = fs::read_to_string(&public_keys_path)
-            .context("Failed to read public-keys.pgp")?;
+        let content =
+            fs::read_to_string(&public_keys_path).context("Failed to read public-keys.pgp")?;
         for block in split_armored_public_key_blocks(&content, &public_keys_path)? {
             let (key, _headers) = SignedPublicKey::from_string(&block)
                 .context("Failed to parse public key block in public-keys.pgp")?;
@@ -132,11 +132,11 @@ pub fn load_public_keys_from_store(key_store: &PathBuf) -> Result<Vec<SignedPubl
 
     let secret_keys_path = key_store.join("secret-keys.pgp");
     if secret_keys_path.exists() {
-        let content = fs::read_to_string(&secret_keys_path)
-            .context("Failed to read secret-keys.pgp")?;
+        let content =
+            fs::read_to_string(&secret_keys_path).context("Failed to read secret-keys.pgp")?;
         for block in split_armored_private_key_blocks(&content, &secret_keys_path)? {
-            let (key, _headers) = SignedSecretKey::from_string(&block)
-                .context("Failed to parse secret key")?;
+            let (key, _headers) =
+                SignedSecretKey::from_string(&block).context("Failed to parse secret key")?;
             push_unique(key.to_public_key());
         }
     }
@@ -147,19 +147,22 @@ pub fn load_public_keys_from_store(key_store: &PathBuf) -> Result<Vec<SignedPubl
 /// Loads and parses every private key in the key store.
 fn load_secret_keys(key_store: &PathBuf) -> Result<Vec<SignedSecretKey>> {
     let secret_keys_path = key_store.join("secret-keys.pgp");
-    let content = fs::read_to_string(&secret_keys_path)
-        .context("Failed to read secret-keys.pgp")?;
+    let content =
+        fs::read_to_string(&secret_keys_path).context("Failed to read secret-keys.pgp")?;
 
     let blocks = split_armored_private_key_blocks(&content, &secret_keys_path)?;
     if blocks.is_empty() {
-        anyhow::bail!("No private key blocks found in {}", secret_keys_path.display());
+        anyhow::bail!(
+            "No private key blocks found in {}",
+            secret_keys_path.display()
+        );
     }
 
     blocks
         .iter()
         .map(|block| {
-            let (key, _headers) = SignedSecretKey::from_string(block)
-                .context("Failed to parse secret key")?;
+            let (key, _headers) =
+                SignedSecretKey::from_string(block).context("Failed to parse secret key")?;
             Ok(key)
         })
         .collect()
@@ -184,7 +187,10 @@ pub fn find_private_key_by_email(key_store: &PathBuf, email: &str) -> Result<Sig
 }
 
 /// Finds a private key by fingerprint in the key store.
-pub fn find_private_key_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Result<SignedSecretKey> {
+pub fn find_private_key_by_fingerprint(
+    key_store: &PathBuf,
+    fingerprint: &str,
+) -> Result<SignedSecretKey> {
     let keys = load_secret_keys(key_store)?;
 
     let wanted = fingerprint.to_uppercase();
@@ -206,9 +212,11 @@ pub fn decrypt_with_private_key(
 ) -> Result<Vec<u8>> {
     use pgp::composed::Message;
 
-    let passphrase = passphrase.map(Password::from).unwrap_or_else(Password::empty);
-    let (message, _headers) = Message::from_string(ciphertext)
-        .context("Failed to parse encrypted message")?;
+    let passphrase = passphrase
+        .map(Password::from)
+        .unwrap_or_else(Password::empty);
+    let (message, _headers) =
+        Message::from_string(ciphertext).context("Failed to parse encrypted message")?;
 
     // Name the key in the failure message: the two indistinguishable-at-this-
     // layer causes are (a) the ciphertext was never encrypted to this key and
@@ -227,10 +235,11 @@ pub fn decrypt_with_private_key(
             "decryption failed: this ciphertext was not encrypted to your key '{}' (it is not a listed recipient), or your key needs a passphrase (set GITVEIL_PASSPHRASE or use --passphrase-stdin)",
             key_email
         ))?;
-    
-    let plaintext = decrypted.as_data_vec()
+
+    let plaintext = decrypted
+        .as_data_vec()
         .context("Failed to extract plaintext")?;
-    
+
     Ok(plaintext)
 }
 
@@ -259,16 +268,23 @@ pub fn encrypt_to_public_keys(plaintext: &[u8], public_keys: &[SignedPublicKey])
 
     for public_key in public_keys {
         // Find encryption subkey
-        let encryption_subkey = public_key.public_subkeys.iter()
-            .find(|sk| sk.signatures.iter()
-                .any(|sig| sig.key_flags().encrypt_comms() || sig.key_flags().encrypt_storage()))
+        let encryption_subkey = public_key
+            .public_subkeys
+            .iter()
+            .find(|sk| {
+                sk.signatures
+                    .iter()
+                    .any(|sig| sig.key_flags().encrypt_comms() || sig.key_flags().encrypt_storage())
+            })
             .context("No encryption subkey found in public key")?;
 
-        builder.encrypt_to_key(&mut rng, &encryption_subkey.key)
+        builder
+            .encrypt_to_key(&mut rng, &encryption_subkey.key)
             .context("Failed to encrypt to key")?;
     }
 
-    let armored = builder.to_armored_string(&mut rng, Default::default())
+    let armored = builder
+        .to_armored_string(&mut rng, Default::default())
         .context("Failed to armor encrypted message")?;
 
     Ok(armored)

@@ -2,12 +2,11 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
-use crate::tracked_files::{ensure_regular_file, PathResolveMode, resolve_repo_relative_input};
+use crate::fs_atomic::write_atomic;
+use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
 use crate::{
-    decrypt_with_private_key, find_private_key_by_email, TrackedFiles,
-    verify_keyring_against_trust,
+    decrypt_with_private_key, find_private_key_by_email, verify_keyring_against_trust, TrackedFiles,
 };
 
 /// Unhides a single tracked file: decrypts its in-place `<name>.secret`
@@ -57,7 +56,11 @@ pub fn cmd_unhide(
     )?;
 
     if !tracked.files.contains(&relative) {
-        anyhow::bail!("file not tracked: {}; run git-veil add '{}' to track it", file, file);
+        anyhow::bail!(
+            "file not tracked: {}; run git-veil add '{}' to track it",
+            file,
+            file
+        );
     }
 
     // Lstat gate: writing the plaintext through a committed symlink would
@@ -74,12 +77,19 @@ pub fn cmd_unhide(
 
     // Check encrypted file exists
     if !encrypted_path.exists() {
-        anyhow::bail!("Encrypted file not found: {}; run git-veil hide to create it", encrypted_path.display());
+        anyhow::bail!(
+            "Encrypted file not found: {}; run git-veil hide to create it",
+            encrypted_path.display()
+        );
     }
 
     // Read encrypted content
-    let ciphertext = fs::read_to_string(&encrypted_path)
-        .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
+    let ciphertext = fs::read_to_string(&encrypted_path).with_context(|| {
+        format!(
+            "Failed to read encrypted file: {}",
+            encrypted_path.display()
+        )
+    })?;
 
     // Decrypt
     let plaintext = decrypt_with_private_key(&ciphertext, &private_key, passphrase)?;
@@ -97,8 +107,12 @@ pub fn cmd_unhide(
         .with_context(|| format!("Failed to write decrypted file: {}", relative.display()))?;
 
     // Delete the ciphertext
-    fs::remove_file(&encrypted_path)
-        .with_context(|| format!("Failed to delete encrypted file: {}", encrypted_path.display()))?;
+    fs::remove_file(&encrypted_path).with_context(|| {
+        format!(
+            "Failed to delete encrypted file: {}",
+            encrypted_path.display()
+        )
+    })?;
 
     println!("Decrypted: {}", relative.display());
     println!("✓ File unhidden");

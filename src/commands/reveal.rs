@@ -2,10 +2,12 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::fs_atomic::write_atomic;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{cmd_verify_keyring, decrypt_with_private_key, find_private_key_by_email, Keyring, TrackedFiles};
+use crate::{
+    cmd_verify_keyring, decrypt_with_private_key, find_private_key_by_email, Keyring, TrackedFiles,
+};
 
 /// Decrypts all tracked files using the user's private key.
 ///
@@ -13,14 +15,19 @@ use crate::{cmd_verify_keyring, decrypt_with_private_key, find_private_key_by_em
 /// validated before any use, so a malicious committed tracked.json cannot
 /// make reveal write attacker-chosen plaintext to an arbitrary path outside
 /// the repository.
-pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, key_store: &PathBuf, passphrase: Option<&str>) -> Result<()> {
+pub fn cmd_reveal(
+    repo_root: &Path,
+    email: &str,
+    remote_name: &str,
+    key_store: &PathBuf,
+    passphrase: Option<&str>,
+) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, key_store)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_text = fs::read_to_string(&keyring_path)
-        .context("Failed to read keyring file")?;
+    let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
 
     // Find user's entry
@@ -65,12 +72,19 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, key_store: &
 
         // Check encrypted file exists
         if !encrypted_path.exists() {
-            anyhow::bail!("Encrypted file not found: {}; run git-veil hide to create it", encrypted_path.display());
+            anyhow::bail!(
+                "Encrypted file not found: {}; run git-veil hide to create it",
+                encrypted_path.display()
+            );
         }
 
         // Read encrypted content
-        let ciphertext = fs::read_to_string(&encrypted_path)
-            .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
+        let ciphertext = fs::read_to_string(&encrypted_path).with_context(|| {
+            format!(
+                "Failed to read encrypted file: {}",
+                encrypted_path.display()
+            )
+        })?;
 
         // Decrypt
         let plaintext = decrypt_with_private_key(&ciphertext, &private_key, passphrase)?;
@@ -109,9 +123,12 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, key_store: &
     let mut deleted: Vec<&PathBuf> = Vec::new();
     let mut delete_error: Option<anyhow::Error> = None;
     for (file, encrypted_path, _plaintext) in &written {
-        match fs::remove_file(encrypted_path)
-            .with_context(|| format!("Failed to delete encrypted file: {}", encrypted_path.display()))
-        {
+        match fs::remove_file(encrypted_path).with_context(|| {
+            format!(
+                "Failed to delete encrypted file: {}",
+                encrypted_path.display()
+            )
+        }) {
             Ok(()) => {
                 deleted.push(file);
                 println!("Decrypted: {}", file.display());

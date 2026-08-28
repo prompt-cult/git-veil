@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_public_keys, validate_public_key_for_use, KeyUse, Keyring, TrackedFiles};
+use crate::{
+    base64_decode_public_key, cmd_verify_keyring, encrypt_to_public_keys,
+    validate_public_key_for_use, KeyUse, Keyring, TrackedFiles,
+};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -14,12 +17,10 @@ use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_public_keys
 /// sub/dir/x -> sub/dir/x.secret). Shared by hide, reveal, cat and changes
 /// so the sides cannot drift apart.
 pub(crate) fn encrypted_path_for(repo_root: &Path, file: &Path) -> PathBuf {
-    repo_root
-        .join(file)
-        .with_file_name(format!(
-            "{}.secret",
-            file.file_name().unwrap_or_default().to_string_lossy()
-        ))
+    repo_root.join(file).with_file_name(format!(
+        "{}.secret",
+        file.file_name().unwrap_or_default().to_string_lossy()
+    ))
 }
 
 /// Defence in depth: the ciphertext must stay inside the repository root,
@@ -56,8 +57,7 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_text = fs::read_to_string(&keyring_path)
-        .context("Failed to read keyring file")?;
+    let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
 
     if keyring.entries.is_empty() {
@@ -65,7 +65,9 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
     }
 
     // Decode all public keys
-    let public_keys: Vec<_> = keyring.entries.iter()
+    let public_keys: Vec<_> = keyring
+        .entries
+        .iter()
         .map(|e| base64_decode_public_key(&e.base64_key))
         .collect::<Result<Vec<_>>>()?;
 
@@ -144,9 +146,12 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
         if let Some(parent) = encrypted_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        match write_atomic(encrypted_path, ciphertext)
-            .with_context(|| format!("Failed to write encrypted file: {}", encrypted_path.display()))
-        {
+        match write_atomic(encrypted_path, ciphertext).with_context(|| {
+            format!(
+                "Failed to write encrypted file: {}",
+                encrypted_path.display()
+            )
+        }) {
             Ok(()) => written.push(item),
             Err(err) => {
                 if first_error.is_none() {

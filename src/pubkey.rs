@@ -2,15 +2,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use pgp::composed::{SignedPublicKey, Deserializable};
+use pgp::composed::ArmorOptions;
+use pgp::composed::{Deserializable, SignedPublicKey};
 use pgp::packet::{RevocationCode, Signature, SignatureType};
 use pgp::types::KeyDetails;
-use pgp::composed::ArmorOptions;
 
 /// Parses an armored public key string into a SignedPublicKey.
 pub fn parse_armored_public_key(armored: &str) -> Result<SignedPublicKey> {
-    let (key, _headers) = SignedPublicKey::from_string(armored)
-        .context("Failed to parse armored public key")?;
+    let (key, _headers) =
+        SignedPublicKey::from_string(armored).context("Failed to parse armored public key")?;
     Ok(key)
 }
 
@@ -71,7 +71,9 @@ pub fn base64_encode_public_key(key: &SignedPublicKey) -> Result<String> {
 
 /// Decodes a base64-encoded public key back to a SignedPublicKey.
 pub fn base64_decode_public_key(encoded: &str) -> Result<SignedPublicKey> {
-    let bytes = STANDARD.decode(encoded).context("Failed to decode base64")?;
+    let bytes = STANDARD
+        .decode(encoded)
+        .context("Failed to decode base64")?;
     let armored = String::from_utf8(bytes).context("Invalid UTF-8 in decoded key")?;
     parse_armored_public_key(&armored)
 }
@@ -142,12 +144,7 @@ fn is_hard_revocation(sig: &Signature) -> bool {
 
 /// Rejects `sig` if its declared expiry (creation time + duration) is not in
 /// the future relative to `now`. `what` names the component in error messages.
-fn check_expiry(
-    fingerprint: &str,
-    what: &str,
-    sig: &Signature,
-    now: u64,
-) -> Result<()> {
+fn check_expiry(fingerprint: &str, what: &str, sig: &Signature, now: u64) -> Result<()> {
     let Some(created) = sig.created() else {
         return Ok(());
     };
@@ -282,8 +279,7 @@ pub fn validate_public_key_for_use(key: &SignedPublicKey, use_for: KeyUse) -> Re
             Some(sub) => {
                 // Expiry + revocation of the subkey that will actually be used.
                 for sig in &sub.signatures {
-                    if sig.typ() == Some(SignatureType::SubkeyRevocation)
-                        && is_hard_revocation(sig)
+                    if sig.typ() == Some(SignatureType::SubkeyRevocation) && is_hard_revocation(sig)
                     {
                         bail!(
                             "encryption subkey {} of key {} is revoked (hard revocation)",

@@ -11,7 +11,12 @@ use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParam
 use rand::thread_rng;
 use std::path::Path;
 
-fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+fn generate_test_key(
+    email: &str,
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let mut rng = thread_rng();
 
     let encrypt_subkey = SubkeyParamsBuilder::default()
@@ -39,7 +44,10 @@ fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::compo
 fn generate_protected_test_key(
     email: &str,
     passphrase: &str,
-) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let mut rng = thread_rng();
 
     let encrypt_subkey = SubkeyParamsBuilder::default()
@@ -151,7 +159,10 @@ fn setup_told_repo() -> (
         repo_temp.path(),
         &["remote", "add", "origin", "git@github.com:owner/repo.git"],
     );
-    git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
+    git(
+        repo_temp.path(),
+        &["config", "user.email", "alice@example.com"],
+    );
 
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
@@ -406,8 +417,8 @@ fn manpage_for_hide_contains_workflow_text() {
     // The committed man page must carry the same workflow discussion that
     // `git-veil help hide` shows, because clap_mangen renders it from the
     // same clap definition.
-    let man_page = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("docs/man/git-veil-hide.1");
+    let man_page =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/man/git-veil-hide.1");
     let content = std::fs::read_to_string(&man_page).expect("read committed man page");
 
     for marker in ["init", "trust", "tell", "add", "secret"] {
@@ -446,7 +457,10 @@ fn home_free_subcommands_work_without_home_set() {
     let repo_temp = tempfile::tempdir().unwrap();
 
     git(repo_temp.path(), &["init"]);
-    git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
+    git(
+        repo_temp.path(),
+        &["config", "user.email", "alice@example.com"],
+    );
 
     let run_without_home = |args: &[&str]| {
         Command::cargo_bin("git-veil")
@@ -580,7 +594,10 @@ fn setup_repo_with_protected_owner_key(passphrase: &str) -> (tempfile::TempDir, 
         repo_temp.path(),
         &["remote", "add", "origin", "git@github.com:owner/repo.git"],
     );
-    git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
+    git(
+        repo_temp.path(),
+        &["config", "user.email", "owner@github.com"],
+    );
 
     let (owner_sec, owner_pub) = generate_protected_test_key("owner@github.com", passphrase);
     write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec]);
@@ -681,7 +698,12 @@ fn passphrase_stdin_reads_exactly_one_line() {
     let out = run_with_stdin(
         repo_temp.path(),
         home_temp.path(),
-        &["tell", "owner@github.com", "owner.pub", "--passphrase-stdin"],
+        &[
+            "tell",
+            "owner@github.com",
+            "owner.pub",
+            "--passphrase-stdin",
+        ],
         "correct horse\nIGNORED SECOND LINE\n",
     );
     assert!(
@@ -872,8 +894,7 @@ fn cli_export_round_trip_into_tell() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(alice_pub_path.exists(), "export must produce alice.pub");
-    let handed_over =
-        std::fs::read_to_string(&alice_pub_path).expect("read handed-over alice.pub");
+    let handed_over = std::fs::read_to_string(&alice_pub_path).expect("read handed-over alice.pub");
     assert!(
         handed_over.contains("BEGIN PGP PUBLIC KEY BLOCK")
             && !handed_over.contains("PRIVATE KEY BLOCK"),
@@ -928,7 +949,11 @@ fn cli_export_round_trip_into_tell() {
     let out = run(
         repo_b.path(),
         home_b.path(),
-        &["tell", "alice@example.com", alice_pub_path.to_str().unwrap()],
+        &[
+            "tell",
+            "alice@example.com",
+            alice_pub_path.to_str().unwrap(),
+        ],
     );
     assert!(
         out.status.success(),
@@ -936,8 +961,7 @@ fn cli_export_round_trip_into_tell() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let keyring_text =
-        std::fs::read_to_string(repo_b.path().join(".git-veil/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_b.path().join(".git-veil/keyring")).unwrap();
     assert!(
         keyring_text.contains("alice@example.com"),
         "keyring must contain alice after telling the exported key, got: {}",
@@ -985,8 +1009,7 @@ fn cli_tell_hints_to_rehide_when_ciphertext_exists() {
         stdout
     );
 
-    let keyring_text =
-        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     assert!(
         keyring_text.contains("alice@example.com") && keyring_text.contains("bob@example.com"),
         "the keyring must contain both entries after the tell, got: {}",
@@ -1004,16 +1027,16 @@ fn cli_tell_no_hint_when_nothing_hidden() {
         repo_temp.path(),
         &["remote", "add", "origin", "git@github.com:owner/repo.git"],
     );
-    git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
+    git(
+        repo_temp.path(),
+        &["config", "user.email", "owner@github.com"],
+    );
 
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (_, bob_pub) = generate_test_key("bob@example.com");
 
-    write_multi_key_secret_keys(
-        &home_temp.path().join(".git-veil"),
-        &[owner_sec, alice_sec],
-    );
+    write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec, alice_sec]);
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
     let alice_keyfile = repo_temp.path().join("alice.pub");
@@ -1090,10 +1113,7 @@ fn cli_removekey_round_trip() {
     let (alice_sec, _) = generate_test_key("alice@example.com");
     let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = git_veil::extract_key_fingerprint(&bob_pub);
-    for (name, key) in [
-        ("alice-priv.asc", &alice_sec),
-        ("bob-priv.asc", &bob_sec),
-    ] {
+    for (name, key) in [("alice-priv.asc", &alice_sec), ("bob-priv.asc", &bob_sec)] {
         std::fs::write(
             repo_temp.path().join(name),
             key.to_armored_string(Default::default()).unwrap(),
@@ -1199,7 +1219,10 @@ fn cli_whoami_prints_email_and_key_store() {
     let repo_temp = tempfile::tempdir().unwrap();
     let home_temp = tempfile::tempdir().unwrap();
     git(repo_temp.path(), &["init"]);
-    git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
+    git(
+        repo_temp.path(),
+        &["config", "user.email", "alice@example.com"],
+    );
     std::fs::create_dir_all(home_temp.path().join(".git-veil")).unwrap();
 
     let out = run(repo_temp.path(), home_temp.path(), &["whoami"]);
@@ -1222,7 +1245,13 @@ fn cli_whoami_prints_email_and_key_store() {
         stdout
     );
     assert!(
-        stdout.contains(&home_temp.path().join(".git-veil").to_string_lossy().to_string()),
+        stdout.contains(
+            &home_temp
+                .path()
+                .join(".git-veil")
+                .to_string_lossy()
+                .to_string()
+        ),
         "whoami must print the resolved $HOME/.git-veil key store path, got: {}",
         stdout
     );
@@ -1329,7 +1358,10 @@ fn re_trust_with_different_key_prints_repin_notice() {
         repo_temp.path(),
         &["remote", "add", "origin", "git@github.com:owner/repo.git"],
     );
-    git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
+    git(
+        repo_temp.path(),
+        &["config", "user.email", "owner@github.com"],
+    );
 
     // Two DIFFERENT keys carrying the same owner identity: only the second
     // trust run changes the machine's pinned record for the repo.

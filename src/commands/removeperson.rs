@@ -3,10 +3,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
-use crate::{derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint, get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
+use crate::{
+    derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint,
+    get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore,
+};
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
-pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &str, key_store: &PathBuf, passphrase: Option<&str>) -> Result<()> {
+pub fn cmd_removeperson(
+    repo_root: &Path,
+    email_to_remove: &str,
+    remote_name: &str,
+    key_store: &PathBuf,
+    passphrase: Option<&str>,
+) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -31,8 +40,8 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_content = fs::read_to_string(&keyring_path)
-        .context("Failed to read keyring file")?;
+    let keyring_content =
+        fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let mut keyring = Keyring::parse(&keyring_content)?;
 
     // Find the entry by exact email

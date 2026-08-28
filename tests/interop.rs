@@ -62,7 +62,10 @@ fn generate_gpg_key_of_type(home: &Path, primary: &str, subkey: &str) -> anyhow:
         ],
     )?;
 
-    let listing = gpg(home, &["--with-colons", "--list-keys", "interop@example.com"])?;
+    let listing = gpg(
+        home,
+        &["--with-colons", "--list-keys", "interop@example.com"],
+    )?;
     let fingerprint = listing
         .lines()
         .find(|line| line.starts_with("fpr:"))
@@ -103,11 +106,7 @@ fn roundtrips_gpg_generated_key(primary: &str, subkey: &str) -> anyhow::Result<(
     // Export the secret key exactly as a real user would hand it to us.
     let secret_armored = gpg(
         &gpg_home,
-        &[
-            "--armor",
-            "--export-secret-keys",
-            "interop@example.com",
-        ],
+        &["--armor", "--export-secret-keys", "interop@example.com"],
     )
     .expect("export secret key from gpg");
     let key_file = temp.path().join("secret-key.asc");
@@ -123,9 +122,14 @@ fn roundtrips_gpg_generated_key(primary: &str, subkey: &str) -> anyhow::Result<(
     let public_key = secret_key.to_public_key();
 
     let plaintext = b"hello from git-veil interop";
-    let ciphertext = encrypt_to_public_key(plaintext, &public_key).expect("encrypt to imported key");
-    let decrypted = decrypt_with_private_key(&ciphertext, &secret_key, None).expect("decrypt with imported key");
-    assert_eq!(decrypted, plaintext, "round-trip through imported gpg key must preserve bytes");
+    let ciphertext =
+        encrypt_to_public_key(plaintext, &public_key).expect("encrypt to imported key");
+    let decrypted = decrypt_with_private_key(&ciphertext, &secret_key, None)
+        .expect("decrypt with imported key");
+    assert_eq!(
+        decrypted, plaintext,
+        "round-trip through imported gpg key must preserve bytes"
+    );
     Ok(())
 }
 
@@ -182,7 +186,11 @@ fn our_ciphertext_is_readable_by_gpg() {
         ],
     )
     .expect("gpg must decrypt our ciphertext");
-    assert_eq!(decrypted.as_bytes(), plaintext, "gpg decryption must match our plaintext");
+    assert_eq!(
+        decrypted.as_bytes(),
+        plaintext,
+        "gpg decryption must match our plaintext"
+    );
 }
 
 /// Interop residual: a passphrase-protected (S2K-encrypted) RSA secret key
@@ -216,8 +224,11 @@ fn gpg_protected_secret_key_imports_and_decrypts_with_passphrase() {
     )
     .expect("generate protected gpg key");
 
-    let listing = gpg(&gpg_home, &["--with-colons", "--list-keys", "interop@example.com"])
-        .expect("list gpg keys");
+    let listing = gpg(
+        &gpg_home,
+        &["--with-colons", "--list-keys", "interop@example.com"],
+    )
+    .expect("list gpg keys");
     let fingerprint = listing
         .lines()
         .find(|line| line.starts_with("fpr:"))

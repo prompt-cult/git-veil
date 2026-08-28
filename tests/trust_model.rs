@@ -5,21 +5,26 @@
 //! contracts live in tests/features.rs and tests/cli.rs.
 
 use git_veil::*;
-use std::path::PathBuf;
-use pgp::composed::{SecretKeyParamsBuilder, SubkeyParamsBuilder, KeyType, EncryptionCaps};
+use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use serial_test::serial;
+use std::path::PathBuf;
 
 /// Helper function to generate a test PGP key pair
-fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+fn generate_test_key(
+    email: &str,
+) -> (
+    pgp::composed::SignedSecretKey,
+    pgp::composed::SignedPublicKey,
+) {
     let mut rng = thread_rng();
-    
+
     let encrypt_subkey = SubkeyParamsBuilder::default()
         .key_type(KeyType::X25519)
         .can_encrypt(EncryptionCaps::All)
         .build()
         .expect("build encrypt subkey params");
-    
+
     let params = SecretKeyParamsBuilder::default()
         .key_type(KeyType::Ed25519)
         .can_certify(true)
@@ -29,7 +34,7 @@ fn generate_test_key(email: &str) -> (pgp::composed::SignedSecretKey, pgp::compo
         .subkeys(vec![encrypt_subkey])
         .build()
         .expect("build key params");
-    
+
     let secret_key = params.generate(&mut rng).expect("generate key");
     let public_key = secret_key.to_public_key();
 
@@ -102,7 +107,8 @@ fn setup_trusted_repo_with_owner_in_keyring() -> (tempfile::TempDir, PathBuf) {
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     )
     .expect("cmd_tell must succeed");
 
@@ -203,7 +209,8 @@ fn test_parse_github_https_url() {
 
 #[test]
 fn test_parse_codeberg_ssh_url() {
-    let (repo, user, service) = parse_git_remote_url("ssh://git@codeberg.org/user/repo.git").unwrap();
+    let (repo, user, service) =
+        parse_git_remote_url("ssh://git@codeberg.org/user/repo.git").unwrap();
     assert_eq!(repo, "repo");
     assert_eq!(user, "user");
     assert_eq!(service, "codeberg.org");
@@ -246,9 +253,17 @@ fn test_parse_url_invalid_format_returns_error() {
 #[test]
 fn test_get_remote_push_url_origin() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
+
     let url = get_remote_push_url(&temp.path().to_path_buf(), "origin").unwrap();
     assert!(url.contains("github.com") && url.contains("user/repo"));
 }
@@ -256,9 +271,22 @@ fn test_get_remote_push_url_origin() {
 #[test]
 fn test_get_remote_push_url_custom_remote() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "fork", "ssh://git@codeberg.org/user/repo.git"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&[
+            "remote",
+            "add",
+            "fork",
+            "ssh://git@codeberg.org/user/repo.git",
+        ])
+        .output()
+        .unwrap();
+
     let url = get_remote_push_url(&temp.path().to_path_buf(), "fork").unwrap();
     assert!(url.contains("codeberg.org"));
 }
@@ -266,8 +294,12 @@ fn test_get_remote_push_url_custom_remote() {
 #[test]
 fn test_get_remote_push_url_nonexistent_remote_fails() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+
     let result = get_remote_push_url(&temp.path().to_path_buf(), "nonexistent");
     assert!(result.is_err());
 }
@@ -311,46 +343,121 @@ fn ssh_url_with_port_keeps_port_out_of_service() {
 
 #[test]
 fn parse_git_remote_url_table() {
-    type UrlCase = (&'static str, Option<(&'static str, &'static str, &'static str)>);
+    type UrlCase = (
+        &'static str,
+        Option<(&'static str, &'static str, &'static str)>,
+    );
     // (url, expected (repo, user, service); None = must be rejected)
     let cases: &[UrlCase] = &[
         // Documented SSH SCP-style shapes
-        ("git@github.com:user/repo.git", Some(("repo", "user", "github.com"))),
-        ("git@gitlab.com:org/project.git", Some(("project", "org", "gitlab.com"))),
+        (
+            "git@github.com:user/repo.git",
+            Some(("repo", "user", "github.com")),
+        ),
+        (
+            "git@gitlab.com:org/project.git",
+            Some(("project", "org", "gitlab.com")),
+        ),
         // Non-`git` SSH users (second element is the repo owner path segment)
-        ("deploy@host.tld:org/repo.git", Some(("repo", "org", "host.tld"))),
-        ("person@git.sr.ht:~person/repo.git", Some(("repo", "~person", "git.sr.ht"))),
+        (
+            "deploy@host.tld:org/repo.git",
+            Some(("repo", "org", "host.tld")),
+        ),
+        (
+            "person@git.sr.ht:~person/repo.git",
+            Some(("repo", "~person", "git.sr.ht")),
+        ),
         // Documented ssh:// and https:// shapes
-        ("ssh://git@codeberg.org/user/repo.git", Some(("repo", "user", "codeberg.org"))),
-        ("https://github.com/user/repo.git", Some(("repo", "user", "github.com"))),
-        ("https://gitlab.com/org/project.git", Some(("project", "org", "gitlab.com"))),
+        (
+            "ssh://git@codeberg.org/user/repo.git",
+            Some(("repo", "user", "codeberg.org")),
+        ),
+        (
+            "https://github.com/user/repo.git",
+            Some(("repo", "user", "github.com")),
+        ),
+        (
+            "https://gitlab.com/org/project.git",
+            Some(("project", "org", "gitlab.com")),
+        ),
         // Port forms: the port must be discarded so the service is the bare host
-        ("ssh://git@codeberg.org:2222/user/repo.git", Some(("repo", "user", "codeberg.org"))),
-        ("https://github.com:8443/user/repo.git", Some(("repo", "user", "github.com"))),
+        (
+            "ssh://git@codeberg.org:2222/user/repo.git",
+            Some(("repo", "user", "codeberg.org")),
+        ),
+        (
+            "https://github.com:8443/user/repo.git",
+            Some(("repo", "user", "github.com")),
+        ),
         // .git suffix and no-suffix variants
-        ("git@github.com:user/my-project.git", Some(("my-project", "user", "github.com"))),
-        ("git@github.com:user/my-project", Some(("my-project", "user", "github.com"))),
-        ("https://github.com/user/repo", Some(("repo", "user", "github.com"))),
+        (
+            "git@github.com:user/my-project.git",
+            Some(("my-project", "user", "github.com")),
+        ),
+        (
+            "git@github.com:user/my-project",
+            Some(("my-project", "user", "github.com")),
+        ),
+        (
+            "https://github.com/user/repo",
+            Some(("repo", "user", "github.com")),
+        ),
         // Credential-embedded (userinfo) HTTPS URLs: userinfo must be
         // stripped, never folded into the service host, never logged
-        ("https://user@github.com/owner/repo.git", Some(("repo", "owner", "github.com"))),
-        ("https://user:pass@github.com/owner/repo.git", Some(("repo", "owner", "github.com"))),
+        (
+            "https://user@github.com/owner/repo.git",
+            Some(("repo", "owner", "github.com")),
+        ),
+        (
+            "https://user:pass@github.com/owner/repo.git",
+            Some(("repo", "owner", "github.com")),
+        ),
         // git:// protocol (the git daemon port) normalizes like any other shape
-        ("git://github.com/owner/repo.git", Some(("repo", "owner", "github.com"))),
-        ("git://github.com:9418/owner/repo.git", Some(("repo", "owner", "github.com"))),
+        (
+            "git://github.com/owner/repo.git",
+            Some(("repo", "owner", "github.com")),
+        ),
+        (
+            "git://github.com:9418/owner/repo.git",
+            Some(("repo", "owner", "github.com")),
+        ),
         // ssh:// with a non-`git` login or no login (login is a credential,
         // the owner is the first path segment, same as the SCP-style form)
-        ("ssh://deploy@codeberg.org/user/repo.git", Some(("repo", "user", "codeberg.org"))),
-        ("ssh://codeberg.org/user/repo.git", Some(("repo", "user", "codeberg.org"))),
+        (
+            "ssh://deploy@codeberg.org/user/repo.git",
+            Some(("repo", "user", "codeberg.org")),
+        ),
+        (
+            "ssh://codeberg.org/user/repo.git",
+            Some(("repo", "user", "codeberg.org")),
+        ),
         // Host case is irrelevant: service is lowercased
-        ("git@GITHUB.com:user/repo.git", Some(("repo", "user", "github.com"))),
-        ("https://GitHub.com/user/repo.git", Some(("repo", "user", "github.com"))),
+        (
+            "git@GITHUB.com:user/repo.git",
+            Some(("repo", "user", "github.com")),
+        ),
+        (
+            "https://GitHub.com/user/repo.git",
+            Some(("repo", "user", "github.com")),
+        ),
         // Repo/owner case is irrelevant: both are lowercased
-        ("git@github.com:Owner/Repo.git", Some(("repo", "owner", "github.com"))),
-        ("https://github.com/Owner/Repo.git", Some(("repo", "owner", "github.com"))),
+        (
+            "git@github.com:Owner/Repo.git",
+            Some(("repo", "owner", "github.com")),
+        ),
+        (
+            "https://github.com/Owner/Repo.git",
+            Some(("repo", "owner", "github.com")),
+        ),
         // Trailing slashes are tolerated
-        ("https://github.com/owner/repo/", Some(("repo", "owner", "github.com"))),
-        ("git@github.com:owner/repo/", Some(("repo", "owner", "github.com"))),
+        (
+            "https://github.com/owner/repo/",
+            Some(("repo", "owner", "github.com")),
+        ),
+        (
+            "git@github.com:owner/repo/",
+            Some(("repo", "owner", "github.com")),
+        ),
         // Credential-shaped material in owner/repo (fuzz finding) must fail
         // closed, never forge a repo identity
         ("https://github.com/user:pass@evil/repo", None),
@@ -358,7 +465,10 @@ fn parse_git_remote_url_table() {
         // fuzz finding: SCP-style HOST group must also reject `@` — a
         // credential-shaped `user@host` inside the host must never land in
         // the derived service identity
-        ("git@github\u{0}4om?git@github.com:simbo1905/fara.srg\u{11}2g2", None),
+        (
+            "git@github\u{0}4om?git@github.com:simbo1905/fara.srg\u{11}2g2",
+            None,
+        ),
         // Invalid rows must stay invalid
         ("not-a-valid-url", None),
         ("git@github.com", None),
@@ -497,7 +607,9 @@ fn test_keyring_parse_malformed_entry_fails() {
 #[test]
 fn test_keyring_serialize_single_entry() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
     let serialized = keyring.serialize();
     assert!(serialized.contains("-----BEGIN GIT-VEIL KEYRING-----"));
     assert!(serialized.contains("alice@example.com"));
@@ -509,8 +621,12 @@ fn test_keyring_serialize_single_entry() {
 #[test]
 fn test_keyring_serialize_multiple_entries() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
+    keyring
+        .add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into())
+        .unwrap();
     let serialized = keyring.serialize();
     assert!(serialized.contains("alice@example.com"));
     assert!(serialized.contains("bob@work.com"));
@@ -520,14 +636,18 @@ fn test_keyring_serialize_multiple_entries() {
 fn test_keyring_add_entry() {
     let mut keyring = Keyring::new();
     assert_eq!(keyring.entries.len(), 0);
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
     assert_eq!(keyring.entries.len(), 1);
 }
 
 #[test]
 fn test_keyring_find_by_email() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
     let entry = keyring.find_by_email("alice@example.com").unwrap();
     assert_eq!(entry.email, "alice@example.com");
 }
@@ -542,8 +662,12 @@ fn test_keyring_find_by_email_not_found() {
 #[test]
 fn test_keyring_list_all_emails() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
+    keyring
+        .add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into())
+        .unwrap();
     let emails = keyring.list_emails();
     assert_eq!(emails.len(), 2);
     assert!(emails.contains(&"alice@example.com"));
@@ -553,8 +677,12 @@ fn test_keyring_list_all_emails() {
 #[test]
 fn test_keyring_extract_fingerprints() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
+    keyring
+        .add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into())
+        .unwrap();
     let fps = keyring.extract_fingerprints();
     assert_eq!(fps.len(), 2);
     assert!(fps.contains(&"ABC123"));
@@ -564,7 +692,9 @@ fn test_keyring_extract_fingerprints() {
 #[test]
 fn add_entry_rejects_colon_in_email() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
+    keyring
+        .add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into())
+        .unwrap();
     keyring.signature = Some("stale-sig".to_string());
     let before = keyring.serialize();
 
@@ -590,18 +720,27 @@ fn add_entry_rejects_colon_in_email() {
         Some("stale-sig"),
         "a rejected add_entry must leave the signature untouched"
     );
-    assert_eq!(keyring.serialize(), before, "keyring must be unchanged after rejection");
+    assert_eq!(
+        keyring.serialize(),
+        before,
+        "keyring must be unchanged after rejection"
+    );
 
     // Round-trip: a keyring serialized from valid entries still parses.
-    keyring.add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into()).unwrap();
+    keyring
+        .add_entry("bob@work.com".into(), "ZGVm".into(), "DEF456".into())
+        .unwrap();
     keyring.signature = None;
     let parsed = Keyring::parse(&keyring.serialize()).expect("serialized keyring must parse");
-    assert_eq!(parsed.list_emails(), vec!["alice@example.com", "bob@work.com"]);
+    assert_eq!(
+        parsed.list_emails(),
+        vec!["alice@example.com", "bob@work.com"]
+    );
 }
 
 #[test]
 fn test_colon_not_in_base64() {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     let test_bytes = b"hello:world:test";
     let encoded = STANDARD.encode(test_bytes);
     assert!(!encoded.contains(':'), "base64 should not contain colon");
@@ -634,7 +773,9 @@ fn test_trust_store_add_trust() {
 fn test_trust_store_get_trusted_fingerprint() {
     let mut store = TrustStore::new();
     store.add_trust("repo+user@github.com".into(), "ABC123".into());
-    let fp = store.get_trusted_fingerprint("repo+user@github.com").unwrap();
+    let fp = store
+        .get_trusted_fingerprint("repo+user@github.com")
+        .unwrap();
     assert_eq!(fp, "ABC123");
 }
 
@@ -651,7 +792,12 @@ fn test_trust_store_update_existing_trust() {
     store.add_trust("repo+user@github.com".into(), "ABC123".into());
     store.add_trust("repo+user@github.com".into(), "DEF456".into());
     assert_eq!(store.trusted_keys.len(), 1);
-    assert_eq!(store.get_trusted_fingerprint("repo+user@github.com").unwrap(), "DEF456");
+    assert_eq!(
+        store
+            .get_trusted_fingerprint("repo+user@github.com")
+            .unwrap(),
+        "DEF456"
+    );
 }
 
 #[test]
@@ -667,7 +813,12 @@ fn test_trust_store_serialize_to_json() {
 fn test_trust_store_deserialize_from_json() {
     let json = r#"{"trusted_keys":{"repo+user@github.com":"ABC123"}}"#;
     let store = TrustStore::deserialize(json).unwrap();
-    assert_eq!(store.get_trusted_fingerprint("repo+user@github.com").unwrap(), "ABC123");
+    assert_eq!(
+        store
+            .get_trusted_fingerprint("repo+user@github.com")
+            .unwrap(),
+        "ABC123"
+    );
 }
 
 #[test]
@@ -687,9 +838,14 @@ fn test_trust_store_load_from_file() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("trust.json");
     store.save_to_file(&path).unwrap();
-    
+
     let loaded = TrustStore::load_from_file(&path).unwrap();
-    assert_eq!(loaded.get_trusted_fingerprint("repo+user@github.com").unwrap(), "ABC123");
+    assert_eq!(
+        loaded
+            .get_trusted_fingerprint("repo+user@github.com")
+            .unwrap(),
+        "ABC123"
+    );
 }
 
 #[test]
@@ -748,7 +904,9 @@ fn test_base64_encode_public_key() {
     let encoded = base64_encode_public_key(&public_key).expect("armouring should succeed");
     assert!(!encoded.is_empty());
     // Should be valid base64
-    assert!(encoded.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
+    assert!(encoded
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
 }
 
 #[test]
@@ -794,7 +952,8 @@ fn test_extract_identities_from_multiple_uids() {
 fn test_sign_keyring_content() {
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
+    let signature =
+        sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     assert!(signature.contains("-----BEGIN PGP SIGNATURE-----"));
     assert!(signature.contains("-----END PGP SIGNATURE-----"));
 }
@@ -803,7 +962,8 @@ fn test_sign_keyring_content() {
 fn test_verify_keyring_signature_valid() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
+    let signature =
+        sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     let result = verify_keyring_signature(keyring_content, &signature, &public_key);
     assert!(result.is_ok());
 }
@@ -812,7 +972,8 @@ fn test_verify_keyring_signature_valid() {
 fn test_verify_keyring_signature_invalid_tampering() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
+    let signature =
+        sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
     // Tamper with the content
     let tampered_content = "tampered keyring content";
     let result = verify_keyring_signature(tampered_content, &signature, &public_key);
@@ -824,7 +985,8 @@ fn test_verify_keyring_signature_wrong_key() {
     let (secret_key_alice, _public_key_alice) = generate_test_key("alice@example.com");
     let (_secret_key_bob, public_key_bob) = generate_test_key("bob@example.com");
     let keyring_content = "test keyring content";
-    let signature = sign_keyring_content(keyring_content, &secret_key_alice, None).expect("signing should succeed");
+    let signature = sign_keyring_content(keyring_content, &secret_key_alice, None)
+        .expect("signing should succeed");
     // Try to verify with wrong key
     let result = verify_keyring_signature(keyring_content, &signature, &public_key_bob);
     assert!(result.is_err());
@@ -834,10 +996,11 @@ fn test_verify_keyring_signature_wrong_key() {
 fn test_sign_and_verify_roundtrip() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let keyring_content = "test keyring content for roundtrip";
-    
+
     // Sign
-    let signature = sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
-    
+    let signature =
+        sign_keyring_content(keyring_content, &secret_key, None).expect("signing should succeed");
+
     // Verify
     let result = verify_keyring_signature(keyring_content, &signature, &public_key);
     assert!(result.is_ok(), "Signature verification should succeed");
@@ -898,14 +1061,15 @@ fn test_extract_content_to_verify_from_keyring() {
 fn test_verify_detached_signature() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let content = "detached signature test content";
-    
+
     // Create detached signature
-    let signature = sign_keyring_content(content, &secret_key, None).expect("signing should succeed");
-    
+    let signature =
+        sign_keyring_content(content, &secret_key, None).expect("signing should succeed");
+
     // Verify it's a valid detached signature
     assert!(signature.contains("-----BEGIN PGP SIGNATURE-----"));
     assert!(signature.contains("-----END PGP SIGNATURE-----"));
-    
+
     // Verify signature is valid
     let result = verify_keyring_signature(content, &signature, &public_key);
     assert!(result.is_ok());
@@ -915,10 +1079,11 @@ fn test_verify_detached_signature() {
 fn test_sign_empty_keyring() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let empty_keyring = "-----BEGIN GIT-VEIL KEYRING-----\n-----END GIT-VEIL KEYRING-----\n";
-    
+
     // Sign empty keyring
-    let signature = sign_keyring_content(empty_keyring, &secret_key, None).expect("signing empty keyring should succeed");
-    
+    let signature = sign_keyring_content(empty_keyring, &secret_key, None)
+        .expect("signing empty keyring should succeed");
+
     // Verify signature
     let result = verify_keyring_signature(empty_keyring, &signature, &public_key);
     assert!(result.is_ok(), "Empty keyring signature should be valid");
@@ -932,10 +1097,10 @@ fn test_sign_empty_keyring() {
 fn test_import_key_to_store() {
     let temp = tempfile::tempdir().unwrap();
     let key_store = temp.path().to_path_buf();
-    
+
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
     let armored = public_key.to_armored_string(Default::default()).unwrap();
-    
+
     let result = import_key_to_store(&key_store, &armored);
     assert!(result.is_ok());
     assert!(key_store.join("public-keys.pgp").exists());
@@ -945,13 +1110,13 @@ fn test_import_key_to_store() {
 fn test_find_private_key_by_email() {
     let temp = tempfile::tempdir().unwrap();
     let key_store = temp.path().to_path_buf();
-    
+
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
-    
+
     // Write to secret-keys.pgp
     std::fs::write(key_store.join("secret-keys.pgp"), &armored).unwrap();
-    
+
     let result = find_private_key_by_email(&key_store, "alice@example.com");
     assert!(result.is_ok());
 }
@@ -960,14 +1125,14 @@ fn test_find_private_key_by_email() {
 fn test_find_private_key_by_fingerprint() {
     let temp = tempfile::tempdir().unwrap();
     let key_store = temp.path().to_path_buf();
-    
+
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let fingerprint = extract_key_fingerprint(&public_key);
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
-    
+
     // Write to secret-keys.pgp
     std::fs::write(key_store.join("secret-keys.pgp"), &armored).unwrap();
-    
+
     let result = find_private_key_by_fingerprint(&key_store, &fingerprint);
     assert!(result.is_ok());
 }
@@ -983,8 +1148,9 @@ fn test_find_private_key_not_found() {
 fn test_encrypt_to_public_key() {
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
     let plaintext = b"Hello, World!";
-    
-    let encrypted = encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
+
+    let encrypted =
+        encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
     assert!(encrypted.contains("-----BEGIN PGP MESSAGE-----"));
     assert!(encrypted.contains("-----END PGP MESSAGE-----"));
 }
@@ -993,10 +1159,12 @@ fn test_encrypt_to_public_key() {
 fn test_decrypt_with_private_key() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let plaintext = b"Hello, World!";
-    
-    let encrypted = encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
-    let decrypted = decrypt_with_private_key(&encrypted, &secret_key, None).expect("decryption should succeed");
-    
+
+    let encrypted =
+        encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
+    let decrypted =
+        decrypt_with_private_key(&encrypted, &secret_key, None).expect("decryption should succeed");
+
     assert_eq!(decrypted, plaintext);
 }
 
@@ -1050,8 +1218,7 @@ fn test_init_creates_empty_tracked_json() {
 fn init_no_longer_creates_secrets_dir_or_gitignore_entry() {
     let temp = tempfile::tempdir().unwrap();
     std::fs::write(temp.path().join(".gitignore"), "/target\n*.log\n").unwrap();
-    let gitignore_before =
-        std::fs::read(temp.path().join(".gitignore")).unwrap();
+    let gitignore_before = std::fs::read(temp.path().join(".gitignore")).unwrap();
 
     cmd_init(temp.path()).unwrap();
 
@@ -1059,14 +1226,15 @@ fn init_no_longer_creates_secrets_dir_or_gitignore_entry() {
         !temp.path().join(".git-veil").join("secrets").exists(),
         "init must not create a .git-veil/secrets directory"
     );
-    let gitignore_after =
-        std::fs::read(temp.path().join(".gitignore")).unwrap();
+    let gitignore_after = std::fs::read(temp.path().join(".gitignore")).unwrap();
     assert_eq!(
         gitignore_before, gitignore_after,
         ".gitignore must be byte-identical after init"
     );
     assert!(
-        !gitignore_after.windows(b".git-veil".len()).any(|w| w == b".git-veil"),
+        !gitignore_after
+            .windows(b".git-veil".len())
+            .any(|w| w == b".git-veil"),
         ".gitignore must gain no git-veil entry, got: {:?}",
         String::from_utf8_lossy(&gitignore_after)
     );
@@ -1112,8 +1280,7 @@ fn init_refuses_to_reset_existing_trust() {
 
     let result = cmd_init(temp.path());
 
-    let err = result
-        .expect_err("a second init over established trust must be refused");
+    let err = result.expect_err("a second init over established trust must be refused");
     assert!(
         err.to_string().contains("already initialized"),
         "the refusal must say the repo is already initialized, got: {}",
@@ -1180,15 +1347,29 @@ fn test_init_leaves_existing_gitignore_untouched() {
 #[test]
 fn test_trust_validates_repo_id_matches_remote() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
 
     // A provided repo_id that does not match the one computed from the
     // remote's push URL must be rejected with the mismatch error. That check
     // runs before the signing key is read, so the nonexistent key path never
     // matters here.
-    let result = cmd_trust(temp.path(), "wrong+user@github.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"));
+    let result = cmd_trust(
+        temp.path(),
+        "wrong+user@github.com",
+        "/nonexistent/key.pub",
+        "origin",
+        &PathBuf::from("/tmp"),
+    );
     let err = result
         .err()
         .expect("a repo_id that does not match the remote must be rejected");
@@ -1237,12 +1418,29 @@ fn test_trust_validates_repo_id_matches_remote() {
 #[test]
 fn test_tell_fails_if_trust_not_established() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
 
-    let result = cmd_tell(temp.path(), "alice@example.com", "/nonexistent/key.pub", "origin", &PathBuf::from("/tmp"), None);
-    let err = result.err().expect("tell without established trust must fail");
+    let result = cmd_tell(
+        temp.path(),
+        "alice@example.com",
+        "/nonexistent/key.pub",
+        "origin",
+        &PathBuf::from("/tmp"),
+        None,
+    );
+    let err = result
+        .err()
+        .expect("tell without established trust must fail");
     let msg = err.to_string();
     assert!(
         msg.contains("no trust established for repo+user@github.com"),
@@ -1275,7 +1473,8 @@ fn test_tell_validates_email_not_in_key_fails() {
         "alice@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
     let err = result
         .err()
@@ -1321,13 +1520,15 @@ fn test_tell_fails_if_signing_key_not_in_key_store() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
     let err = result
         .err()
         .expect("tell without the trusted secret key must fail");
     assert!(
-        err.to_string().contains("No secret key found for fingerprint"),
+        err.to_string()
+            .contains("No secret key found for fingerprint"),
         "the failure must be the missing-signing-key error, got: {}",
         err
     );
@@ -1350,7 +1551,8 @@ fn tell_failure_leaves_existing_keyring_untouched() {
         "alice@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &key_store, None
+        &key_store,
+        None,
     );
     assert!(result.is_err(), "the mismatched tell must be rejected");
 
@@ -1368,9 +1570,17 @@ fn tell_failure_leaves_existing_keyring_untouched() {
 #[test]
 fn test_show_repo_id_default_origin_remote() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
+
     let result = cmd_show_repo_id(temp.path(), "origin");
     assert!(result.is_ok());
 }
@@ -1378,9 +1588,17 @@ fn test_show_repo_id_default_origin_remote() {
 #[test]
 fn test_show_repo_id_custom_remote() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "fork", "git@github.com:user/repo.git"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "fork", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
+
     let result = cmd_show_repo_id(temp.path(), "fork");
     assert!(result.is_ok());
 }
@@ -1394,8 +1612,12 @@ fn test_show_repo_id_custom_remote() {
 #[test]
 fn test_show_repo_id_fails_if_remote_not_found() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+
     let result = cmd_show_repo_id(temp.path(), "nonexistent");
     assert!(result.is_err());
 }
@@ -1407,9 +1629,17 @@ fn test_show_repo_id_fails_if_remote_not_found() {
 #[test]
 fn test_whoami_from_git_config_user_email() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["config", "user.email", "test@example.com"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["config", "user.email", "test@example.com"])
+        .output()
+        .unwrap();
+
     let result = cmd_whoami(temp.path(), None, &PathBuf::from("/tmp"));
     assert!(result.is_ok());
 }
@@ -1417,8 +1647,12 @@ fn test_whoami_from_git_config_user_email() {
 #[test]
 fn test_whoami_from_email_flag_override() {
     let temp = tempfile::tempdir().unwrap();
-    
-    let result = cmd_whoami(temp.path(), Some("override@example.com"), &PathBuf::from("/tmp"));
+
+    let result = cmd_whoami(
+        temp.path(),
+        Some("override@example.com"),
+        &PathBuf::from("/tmp"),
+    );
     assert!(result.is_ok());
 }
 
@@ -1429,9 +1663,17 @@ fn test_whoami_from_email_flag_override() {
 #[test]
 fn test_whoami_displays_custom_key_store() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["config", "user.email", "test@example.com"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["config", "user.email", "test@example.com"])
+        .output()
+        .unwrap();
+
     let key_store = temp.path().join("custom-store");
     std::fs::create_dir_all(&key_store).unwrap();
     let result = cmd_whoami(temp.path(), None, &key_store);
@@ -1442,17 +1684,21 @@ fn test_whoami_displays_custom_key_store() {
 #[serial]
 fn test_whoami_fails_if_no_git_config_and_no_flag() {
     let temp = tempfile::tempdir().unwrap();
-    
+
     // Set HOME to temp so git can't find global config
     let orig_home = std::env::var("HOME").ok();
     std::env::set_var("HOME", temp.path());
     std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
-    
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    
+
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+
     let result = cmd_whoami(temp.path(), None, &PathBuf::from("/tmp"));
     assert!(result.is_err());
-    
+
     // Restore HOME
     if let Some(home) = orig_home {
         std::env::set_var("HOME", home);
@@ -1484,15 +1730,25 @@ fn test_whoami_fails_if_no_git_config_and_no_flag() {
 #[test]
 fn test_list_keys_empty_keyring() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
 
     // list-keys is gated on keyring signature verification: on a repo where
     // no trust was ever established it must fail closed like every other
     // gated command, with the existing no-trust message.
     let result = cmd_list_keys(temp.path(), "origin", &PathBuf::from("/tmp"));
-    let err = result.err().expect("list-keys on an untrusted repo must fail closed");
+    let err = result
+        .err()
+        .expect("list-keys on an untrusted repo must fail closed");
     let msg = err.to_string();
     assert!(
         msg.contains("no trust established for repo+user@github.com"),
@@ -1535,14 +1791,21 @@ fn test_list_keys_single_entry() {
 #[test]
 fn test_add_multiple_files_to_tracked_json() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
 
     std::fs::write(temp.path().join("file1.txt"), "content1").unwrap();
     std::fs::write(temp.path().join("file2.txt"), "content2").unwrap();
 
-    cmd_add(temp.path(), vec!["file1.txt".to_string(), "file2.txt".to_string()])
-        .expect("multi-file cmd_add must succeed");
+    cmd_add(
+        temp.path(),
+        vec!["file1.txt".to_string(), "file2.txt".to_string()],
+    )
+    .expect("multi-file cmd_add must succeed");
 
     let tracked = TrackedFiles::load(&temp.path().join(".git-veil").join("tracked.json"))
         .expect("tracked.json must stay loadable after a multi-file add");
@@ -1561,12 +1824,16 @@ fn test_add_multiple_files_to_tracked_json() {
 #[test]
 fn test_add_duplicate_file_idempotent() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let test_file = temp.path().join("secret.txt");
     std::fs::write(&test_file, "content").unwrap();
-    
+
     cmd_add(temp.path(), vec!["secret.txt".to_string()]).unwrap();
     let result = cmd_add(temp.path(), vec!["secret.txt".to_string()]);
     assert!(result.is_ok());
@@ -1575,9 +1842,13 @@ fn test_add_duplicate_file_idempotent() {
 #[test]
 fn test_add_nonexistent_file_fails() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let result = cmd_add(temp.path(), vec!["nonexistent.txt".to_string()]);
     assert!(result.is_err());
 }
@@ -1589,13 +1860,17 @@ fn test_add_nonexistent_file_fails() {
 #[test]
 fn test_remove_file_from_tracked_json() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let test_file = temp.path().join("secret.txt");
     std::fs::write(&test_file, "content").unwrap();
     cmd_add(temp.path(), vec!["secret.txt".to_string()]).unwrap();
-    
+
     let result = cmd_remove(temp.path(), vec!["secret.txt".to_string()]);
     assert!(result.is_ok());
 }
@@ -1603,23 +1878,38 @@ fn test_remove_file_from_tracked_json() {
 #[test]
 fn test_remove_multiple_files() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     std::fs::write(temp.path().join("file1.txt"), "content1").unwrap();
     std::fs::write(temp.path().join("file2.txt"), "content2").unwrap();
-    cmd_add(temp.path(), vec!["file1.txt".to_string(), "file2.txt".to_string()]).unwrap();
-    
-    let result = cmd_remove(temp.path(), vec!["file1.txt".to_string(), "file2.txt".to_string()]);
+    cmd_add(
+        temp.path(),
+        vec!["file1.txt".to_string(), "file2.txt".to_string()],
+    )
+    .unwrap();
+
+    let result = cmd_remove(
+        temp.path(),
+        vec!["file1.txt".to_string(), "file2.txt".to_string()],
+    );
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_remove_nonexistent_file_fails() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let result = cmd_remove(temp.path(), vec!["nonexistent.txt".to_string()]);
     assert!(result.is_err());
 }
@@ -1627,12 +1917,16 @@ fn test_remove_nonexistent_file_fails() {
 #[test]
 fn test_remove_not_tracked_file_fails() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let test_file = temp.path().join("untracked.txt");
     std::fs::write(&test_file, "content").unwrap();
-    
+
     let result = cmd_remove(temp.path(), vec!["untracked.txt".to_string()]);
     assert!(result.is_err());
 }
@@ -1644,9 +1938,13 @@ fn test_remove_not_tracked_file_fails() {
 #[test]
 fn test_list_empty_tracked_json() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let result = cmd_list(temp.path());
     assert!(result.is_ok());
 }
@@ -1654,13 +1952,17 @@ fn test_list_empty_tracked_json() {
 #[test]
 fn test_list_single_file() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let test_file = temp.path().join("secret.txt");
     std::fs::write(&test_file, "content").unwrap();
     cmd_add(temp.path(), vec!["secret.txt".to_string()]).unwrap();
-    
+
     let result = cmd_list(temp.path());
     assert!(result.is_ok());
 }
@@ -1668,13 +1970,21 @@ fn test_list_single_file() {
 #[test]
 fn test_list_multiple_files() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     std::fs::write(temp.path().join("file1.txt"), "content1").unwrap();
     std::fs::write(temp.path().join("file2.txt"), "content2").unwrap();
-    cmd_add(temp.path(), vec!["file1.txt".to_string(), "file2.txt".to_string()]).unwrap();
-    
+    cmd_add(
+        temp.path(),
+        vec!["file1.txt".to_string(), "file2.txt".to_string()],
+    )
+    .unwrap();
+
     let result = cmd_list(temp.path());
     assert!(result.is_ok());
 }
@@ -1751,7 +2061,13 @@ fn test_hide_missing_tracked_file_fails() {
 fn test_reveal_fails_if_email_not_in_keyring() {
     let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
-    let result = cmd_reveal(repo_temp.path(), "mallory@evil.com", "origin", &key_store, None);
+    let result = cmd_reveal(
+        repo_temp.path(),
+        "mallory@evil.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let err = result
         .err()
         .expect("reveal for an email absent from the keyring must fail");
@@ -1770,7 +2086,13 @@ fn test_reveal_missing_encrypted_file_fails() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
     // Tracked and on disk, but never hidden: no secret.env.secret exists.
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
+    let result = cmd_reveal(
+        repo_temp.path(),
+        "owner@github.com",
+        "origin",
+        &key_store,
+        None,
+    );
     let err = result
         .err()
         .expect("reveal without the ciphertext file must fail");
@@ -1788,9 +2110,13 @@ fn test_reveal_missing_encrypted_file_fails() {
 #[test]
 fn test_clean_removes_git_veil_directory() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let result = cmd_clean(temp.path(), false);
     assert!(result.is_ok());
     assert!(!temp.path().join(".git-veil").exists());
@@ -1799,7 +2125,11 @@ fn test_clean_removes_git_veil_directory() {
 #[test]
 fn clean_keeps_gitignore_untouched() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     std::fs::write(temp.path().join(".gitignore"), "/target\n*.log\n").unwrap();
     cmd_init(temp.path()).unwrap();
 
@@ -1816,9 +2146,13 @@ fn clean_keeps_gitignore_untouched() {
 #[test]
 fn test_clean_idempotent() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     cmd_clean(temp.path(), false).unwrap();
     let result = cmd_clean(temp.path(), false);
     assert!(result.is_ok());
@@ -1843,8 +2177,7 @@ fn clean_without_yes_refuses_to_destroy_ciphertext() {
 
     let result = cmd_clean(temp.path(), false);
 
-    let err = result
-        .expect_err("clean without --yes must refuse to destroy ciphertext");
+    let err = result.expect_err("clean without --yes must refuse to destroy ciphertext");
     let msg = err.to_string();
     assert!(
         msg.contains("--yes"),
@@ -1875,8 +2208,7 @@ fn clean_without_yes_refuses_when_tracked_files_exist() {
 
     let result = cmd_clean(temp.path(), false);
 
-    let err = result
-        .expect_err("clean without --yes must refuse while tracked files exist");
+    let err = result.expect_err("clean without --yes must refuse while tracked files exist");
     assert!(
         err.to_string().contains("--yes"),
         "the refusal must explain that --yes is required, got: {}",
@@ -1922,70 +2254,127 @@ fn clean_without_yes_succeeds_when_nothing_tracked() {
 #[test]
 fn test_full_workflow_owner_setup() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
+
     // Initialize
     cmd_init(temp.path()).unwrap();
-    
+
     // Generate owner key
     let (owner_secret, owner_public) = generate_test_key("owner@example.com");
     let owner_fingerprint = extract_key_fingerprint(&owner_public);
-    
+
     // Create keyring with owner
     let mut keyring = Keyring::new();
     let owner_base64 = base64_encode_public_key(&owner_public).expect("armouring should succeed");
-    keyring.add_entry("owner@example.com".to_string(), owner_base64, owner_fingerprint.clone()).unwrap();
-    
+    keyring
+        .add_entry(
+            "owner@example.com".to_string(),
+            owner_base64,
+            owner_fingerprint.clone(),
+        )
+        .unwrap();
+
     // Sign keyring
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
-    
+    let signature =
+        sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
+
     assert!(signature.contains("-----BEGIN PGP SIGNATURE-----"));
 }
 
 #[test]
 fn test_full_workflow_add_collaborator() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     // Generate owner and collaborator keys
     let (owner_secret, owner_public) = generate_test_key("owner@example.com");
     let (_collab_secret, collab_public) = generate_test_key("collab@example.com");
-    
+
     // Create keyring with both
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public).expect("armouring should succeed"), extract_key_fingerprint(&owner_public)).unwrap();
-    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public).expect("armouring should succeed"), extract_key_fingerprint(&collab_public)).unwrap();
-    
+    keyring
+        .add_entry(
+            "owner@example.com".to_string(),
+            base64_encode_public_key(&owner_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&owner_public),
+        )
+        .unwrap();
+    keyring
+        .add_entry(
+            "collab@example.com".to_string(),
+            base64_encode_public_key(&collab_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&collab_public),
+        )
+        .unwrap();
+
     // Sign keyring
     let content = keyring.serialize();
-    let _signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
-    
+    let _signature =
+        sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
+
     assert!(keyring.entries.len() == 2);
 }
 
 #[test]
 fn test_full_workflow_collaborator_clone_and_reveal() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     // Generate keys
     let (owner_secret, owner_public) = generate_test_key("owner@example.com");
     let (_collab_secret, collab_public) = generate_test_key("collab@example.com");
-    
+
     // Create keyring
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public).expect("armouring should succeed"), extract_key_fingerprint(&owner_public)).unwrap();
-    keyring.add_entry("collab@example.com".to_string(), base64_encode_public_key(&collab_public).expect("armouring should succeed"), extract_key_fingerprint(&collab_public)).unwrap();
-    
+    keyring
+        .add_entry(
+            "owner@example.com".to_string(),
+            base64_encode_public_key(&owner_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&owner_public),
+        )
+        .unwrap();
+    keyring
+        .add_entry(
+            "collab@example.com".to_string(),
+            base64_encode_public_key(&collab_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&collab_public),
+        )
+        .unwrap();
+
     // Sign and verify
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
+    let signature =
+        sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
     let result = verify_keyring_signature(&content, &signature, &owner_public);
     assert!(result.is_ok());
 }
@@ -1993,42 +2382,78 @@ fn test_full_workflow_collaborator_clone_and_reveal() {
 #[test]
 fn test_full_workflow_hide_reveal_roundtrip() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     // Generate key
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
-    
+
     // Test encryption/decryption roundtrip
     let plaintext = b"secret content";
-    let encrypted = encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
+    let encrypted =
+        encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
     assert!(encrypted.contains("-----BEGIN PGP MESSAGE-----"));
 }
 
 #[test]
 fn test_multi_collaborator_workflow() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     // Generate multiple collaborator keys
     let (owner_secret, owner_public) = generate_test_key("owner@example.com");
     let (_collab1_secret, collab1_public) = generate_test_key("collab1@example.com");
     let (_collab2_secret, collab2_public) = generate_test_key("collab2@example.com");
-    
+
     // Create keyring with all collaborators
     let mut keyring = Keyring::new();
-    keyring.add_entry("owner@example.com".to_string(), base64_encode_public_key(&owner_public).expect("armouring should succeed"), extract_key_fingerprint(&owner_public)).unwrap();
-    keyring.add_entry("collab1@example.com".to_string(), base64_encode_public_key(&collab1_public).expect("armouring should succeed"), extract_key_fingerprint(&collab1_public)).unwrap();
-    keyring.add_entry("collab2@example.com".to_string(), base64_encode_public_key(&collab2_public).expect("armouring should succeed"), extract_key_fingerprint(&collab2_public)).unwrap();
-    
+    keyring
+        .add_entry(
+            "owner@example.com".to_string(),
+            base64_encode_public_key(&owner_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&owner_public),
+        )
+        .unwrap();
+    keyring
+        .add_entry(
+            "collab1@example.com".to_string(),
+            base64_encode_public_key(&collab1_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&collab1_public),
+        )
+        .unwrap();
+    keyring
+        .add_entry(
+            "collab2@example.com".to_string(),
+            base64_encode_public_key(&collab2_public).expect("armouring should succeed"),
+            extract_key_fingerprint(&collab2_public),
+        )
+        .unwrap();
+
     assert!(keyring.entries.len() == 3);
-    
+
     // Sign and verify
     let content = keyring.serialize();
-    let signature = sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
+    let signature =
+        sign_keyring_content(&content, &owner_secret, None).expect("signing should succeed");
     let result = verify_keyring_signature(&content, &signature, &owner_public);
     assert!(result.is_ok());
 }
@@ -2044,22 +2469,29 @@ fn test_multi_collaborator_workflow() {
 #[test]
 fn test_keyring_signature_rotation() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let fingerprint = extract_key_fingerprint(&public_key);
     let base64_key = base64_encode_public_key(&public_key).expect("armouring should succeed");
-    
+
     // Create keyring with entry
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".to_string(), base64_key, fingerprint).unwrap();
-    
+    keyring
+        .add_entry("alice@example.com".to_string(), base64_key, fingerprint)
+        .unwrap();
+
     // Sign keyring content (without signature)
     let content_without_sig = keyring.serialize();
-    let signature = sign_keyring_content(&content_without_sig, &secret_key, None).expect("signing should succeed");
+    let signature = sign_keyring_content(&content_without_sig, &secret_key, None)
+        .expect("signing should succeed");
     keyring.signature = Some(signature.clone());
-    
+
     // Verify signature using the content without signature
     let result = verify_keyring_signature(&content_without_sig, &signature, &public_key);
     assert!(result.is_ok());
@@ -2068,15 +2500,27 @@ fn test_keyring_signature_rotation() {
 #[test]
 fn test_multiple_remotes_workflow() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "fork", "git@github.com:fork/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "fork", "git@github.com:fork/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     // Both remotes should work
     let result1 = cmd_show_repo_id(temp.path(), "origin");
     assert!(result1.is_ok());
-    
+
     let result2 = cmd_show_repo_id(temp.path(), "fork");
     assert!(result2.is_ok());
 }
@@ -2086,10 +2530,10 @@ fn test_custom_key_store_workflow() {
     let temp = tempfile::tempdir().unwrap();
     let custom_key_store = temp.path().join("custom-store");
     std::fs::create_dir_all(&custom_key_store).unwrap();
-    
+
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
-    
+
     // Import to custom key store
     import_key_to_store(&custom_key_store, &armored).unwrap();
     assert!(custom_key_store.join("public-keys.pgp").exists());
@@ -2098,26 +2542,31 @@ fn test_custom_key_store_workflow() {
 #[test]
 fn test_binary_file_encryption_workflow() {
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
-    
+
     // Binary data
     let binary_data: Vec<u8> = (0..255).collect();
-    
-    let encrypted = encrypt_to_public_key(&binary_data, &public_key).expect("encryption should succeed");
+
+    let encrypted =
+        encrypt_to_public_key(&binary_data, &public_key).expect("encryption should succeed");
     assert!(encrypted.contains("-----BEGIN PGP MESSAGE-----"));
 }
 
 #[test]
 fn test_nested_directory_workflow() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     // Create nested directory structure
     let nested_dir = temp.path().join("subdir").join("nested");
     std::fs::create_dir_all(&nested_dir).unwrap();
     let test_file = nested_dir.join("secret.txt");
     std::fs::write(&test_file, "nested secret content").unwrap();
-    
+
     let result = cmd_add(temp.path(), vec!["subdir/nested/secret.txt".to_string()]);
     assert!(result.is_ok());
 }
@@ -2129,7 +2578,7 @@ fn test_nested_directory_workflow() {
 #[test]
 fn test_not_in_git_repo_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
-    
+
     let result = cmd_show_repo_id(temp.path(), "origin");
     assert!(result.is_err());
 }
@@ -2137,8 +2586,12 @@ fn test_not_in_git_repo_fails_gracefully() {
 #[test]
 fn test_git_veil_not_initialized_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+
     let result = cmd_list_keys(temp.path(), "origin", &PathBuf::from("/tmp"));
     assert!(result.is_err());
 }
@@ -2146,11 +2599,19 @@ fn test_git_veil_not_initialized_fails_gracefully() {
 #[test]
 fn test_corrupted_trust_json_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
-    std::fs::write(temp.path().join(".git-veil").join("trust.json"), "corrupted").unwrap();
-    
+
+    std::fs::write(
+        temp.path().join(".git-veil").join("trust.json"),
+        "corrupted",
+    )
+    .unwrap();
+
     let result = TrustStore::load_from_file(&temp.path().join(".git-veil").join("trust.json"));
     assert!(result.is_err());
 }
@@ -2158,11 +2619,19 @@ fn test_corrupted_trust_json_fails_gracefully() {
 #[test]
 fn test_corrupted_tracked_json_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
-    std::fs::write(temp.path().join(".git-veil").join("tracked.json"), "corrupted").unwrap();
-    
+
+    std::fs::write(
+        temp.path().join(".git-veil").join("tracked.json"),
+        "corrupted",
+    )
+    .unwrap();
+
     let result = TrackedFiles::load(&temp.path().join(".git-veil").join("tracked.json"));
     assert!(result.is_err());
 }
@@ -2170,11 +2639,15 @@ fn test_corrupted_tracked_json_fails_gracefully() {
 #[test]
 fn test_corrupted_keyring_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     std::fs::write(temp.path().join(".git-veil").join("keyring"), "corrupted").unwrap();
-    
+
     let content = std::fs::read_to_string(temp.path().join(".git-veil").join("keyring")).unwrap();
     let result = Keyring::parse(&content);
     assert!(result.is_err());
@@ -2183,12 +2656,20 @@ fn test_corrupted_keyring_fails_gracefully() {
 #[test]
 fn test_missing_keyring_file_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
-    std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["init"])
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .current_dir(temp.path())
+        .args(&["remote", "add", "origin", "git@github.com:user/repo.git"])
+        .output()
+        .unwrap();
     cmd_init(temp.path()).unwrap();
-    
+
     std::fs::remove_file(temp.path().join(".git-veil").join("keyring")).unwrap();
-    
+
     let result = cmd_verify_keyring(temp.path(), "origin", &PathBuf::from("/tmp"));
     assert!(result.is_err());
 }

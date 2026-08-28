@@ -1,12 +1,12 @@
+use anyhow::{Context as _, Result};
 use clap::{CommandFactory as _, Parser as _};
 use std::path::PathBuf;
-use anyhow::{Context as _, Result};
 
 use git_veil::{
     cli::{Cli, Commands},
-    cmd_init, cmd_import, cmd_export, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove,
-    cmd_list, cmd_hide, cmd_reveal, cmd_unhide, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id,
-    cmd_whoami, cmd_verify_keyring, cmd_list_keys, cmd_removekey, default_key_store,
+    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_list,
+    cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id,
+    cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring, cmd_whoami, default_key_store,
     get_git_config_email,
 };
 
@@ -95,60 +95,168 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init => cmd_init(&repo_root)?,
-        Commands::Import { files, key_store: opt } => {
+        Commands::Import {
+            files,
+            key_store: opt,
+        } => {
             cmd_import(&repo_root, &files, &resolve_key_store(opt)?)?;
         }
-        Commands::Export { identifier, output, key_store: opt } => {
+        Commands::Export {
+            identifier,
+            output,
+            key_store: opt,
+        } => {
             cmd_export(&resolve_key_store(opt)?, &identifier, output.as_deref())?;
         }
-        Commands::RemoveKey { identifier, yes, key_store: opt } => {
+        Commands::RemoveKey {
+            identifier,
+            yes,
+            key_store: opt,
+        } => {
             cmd_removekey(&resolve_key_store(opt)?, &identifier, yes)?;
         }
-        Commands::Trust { repo_id, signing_key, remote, key_store: opt } => {
-            cmd_trust(&repo_root, &repo_id, &signing_key, &remote, &resolve_key_store(opt)?)?;
+        Commands::Trust {
+            repo_id,
+            signing_key,
+            remote,
+            key_store: opt,
+        } => {
+            cmd_trust(
+                &repo_root,
+                &repo_id,
+                &signing_key,
+                &remote,
+                &resolve_key_store(opt)?,
+            )?;
         }
-        Commands::Tell { email, public_key, remote, key_store: opt, passphrase_stdin } => {
+        Commands::Tell {
+            email,
+            public_key,
+            remote,
+            key_store: opt,
+            passphrase_stdin,
+        } => {
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_tell(&repo_root, &email, &public_key, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
+            cmd_tell(
+                &repo_root,
+                &email,
+                &public_key,
+                &remote,
+                &resolve_key_store(opt)?,
+                passphrase.as_deref(),
+            )?;
         }
-        Commands::RemovePerson { email, remote, key_store: opt, passphrase_stdin } => {
+        Commands::RemovePerson {
+            email,
+            remote,
+            key_store: opt,
+            passphrase_stdin,
+        } => {
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_removeperson(&repo_root, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
+            cmd_removeperson(
+                &repo_root,
+                &email,
+                &remote,
+                &resolve_key_store(opt)?,
+                passphrase.as_deref(),
+            )?;
         }
         Commands::Add { files } => cmd_add(&repo_root, files)?,
         Commands::Remove { files } => cmd_remove(&repo_root, files)?,
         Commands::List => cmd_list(&repo_root)?,
-        Commands::Hide { remote, key_store: opt } => {
+        Commands::Hide {
+            remote,
+            key_store: opt,
+        } => {
             cmd_hide(&repo_root, &remote, &resolve_key_store(opt)?)?;
         }
-        Commands::Reveal { email, remote, key_store: opt, passphrase_stdin } => {
+        Commands::Reveal {
+            email,
+            remote,
+            key_store: opt,
+            passphrase_stdin,
+        } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_reveal(&repo_root, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
+            cmd_reveal(
+                &repo_root,
+                &email,
+                &remote,
+                &resolve_key_store(opt)?,
+                passphrase.as_deref(),
+            )?;
         }
-        Commands::Cat { file, email, remote, key_store: opt, passphrase_stdin } => {
+        Commands::Cat {
+            file,
+            email,
+            remote,
+            key_store: opt,
+            passphrase_stdin,
+        } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_cat(&repo_root, &file, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
+            cmd_cat(
+                &repo_root,
+                &file,
+                &email,
+                &remote,
+                &resolve_key_store(opt)?,
+                passphrase.as_deref(),
+            )?;
         }
-        Commands::Unhide { file, email, remote, key_store: opt, passphrase_stdin } => {
+        Commands::Unhide {
+            file,
+            email,
+            remote,
+            key_store: opt,
+            passphrase_stdin,
+        } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_unhide(&repo_root, &file, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
+            cmd_unhide(
+                &repo_root,
+                &file,
+                &email,
+                &remote,
+                &resolve_key_store(opt)?,
+                passphrase.as_deref(),
+            )?;
         }
-        Commands::Changes { files, email, remote, key_store: opt, passphrase_stdin } => {
+        Commands::Changes {
+            files,
+            email,
+            remote,
+            key_store: opt,
+            passphrase_stdin,
+        } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_changes(&repo_root, files, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
+            cmd_changes(
+                &repo_root,
+                files,
+                &email,
+                &remote,
+                &resolve_key_store(opt)?,
+                passphrase.as_deref(),
+            )?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&repo_root, &remote)?,
-        Commands::Whoami { email, key_store: opt } => {
+        Commands::Whoami {
+            email,
+            key_store: opt,
+        } => {
             cmd_whoami(&repo_root, email.as_deref(), &resolve_key_store(opt)?)?;
         }
-        Commands::VerifyKeyring { remote, key_store: opt } => {
+        Commands::VerifyKeyring {
+            remote,
+            key_store: opt,
+        } => {
             cmd_verify_keyring(&repo_root, &remote, &resolve_key_store(opt)?)?;
         }
-        Commands::ListKeys { remote, key_store: opt } => {
+        Commands::ListKeys {
+            remote,
+            key_store: opt,
+        } => {
             cmd_list_keys(&repo_root, &remote, &resolve_key_store(opt)?)?;
         }
         Commands::Clean { yes } => cmd_clean(&repo_root, yes)?,
