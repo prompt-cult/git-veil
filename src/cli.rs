@@ -60,6 +60,41 @@ EXAMPLES
         gpg_home: Option<PathBuf>,
     },
 
+    /// Export an armoured public key from the local key store
+    #[command(after_long_help = "\
+Prints — or with --output writes — the armoured PUBLIC key for the given
+email or fingerprint, read from the local key store on this machine
+($HOME/.git-gpg). This is the key handoff between collaborators without
+the gpg CLI: the local store only holds keys THIS machine knows about
+(your imported private key and any key trust has pinned), so each
+collaborator runs export on their OWN machine and sends the .pub file to
+the owner, who adds it to the keyring with tell. It cannot export a
+collaborator's key for them.
+
+The output never contains private key material — even when the match is
+your imported private key, export always re-armours the public half.
+
+Matching is exact: the identifier equals the key's fingerprint, or the
+address in one of its user-IDs. If several keys share the requested
+email, the fingerprints are listed so you can retry with one of them.
+export does not touch the repository and needs no init or trust state.
+
+EXAMPLES
+  $ git-gpg export alice@example.com                     # armour to stdout
+  $ git-gpg export alice@example.com --output alice.pub  # hand-off file
+  $ git-gpg export 9A1F... --output alice.pub            # by fingerprint
+")]
+    Export {
+        /// Email or fingerprint of the key to export
+        identifier: String,
+        /// Write the armoured public key to this file instead of stdout
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Key store directory (default: $HOME/.git-gpg)
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+    },
+
     /// Verify and pin the repository owner's signing key (per machine)
     #[command(after_long_help = "\
 Verifies the repository owner's public signing key and pins it in your

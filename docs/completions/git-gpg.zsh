@@ -42,6 +42,15 @@ _arguments "${_arguments_options[@]}" : \
 '*::files -- File(s) containing armoured private key blocks:_default' \
 && ret=0
 ;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+'--output=[Write the armoured public key to this file instead of stdout]:OUTPUT:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':identifier -- Email or fingerprint of the key to export:_default' \
+&& ret=0
+;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
@@ -216,6 +225,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -306,6 +319,7 @@ _git-gpg_commands() {
     local commands; commands=(
 'init:Initialize git-gpg state (.git-gpg/) in the current repository' \
 'import:Import your private key(s) into the git-gpg key store' \
+'export:Export an armoured public key from the local key store' \
 'trust:Verify and pin the repository owner'\''s signing key (per machine)' \
 'tell:Add a collaborator'\''s public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
@@ -353,11 +367,17 @@ _git-gpg__subcmd__completions_commands() {
     local commands; commands=()
     _describe -t commands 'git-gpg completions commands' commands "$@"
 }
+(( $+functions[_git-gpg__subcmd__export_commands] )) ||
+_git-gpg__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-gpg export commands' commands "$@"
+}
 (( $+functions[_git-gpg__subcmd__help_commands] )) ||
 _git-gpg__subcmd__help_commands() {
     local commands; commands=(
 'init:Initialize git-gpg state (.git-gpg/) in the current repository' \
 'import:Import your private key(s) into the git-gpg key store' \
+'export:Export an armoured public key from the local key store' \
 'trust:Verify and pin the repository owner'\''s signing key (per machine)' \
 'tell:Add a collaborator'\''s public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
@@ -404,6 +424,11 @@ _git-gpg__subcmd__help__subcmd__clean_commands() {
 _git-gpg__subcmd__help__subcmd__completions_commands() {
     local commands; commands=()
     _describe -t commands 'git-gpg help completions commands' commands "$@"
+}
+(( $+functions[_git-gpg__subcmd__help__subcmd__export_commands] )) ||
+_git-gpg__subcmd__help__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-gpg help export commands' commands "$@"
 }
 (( $+functions[_git-gpg__subcmd__help__subcmd__help_commands] )) ||
 _git-gpg__subcmd__help__subcmd__help_commands() {

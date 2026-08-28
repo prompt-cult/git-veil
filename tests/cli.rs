@@ -299,6 +299,7 @@ fn bare_help_lists_every_command_with_one_liner() {
     for name in [
         "init",
         "import",
+        "export",
         "trust",
         "tell",
         "removeperson",
@@ -816,5 +817,115 @@ fn assert_th_roff(content: &[u8], label: &str) {
         "{} must be roff with a .TH title line, got: {:?}",
         label,
         text.chars().take(80).collect::<String>()
+    );
+}
+
+#[test]
+fn cli_export_round_trip_into_tell() {
+    // Machine A: alice imports her private key and exports her PUBLIC key —
+    // no gpg CLI involved in the handoff.
+    let repo_a = tempfile::tempdir().unwrap();
+    let home_a = tempfile::tempdir().unwrap();
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    std::fs::write(
+        repo_a.path().join("alice-priv.asc"),
+        alice_sec.to_armored_string(Default::default()).unwrap(),
+    )
+    .unwrap();
+
+    let out = run(repo_a.path(), home_a.path(), &["import", "alice-priv.asc"]);
+    assert!(
+        out.status.success(),
+        "machine A import failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let alice_pub_path = home_a.path().join("alice.pub");
+    let out = run(
+        repo_a.path(),
+        home_a.path(),
+        &[
+            "export",
+            "alice@example.com",
+            "--output",
+            alice_pub_path.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "machine A export failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(alice_pub_path.exists(), "export must produce alice.pub");
+    let handed_over =
+        std::fs::read_to_string(&alice_pub_path).expect("read handed-over alice.pub");
+    assert!(
+        handed_over.contains("BEGIN PGP PUBLIC KEY BLOCK")
+            && !handed_over.contains("PRIVATE KEY BLOCK"),
+        "the handed-over file must be an armoured PUBLIC key only, got: {}",
+        handed_over
+    );
+
+    // Machine B (different fake HOME = different key store): the owner
+    // receives alice.pub and tells it into the keyring.
+    let repo_b = tempfile::tempdir().unwrap();
+    let home_b = tempfile::tempdir().unwrap();
+    git(repo_b.path(), &["init"]);
+    git(
+        repo_b.path(),
+        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    );
+    git(repo_b.path(), &["config", "user.email", "owner@github.com"]);
+
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    std::fs::write(
+        repo_b.path().join("owner-priv.asc"),
+        owner_sec.to_armored_string(Default::default()).unwrap(),
+    )
+    .unwrap();
+    let owner_keyfile = repo_b.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+
+    let out = run(repo_b.path(), home_b.path(), &["init"]);
+    assert!(
+        out.status.success(),
+        "machine B init failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = run(repo_b.path(), home_b.path(), &["import", "owner-priv.asc"]);
+    assert!(
+        out.status.success(),
+        "machine B import failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = run(
+        repo_b.path(),
+        home_b.path(),
+        &["trust", "repo+owner@github.com", "owner.pub"],
+    );
+    assert!(
+        out.status.success(),
+        "machine B trust failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // The actual handoff: tell consumes the exported file.
+    let out = run(
+        repo_b.path(),
+        home_b.path(),
+        &["tell", "alice@example.com", alice_pub_path.to_str().unwrap()],
+    );
+    assert!(
+        out.status.success(),
+        "machine B tell of the exported key failed: {:?}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let keyring_text =
+        std::fs::read_to_string(repo_b.path().join(".git-gpg/keyring")).unwrap();
+    assert!(
+        keyring_text.contains("alice@example.com"),
+        "keyring must contain alice after telling the exported key, got: {}",
+        keyring_text
     );
 }

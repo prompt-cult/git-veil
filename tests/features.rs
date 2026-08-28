@@ -5,13 +5,13 @@
 
 use git_gpg::{
     base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
-    cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson,
-    cmd_reveal, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring, cmd_list_keys,
-    decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key,
+    cmd_cat, cmd_changes, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_remove,
+    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    cmd_list_keys, decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key, export_public_key,
     extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_email,
-    find_private_key_by_fingerprint, import_key_to_gpg_home, sign_keyring_content,
-    verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry, TrustPinStore, TrustStore,
-    TrackedFiles,
+    find_private_key_by_fingerprint, import_key_to_gpg_home, parse_armored_public_key,
+    sign_keyring_content, verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry,
+    TrustPinStore, TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -3700,4 +3700,169 @@ fn atomic_store_write_survives_simulated_tear() {
         .expect("bob's key must parse out of the appended store");
 
     assert_no_temp_files(&gpg_home, "after the append through the atomic path");
+}
+
+// ============================================================================
+// export: armoured public key handoff without the gpg CLI
+// ============================================================================
+
+/// Imports a secret key into the key store via cmd_import — the way a
+/// collaborator's machine normally ends up knowing its own key.
+fn import_secret_key(
+    repo_root: &std::path::Path,
+    gpg_home: &PathBuf,
+    secret_key: &pgp::composed::SignedSecretKey,
+    file_name: &str,
+) {
+    let key_file = repo_root.join(file_name);
+    std::fs::write(&key_file, secret_key.to_armored_string(Default::default()).unwrap())
+        .expect("write armoured private key file");
+    cmd_import(repo_root, &[file_name.to_string()], gpg_home)
+        .expect("cmd_import must succeed");
+}
+
+#[test]
+fn export_writes_armoured_public_key_by_email() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let alice_fingerprint = extract_key_fingerprint(&alice_pub);
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+
+    let armored = export_public_key(&gpg_home, "alice@example.com")
+        .expect("export by email must succeed");
+
+    assert!(
+        armored.contains("BEGIN PGP PUBLIC KEY BLOCK"),
+        "exported text must be an armoured public key block, got: {}",
+        armored
+    );
+    let reparsed = parse_armored_public_key(&armored)
+        .expect("exported armour must re-parse as a public key");
+    assert_eq!(
+        extract_key_fingerprint(&reparsed),
+        alice_fingerprint,
+        "the re-parsed key must have the SAME fingerprint as the imported key"
+    );
+}
+
+#[test]
+fn export_writes_to_output_file_atomically() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+
+    let stdout_variant = export_public_key(&gpg_home, "alice@example.com")
+        .expect("stdout-variant export must succeed");
+
+    let out_path = temp.path().join("alice.pub");
+    cmd_export(&gpg_home, "alice@example.com", Some(out_path.as_path()))
+        .expect("export to an output file must succeed");
+
+    let file_content =
+        std::fs::read_to_string(&out_path).expect("output file must exist after export");
+    assert_eq!(
+        file_content, stdout_variant,
+        "the file variant must carry content identical to the stdout variant"
+    );
+
+    let residue: Vec<String> = std::fs::read_dir(temp.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.contains(".tmp-"))
+        .collect();
+    assert!(
+        residue.is_empty(),
+        "no .tmp-* residue may remain after an atomic export, found: {:?}",
+        residue
+    );
+}
+
+#[test]
+fn export_errors_for_unknown_identifier() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+
+    let result = export_public_key(&gpg_home, "carol@example.com");
+
+    let err = result.err().expect("an unknown identifier must not export any key");
+    assert!(
+        err.to_string().contains("carol@example.com"),
+        "the error must name the identifier, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("public-keys.pgp"),
+        "the error must name the key store path, got: {}",
+        err
+    );
+}
+
+#[test]
+fn export_errors_for_ambiguous_email() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    // Two DIFFERENT keys sharing one email (both UIDs "Test User <carol@…>"):
+    // importing both puts two same-email keys in the store.
+    let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
+    let (carol_second, carol_second_pub) = generate_test_key("carol@example.com");
+    let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
+    let second_fingerprint = extract_key_fingerprint(&carol_second_pub);
+    import_secret_key(temp.path(), &gpg_home, &carol_first, "carol1-priv.asc");
+    import_secret_key(temp.path(), &gpg_home, &carol_second, "carol2-priv.asc");
+
+    let result = export_public_key(&gpg_home, "carol@example.com");
+
+    let err = result
+        .err()
+        .expect("an ambiguous email must not silently export one of several keys");
+    assert!(
+        err.to_string().contains(first_fingerprint.as_str())
+            && err.to_string().contains(second_fingerprint.as_str()),
+        "the ambiguity error must list BOTH matching fingerprints, got: {}",
+        err
+    );
+}
+
+#[test]
+fn export_never_emits_private_key_material() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+
+    let armored = export_public_key(&gpg_home, "alice@example.com")
+        .expect("export from a store holding the private key must still succeed");
+
+    assert!(
+        !armored.contains("PRIVATE KEY BLOCK"),
+        "export must never emit private key material, got: {}",
+        armored
+    );
+}
+
+#[test]
+fn export_by_fingerprint_selects_the_exact_key() {
+    let temp = tempfile::tempdir().unwrap();
+    let gpg_home = temp.path().join("gpg-home");
+    let (alice_sec, _) = generate_test_key("alice@example.com");
+    let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
+    let bob_fingerprint = extract_key_fingerprint(&bob_pub);
+    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &gpg_home, &bob_sec, "bob-priv.asc");
+
+    let armored = export_public_key(&gpg_home, &bob_fingerprint)
+        .expect("export by fingerprint must succeed");
+
+    let reparsed =
+        parse_armored_public_key(&armored).expect("exported armour must re-parse");
+    assert_eq!(
+        extract_key_fingerprint(&reparsed),
+        bob_fingerprint,
+        "export by fingerprint must return bob's key, not another key from the store"
+    );
 }

@@ -1,0 +1,44 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-export 1  "git-gpg-export " 
+.SH NAME
+git\-gpg\-export \- Export an armoured public key from the local key store
+.SH SYNOPSIS
+\fBgit\-gpg export\fR [\fB\-\-output\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+.SH DESCRIPTION
+Export an armoured public key from the local key store
+.SH OPTIONS
+.TP
+\fB\-\-output\fR \fI<OUTPUT>\fR
+Write the armoured public key to this file instead of stdout
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIIDENTIFIER\fR>
+Email or fingerprint of the key to export
+.SH EXTRA
+Prints — or with \-\-output writes — the armoured PUBLIC key for the given
+email or fingerprint, read from the local key store on this machine
+($HOME/.git\-gpg). This is the key handoff between collaborators without
+the gpg CLI: the local store only holds keys THIS machine knows about
+(your imported private key and any key trust has pinned), so each
+collaborator runs export on their OWN machine and sends the .pub file to
+the owner, who adds it to the keyring with tell. It cannot export a
+collaborator\*(Aqs key for them.
+
+The output never contains private key material — even when the match is
+your imported private key, export always re\-armours the public half.
+
+Matching is exact: the identifier equals the key\*(Aqs fingerprint, or the
+address in one of its user\-IDs. If several keys share the requested
+email, the fingerprints are listed so you can retry with one of them.
+export does not touch the repository and needs no init or trust state.
+
+EXAMPLES
+  $ git\-gpg export alice@example.com                     # armour to stdout
+  $ git\-gpg export alice@example.com \-\-output alice.pub  # hand\-off file
+  $ git\-gpg export 9A1F... \-\-output alice.pub            # by fingerprint

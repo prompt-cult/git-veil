@@ -1,10 +1,11 @@
-use crate::armour::{PRIVATE_KEY_BEGIN, PRIVATE_KEY_END};
+use crate::armour::{PRIVATE_KEY_BEGIN, PRIVATE_KEY_END, PUBLIC_KEY_BEGIN, PUBLIC_KEY_END};
 use crate::fs_atomic::write_atomic;
 use crate::pubkey::extract_email_from_user_id;
 use anyhow::{Context, Result};
 use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::types::{KeyDetails, Password};
 use rand::thread_rng;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -71,6 +72,76 @@ pub(crate) fn split_armored_private_key_blocks(
         rest = &after[end..];
     }
     Ok(blocks)
+}
+
+/// Splits file content into individual armoured public key blocks.
+///
+/// Same contract as [`split_armored_private_key_blocks`]: garbage between
+/// complete blocks is ignored, an unterminated block is a hard error (the
+/// public key store must never be silently truncated).
+pub(crate) fn split_armored_public_key_blocks(
+    content: &str,
+    public_keys_path: &std::path::Path,
+) -> Result<Vec<String>> {
+    let mut blocks = Vec::new();
+    let mut rest = content;
+    while let Some(start) = rest.find(PUBLIC_KEY_BEGIN) {
+        let after = &rest[start..];
+        let end = match after.find(PUBLIC_KEY_END) {
+            Some(e) => e + PUBLIC_KEY_END.len(),
+            None => anyhow::bail!(
+                "Unterminated public key block in {} (corrupt public key store)",
+                public_keys_path.display()
+            ),
+        };
+        blocks.push(after[..end].to_string());
+        rest = &after[end..];
+    }
+    Ok(blocks)
+}
+
+/// Loads every public key the local key store knows about.
+///
+/// Sources, in file order: the armoured public key blocks in
+/// `<gpg_home>/public-keys.pgp` (populated by trust), then the public halves
+/// of the imported private keys in `<gpg_home>/secret-keys.pgp` (populated
+/// by import). The result is deduplicated by fingerprint, first occurrence
+/// winning. Both stores may be absent (fresh machine): an empty Vec is
+/// returned, not an error — callers decide what "nothing found" means.
+pub fn load_public_keys_from_store(gpg_home: &PathBuf) -> Result<Vec<SignedPublicKey>> {
+    let mut keys: Vec<SignedPublicKey> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    let mut push_unique = |key: SignedPublicKey| {
+        let fingerprint = key.fingerprint().to_string().to_uppercase();
+        if seen.insert(fingerprint) {
+            keys.push(key);
+        }
+    };
+
+    let public_keys_path = gpg_home.join("public-keys.pgp");
+    if public_keys_path.exists() {
+        let content = fs::read_to_string(&public_keys_path)
+            .context("Failed to read public-keys.pgp")?;
+        for block in split_armored_public_key_blocks(&content, &public_keys_path)? {
+            let (key, _headers) = SignedPublicKey::from_string(&block)
+                .context("Failed to parse public key block in public-keys.pgp")?;
+            push_unique(key);
+        }
+    }
+
+    let secret_keys_path = gpg_home.join("secret-keys.pgp");
+    if secret_keys_path.exists() {
+        let content = fs::read_to_string(&secret_keys_path)
+            .context("Failed to read secret-keys.pgp")?;
+        for block in split_armored_private_key_blocks(&content, &secret_keys_path)? {
+            let (key, _headers) = SignedSecretKey::from_string(&block)
+                .context("Failed to parse secret key")?;
+            push_unique(key.to_public_key());
+        }
+    }
+
+    Ok(keys)
 }
 
 /// Loads and parses every private key in the key store.
