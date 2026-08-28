@@ -9,7 +9,7 @@ use anyhow::Result;
 
 use git_gpg::{
     cmd_init, cmd_import, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove, cmd_list,
-    cmd_hide, cmd_reveal, cmd_cat, cmd_clean, cmd_show_repo_id, cmd_whoami,
+    cmd_hide, cmd_reveal, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id, cmd_whoami,
     cmd_verify_keyring, cmd_list_keys, default_gpg_home, get_git_config_email,
 };
 
@@ -133,6 +133,21 @@ enum Commands {
         gpg_home: Option<PathBuf>,
     },
 
+    /// Changes - report where plaintext differs from the last hidden version
+    Changes {
+        /// File(s) to check (default: all tracked files)
+        files: Vec<String>,
+        /// Your email address
+        #[arg(long)]
+        email: Option<String>,
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// GPG home directory
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+    },
+
     /// Show the repository ID
     #[command(name = "show-repo-id")]
     ShowRepoId {
@@ -218,6 +233,10 @@ fn main() -> Result<()> {
         Commands::Cat { file, email, remote, gpg_home: opt } => {
             let email = resolve_email(email)?;
             cmd_cat(&file, &email, &remote, &resolve_gpg_home(opt)?)?;
+        }
+        Commands::Changes { files, email, remote, gpg_home: opt } => {
+            let email = resolve_email(email)?;
+            cmd_changes(files, &email, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&remote)?,
         Commands::Whoami { email, gpg_home: opt } => {

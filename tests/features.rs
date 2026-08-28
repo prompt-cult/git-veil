@@ -4,11 +4,11 @@
 //! they must fail against the code they were written to fix, and pass after.
 
 use git_gpg::{
-    check_email_in_identities, cmd_add, cmd_cat, cmd_hide, cmd_init, cmd_remove, cmd_removeperson,
-    cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring, default_gpg_home, encrypt_to_gpg_key,
-    extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_email,
-    find_private_key_by_fingerprint, sign_keyring_content, Keyring, KeyringEntry, TrustStore,
-    TrackedFiles,
+    check_email_in_identities, cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_init, cmd_remove,
+    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_verify_keyring, default_gpg_home,
+    encrypt_to_gpg_key, extract_content_to_verify_from_keyring, extract_key_fingerprint,
+    find_private_key_by_email, find_private_key_by_fingerprint, sign_keyring_content, Keyring,
+    KeyringEntry, TrustStore, TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -1733,5 +1733,147 @@ fn cat_rejects_path_escaping_the_repo() {
     assert!(
         absolute_exists,
         "the outside file must be untouched by the rejected cat"
+    );
+}
+
+// ============================================================================
+// changes: report where on-disk plaintext differs from the last hidden version
+// ============================================================================
+
+#[test]
+#[serial]
+fn changes_reports_no_changes_when_plaintext_matches() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    let plaintext = "API_KEY=s3cr3t-value\nDB_PASSWORD=hunter2\n";
+    std::fs::write("secret.env", plaintext).unwrap();
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+
+    // Re-create the plaintext with IDENTICAL bytes, as if revealed and untouched.
+    std::fs::write("secret.env", plaintext).unwrap();
+
+    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
+    let ciphertext_still_exists =
+        std::path::Path::new(".git-gpg/secrets/secret.env.asc").exists();
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let changed = result.expect("cmd_changes must succeed when plaintext matches");
+    assert!(
+        changed.is_empty(),
+        "identical plaintext must not be reported as changed, got: {:?}",
+        changed
+    );
+    assert!(
+        ciphertext_still_exists,
+        "changes must not delete the ciphertext"
+    );
+    assert!(
+        repo_temp.path().join("secret.env").is_file(),
+        "changes must not touch the plaintext on disk"
+    );
+}
+
+#[test]
+#[serial]
+fn changes_reports_modified_file() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write("secret.env", "API_KEY=old-value\n").unwrap();
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+
+    std::fs::write("secret.env", "API_KEY=NEW-value\nDB=hunter2\n").unwrap();
+
+    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let changed = result.expect("cmd_changes must succeed for a modified file");
+    assert_eq!(
+        changed,
+        vec![PathBuf::from("secret.env")],
+        "the modified file must be the only reported change, got: {:?}",
+        changed
+    );
+}
+
+#[test]
+#[serial]
+fn changes_ignores_missing_plaintext() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    std::fs::write("secret.env", "API_KEY=s3cr3t\n").unwrap();
+    cmd_add(vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+    // hide deleted the plaintext; it is still hidden but absent on disk.
+
+    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let changed = result.expect("missing plaintext must be skipped, not an error");
+    assert!(
+        changed.is_empty(),
+        "a file hidden with no plaintext on disk must not be reported as changed, got: {:?}",
+        changed
+    );
+    assert!(
+        repo_temp.path().join(".git-gpg/secrets/secret.env.asc").exists(),
+        "the ciphertext must remain in place after the skipped file"
+    );
+}
+
+#[test]
+#[serial]
+fn changes_fails_for_untracked_file() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    let result = cmd_changes(
+        vec!["not-tracked.env".to_string()],
+        "owner@github.com",
+        "origin",
+        &gpg_home,
+    );
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let err = result.err().expect("changes for an untracked file must fail");
+    assert!(
+        err.to_string().contains("not tracked"),
+        "the error must say the file is not tracked, got: {}",
+        err
+    );
+}
+
+#[test]
+#[serial]
+fn changes_detects_binary_difference() {
+    let original_dir = std::env::current_dir().unwrap();
+    let (_repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+
+    let original: Vec<u8> = vec![0u8, 1, 2, 3, 255];
+    std::fs::write("blob.bin", &original).unwrap();
+    cmd_add(vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
+    cmd_hide("origin", &gpg_home).expect("cmd_hide must succeed");
+
+    let modified: Vec<u8> = vec![0u8, 1, 2, 3, 254, 9];
+    std::fs::write("blob.bin", &modified).unwrap();
+
+    let result = cmd_changes(vec![], "owner@github.com", "origin", &gpg_home);
+
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let changed = result.expect("cmd_changes must succeed for a binary file");
+    assert_eq!(
+        changed,
+        vec![PathBuf::from("blob.bin")],
+        "the binary difference must be detected in the changed list, got: {:?}",
+        changed
     );
 }
