@@ -1,4 +1,4 @@
-use clap::Parser as _;
+use clap::{CommandFactory as _, Parser as _};
 use std::path::PathBuf;
 use anyhow::{Context as _, Result};
 
@@ -58,7 +58,37 @@ fn resolve_passphrase(passphrase_stdin: bool) -> Result<Option<String>> {
     }
 }
 
+/// Intercepts `git-gpg help [cmd]` so that per the UX spec the command's
+/// discussion + EXAMPLES (its after_long_help content) render FIRST and the
+/// usage/options block renders LAST. `git-gpg <cmd> --help` keeps clap's
+/// native order (options before after_long_help), matching the man pages.
+fn handle_help_subcommand(rest: &[String]) -> Result<()> {
+    let mut root = Cli::command();
+    match rest.first() {
+        None => {
+            print!("{}", root.render_long_help());
+        }
+        Some(name) => {
+            let Some(sub) = root.find_subcommand(name.as_str()) else {
+                eprintln!("error: unrecognized subcommand '{name}'");
+                std::process::exit(2);
+            };
+            let mut sub = sub.clone();
+            if let Some(after) = sub.get_after_long_help() {
+                println!("{after}");
+            }
+            print!("{}", sub.render_help());
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 && args[1] == "help" {
+        return handle_help_subcommand(&args[2..]);
+    }
+
     let cli = Cli::parse();
     let repo_root = std::env::current_dir()?;
 

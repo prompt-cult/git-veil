@@ -356,6 +356,19 @@ fn help_hide_shows_workflow_and_examples() {
             "git-gpg help hide must discuss the workflow (missing: {marker})\n---\n{stdout}"
         );
     }
+
+    // UX spec: the discussion + EXAMPLES must render BEFORE the
+    // usage/options block for `help <cmd>`.
+    let examples_pos = stdout
+        .find("EXAMPLES")
+        .expect("git-gpg help hide must contain an EXAMPLES section");
+    let usage_pos = stdout
+        .find("Usage:")
+        .expect("git-gpg help hide must contain a Usage block");
+    assert!(
+        examples_pos < usage_pos,
+        "EXAMPLES must render before Usage for `git-gpg help hide`\n---\n{stdout}"
+    );
 }
 
 #[test]
