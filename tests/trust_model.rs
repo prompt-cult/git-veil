@@ -113,6 +113,78 @@ fn setup_trusted_repo_with_owner_in_keyring() -> (tempfile::TempDir, PathBuf) {
 // Phase 1: Repository Identity
 // ============================================================================
 
+/// The pinned invariant: one repository, any supported URL shape, one repo_id.
+/// Every row below is the SAME GitHub repository expressed in a different URL
+/// shape (scheme, port, userinfo, case, trailing slash, .git suffix) and must
+/// all collapse to a single identity: `repo+owner@github.com`.
+#[test]
+fn one_repository_any_url_shape_one_repo_id() {
+    let expected = "repo+owner@github.com";
+    let same_repository_urls: &[&str] = &[
+        // SCP-style SSH
+        "git@github.com:owner/repo.git",
+        "git@github.com:owner/repo",
+        // Scheme equivalence: https and scp-style are the same repository
+        "https://github.com/owner/repo.git",
+        "https://github.com/owner/repo",
+        // ssh:// and git:// schemes
+        "ssh://git@github.com/owner/repo.git",
+        "ssh://git@github.com:22/owner/repo.git",
+        "git://github.com/owner/repo.git",
+        "git://github.com:9418/owner/repo.git",
+        // Credential-embedded HTTPS (userinfo is a login credential, stripped)
+        "https://git@github.com/owner/repo.git",
+        "https://user:pass@github.com/owner/repo.git",
+        // Host case is irrelevant
+        "git@GITHUB.com:owner/repo.git",
+        "https://GitHub.com/owner/repo.git",
+        // Repo/owner case is irrelevant
+        "git@github.com:Owner/Repo.git",
+        "https://GitHub.com/Owner/Repo",
+        // Trailing slash tolerated
+        "https://github.com/owner/repo/",
+    ];
+
+    for url in same_repository_urls {
+        let repo_id = derive_repo_id(url)
+            .unwrap_or_else(|e| panic!("url {url:?} must parse to derive a repo_id, got: {e}"));
+        assert_eq!(
+            repo_id, expected,
+            "url {url:?} must normalize to the same repo_id as every other shape"
+        );
+    }
+}
+
+/// The pin filename must be a deterministic function of the repo_id, so all
+/// URL shapes of one repository map to one pin file. `+` and `@` (the
+/// structural characters of a repo_id) must percent-encode stably.
+#[test]
+fn sanitize_repo_id_stable_across_url_normalizations() {
+    let expected_pin = "repo%2Bowner%40github.com";
+    assert_eq!(
+        TrustPinStore::sanitize_repo_id("repo+owner@github.com"),
+        expected_pin
+    );
+
+    let same_repository_urls = [
+        "git@github.com:owner/repo.git",
+        "https://github.com/owner/repo.git",
+        "ssh://git@github.com/owner/repo.git",
+        "git://github.com/owner/repo.git",
+        "https://user:pass@github.com/owner/repo.git",
+        "git@github.com:Owner/Repo.git",
+        "https://GitHub.com/owner/repo/",
+    ];
+    for url in same_repository_urls {
+        let repo_id = derive_repo_id(url).unwrap();
+        assert_eq!(
+            TrustPinStore::sanitize_repo_id(&repo_id),
+            expected_pin,
+            "url {url:?} (repo_id {repo_id:?}) must map to the same pin filename"
+        );
+    }
+}
+
 #[test]
 fn test_parse_github_ssh_url() {
     let (repo, user, service) = parse_git_remote_url("git@github.com:user/repo.git").unwrap();
@@ -259,6 +331,26 @@ fn parse_git_remote_url_table() {
         ("git@github.com:user/my-project.git", Some(("my-project", "user", "github.com"))),
         ("git@github.com:user/my-project", Some(("my-project", "user", "github.com"))),
         ("https://github.com/user/repo", Some(("repo", "user", "github.com"))),
+        // Credential-embedded (userinfo) HTTPS URLs: userinfo must be
+        // stripped, never folded into the service host, never logged
+        ("https://user@github.com/owner/repo.git", Some(("repo", "owner", "github.com"))),
+        ("https://user:pass@github.com/owner/repo.git", Some(("repo", "owner", "github.com"))),
+        // git:// protocol (the git daemon port) normalizes like any other shape
+        ("git://github.com/owner/repo.git", Some(("repo", "owner", "github.com"))),
+        ("git://github.com:9418/owner/repo.git", Some(("repo", "owner", "github.com"))),
+        // ssh:// with a non-`git` login or no login (login is a credential,
+        // the owner is the first path segment, same as the SCP-style form)
+        ("ssh://deploy@codeberg.org/user/repo.git", Some(("repo", "user", "codeberg.org"))),
+        ("ssh://codeberg.org/user/repo.git", Some(("repo", "user", "codeberg.org"))),
+        // Host case is irrelevant: service is lowercased
+        ("git@GITHUB.com:user/repo.git", Some(("repo", "user", "github.com"))),
+        ("https://GitHub.com/user/repo.git", Some(("repo", "user", "github.com"))),
+        // Repo/owner case is irrelevant: both are lowercased
+        ("git@github.com:Owner/Repo.git", Some(("repo", "owner", "github.com"))),
+        ("https://github.com/Owner/Repo.git", Some(("repo", "owner", "github.com"))),
+        // Trailing slashes are tolerated
+        ("https://github.com/owner/repo/", Some(("repo", "owner", "github.com"))),
+        ("git@github.com:owner/repo/", Some(("repo", "owner", "github.com"))),
         // Invalid rows must stay invalid
         ("not-a-valid-url", None),
         ("git@github.com", None),
