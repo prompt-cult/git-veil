@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-trust 1  "git-gpg-trust " 
+.SH NAME
+git\-gpg\-trust \- Establish trust for a repository by verifying the owner\*(Aqs signing key
+.SH SYNOPSIS
+\fBgit\-gpg trust\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> <\fISIGNING_KEY\fR> 
+.SH DESCRIPTION
+Establish trust for a repository by verifying the owner\*(Aqs signing key
+.SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIREPO_ID\fR>
+Repository ID (e.g., fara+simbo1905@github.com)
+.TP
+<\fISIGNING_KEY\fR>
+Path to owner\*(Aqs public key file

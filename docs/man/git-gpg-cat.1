@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-cat 1  "git-gpg-cat " 
+.SH NAME
+git\-gpg\-cat \- Cat \- decrypt a single tracked file to stdout
+.SH SYNOPSIS
+\fBgit\-gpg cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+.SH DESCRIPTION
+Cat \- decrypt a single tracked file to stdout
+.SH OPTIONS
+.TP
+\fB\-\-email\fR \fI<EMAIL>\fR
+Your email address
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-\-passphrase\-stdin\fR
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILE\fR>
+File to decrypt

@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-changes 1  "git-gpg-changes " 
+.SH NAME
+git\-gpg\-changes \- Changes \- report where plaintext differs from the last hidden version
+.SH SYNOPSIS
+\fBgit\-gpg changes\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+.SH DESCRIPTION
+Changes \- report where plaintext differs from the last hidden version
+.SH OPTIONS
+.TP
+\fB\-\-email\fR \fI<EMAIL>\fR
+Your email address
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-\-passphrase\-stdin\fR
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIFILES\fR]
+File(s) to check (default: all tracked files)

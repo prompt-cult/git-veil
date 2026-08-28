@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-import 1  "git-gpg-import " 
+.SH NAME
+git\-gpg\-import \- Import your private key(s) into the git\-gpg key store
+.SH SYNOPSIS
+\fBgit\-gpg import\fR [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+.SH DESCRIPTION
+Import your private key(s) into the git\-gpg key store
+.SH OPTIONS
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILES\fR>
+File(s) containing armoured private key blocks

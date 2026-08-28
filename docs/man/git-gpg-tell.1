@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-tell 1  "git-gpg-tell " 
+.SH NAME
+git\-gpg\-tell \- Add a collaborator\*(Aqs public key to the keyring
+.SH SYNOPSIS
+\fBgit\-gpg tell\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
+.SH DESCRIPTION
+Add a collaborator\*(Aqs public key to the keyring
+.SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-\-passphrase\-stdin\fR
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIEMAIL\fR>
+Collaborator\*(Aqs email
+.TP
+<\fIPUBLIC_KEY\fR>
+Path to collaborator\*(Aqs public key file

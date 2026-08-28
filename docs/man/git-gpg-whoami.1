@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-whoami 1  "git-gpg-whoami " 
+.SH NAME
+git\-gpg\-whoami \- Show your identity
+.SH SYNOPSIS
+\fBgit\-gpg whoami\fR [\fB\-\-email\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Show your identity
+.SH OPTIONS
+.TP
+\fB\-\-email\fR \fI<EMAIL>\fR
+Email override
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

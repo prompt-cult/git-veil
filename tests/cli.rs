@@ -6,6 +6,7 @@
 //! working directory or environment — hence no #[serial] is needed.
 
 use assert_cmd::Command;
+use clap::CommandFactory as _;
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use std::path::Path;
@@ -603,5 +604,94 @@ fn passphrase_stdin_reads_exactly_one_line() {
     assert!(
         !out.status.success(),
         "a wrong passphrase on stdin must fail"
+    );
+}
+
+// ============================================================================
+// Docs infrastructure: `completions` and `manpages` subcommands generate
+// shell completion scripts and roff man pages FROM the real clap definition.
+// ============================================================================
+
+#[test]
+fn cli_completions_emit_scripts() {
+    for shell in ["bash", "zsh", "fish"] {
+        let out = Command::cargo_bin("git-gpg")
+            .expect("git-gpg binary must be buildable")
+            .args(["completions", shell])
+            .output()
+            .expect("run git-gpg");
+
+        assert!(
+            out.status.success(),
+            "completions {} must exit 0: stderr={:?}",
+            shell,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            !out.stdout.is_empty(),
+            "completions {} must emit a non-empty script",
+            shell
+        );
+        let script = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            script.contains("git-gpg"),
+            "completions {} script must reference the binary name, got: {}",
+            shell,
+            script
+        );
+    }
+}
+
+#[test]
+fn cli_manpages_write_files() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let out = Command::cargo_bin("git-gpg")
+        .expect("git-gpg binary must be buildable")
+        .args(["manpages", dir.path().to_str().unwrap()])
+        .output()
+        .expect("run git-gpg");
+
+    assert!(
+        out.status.success(),
+        "manpages must exit 0: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let root_page = dir.path().join("git-gpg.1");
+    let root_content = std::fs::read(&root_page).expect("git-gpg.1 must exist");
+    assert_th_roff(&root_content, "git-gpg.1");
+
+    // The expected per-subcommand man pages are derived from the real clap
+    // definition (the lib's Cli), not a hardcoded list that could drift.
+    let mut expected: Vec<String> = git_gpg::cli::Cli::command()
+        .get_subcommands()
+        .map(|sub| sub.get_name().to_string())
+        .collect();
+    expected.sort();
+    assert!(
+        !expected.is_empty(),
+        "the Cli definition must expose subcommands"
+    );
+    for name in expected {
+        let page = dir.path().join(format!("git-gpg-{}.1", name));
+        let content = std::fs::read(&page).unwrap_or_else(|_| {
+            panic!("man page for subcommand {} must exist at {:?}", name, page)
+        });
+        assert_th_roff(&content, &format!("git-gpg-{}.1", name));
+    }
+}
+
+/// Structural roff validation: the rendered man page must carry a `.TH`
+/// title line naming the page (clap_mangen emits a groff-compatibility
+/// prologue before it, so a whole-file prefix check would be wrong).
+fn assert_th_roff(content: &[u8], label: &str) {
+    let text = String::from_utf8_lossy(content);
+    assert!(
+        text.lines().any(|line| line.starts_with(".TH ")),
+        "{} must be roff with a .TH title line, got: {:?}",
+        label,
+        text.chars().take(80).collect::<String>()
     );
 }

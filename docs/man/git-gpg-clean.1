@@ -1,0 +1,16 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-clean 1  "git-gpg-clean " 
+.SH NAME
+git\-gpg\-clean \- Clean \- remove all git\-gpg metadata
+.SH SYNOPSIS
+\fBgit\-gpg clean\fR [\fB\-\-yes\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Clean \- remove all git\-gpg metadata
+.SH OPTIONS
+.TP
+\fB\-\-yes\fR
+Confirm destruction of tracked state and any ciphertext. Required when the clean would destroy tracked files or their in\-place `<name>.secret` ciphertext (which may be the only remaining copy)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

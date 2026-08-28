@@ -1,0 +1,82 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg 1  "git-gpg 0.1.0" 
+.SH NAME
+git\-gpg \- Git secret management using pure Rust OpenPGP
+.SH SYNOPSIS
+\fBgit\-gpg\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Git secret management using pure Rust OpenPGP
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH SUBCOMMANDS
+.TP
+git\-gpg\-init(1)
+Initialize git\-gpg in the current repository
+.TP
+git\-gpg\-import(1)
+Import your private key(s) into the git\-gpg key store
+.TP
+git\-gpg\-trust(1)
+Establish trust for a repository by verifying the owner\*(Aqs signing key
+.TP
+git\-gpg\-tell(1)
+Add a collaborator\*(Aqs public key to the keyring
+.TP
+git\-gpg\-removeperson(1)
+Remove a collaborator from the keyring
+.TP
+git\-gpg\-add(1)
+Add a file to be encrypted
+.TP
+git\-gpg\-remove(1)
+Remove a file from encryption tracking
+.TP
+git\-gpg\-list(1)
+List all tracked files
+.TP
+git\-gpg\-hide(1)
+Hide \- encrypt all tracked files
+.TP
+git\-gpg\-reveal(1)
+Reveal \- decrypt all tracked files
+.TP
+git\-gpg\-cat(1)
+Cat \- decrypt a single tracked file to stdout
+.TP
+git\-gpg\-unhide(1)
+Unhide \- decrypt a single tracked file back to plaintext and delete its ciphertext
+.TP
+git\-gpg\-changes(1)
+Changes \- report where plaintext differs from the last hidden version
+.TP
+git\-gpg\-show\-repo\-id(1)
+Show the repository ID
+.TP
+git\-gpg\-whoami(1)
+Show your identity
+.TP
+git\-gpg\-verify\-keyring(1)
+Verify the keyring signature
+.TP
+git\-gpg\-list\-keys(1)
+List all keys in the keyring (requires a verified keyring signature)
+.TP
+git\-gpg\-clean(1)
+Clean \- remove all git\-gpg metadata
+.TP
+git\-gpg\-completions(1)
+Emit a shell completion script for the given shell to stdout
+.TP
+git\-gpg\-manpages(1)
+Write roff man pages (git\-gpg.1 plus one per subcommand) to a directory
+.TP
+git\-gpg\-help(1)
+Print this message or the help of the given subcommand(s)
+.SH VERSION
+v0.1.0

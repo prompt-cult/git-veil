@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-list-keys 1  "git-gpg-list-keys " 
+.SH NAME
+git\-gpg\-list\-keys \- List all keys in the keyring (requires a verified keyring signature)
+.SH SYNOPSIS
+\fBgit\-gpg list\-keys\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+List all keys in the keyring (requires a verified keyring signature)
+.SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

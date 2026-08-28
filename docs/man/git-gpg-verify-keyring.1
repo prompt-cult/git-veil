@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-gpg-verify-keyring 1  "git-gpg-verify-keyring " 
+.SH NAME
+git\-gpg\-verify\-keyring \- Verify the keyring signature
+.SH SYNOPSIS
+\fBgit\-gpg verify\-keyring\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Verify the keyring signature
+.SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+Key store directory (default: $HOME/.git\-gpg)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

@@ -14,8 +14,15 @@ categories = ["command-line-utilities", "cryptography"]
 # Pure Rust OpenPGP implementation (RFC 4880, compatible with RFC 9580)
 pgp = "0.19"
 
-# CLI
-clap = { version = "4.5", features = ["derive"] }
+# CLI ("string" feature lets the manpages generator pass runtime-computed
+# subcommand names to Command::name)
+clap = { version = "4.5", features = ["derive", "string"] }
+
+# Shell completion generation for the `completions` subcommand (runtime)
+clap_complete = "4"
+
+# Roff man page generation for the `manpages` subcommand (runtime)
+clap_mangen = "0.2"
 
 # Error handling
 anyhow = "1.0"

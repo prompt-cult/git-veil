@@ -3,6 +3,7 @@
 //! Pure Rust OpenPGP implementation using the `pgp` crate.
 
 mod armour;
+pub mod cli;
 mod fs_atomic;
 mod repo_identity;
 mod keyring;
