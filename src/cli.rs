@@ -303,6 +303,18 @@ plaintext, and leaves <name>.secret beside where the plaintext was
 the .secret files: a fresh clone carrying only ciphertext stays
 decryptable by every keyring member via reveal.
 
+hide is TWO-PHASE and ALL-OR-NOTHING: phase 1 reads and validates every
+tracked plaintext and encrypts EVERY file to the full recipient set in
+memory — if any plaintext is missing, unreadable or cannot be encrypted,
+hide aborts having changed NOTHING on disk. Phase 2 (only after every
+encryption succeeded) writes each .secret atomically and then deletes each
+plaintext; a plaintext is deleted only after its own ciphertext is durably
+on disk, so a crash can never leave a secret neither plaintext nor
+encrypted. If a phase-2 write fails part-way, the remaining ciphertexts
+are still written, only plaintexts whose ciphertext landed are deleted,
+and hide reports exactly what was done and what was left before exiting
+with an error.
+
 hide only works after the repository is initialized (git-veil init), the
 owner's key is trusted on this machine (git-veil trust), collaborators are
 in the keyring (git-veil tell), and files are tracked (git-veil add).
@@ -325,15 +337,25 @@ EXAMPLES
 
     /// Decrypt all tracked files back to plaintext
     #[command(after_long_help = "\
-Decrypts every tracked file whose .secret ciphertext exists back to its
-plaintext path, using your private key from the local key store. The
-keyring signature is verified against the pinned trusted key before any
-decryption. Your identity comes from git config user.email or --email;
-passphrase-protected keys take the passphrase from GITVEIL_PASSPHRASE or
---passphrase-stdin.
+Decrypts every tracked file back to its plaintext path, using your private
+key from the local key store. The keyring signature is verified against
+the pinned trusted key before any decryption. Your identity comes from
+git config user.email or --email; passphrase-protected keys take the
+passphrase from GITVEIL_PASSPHRASE or --passphrase-stdin.
 
 reveal is the inverse of hide for all files; unhide does one file and
 deletes its ciphertext; cat prints one file without touching disk state.
+
+reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY tracked file must have its
+.secret ciphertext present and decrypt successfully. Phase 1 verifies and
+decrypts all files in memory — if any ciphertext is missing or cannot be
+decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
+(only after every decryption succeeded) writes each plaintext atomically
+and then deletes each ciphertext; a ciphertext is deleted only after its
+own plaintext is durably on disk. If a phase-2 write fails part-way, the
+remaining plaintexts are still written, only ciphertexts whose plaintext
+landed are deleted, and reveal reports exactly what was done and what was
+left before exiting with an error.
 
 EXAMPLES
   $ git-veil reveal

@@ -39,6 +39,14 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
         return Ok(());
     }
 
+    // Two-phase, all-or-nothing reveal (compute-then-commit). PHASE 1
+    // verifies every tracked file's ciphertext exists and decrypts ALL of
+    // them into memory; ANY failure (missing ciphertext, key error) aborts
+    // with nothing changed on disk — no mixed state where some files are
+    // revealed and others remain hidden. Memory trade: secrets are small
+    // config-scale files, so holding every plaintext in memory is
+    // acceptable; reveal is not a bulk-restoration path.
+    let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
@@ -67,23 +75,70 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
         // Decrypt
         let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
 
-        // Write plaintext
+        prepared.push((file.clone(), encrypted_path, plaintext));
+    }
+
+    // PHASE 2 (only reached after every decryption succeeded): write each
+    // plaintext atomically, then delete each ciphertext. A ciphertext is
+    // deleted only AFTER its plaintext is durably on disk, so at worst both
+    // copies exist (zero loss), never neither. If a write fails part-way,
+    // the remaining plaintexts are still written and only ciphertexts whose
+    // plaintext was successfully written are deleted; the summary of what
+    // was done and what was left is reported and reveal exits with an error.
+    let mut written: Vec<&(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
+    let mut first_error: Option<anyhow::Error> = None;
+    for item in &prepared {
+        let (file, _encrypted_path, plaintext) = item;
         if let Some(parent) = file.parent() {
             if !parent.as_os_str().is_empty() {
                 fs::create_dir_all(repo_root.join(parent))?;
             }
         }
-        // Write plaintext atomically BEFORE deleting the ciphertext: a
-        // crash mid-reveal leaves at worst both copies (zero loss),
-        // never neither.
-        write_atomic(&repo_root.join(file), &plaintext)
-            .with_context(|| format!("Failed to write decrypted file: {}", file.display()))?;
+        match write_atomic(&repo_root.join(file), plaintext)
+            .with_context(|| format!("Failed to write decrypted file: {}", file.display()))
+        {
+            Ok(()) => written.push(item),
+            Err(err) => {
+                if first_error.is_none() {
+                    first_error = Some(err);
+                }
+            }
+        }
+    }
 
-        // Delete encrypted file
-        fs::remove_file(&encrypted_path)
-            .with_context(|| format!("Failed to delete encrypted file: {}", encrypted_path.display()))?;
+    let mut deleted: Vec<&PathBuf> = Vec::new();
+    let mut delete_error: Option<anyhow::Error> = None;
+    for (file, encrypted_path, _plaintext) in &written {
+        match fs::remove_file(encrypted_path)
+            .with_context(|| format!("Failed to delete encrypted file: {}", encrypted_path.display()))
+        {
+            Ok(()) => {
+                deleted.push(file);
+                println!("Decrypted: {}", file.display());
+            }
+            Err(err) => {
+                if delete_error.is_none() {
+                    delete_error = Some(err);
+                }
+            }
+        }
+    }
 
-        println!("Decrypted: {}", file.display());
+    if let Some(err) = first_error.or(delete_error) {
+        let ciphertext_left: Vec<String> = prepared
+            .iter()
+            .filter(|(file, _, _)| !deleted.contains(&file))
+            .map(|(_, encrypted_path, _)| encrypted_path.display().to_string())
+            .collect();
+        return Err(err.context(format!(
+            "reveal failed part-way through the commit phase: {} of {} plaintext(s) written, \
+             {} ciphertext(s) deleted; ciphertext(s) left as-is: {}. \
+             Re-run 'git-veil reveal' once the cause is fixed.",
+            written.len(),
+            prepared.len(),
+            deleted.len(),
+            ciphertext_left.join(", ")
+        )));
     }
 
     println!("✓ Files revealed");

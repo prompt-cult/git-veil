@@ -94,6 +94,14 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
         return Ok(());
     }
 
+    // Two-phase, all-or-nothing hide (compute-then-commit). PHASE 1 reads and
+    // validates every tracked plaintext and encrypts EVERY file to the full
+    // recipient set, holding all ciphertexts in memory; ANY failure here
+    // aborts with nothing changed on disk — no mixed state where some files
+    // are hidden and others remain plaintext. Memory trade: secrets are
+    // small config-scale files, so holding every ciphertext in memory is
+    // acceptable; hide is not a bulk-archival path.
+    let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
@@ -119,23 +127,68 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
         // root, beside its plaintext
         ensure_ciphertext_beside_plaintext(repo_root, file, &encrypted_path)?;
 
-        // Create parent dirs
+        prepared.push((file.clone(), encrypted_path, ciphertext.into_bytes()));
+    }
+
+    // PHASE 2 (only reached after every encryption succeeded): write each
+    // .secret atomically, then delete each plaintext. A plaintext is deleted
+    // only AFTER its own ciphertext is durably on disk, so at worst both
+    // copies exist (zero loss), never neither. If a write fails part-way,
+    // the remaining ciphertexts are still written and only plaintexts whose
+    // ciphertext was successfully written are deleted; the summary of what
+    // was done and what was left is reported and hide exits with an error.
+    let mut written: Vec<&(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
+    let mut first_error: Option<anyhow::Error> = None;
+    for item in &prepared {
+        let (_file, encrypted_path, ciphertext) = item;
         if let Some(parent) = encrypted_path.parent() {
             fs::create_dir_all(parent)?;
         }
+        match write_atomic(encrypted_path, ciphertext)
+            .with_context(|| format!("Failed to write encrypted file: {}", encrypted_path.display()))
+        {
+            Ok(()) => written.push(item),
+            Err(err) => {
+                if first_error.is_none() {
+                    first_error = Some(err);
+                }
+            }
+        }
+    }
 
-        // Write encrypted content atomically: a torn ciphertext is never
-        // visible under the target name. The plaintext is deleted only
-        // AFTER the ciphertext write succeeded, so a crash mid-hide
-        // leaves at worst both copies (zero loss), never neither.
-        write_atomic(&encrypted_path, ciphertext.as_bytes())
-            .with_context(|| format!("Failed to write encrypted file: {}", encrypted_path.display()))?;
+    let mut deleted: Vec<&PathBuf> = Vec::new();
+    let mut delete_error: Option<anyhow::Error> = None;
+    for (file, _encrypted_path, _ciphertext) in &written {
+        match fs::remove_file(repo_root.join(file))
+            .with_context(|| format!("Failed to delete original file: {}", file.display()))
+        {
+            Ok(()) => {
+                deleted.push(file);
+                println!("Encrypted: {}", file.display());
+            }
+            Err(err) => {
+                if delete_error.is_none() {
+                    delete_error = Some(err);
+                }
+            }
+        }
+    }
 
-        // Delete original
-        fs::remove_file(repo_root.join(file))
-            .with_context(|| format!("Failed to delete original file: {}", file.display()))?;
-
-        println!("Encrypted: {}", file.display());
+    if let Some(err) = first_error.or(delete_error) {
+        let plaintext_left: Vec<String> = prepared
+            .iter()
+            .filter(|(file, _, _)| !deleted.contains(&file))
+            .map(|(file, _, _)| file.display().to_string())
+            .collect();
+        return Err(err.context(format!(
+            "hide failed part-way through the commit phase: {} of {} ciphertext(s) written, \
+             {} plaintext(s) deleted; plaintext(s) left as-is: {}. \
+             Re-run 'git-veil hide' once the cause is fixed.",
+            written.len(),
+            prepared.len(),
+            deleted.len(),
+            plaintext_left.join(", ")
+        )));
     }
 
     println!("✓ Files hidden");

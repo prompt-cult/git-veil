@@ -4483,3 +4483,139 @@ fn removekey_unknown_identifier_errors() {
         err
     );
 }
+
+// ============================================================================
+// Two-phase hide/reveal (L5): a failure must leave EVERYTHING unchanged
+//
+// hide and reveal are destructive loops (encrypt-then-delete / write-then-
+// delete per file). Written Red: pre-fix, a failure on file 2 aborts AFTER
+// file 1 has already been hidden/revealed, leaving a mixed state. Post-fix,
+// both commands are compute-then-commit: phase 1 validates and encrypts (or
+// decrypts) EVERY file in memory and any failure aborts with nothing changed
+// on disk; phase 2 writes/deletes only after every transformation succeeded.
+// ============================================================================
+
+#[test]
+fn hide_failure_leaves_everything_unchanged() {
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("cmd_tell must succeed");
+
+    let one_plaintext = b"ONE=1\n".to_vec();
+    std::fs::write(repo_temp.path().join("one.env"), &one_plaintext).unwrap();
+    // two.env is tracked but its plaintext deliberately does not exist: hide
+    // must fail on it. Pre-fix, one.env was ALREADY hidden when the failure
+    // hit, leaving a mixed state.
+    write_tracked_json(repo_temp.path(), &["one.env", "two.env"]);
+
+    let result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+
+    let err = result
+        .err()
+        .expect("hide must fail when a tracked plaintext is missing");
+    assert!(
+        err.to_string().contains("two.env"),
+        "the error must name the offending tracked file, got: {}",
+        err
+    );
+    assert!(
+        repo_temp.path().join("one.env").is_file(),
+        "hide is all-or-nothing: one.env must still be plaintext on disk"
+    );
+    assert_eq!(
+        std::fs::read(repo_temp.path().join("one.env")).unwrap(),
+        one_plaintext,
+        "the surviving plaintext must be byte-identical"
+    );
+    assert!(
+        !repo_temp.path().join("one.env.secret").exists()
+            && !repo_temp.path().join("two.env.secret").exists(),
+        "no ciphertext may be written when any tracked file fails phase 1"
+    );
+}
+
+#[test]
+fn reveal_failure_leaves_everything_unchanged() {
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("cmd_tell must succeed");
+
+    std::fs::write(repo_temp.path().join("one.env"), "ONE=1\n").unwrap();
+    std::fs::write(repo_temp.path().join("two.env"), "TWO=2\n").unwrap();
+    write_tracked_json(repo_temp.path(), &["one.env", "two.env"]);
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+
+    // Delete two.env's ciphertext: reveal must refuse. Pre-fix, one.env was
+    // ALREADY revealed (ciphertext deleted, plaintext restored) when the
+    // missing-ciphertext failure hit, leaving a mixed state.
+    std::fs::remove_file(repo_temp.path().join("two.env.secret")).unwrap();
+
+    let result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
+
+    let err = result
+        .err()
+        .expect("reveal must fail when a tracked ciphertext is missing");
+    assert!(
+        err.to_string().contains("two.env.secret"),
+        "the error must name the missing ciphertext, got: {}",
+        err
+    );
+    assert!(
+        !repo_temp.path().join("one.env").exists(),
+        "reveal is all-or-nothing: one.env must remain hidden (no plaintext on disk)"
+    );
+    assert!(
+        repo_temp.path().join("one.env.secret").exists(),
+        "one.env's ciphertext must be untouched when any tracked file fails phase 1"
+    );
+}
+
+/// The `git-veil help <cmd>` handler (main.rs) prints exactly the
+/// subcommand's after_long_help followed by its short help, so asserting on
+/// the after_long_help content via Cli::command() asserts the substance of
+/// what `git-veil help hide` / `git-veil help reveal` render.
+#[test]
+fn help_text_describes_two_phase_all_or_nothing_contract() {
+    use clap::CommandFactory as _;
+
+    let root = git_veil::cli::Cli::command();
+    for name in ["hide", "reveal"] {
+        let sub = root
+            .find_subcommand(name)
+            .unwrap_or_else(|| panic!("subcommand {name} must exist"));
+        let after = sub
+            .get_after_long_help()
+            .unwrap_or_else(|| panic!("{name} must carry after_long_help"));
+        let text = after.to_string();
+        assert!(
+            text.to_lowercase().contains("two-phase"),
+            "`help {name}` must describe the two-phase behaviour, got: {text}"
+        );
+        assert!(
+            text.to_lowercase().contains("all-or-nothing"),
+            "`help {name}` must state the all-or-nothing contract, got: {text}"
+        );
+    }
+}
