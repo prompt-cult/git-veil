@@ -530,6 +530,25 @@ fn add_entry_updates_existing_email_and_clears_signature() {
 }
 
 #[test]
+fn keyring_find_by_email_is_case_insensitive() {
+    let mut keyring = Keyring::new();
+    keyring.add_entry(
+        "alice@example.com".to_string(),
+        "QUJDREVGR0hJSktMTU5PUA==".to_string(),
+        "AAAA1111AAAA1111AAAA1111AAAA1111AAAA1111".to_string(),
+    ).unwrap();
+
+    let found = keyring
+        .find_by_email("ALICE@EXAMPLE.COM")
+        .expect("find_by_email must match emails case-insensitively, like every other email comparison in the codebase");
+    assert_eq!(
+        found.email, "alice@example.com",
+        "the stored email must not be rewritten, got: {:?}",
+        found
+    );
+}
+
+#[test]
 fn tell_twice_same_email_updates_rather_than_duplicates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
@@ -584,6 +603,49 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         keyring_after_second.entries
     );
     verify_result.expect("keyring must still verify after duplicate tell");
+}
+
+#[test]
+fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
+    let (alice_sec, alice_pub) = generate_test_key("alice@x.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        repo_temp.path(),
+        "alice@x.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("first tell must succeed");
+
+    cmd_tell(
+        repo_temp.path(),
+        "ALICE@X.COM",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("second tell with different email case must succeed");
+
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).unwrap();
+
+    assert_eq!(
+        keyring.entries.len(), 1,
+        "telling with a different email case must update, not duplicate: got {:?} in {}",
+        keyring.entries, keyring_text
+    );
+    assert_eq!(
+        keyring.entries[0].email, "alice@x.com",
+        "the first-seen stored email casing must be preserved, got: {:?}",
+        keyring.entries[0]
+    );
+    cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home)
+        .expect("keyring must still verify after case-variant tell");
 }
 
 // ============================================================================
@@ -839,6 +901,40 @@ fn removeperson_removes_entry_and_resigns() {
         keyring_text.contains("-----BEGIN PGP SIGNATURE-----"),
         "keyring must be re-signed after removeperson, got: {}",
         keyring_text
+    );
+    verify_result.expect("keyring signature must still verify after removeperson");
+}
+
+#[test]
+fn removeperson_removes_entry_regardless_of_email_case() {
+    let (_, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home, None
+    )
+    .expect("tell alice must succeed");
+
+    let remove_result = cmd_removeperson(repo_temp.path(), "ALICE@EXAMPLE.COM", "origin", &gpg_home, None);
+
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).unwrap();
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
+
+    remove_result.expect(
+        "removeperson must remove the entry regardless of email case, matching the case-insensitive reveal lookup",
+    );
+    assert!(
+        keyring.entries.is_empty(),
+        "keyring must contain no entries after removing alice case-insensitively, got: {:?}",
+        keyring.entries
     );
     verify_result.expect("keyring signature must still verify after removeperson");
 }

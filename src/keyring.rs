@@ -81,7 +81,9 @@ impl Keyring {
     }
 
     /// Adds an entry, or updates the existing entry in place when the email
-    /// already exists. Clears the signature so the keyring gets re-signed.
+    /// already exists (matched case-insensitively; the first-seen stored
+    /// casing is preserved). Clears the signature so the keyring gets
+    /// re-signed.
     ///
     /// # Format constraint
     ///
@@ -99,7 +101,11 @@ impl Keyring {
                 email
             );
         }
-        if let Some(existing) = self.entries.iter_mut().find(|e| e.email == email) {
+        if let Some(existing) = self
+            .entries
+            .iter_mut()
+            .find(|e| e.email.eq_ignore_ascii_case(&email))
+        {
             existing.base64_key = base64_key;
             existing.fingerprint = fingerprint;
         } else {
@@ -113,15 +119,22 @@ impl Keyring {
         Ok(())
     }
 
+    /// Finds the entry whose email matches the given email
+    /// case-insensitively, consistent with every other email comparison in
+    /// this codebase (see `check_email_in_identities`).
     pub fn find_by_email(&self, email: &str) -> Option<&KeyringEntry> {
-        self.entries.iter().find(|e| e.email == email)
+        self.entries
+            .iter()
+            .find(|e| e.email.eq_ignore_ascii_case(email))
     }
 
-    /// Removes the entry with the exact given email. Returns true if an entry
-    /// was removed. Clearing the signature forces a re-sign, like add_entry.
+    /// Removes the entry whose email matches the given email
+    /// case-insensitively. Returns true if an entry was removed. Clearing the
+    /// signature forces a re-sign, like add_entry.
     pub fn remove_entry(&mut self, email: &str) -> bool {
         let len_before = self.entries.len();
-        self.entries.retain(|e| e.email != email);
+        self.entries
+            .retain(|e| !e.email.eq_ignore_ascii_case(email));
         let removed = self.entries.len() != len_before;
         if removed {
             self.signature = None;
