@@ -2996,3 +2996,458 @@ fn base64_encode_public_key_round_trips_through_decode() {
         "the keyring entry must carry the real key, not an empty blob"
     );
 }
+
+// ============================================================================
+// Key-validity policy: expired / revoked / unsigned keys are rejected at the
+// trust, tell and hide gates (fail-closed, naming the offending key)
+// ============================================================================
+
+use git_gpg::{validate_public_key_for_use, KeyUse};
+use pgp::composed::{SignedKeyDetails, SignedPublicKey};
+use pgp::packet::{
+    KeyFlags, RevocationCode, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+};
+use pgp::types::{KeyDetails as _, Password, SignedUser, Tag, Timestamp};
+
+const DAY_SECS: u64 = 86_400;
+
+/// Builds a public key identical to the freshly generated one, except the
+/// self-certification over the User ID is re-created with a BACKDATED
+/// creation time and a KeyExpirationTime of 30 days — i.e. the key expired
+/// 60 days ago. The SecretKeyParamsBuilder in pgp 0.19 has no expiration
+/// field, so the signature packet is hand-built and re-signed with the same
+/// secret key (cryptographically valid, just past its expiry).
+fn expired_public_key(
+    email: &str,
+) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+    let (secret, public) = generate_test_key(email);
+    let mut rng = thread_rng();
+    let primary = secret.primary_key.public_key().clone();
+
+    let now = Timestamp::now().as_secs() as u64;
+    let created = now - 90 * DAY_SECS;
+    let mut key_flags = KeyFlags::default();
+    key_flags.set_certify(true);
+    key_flags.set_sign(true);
+
+    let user_id = public.details.users[0].id.clone();
+    let mut config = SignatureConfig::from_key(
+        &mut rng,
+        &secret.primary_key,
+        SignatureType::CertPositive,
+    )
+    .expect("build signature config");
+    config.hashed_subpackets = vec![
+        Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::from_secs(
+            created as u32,
+        )))
+        .expect("creation time subpacket"),
+        Subpacket::regular(SubpacketData::IssuerFingerprint(
+            secret.primary_key.fingerprint(),
+        ))
+        .expect("issuer fingerprint subpacket"),
+        Subpacket::regular(SubpacketData::KeyFlags(key_flags)).expect("key flags subpacket"),
+        Subpacket::regular(SubpacketData::IsPrimary(true)).expect("is-primary subpacket"),
+        Subpacket::regular(SubpacketData::KeyExpirationTime(pgp::types::Duration::from_secs(
+            (30 * DAY_SECS) as u32,
+        )))
+        .expect("key expiration subpacket"),
+    ];
+    let sig = config
+        .sign_certification(
+            &secret.primary_key,
+            &primary,
+            &Password::empty(),
+            Tag::UserId,
+            &user_id,
+        )
+        .expect("sign backdated certification");
+
+    let details = SignedKeyDetails::new(
+        vec![],
+        vec![],
+        vec![SignedUser::new(user_id, vec![sig])],
+        vec![],
+    );
+    let expired = SignedPublicKey::new(primary, details, public.public_subkeys);
+    (secret, expired)
+}
+
+/// Builds a public key identical to the freshly generated one, except a
+/// hard (KeyCompromised) KeyRevocation self-signature over the primary key
+/// has been added. The crate has no high-level "revoke this key" API, so the
+/// revocation signature packet is hand-built and signed with the same secret
+/// key.
+fn revoked_public_key(
+    email: &str,
+    reason: RevocationCode,
+) -> (pgp::composed::SignedSecretKey, pgp::composed::SignedPublicKey) {
+    let (secret, public) = generate_test_key(email);
+    let mut rng = thread_rng();
+    let primary = secret.primary_key.public_key().clone();
+
+    let mut config = SignatureConfig::from_key(
+        &mut rng,
+        &secret.primary_key,
+        SignatureType::KeyRevocation,
+    )
+    .expect("build revocation config");
+    config.hashed_subpackets = vec![
+        Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))
+            .expect("creation time subpacket"),
+        Subpacket::regular(SubpacketData::IssuerFingerprint(
+            secret.primary_key.fingerprint(),
+        ))
+        .expect("issuer fingerprint subpacket"),
+        Subpacket::regular(SubpacketData::RevocationReason(
+            reason,
+            b"compromised".to_vec().into(),
+        ))
+        .expect("revocation reason subpacket"),
+    ];
+    let sig = config
+        .sign_key(&secret.primary_key, &Password::empty(), &primary)
+        .expect("sign revocation");
+
+    let details = SignedKeyDetails::new(
+        vec![sig],
+        public.details.direct_signatures.clone(),
+        public.details.users.clone(),
+        public.details.user_attributes.clone(),
+    );
+    let revoked = SignedPublicKey::new(primary, details, public.public_subkeys);
+    (secret, revoked)
+}
+
+#[test]
+fn expired_key_is_rejected_by_trust() {
+    let repo_temp = setup_git_repo_with_origin_remote();
+
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
+
+    let (_sec, expired_pub) = expired_public_key("owner@github.com");
+    let fingerprint = extract_key_fingerprint(&expired_pub);
+    let keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&expired_pub, &keyfile);
+
+    let gpg_temp = tempfile::tempdir().unwrap();
+
+    let result = cmd_trust(
+        repo_temp.path(),
+        "repo+owner@github.com",
+        keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_temp.path().to_path_buf(),
+    );
+
+    let err = result.err().expect("expired key must not be trusted");
+    assert!(
+        err.to_string().contains("expired"),
+        "the failure must name the expiry, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains(&fingerprint),
+        "the failure must name the key fingerprint, got: {}",
+        err
+    );
+    assert!(
+        !std::fs::read_to_string(repo_temp.path().join(".git-gpg/trust.json"))
+            .unwrap_or_default()
+            .contains(&fingerprint),
+        "trust store must not record the rejected key"
+    );
+    assert!(
+        !TrustPinStore::pin_path(gpg_temp.path(), "repo+owner@github.com").exists(),
+        "no local trust pin may be written for a rejected key"
+    );
+}
+
+#[test]
+fn revoked_key_is_rejected_by_tell() {
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[]);
+
+    let (_sec, revoked_pub) = revoked_public_key("bob@example.com", RevocationCode::KeyCompromised);
+    let fingerprint = extract_key_fingerprint(&revoked_pub);
+    let bob_keyfile = repo_temp.path().join("bob.pub");
+    write_public_key_file(&revoked_pub, &bob_keyfile);
+
+    let result = cmd_tell(
+        repo_temp.path(),
+        "bob@example.com",
+        bob_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+        None,
+    );
+
+    let err = result.err().expect("revoked key must not be told");
+    assert!(
+        err.to_string().contains("revoked"),
+        "the failure must name the revocation, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains(&fingerprint),
+        "the failure must name the key fingerprint, got: {}",
+        err
+    );
+
+    let keyring_text =
+        std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).unwrap();
+    assert!(
+        keyring.entries.iter().all(|e| e.email != "bob@example.com"),
+        "the keyring must be untouched by a rejected key, got: {:?}",
+        keyring.entries
+    );
+}
+
+#[test]
+fn hide_fails_closed_naming_invalid_keyring_entry() {
+    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (_bob_sec, bob_pub) = expired_public_key("bob@example.com");
+    let bob_fingerprint = extract_key_fingerprint(&bob_pub);
+
+    let repo_temp = setup_git_repo_with_origin_remote();
+    cmd_init(repo_temp.path()).expect("cmd_init must succeed");
+
+    let owner_keyfile = repo_temp.path().join("owner.pub");
+    write_public_key_file(&owner_pub, &owner_keyfile);
+    let gpg_home = repo_temp.path().join("gpg-home");
+
+    cmd_trust(
+        repo_temp.path(),
+        "repo+owner@github.com",
+        owner_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+    )
+    .expect("cmd_trust must succeed");
+
+    write_multi_key_secring(&gpg_home, &[owner_sec.clone(), alice_sec]);
+
+    // Craft a SIGNED keyring containing the valid alice entry plus the
+    // expired bob entry (as a stolen/colluding keyring commit would).
+    let mut keyring = Keyring::parse(
+        &std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap(),
+    )
+    .unwrap();
+    keyring
+        .add_entry(
+            "alice@example.com".to_string(),
+            base64_encode_public_key(&alice_pub).unwrap(),
+            extract_key_fingerprint(&alice_pub),
+        )
+        .unwrap();
+    keyring
+        .add_entry(
+            "bob@example.com".to_string(),
+            base64_encode_public_key(&bob_pub).unwrap(),
+            bob_fingerprint.clone(),
+        )
+        .unwrap();
+    let content =
+        extract_content_to_verify_from_keyring(&keyring.serialize()).expect("extract content");
+    keyring.signature =
+        Some(sign_keyring_content(&content, &owner_sec, None).expect("sign keyring"));
+    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), keyring.serialize()).unwrap();
+
+    let plaintext = "API_KEY=s3cr3t-value\n";
+    std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+
+    let err = hide_result
+        .err()
+        .expect("hide must fail closed with an invalid keyring entry");
+    let err_str = err.to_string();
+    assert!(
+        err_str.contains("bob@example.com") || err_str.contains(&bob_fingerprint),
+        "the failure must name the invalid keyring entry, got: {}",
+        err_str
+    );
+    let chain = format!("{:#}", err);
+    assert!(
+        chain.contains("expired"),
+        "the failure must name the underlying cause, got: {}",
+        chain
+    );
+    assert!(
+        !repo_temp.path().join("secret.env.secret").exists(),
+        "no ciphertext may be written when any keyring key is invalid"
+    );
+    assert!(
+        repo_temp.path().join("secret.env").exists(),
+        "hide must fail before touching any tracked plaintext"
+    );
+}
+
+#[test]
+fn valid_keys_still_pass_all_gates() {
+    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
+    let (repo_temp, gpg_home) = setup_trusted_repo_with_secring(&[alice_sec]);
+
+    let alice_keyfile = repo_temp.path().join("alice.pub");
+    write_public_key_file(&alice_pub, &alice_keyfile);
+
+    cmd_tell(
+        repo_temp.path(),
+        "alice@example.com",
+        alice_keyfile.to_str().unwrap(),
+        "origin",
+        &gpg_home,
+        None,
+    )
+    .expect("cmd_tell must succeed with a valid key");
+
+    std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=s3cr3t\n").unwrap();
+    cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
+
+    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    assert!(
+        repo_temp.path().join("secret.env.secret").exists(),
+        "hide must produce ciphertext for valid keys"
+    );
+
+    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None)
+        .expect("cmd_reveal must succeed");
+    assert_eq!(
+        std::fs::read_to_string(repo_temp.path().join("secret.env")).unwrap(),
+        "API_KEY=s3cr3t\n",
+        "reveal must restore the exact plaintext"
+    );
+}
+
+// ============================================================================
+// Direct unit tests of validate_public_key_for_use for cases the key
+// generator cannot express
+// ============================================================================
+
+#[test]
+fn validate_rejects_key_without_self_signature() {
+    let (_sec, public) = generate_test_key("unsigned@example.com");
+    let unsigned = SignedPublicKey::new(
+        public.primary_key.clone(),
+        SignedKeyDetails::new(vec![], vec![], vec![], vec![]),
+        public.public_subkeys.clone(),
+    );
+
+    for use_for in [KeyUse::Certify, KeyUse::Encrypt] {
+        let err = validate_public_key_for_use(&unsigned, use_for)
+            .expect_err("an unsigned key must be rejected");
+        assert!(
+            err.to_string().contains("no self-signature"),
+            "the failure must name the missing self-signature, got: {}",
+            err
+        );
+    }
+}
+
+#[test]
+fn validate_rejects_hard_revocation_but_allows_soft() {
+    // Hard: KeyCompromised → reject.
+    let (_sec, hard) = revoked_public_key("hard@example.com", RevocationCode::KeyCompromised);
+    let err = validate_public_key_for_use(&hard, KeyUse::Certify)
+        .expect_err("a compromised (hard) revocation must be rejected");
+    assert!(
+        err.to_string().contains("revoked"),
+        "the failure must name the revocation, got: {}",
+        err
+    );
+
+    // No reason subpacket → unconditional hard revocation → reject.
+    let (reasonless, _) = {
+        let (secret, public) = generate_test_key("noreason@example.com");
+        let mut rng = thread_rng();
+        let primary = secret.primary_key.public_key().clone();
+        let mut config = SignatureConfig::from_key(
+            &mut rng,
+            &secret.primary_key,
+            SignatureType::KeyRevocation,
+        )
+        .unwrap();
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                secret.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+        ];
+        let sig = config
+            .sign_key(&secret.primary_key, &Password::empty(), &primary)
+            .unwrap();
+        let details = SignedKeyDetails::new(
+            vec![sig],
+            public.details.direct_signatures.clone(),
+            public.details.users.clone(),
+            public.details.user_attributes.clone(),
+        );
+        (SignedPublicKey::new(primary, details, public.public_subkeys), ())
+    };
+    assert!(
+        validate_public_key_for_use(&reasonless, KeyUse::Certify).is_err(),
+        "a reason-less revocation is a hard revocation and must be rejected"
+    );
+
+    // Soft: KeySuperseded → the key is deprecated, not invalid → allow.
+    let (_sec, soft) = revoked_public_key("soft@example.com", RevocationCode::KeySuperseded);
+    validate_public_key_for_use(&soft, KeyUse::Certify)
+        .expect("a superseded (soft) revocation must NOT reject the key");
+}
+
+#[test]
+fn validate_certify_mode_allows_signing_only_key_but_encrypt_mode_rejects_it() {
+    let mut rng = thread_rng();
+    let params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id("Signing Only <signonly@example.com>".to_string())
+        .passphrase(None)
+        .build()
+        .expect("build key params");
+    let secret = params.generate(&mut rng).expect("generate key");
+    let public = secret.to_public_key();
+
+    validate_public_key_for_use(&public, KeyUse::Certify)
+        .expect("a signing-only owner key is legitimate for certify use");
+
+    let err = validate_public_key_for_use(&public, KeyUse::Encrypt)
+        .expect_err("a signing-only key must not be accepted for encryption use");
+    assert!(
+        err.to_string().contains("encryption-capable subkey"),
+        "the failure must name the missing encryption subkey, got: {}",
+        err
+    );
+}
+
+#[test]
+fn validate_rejects_expired_key_naming_expiry_and_fingerprint() {
+    let (_sec, expired) = expired_public_key("expired-unit@example.com");
+    let fingerprint = extract_key_fingerprint(&expired);
+
+    let err = validate_public_key_for_use(&expired, KeyUse::Certify)
+        .expect_err("an expired key must be rejected");
+    let err_str = err.to_string();
+    assert!(
+        err_str.contains("expired"),
+        "the failure must name the expiry, got: {}",
+        err_str
+    );
+    assert!(
+        err_str.contains(&fingerprint),
+        "the failure must name the key fingerprint, got: {}",
+        err_str
+    );
+
+    let err = validate_public_key_for_use(&expired, KeyUse::Encrypt)
+        .expect_err("an expired key must also be rejected for encryption use");
+    assert!(
+        err.to_string().contains("expired"),
+        "the failure must name the expiry, got: {}",
+        err
+    );
+}

@@ -33,7 +33,7 @@ pub use armour::{SIG_BEGIN, SIG_END};
 pub use commands::whoami::cmd_whoami;
 pub use gpg_integration::{decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key, encrypt_to_gpg_keys, find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_gpg_home};
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};
-pub use pubkey::{base64_decode_public_key, base64_encode_public_key, check_email_in_identities, extract_email_from_user_id, extract_key_fingerprint, extract_key_identities, parse_armored_public_key};
+pub use pubkey::{base64_decode_public_key, base64_encode_public_key, check_email_in_identities, extract_email_from_user_id, extract_key_fingerprint, extract_key_identities, parse_armored_public_key, validate_public_key_for_use, KeyUse};
 pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};
 pub use signature::{extract_content_to_verify_from_keyring, extract_signature_from_keyring, sign_keyring_content, verify_keyring_signature};
 pub use tracked_files::{get_git_config_email, TrackedFiles};

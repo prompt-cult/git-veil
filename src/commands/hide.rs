@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::tracked_files::validate_tracked_path;
-use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, Keyring, TrackedFiles};
+use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, validate_public_key_for_use, KeyUse, Keyring, TrackedFiles};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -67,6 +67,22 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
     let public_keys: Vec<_> = keyring.entries.iter()
         .map(|e| base64_decode_public_key(&e.base64_key))
         .collect::<Result<Vec<_>>>()?;
+
+    // Key-validity policy: EVERY keyring key must be valid for encryption
+    // use. Fail-closed, naming the offending keyring entry — a secrets tool
+    // must never silently narrow its recipient set by skipping an invalid
+    // key. This runs before any file is touched, so no ciphertext or
+    // plaintext state changes when a key is rejected.
+    for (entry, key) in keyring.entries.iter().zip(public_keys.iter()) {
+        if let Err(cause) = validate_public_key_for_use(key, KeyUse::Encrypt) {
+            anyhow::bail!(
+                "keyring entry '{}' (fingerprint {}) is not usable for encryption: {}",
+                entry.email,
+                entry.fingerprint,
+                cause
+            );
+        }
+    }
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-gpg/tracked.json");

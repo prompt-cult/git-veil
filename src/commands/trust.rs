@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_gpg_home, TrustPinStore, TrustStore};
+use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_gpg_home, validate_public_key_for_use, KeyUse, TrustPinStore, TrustStore};
 
 /// Establishes trust for a repository by verifying the owner's signing key.
 pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
@@ -34,6 +34,13 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
             "Signing key does not contain email from repo ID: {}",
             repo_email
         );
+    }
+
+    // Key-validity policy: the anchor of trust must not be expired, revoked
+    // or unsigned key material. Fail-closed before anything is blessed,
+    // imported or pinned.
+    if let Err(cause) = validate_public_key_for_use(&public_key, KeyUse::Certify) {
+        anyhow::bail!("Refusing to trust key: {}", cause);
     }
 
     // Import key to GPG home
