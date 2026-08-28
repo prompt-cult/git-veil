@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-removeperson 1  "git-gpg-removeperson " 
+.TH git-veil-removeperson 1  "git-veil-removeperson " 
 .SH NAME
-git\-gpg\-removeperson \- Remove a collaborator from the keyring and re\-sign it
+git\-veil\-removeperson \- Remove a collaborator from the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-gpg removeperson\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
+\fBgit\-veil removeperson\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
 .SH DESCRIPTION
 Remove a collaborator from the keyring and re\-sign it
 .SH OPTIONS
@@ -13,10 +13,10 @@ Remove a collaborator from the keyring and re\-sign it
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -35,5 +35,5 @@ Requires init, an established trust pin (trust), and the owner\*(Aqs private
 key in the local key store (import).
 
 EXAMPLES
-  $ git\-gpg removeperson alice@example.com
-  $ git\-gpg removeperson alice@example.com \-\-passphrase\-stdin < pass.txt
+  $ git\-veil removeperson alice@example.com
+  $ git\-veil removeperson alice@example.com \-\-passphrase\-stdin < pass.txt

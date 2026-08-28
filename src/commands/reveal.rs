@@ -18,20 +18,20 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
     cmd_verify_keyring(repo_root, remote_name, gpg_home)?;
 
     // Load keyring
-    let keyring_path = repo_root.join(".git-gpg/keyring");
+    let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_text = fs::read_to_string(&keyring_path)
         .context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
 
     // Find user's entry
     keyring.find_by_email(email)
-        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-gpg tell", email))?;
+        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
 
     // Find user's private key
     let private_key = find_private_key_by_email(gpg_home, email)?;
 
     // Load tracked files
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     if tracked.files.is_empty() {
@@ -57,7 +57,7 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
 
         // Check encrypted file exists
         if !encrypted_path.exists() {
-            anyhow::bail!("Encrypted file not found: {}; run git-gpg hide to create it", encrypted_path.display());
+            anyhow::bail!("Encrypted file not found: {}; run git-veil hide to create it", encrypted_path.display());
         }
 
         // Read encrypted content

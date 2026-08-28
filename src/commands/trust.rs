@@ -61,7 +61,7 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
     }
 
     // Update trust store
-    let trust_path = repo_root.join(".git-gpg/trust.json");
+    let trust_path = repo_root.join(".git-veil/trust.json");
     let mut trust_store = TrustStore::load_from_file(&trust_path)?;
     trust_store.add_trust(repo_id.to_string(), fingerprint.clone());
     trust_store.save_to_file(&trust_path)?;

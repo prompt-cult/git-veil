@@ -1,4 +1,4 @@
-//! git-gpg library - trust model implementation
+//! git-veil library - trust model implementation
 //!
 //! Pure Rust OpenPGP implementation using the `pgp` crate.
 

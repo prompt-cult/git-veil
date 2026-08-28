@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-list 1  "git-gpg-list " 
+.TH git-veil-list 1  "git-veil-list " 
 .SH NAME
-git\-gpg\-list \- List all tracked files
+git\-veil\-list \- List all tracked files
 .SH SYNOPSIS
-\fBgit\-gpg list\fR [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil list\fR [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 List all tracked files
 .SH OPTIONS
@@ -12,9 +12,9 @@ List all tracked files
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Prints every file tracked in .git\-gpg/tracked.json. Tracking records
+Prints every file tracked in .git\-veil/tracked.json. Tracking records
 intent only: whether the plaintext or its .secret ciphertext currently
 exists on disk is not checked.
 
 EXAMPLES
-  $ git\-gpg list
+  $ git\-veil list

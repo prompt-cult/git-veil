@@ -10,7 +10,7 @@ use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input, Tracked
 /// is rejected (the target could otherwise be read and deleted by hide).
 /// Relative user-supplied paths resolve against `repo_root`.
 pub fn cmd_add(repo_root: &Path, files: Vec<String>) -> Result<()> {
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
 
     let mut count = 0;

@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::TrustPinStore;
+use git_veil::TrustPinStore;
 use std::path::Path;
 
 fuzz_target!(|data: &[u8]| {

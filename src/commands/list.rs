@@ -5,7 +5,7 @@ use crate::TrackedFiles;
 
 /// Lists all tracked files.
 pub fn cmd_list(repo_root: &Path) -> Result<()> {
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     if tracked.files.is_empty() {

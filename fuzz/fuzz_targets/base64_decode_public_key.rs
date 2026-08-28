@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::{base64_decode_public_key, base64_encode_public_key, extract_key_fingerprint};
+use git_veil::{base64_decode_public_key, base64_encode_public_key, extract_key_fingerprint};
 
 fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };

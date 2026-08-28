@@ -9,16 +9,16 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
-/// Returns the default key store directory (`$HOME/.git-gpg`).
+/// Returns the default key store directory (`$HOME/.git-veil`).
 ///
 /// Errors when `HOME` is unset or empty instead of silently falling back to
 /// a world-writable location such as `/tmp`, where an attacker on a
 /// multi-user system could plant or tamper with key material.
 pub fn default_gpg_home() -> Result<PathBuf> {
     match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".git-gpg")),
+        Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".git-veil")),
         _ => anyhow::bail!(
-            "HOME is not set; cannot locate the key store ($HOME/.git-gpg); pass --gpg-home"
+            "HOME is not set; cannot locate the key store ($HOME/.git-veil); pass --gpg-home"
         ),
     }
 }
@@ -198,7 +198,7 @@ pub fn find_private_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) ->
 /// `passphrase` unlocks a passphrase-protected private key; `None` means an
 /// empty passphrase (unprotected keys). Interactive tty prompting is
 /// deliberately deferred — callers source the passphrase from
-/// `GITGPG_PASSPHRASE` or `--passphrase-stdin` (see main.rs).
+/// `GITVEIL_PASSPHRASE` or `--passphrase-stdin` (see main.rs).
 pub fn decrypt_with_gpg_key(
     ciphertext: &str,
     private_key: &SignedSecretKey,
@@ -224,7 +224,7 @@ pub fn decrypt_with_gpg_key(
 
     let mut decrypted = message.decrypt(&passphrase, private_key)
         .with_context(|| format!(
-            "decryption failed: this ciphertext was not encrypted to your key '{}' (it is not a listed recipient), or your key needs a passphrase (set GITGPG_PASSPHRASE or use --passphrase-stdin)",
+            "decryption failed: this ciphertext was not encrypted to your key '{}' (it is not a listed recipient), or your key needs a passphrase (set GITVEIL_PASSPHRASE or use --passphrase-stdin)",
             key_email
         ))?;
     

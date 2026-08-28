@@ -25,7 +25,7 @@ pub fn cmd_list_keys(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) ->
             println!("⚠ KEYRING SIGNATURE INVALID — listing unverified content");
             println!("Verification failure: {}", verification_error);
 
-            let keyring_path = repo_root.join(".git-gpg/keyring");
+            let keyring_path = repo_root.join(".git-veil/keyring");
             match fs::read_to_string(&keyring_path)
                 .context("Failed to read keyring file")
                 .and_then(|text| Keyring::parse(&text).context("Failed to parse keyring file"))

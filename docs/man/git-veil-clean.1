@@ -1,12 +1,12 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-clean 1  "git-gpg-clean " 
+.TH git-veil-clean 1  "git-veil-clean " 
 .SH NAME
-git\-gpg\-clean \- Remove the .git\-gpg state directory (\-\-yes required when data would be lost)
+git\-veil\-clean \- Remove the .git\-veil state directory (\-\-yes required when data would be lost)
 .SH SYNOPSIS
-\fBgit\-gpg clean\fR [\fB\-\-yes\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil clean\fR [\fB\-\-yes\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Remove the .git\-gpg state directory (\-\-yes required when data would be lost)
+Remove the .git\-veil state directory (\-\-yes required when data would be lost)
 .SH OPTIONS
 .TP
 \fB\-\-yes\fR
@@ -15,7 +15,7 @@ Confirm destruction of tracked state and any ciphertext. Required when the clean
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Removes the .git\-gpg state directory (keyring, trust.json,
+Removes the .git\-veil state directory (keyring, trust.json,
 tracked.json). .gitignore is never rewritten, and the in\-place .secret
 ciphertext files are ordinary committable files that clean does not
 disown.
@@ -25,5 +25,5 @@ can be the ONLY remaining copy of a secret. A clean that would destroy
 tracked state or ciphertext therefore refuses unless \-\-yes confirms it.
 
 EXAMPLES
-  $ git\-gpg clean          # refuses while tracked files or ciphertext exist
-  $ git\-gpg clean \-\-yes    # confirmed destruction of .git\-gpg/
+  $ git\-veil clean          # refuses while tracked files or ciphertext exist
+  $ git\-veil clean \-\-yes    # confirmed destruction of .git\-veil/

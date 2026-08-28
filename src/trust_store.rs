@@ -58,7 +58,7 @@ impl TrustStore {
 /// trust.json (repo_id -> fingerprint) is committed to the repository and
 /// therefore attacker-writable by anyone with write access, and the keyring
 /// it points at ships with the repo too. The pin is the out-of-band record,
-/// written only by `git-gpg trust` on this machine, of which fingerprint the
+/// written only by `git-veil trust` on this machine, of which fingerprint the
 /// user actually chose to trust. A fresh clone has no pin, so trust must be
 /// re-established per machine — the correct posture for a secrets tool.
 pub struct TrustPinStore;

@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-reveal 1  "git-gpg-reveal " 
+.TH git-veil-reveal 1  "git-veil-reveal " 
 .SH NAME
-git\-gpg\-reveal \- Decrypt all tracked files back to plaintext
+git\-veil\-reveal \- Decrypt all tracked files back to plaintext
 .SH SYNOPSIS
-\fBgit\-gpg reveal\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil reveal\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Decrypt all tracked files back to plaintext
 .SH OPTIONS
@@ -16,10 +16,10 @@ Your email address
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -28,13 +28,13 @@ Decrypts every tracked file whose .secret ciphertext exists back to its
 plaintext path, using your private key from the local key store. The
 keyring signature is verified against the pinned trusted key before any
 decryption. Your identity comes from git config user.email or \-\-email;
-passphrase\-protected keys take the passphrase from GITGPG_PASSPHRASE or
+passphrase\-protected keys take the passphrase from GITVEIL_PASSPHRASE or
 \-\-passphrase\-stdin.
 
 reveal is the inverse of hide for all files; unhide does one file and
 deletes its ciphertext; cat prints one file without touching disk state.
 
 EXAMPLES
-  $ git\-gpg reveal
-  $ git\-gpg reveal \-\-email alice@example.com
-  $ git\-gpg reveal \-\-passphrase\-stdin < pass.txt
+  $ git\-veil reveal
+  $ git\-veil reveal \-\-email alice@example.com
+  $ git\-veil reveal \-\-passphrase\-stdin < pass.txt

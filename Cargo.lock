@@ -897,7 +897,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "git-gpg"
+name = "git-veil"
 version = "0.1.0"
 dependencies = [
  "anyhow",

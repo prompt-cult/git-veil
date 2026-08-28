@@ -1,4 +1,4 @@
-//! Crash-safe atomic file replacement for all git-gpg state writes.
+//! Crash-safe atomic file replacement for all git-veil state writes.
 //!
 //! Every durable state file this tool writes (keyring, trust.json,
 //! tracked.json, the secret-keys store, ciphertext `.secret` files,

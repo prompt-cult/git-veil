@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-unhide 1  "git-gpg-unhide " 
+.TH git-veil-unhide 1  "git-veil-unhide " 
 .SH NAME
-git\-gpg\-unhide \- Decrypt one tracked file back to plaintext and delete its ciphertext
+git\-veil\-unhide \- Decrypt one tracked file back to plaintext and delete its ciphertext
 .SH SYNOPSIS
-\fBgit\-gpg unhide\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil unhide\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Decrypt one tracked file back to plaintext and delete its ciphertext
 .SH OPTIONS
@@ -16,10 +16,10 @@ Your email address
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -34,6 +34,6 @@ key first; the file must be tracked and its ciphertext present. Typical
 round trip: unhide to edit, then hide to re\-encrypt.
 
 EXAMPLES
-  $ git\-gpg unhide .env
-  $ git\-gpg unhide .env \-\-email alice@example.com
-  $ git\-gpg unhide .env \-\-passphrase\-stdin < pass.txt
+  $ git\-veil unhide .env
+  $ git\-veil unhide .env \-\-email alice@example.com
+  $ git\-veil unhide .env \-\-passphrase\-stdin < pass.txt

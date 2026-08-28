@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::decrypt_with_gpg_key;
+use git_veil::decrypt_with_gpg_key;
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use std::sync::LazyLock;

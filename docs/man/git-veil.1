@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg 1  "git-gpg 0.1.0" 
+.TH git-veil 1  "git-veil 0.1.0" 
 .SH NAME
-git\-gpg \- Git secret management using pure Rust OpenPGP
+git\-veil \- Git secret management using pure Rust OpenPGP
 .SH SYNOPSIS
-\fBgit\-gpg\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
+\fBgit\-veil\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
 Git secret management using pure Rust OpenPGP
 .SH OPTIONS
@@ -16,73 +16,73 @@ Print help
 Print version
 .SH SUBCOMMANDS
 .TP
-git\-gpg\-init(1)
-Initialize git\-gpg state (.git\-gpg/) in the current repository
+git\-veil\-init(1)
+Initialize git\-veil state (.git\-veil/) in the current repository
 .TP
-git\-gpg\-import(1)
-Import your private key(s) into the git\-gpg key store
+git\-veil\-import(1)
+Import your private key(s) into the git\-veil key store
 .TP
-git\-gpg\-export(1)
+git\-veil\-export(1)
 Export an armoured public key from the local key store
 .TP
-git\-gpg\-removekey(1)
+git\-veil\-removekey(1)
 Remove a key from the local key store (destructive, local\-only)
 .TP
-git\-gpg\-trust(1)
+git\-veil\-trust(1)
 Verify and pin the repository owner\*(Aqs signing key (per machine)
 .TP
-git\-gpg\-tell(1)
+git\-veil\-tell(1)
 Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 .TP
-git\-gpg\-removeperson(1)
+git\-veil\-removeperson(1)
 Remove a collaborator from the keyring and re\-sign it
 .TP
-git\-gpg\-add(1)
+git\-veil\-add(1)
 Track files for encryption
 .TP
-git\-gpg\-remove(1)
+git\-veil\-remove(1)
 Untrack files (leaves any ciphertext in place)
 .TP
-git\-gpg\-list(1)
+git\-veil\-list(1)
 List all tracked files
 .TP
-git\-gpg\-hide(1)
+git\-veil\-hide(1)
 Encrypt all tracked files to the keyring and delete the plaintexts
 .TP
-git\-gpg\-reveal(1)
+git\-veil\-reveal(1)
 Decrypt all tracked files back to plaintext
 .TP
-git\-gpg\-cat(1)
+git\-veil\-cat(1)
 Decrypt a single tracked file to stdout
 .TP
-git\-gpg\-unhide(1)
+git\-veil\-unhide(1)
 Decrypt one tracked file back to plaintext and delete its ciphertext
 .TP
-git\-gpg\-changes(1)
+git\-veil\-changes(1)
 Report where plaintext differs from the last hidden version
 .TP
-git\-gpg\-show\-repo\-id(1)
+git\-veil\-show\-repo\-id(1)
 Show the repository ID derived from the git remote push URL
 .TP
-git\-gpg\-whoami(1)
-Show the identity and key store git\-gpg will use
+git\-veil\-whoami(1)
+Show the identity and key store git\-veil will use
 .TP
-git\-gpg\-verify\-keyring(1)
+git\-veil\-verify\-keyring(1)
 Verify the keyring signature against the pinned trusted key
 .TP
-git\-gpg\-list\-keys(1)
+git\-veil\-list\-keys(1)
 List keyring keys after verifying the keyring signature
 .TP
-git\-gpg\-clean(1)
-Remove the .git\-gpg state directory (\-\-yes required when data would be lost)
+git\-veil\-clean(1)
+Remove the .git\-veil state directory (\-\-yes required when data would be lost)
 .TP
-git\-gpg\-completions(1)
+git\-veil\-completions(1)
 Emit a shell completion script for the given shell to stdout
 .TP
-git\-gpg\-manpages(1)
-Write roff man pages (git\-gpg.1 plus one per subcommand) to a directory
+git\-veil\-manpages(1)
+Write roff man pages (git\-veil.1 plus one per subcommand) to a directory
 .TP
-git\-gpg\-help(1)
+git\-veil\-help(1)
 Print this message or the help of the given subcommand(s)
 .SH VERSION
 v0.1.0

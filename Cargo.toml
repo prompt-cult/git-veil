@@ -1,13 +1,13 @@
 [package]
-name = "git-gpg"
+name = "git-veil"
 version = "0.1.0"
 edition = "2021"
-authors = ["git-gpg contributors"]
+authors = ["git-veil contributors"]
 description = "A Rust-based Git secret management tool inspired by Git Secret" 
 license = "GPL-3.0-or-later"
 repository = "https://codeforge.io/simbo1905/git-gpg"
 readme = "README.md"
-keywords = ["git", "gpg", "encryption", "secrets", "openpgp"]
+keywords = ["git", "openpgp", "encryption", "secrets", "git-veil"]
 categories = ["command-line-utilities", "cryptography"]
 
 [dependencies]

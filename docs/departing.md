@@ -10,7 +10,7 @@ rely on them:
   decrypt every one of them he can obtain — with this tool, or with plain
   `gpg`, forever. Removing him changes nothing about the bytes already on
   disk or already in git history.
-- Only a fresh `git-gpg hide` of every file produces new ciphertext
+- Only a fresh `git-veil hide` of every file produces new ciphertext
   without bob as a recipient — and even then, **git history still contains
   every old ciphertext**. Old commits stay decryptable by bob indefinitely.
 - Therefore: if bob ever saw (or could have decrypted) a secret, treat that
@@ -23,18 +23,18 @@ Remove bob and re-hide (hide only encrypts plaintexts present on disk, so
 reveal first if everything is currently hidden):
 
 ```sh
-$ git-gpg removeperson bob@example.com
+$ git-veil removeperson bob@example.com
 ✓ Removed bob@example.com from keyring
-$ git-gpg reveal
+$ git-veil reveal
 ✓ Keyring signature verified
 ...
 ✓ Files revealed
-$ git-gpg hide
+$ git-veil hide
 ✓ Keyring signature verified
 ...
 Encrypted: .env
 ✓ Files hidden
-$ git add .git-gpg/keyring .env.secret
+$ git add .git-veil/keyring .env.secret
 $ git commit -m "Remove bob from keyring and re-hide"
 $ git push
 ```
@@ -55,17 +55,17 @@ measure.
 ## 2. What the departing user (bob) should do
 
 ```sh
-rm -rf ~/work/demo                 # wipe his clone (ciphertext + .git-gpg/)
+rm -rf ~/work/demo                 # wipe his clone (ciphertext + .git-veil/)
 ```
 
-And his local key store, `$HOME/.git-gpg`, holds his PRIVATE key. He
+And his local key store, `$HOME/.git-veil`, holds his PRIVATE key. He
 removes it from that store with `removekey` — by fingerprint where known
 (preferred: an email that matches several keys is refused without
 confirmation), or by exact email. The key is usually the only private key
 in his store, so `--yes` confirms its removal:
 
 ```sh
-git-gpg removekey bob@example.com --yes
+git-veil removekey bob@example.com --yes
 ```
 
 This is destructive and local-only: it does not touch any repository,
@@ -89,13 +89,13 @@ dead value. After the owner's push, verify from a remaining member's
 chair (here: the owner, alice analogously):
 
 ```sh
-$ git-gpg list-keys
+$ git-veil list-keys
 ✓ Keyring signature verified (signed by pinned trusted key)
 Keys in keyring:
   example@github.com (5ea3e5f8…)
   alice@example.com (8ae022f3…)
 Total: 2 keys
-$ git-gpg reveal
+$ git-veil reveal
 ✓ Keyring signature verified
 ...
 Decrypted: .env
@@ -122,10 +122,10 @@ DB_PASSWORD=correct-horse
 Meanwhile, bob pulling the updated repo finds the tool shuts him out:
 
 ```sh
-$ git-gpg reveal
+$ git-veil reveal
 ✓ Keyring signature verified
 ...
-Error: user bob@example.com not found in keyring; check --email, or ask the owner to add you with git-gpg tell
+Error: user bob@example.com not found in keyring; check --email, or ask the owner to add you with git-veil tell
 ```
 
 Both facts at once are the whole story: the tool refuses him on NEW
@@ -134,7 +134,7 @@ keyrings, but no software can un-ring old ciphertext in his possession.
 ## Checklist
 
 - [ ] Owner: `removeperson <email>` — fails if the email is not in the ring
-- [ ] Owner: `reveal` then `hide`, commit `.git-gpg/keyring` + re-hidden `.secret` files, push
+- [ ] Owner: `reveal` then `hide`, commit `.git-veil/keyring` + re-hidden `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
 - [ ] Departing user: wipe clone; `removekey` their key from the local key store; revoke/delete the key in their gpg keyring

@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-list-keys 1  "git-gpg-list-keys " 
+.TH git-veil-list-keys 1  "git-veil-list-keys " 
 .SH NAME
-git\-gpg\-list\-keys \- List keyring keys after verifying the keyring signature
+git\-veil\-list\-keys \- List keyring keys after verifying the keyring signature
 .SH SYNOPSIS
-\fBgit\-gpg list\-keys\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil list\-keys\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 List keyring keys after verifying the keyring signature
 .SH OPTIONS
@@ -13,7 +13,7 @@ List keyring keys after verifying the keyring signature
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -26,5 +26,5 @@ of a tampered ring for a clean one. A repo with no trust established or
 no local pin fails closed like every other gated command.
 
 EXAMPLES
-  $ git\-gpg list\-keys
-  $ git\-gpg list\-keys \-\-remote upstream
+  $ git\-veil list\-keys
+  $ git\-veil list\-keys \-\-remote upstream

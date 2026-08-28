@@ -16,5 +16,5 @@
 .DS_Store
 Thumbs.db
 
-# git-gpg secrets (never commit encrypted files)
-.git-gpg/secrets
+# git-veil secrets (never commit encrypted files)
+.git-veil/secrets

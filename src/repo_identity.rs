@@ -77,7 +77,7 @@ pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
     // surfacing embedded credentials (redaction is shape-dependent and
     // cannot be made exhaustive). A fixed message carries no input material.
     anyhow::bail!(
-        "invalid git remote URL format; expected a supported GitHub/GitLab/Codeberg shape — see git-gpg help trust"
+        "invalid git remote URL format; expected a supported GitHub/GitLab/Codeberg shape — see git-veil help trust"
     )
 }
 

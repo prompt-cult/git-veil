@@ -12,7 +12,7 @@ mkdir -p "$man_dir" "$completions_dir"
 cargo run --quiet -- manpages "$man_dir"
 
 for shell in bash zsh fish; do
-    cargo run --quiet -- completions "$shell" > "$completions_dir/git-gpg.$shell"
+    cargo run --quiet -- completions "$shell" > "$completions_dir/git-veil.$shell"
 done
 
 echo "man pages:   $man_dir"

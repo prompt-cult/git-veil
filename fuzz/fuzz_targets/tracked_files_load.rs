@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::{validate_tracked_path, TrackedFiles};
+use git_veil::{validate_tracked_path, TrackedFiles};
 use std::path::PathBuf;
 
 fuzz_target!(|data: &[u8]| {
@@ -20,7 +20,7 @@ fuzz_target!(|data: &[u8]| {
 
     // TrackedFiles::load contract: Ok ⇒ every entry passed validation.
     // load() reads from a file, so stage the fuzzed JSON in a temp file.
-    let temp = std::env::temp_dir().join(format!("git-gpg-fuzz-tracked-{}", std::process::id()));
+    let temp = std::env::temp_dir().join(format!("git-veil-fuzz-tracked-{}", std::process::id()));
     if std::fs::write(&temp, data).is_ok() {
         if let Ok(tracked) = TrackedFiles::load(&temp) {
             for file in &tracked.files {

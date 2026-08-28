@@ -3,10 +3,10 @@
 The owner (`example@github.com`) shares a repository with a collaborator
 (`alice@example.com`), remote `git@github.com:example/demo.git`, repository
 ID `demo+example@github.com`. Each person has their own machine, their own
-`$HOME/.git-gpg` key store, and their own key pair. Both sides need gpg
-(or any OpenPGP tool) to generate keys — git-gpg itself has **no** key
+`$HOME/.git-veil` key store, and their own key pair. Both sides need gpg
+(or any OpenPGP tool) to generate keys — git-veil itself has **no** key
 generation. Exporting public keys needs no gpg: each person runs
-`git-gpg export <email> --output <file>` from their own key store (below,
+`git-veil export <email> --output <file>` from their own key store (below,
 after their key is imported; `gpg --armor --export` works too).
 
 ## Part 1 — the owner sets the repository up
@@ -22,12 +22,12 @@ gpg --batch --pinentry-mode loopback --passphrase '' \
 gpg --armor --export-secret-keys example@github.com > key.asc
 gpg --armor --export example@github.com > owner.pub
 
-git-gpg init
-git-gpg import key.asc
-git-gpg trust demo+example@github.com owner.pub   # pins the owner key on this machine
-git-gpg tell example@github.com owner.pub         # the owner must be in the keyring too
-git-gpg add .env && git-gpg hide
-git add .gitignore .git-gpg .env.secret && git commit -m "Add encrypted secrets"
+git-veil init
+git-veil import key.asc
+git-veil trust demo+example@github.com owner.pub   # pins the owner key on this machine
+git-veil tell example@github.com owner.pub         # the owner must be in the keyring too
+git-veil add .env && git-veil hide
+git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
 git push
 ```
 
@@ -40,8 +40,8 @@ then imports her private key into her key store and exports her public
 key from it, and sends the file to the owner:
 
 ```sh
-git-gpg import alice-private-key.asc
-git-gpg export alice@example.com --output alice.pub
+git-veil import alice-private-key.asc
+git-veil export alice@example.com --output alice.pub
 ```
 
 **The owner** verifies out of band that `alice.pub` really is Alice's key
@@ -49,7 +49,7 @@ git-gpg export alice@example.com --output alice.pub
 attacker cannot rewrite), then adds her to the keyring:
 
 ```sh
-$ git-gpg tell alice@example.com alice.pub
+$ git-veil tell alice@example.com alice.pub
 ✓ Added alice@example.com to keyring
 ```
 
@@ -66,8 +66,8 @@ plaintexts present on disk, so reveal first if everything is currently
 hidden):
 
 ```sh
-git-gpg reveal && git-gpg hide
-git add .git-gpg/keyring .env.secret
+git-veil reveal && git-veil hide
+git add .git-veil/keyring .env.secret
 git commit -m "Add alice to keyring and re-hide"
 git push
 ```
@@ -81,7 +81,7 @@ pin). She does **not** need any private key of the owner's.
 $ git clone git@github.com:example/demo.git
 $ cd demo
 $ git config user.email alice@example.com
-$ git-gpg import alice-private-key.asc
+$ git-veil import alice-private-key.asc
 + imported: alice@example.com (93021908BAABAD66FE6F00D0A789666FCEA8DAEA)
 Summary: 1 imported, 0 skipped
 ```
@@ -90,47 +90,47 @@ She imports only her OWN private key into her local key store. Then she
 pins the owner key — this is per machine and the clone cannot carry it:
 
 ```sh
-$ git-gpg reveal
-Error: no local pin for demo+example@github.com (from remote 'origin'); run git-gpg trust demo+example@github.com <keyfile> to pin this repository's key on this machine
+$ git-veil reveal
+Error: no local pin for demo+example@github.com (from remote 'origin'); run git-veil trust demo+example@github.com <keyfile> to pin this repository's key on this machine
 ```
 
 (That failure is fail-closed working as designed.) Alice runs it
-with the repo ID she gets from `git-gpg show-repo-id` and the `owner.pub`
+with the repo ID she gets from `git-veil show-repo-id` and the `owner.pub`
 file the owner gave her:
 
 ```sh
-$ git-gpg show-repo-id
+$ git-veil show-repo-id
 Repository ID: demo+example@github.com
 ...
-$ git-gpg trust demo+example@github.com owner.pub
+$ git-veil trust demo+example@github.com owner.pub
 ✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
 ✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
 ```
 
 What just happened: `trust` re-derived the repo ID from her remote,
 checked it matches the argument, verified `owner.pub` carries the
-repository email, and pinned the fingerprint in her `$HOME/.git-gpg`. The
-committed `.git-gpg/trust.json` is attacker-writable; her local pin is the
+repository email, and pinned the fingerprint in her `$HOME/.git-veil`. The
+committed `.git-veil/trust.json` is attacker-writable; her local pin is the
 real anchor.
 
 Now she can decrypt:
 
 ```sh
-$ git-gpg reveal
+$ git-veil reveal
 ✓ Keyring signature verified
 Signed by fingerprint: 22fb3bcb…
 Repository ID: demo+example@github.com
 Keys in keyring: 2
 Decrypted: .env
 ✓ Files revealed
-$ git-gpg cat .env        # peek to stdout; touches no disk state
+$ git-veil cat .env        # peek to stdout; touches no disk state
 ```
 
 ## Who can decrypt what
 
 - Every `hide` produces ONE ciphertext carrying a recipient packet for
   every key in the signed keyring — any keyring member can reveal.
-- The keyring (`.git-gpg/keyring`, committed) is signed by the owner's
+- The keyring (`.git-veil/keyring`, committed) is signed by the owner's
   key. Every gated command verifies that signature against the local pin
   before touching anything, so a keyring edited by a non-owner fails
   closed.
@@ -140,13 +140,13 @@ $ git-gpg cat .env        # peek to stdout; touches no disk state
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
 - The reveal error `user alice@example.com not found in keyring; check
-  --email, or ask the owner to add you with git-gpg tell` means the owner
+  --email, or ask the owner to add you with git-veil tell` means the owner
   has not yet done Part 2's re-hide-and-push.
 
 ## Handy checks on either side
 
 ```sh
-git-gpg list-keys        # who is in the keyring right now
-git-gpg whoami           # which email/key store this machine resolves to
-git-gpg changes          # which tracked files differ from last hide
+git-veil list-keys        # who is in the keyring right now
+git-veil whoami           # which email/key store this machine resolves to
+git-veil changes          # which tracked files differ from last hide
 ```

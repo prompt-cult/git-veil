@@ -5,9 +5,9 @@ use std::path::Path;
 use crate::commands::hide::encrypted_path_for;
 use crate::TrackedFiles;
 
-/// Removes the .git-gpg internal state directory.
+/// Removes the .git-veil internal state directory.
 ///
-/// Single responsibility: destroy git-gpg's internal state (.git-gpg/).
+/// Single responsibility: destroy git-veil's internal state (.git-veil/).
 /// `.gitignore` is never rewritten — init no longer adds any entry, and the
 /// in-place `<name>.secret` ciphertext files are ordinary committable files
 /// that a clean must not disown.
@@ -17,12 +17,12 @@ use crate::TrackedFiles;
 /// state that references them dies with the clean. A clean that would
 /// destroy such data therefore refuses unless `--yes` confirms it.
 pub fn cmd_clean(repo_root: &Path, yes: bool) -> Result<()> {
-    let git_gpg_dir = repo_root.join(".git-gpg");
+    let git_veil_dir = repo_root.join(".git-veil");
 
     // Compute the danger condition BEFORE removing anything: tracked state
     // (the manifest itself is being destroyed) and any in-place ciphertext
     // beside the tracked paths (possibly the only remaining copy).
-    let tracked = TrackedFiles::load(&git_gpg_dir.join("tracked.json"))?;
+    let tracked = TrackedFiles::load(&git_veil_dir.join("tracked.json"))?;
     let mut ciphertext_paths = Vec::new();
     for file in &tracked.files {
         let encrypted_path = encrypted_path_for(repo_root, file);
@@ -33,7 +33,7 @@ pub fn cmd_clean(repo_root: &Path, yes: bool) -> Result<()> {
 
     if (!tracked.files.is_empty() || !ciphertext_paths.is_empty()) && !yes {
         let mut message = String::from(
-            "Refusing to clean: this would destroy git-gpg state holding secret material.\n",
+            "Refusing to clean: this would destroy git-veil state holding secret material.\n",
         );
         message.push_str(&format!(
             "Tracked files whose manifest entries would be destroyed: {}\n",
@@ -56,9 +56,9 @@ pub fn cmd_clean(repo_root: &Path, yes: bool) -> Result<()> {
         anyhow::bail!("{}", message);
     }
 
-    if git_gpg_dir.exists() {
-        fs::remove_dir_all(&git_gpg_dir)
-            .context("Failed to remove .git-gpg directory")?;
+    if git_veil_dir.exists() {
+        fs::remove_dir_all(&git_veil_dir)
+            .context("Failed to remove .git-veil directory")?;
     }
 
     println!("✓ Cleaned");

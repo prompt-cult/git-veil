@@ -1,9 +1,9 @@
-//! Contract tests for git-gpg features and regression fixes.
+//! Contract tests for git-veil features and regression fixes.
 //!
 //! Each test targets one named contract. Tests here are written Red/Green:
 //! they must fail against the code they were written to fix, and pass after.
 
-use git_gpg::{
+use git_veil::{
     base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
     cmd_cat, cmd_changes, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_remove,
     cmd_removekey, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide,
@@ -143,7 +143,7 @@ fn default_gpg_home_errors_when_home_unset() {
 
 #[test]
 #[serial]
-fn default_key_store_is_home_git_gpg() {
+fn default_key_store_is_home_git_veil() {
     let saved = std::env::var("HOME").ok();
     let temp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", temp.path());
@@ -156,9 +156,9 @@ fn default_key_store_is_home_git_gpg() {
     }
 
     assert_eq!(
-        result.expect("a set HOME must resolve to $HOME/.git-gpg"),
-        temp.path().join(".git-gpg"),
-        "default key store must be $HOME/.git-gpg"
+        result.expect("a set HOME must resolve to $HOME/.git-veil"),
+        temp.path().join(".git-veil"),
+        "default key store must be $HOME/.git-veil"
     );
 }
 
@@ -540,8 +540,8 @@ fn keyring_parse_rejects_end_marker_before_begin() {
     // "byte range starts at .. but ends at 0" in the marker slicing).
     let inverted = format!(
         "{}\n{}\n",
-        git_gpg::END_MARKER,
-        git_gpg::BEGIN_MARKER
+        git_veil::END_MARKER,
+        git_veil::BEGIN_MARKER
     );
     let err = Keyring::parse(&inverted)
         .err()
@@ -556,9 +556,9 @@ fn keyring_parse_rejects_end_marker_before_begin() {
     // an empty keyring; a second BEGIN inside the body is malformed.
     let nested = format!(
         "{}\n{}\n{}\n",
-        git_gpg::BEGIN_MARKER,
-        git_gpg::BEGIN_MARKER,
-        git_gpg::END_MARKER
+        git_veil::BEGIN_MARKER,
+        git_veil::BEGIN_MARKER,
+        git_veil::END_MARKER
     );
     assert!(
         Keyring::parse(&nested).is_err(),
@@ -631,7 +631,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
     .expect("first tell must succeed");
 
     let keyring_after_first =
-        Keyring::parse(&std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap()).unwrap();
+        Keyring::parse(&std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap()).unwrap();
 
     let second_tell = cmd_tell(
         repo_temp.path(),
@@ -641,7 +641,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         &gpg_home, None
     );
 
-    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring_after_second = Keyring::parse(&keyring_text).unwrap();
     let alice_count = keyring_after_second
         .entries
@@ -696,7 +696,7 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
     )
     .expect("second tell with different email case must succeed");
 
-    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
 
     assert_eq!(
@@ -823,7 +823,7 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
         }],
         signature: None,
     };
-    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), unsigned_keyring.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-veil/keyring"), unsigned_keyring.serialize()).unwrap();
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -864,7 +864,7 @@ fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::Path
     )
     .expect("cmd_tell must succeed");
 
-    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    let keyring_path = repo_temp.path().join(".git-veil/keyring");
     let mut tampered =
         Keyring::parse(&std::fs::read_to_string(&keyring_path).unwrap()).unwrap();
     tampered
@@ -977,7 +977,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
     let signature = sign_keyring_content(&content_to_sign, &mallory_sec, None)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
-    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), forged.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-veil/keyring"), forged.serialize()).unwrap();
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1013,7 +1013,7 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
     );
 
     let keyring_text =
-        std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).expect("keyring must exist after tell");
+        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).expect("keyring must exist after tell");
 
     assert!(
         result.is_ok(),
@@ -1055,7 +1055,7 @@ fn generate_subkeyless_test_key(email: &str) -> pgp::composed::SignedPublicKey {
 /// The canary bytes cmd_tell test-encrypts with. Must match
 /// TELL_CANARY in src/commands/tell.rs; the contract under test is that
 /// these bytes never reach disk.
-const TELL_CANARY: &[u8] = b"git-gpg tell canary";
+const TELL_CANARY: &[u8] = b"git-veil tell canary";
 
 #[test]
 #[serial]
@@ -1069,7 +1069,7 @@ fn tell_fails_when_collaborator_key_cannot_encrypt() {
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
 
-    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    let keyring_path = repo_temp.path().join(".git-veil/keyring");
     let keyring_before = std::fs::read(&keyring_path).unwrap();
 
     let result = cmd_tell(
@@ -1177,7 +1177,7 @@ fn removeperson_removes_entry_and_resigns() {
 
     let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home, None);
 
-    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
     let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
 
@@ -1215,7 +1215,7 @@ fn removeperson_removes_entry_regardless_of_email_case() {
 
     let remove_result = cmd_removeperson(repo_temp.path(), "ALICE@EXAMPLE.COM", "origin", &gpg_home, None);
 
-    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
     let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
 
@@ -1312,11 +1312,11 @@ fn removeperson_rejects_tampered_keyring() {
     let signature = sign_keyring_content(&content_to_sign, &mallory_sec, None)
         .expect("mallory must be able to sign her own keyring");
     forged.signature = Some(signature);
-    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), forged.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-veil/keyring"), forged.serialize()).unwrap();
 
     let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &gpg_home, None);
 
-    let keyring_text_after = std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+    let keyring_text_after = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
 
     assert!(
         remove_result.is_err(),
@@ -1340,7 +1340,7 @@ fn init_creates_loadable_trust_store() {
 
     cmd_init(repo_temp.path()).expect("cmd_init must succeed");
 
-    let loaded = TrustStore::load_from_file(&repo_temp.path().join(".git-gpg/trust.json"));
+    let loaded = TrustStore::load_from_file(&repo_temp.path().join(".git-veil/trust.json"));
 
     let store = loaded.expect("trust.json written by init must load via TrustStore");
     assert!(
@@ -1427,8 +1427,8 @@ fn init_git_repo(repo_root: &std::path::Path) {
 fn write_tracked_json(repo_root: &std::path::Path, files: &[&str]) {
     let entries: Vec<String> = files.iter().map(|f| format!("\"{}\"", f)).collect();
     let content = format!("{{\n  \"files\": [{}]\n}}", entries.join(", "));
-    std::fs::create_dir_all(repo_root.join(".git-gpg")).unwrap();
-    std::fs::write(repo_root.join(".git-gpg/tracked.json"), content).unwrap();
+    std::fs::create_dir_all(repo_root.join(".git-veil")).unwrap();
+    std::fs::write(repo_root.join(".git-veil/tracked.json"), content).unwrap();
 }
 
 /// Sets up a repo where the trusted owner key is also a keyring entry, so a
@@ -1471,7 +1471,7 @@ fn setup_repo_with_owner_in_keyring()
 #[test]
 fn tracked_files_load_rejects_absolute_paths() {
     let temp = tempfile::tempdir().unwrap();
-    let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
+    let tracked_path = temp.path().join(".git-veil").join("tracked.json");
     std::fs::create_dir_all(tracked_path.parent().unwrap()).unwrap();
     std::fs::write(&tracked_path, r#"{"files":["/etc/passwd"]}"#).unwrap();
 
@@ -1488,7 +1488,7 @@ fn tracked_files_load_rejects_absolute_paths() {
 #[test]
 fn tracked_files_load_rejects_dotdot_components() {
     let temp = tempfile::tempdir().unwrap();
-    let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
+    let tracked_path = temp.path().join(".git-veil").join("tracked.json");
     std::fs::create_dir_all(tracked_path.parent().unwrap()).unwrap();
     std::fs::write(&tracked_path, r#"{"files":["../escape.txt"]}"#).unwrap();
 
@@ -1512,7 +1512,7 @@ fn add_stores_repo_relative_paths() {
     std::fs::write(temp.path().join("secret.env"), "s3cret").unwrap();
     let result = cmd_add(temp.path(), vec!["secret.env".to_string()]);
 
-    let tracked_content = std::fs::read_to_string(temp.path().join(".git-gpg/tracked.json"))
+    let tracked_content = std::fs::read_to_string(temp.path().join(".git-veil/tracked.json"))
         .expect("tracked.json must exist after add");
 
     result.expect("cmd_add must succeed for a file inside the repo");
@@ -1602,7 +1602,7 @@ fn remove_works_on_currently_hidden_file() {
     );
 
     let tracked_content =
-        std::fs::read_to_string(repo_temp.path().join(".git-gpg/tracked.json"))
+        std::fs::read_to_string(repo_temp.path().join(".git-veil/tracked.json"))
             .expect("tracked.json must exist after remove");
     assert!(
         !tracked_content.contains("\"a.env\""),
@@ -2018,7 +2018,7 @@ fn symlink_outside_repo_is_rejected() {
 
     let result = cmd_add(repo_temp.path(), vec!["link.env".to_string()]);
 
-    let tracked_content = std::fs::read_to_string(repo_temp.path().join(".git-gpg/tracked.json"))
+    let tracked_content = std::fs::read_to_string(repo_temp.path().join(".git-veil/tracked.json"))
         .expect("tracked.json must exist");
 
     assert!(
@@ -2599,7 +2599,7 @@ fn verify_fails_closed_when_pin_missing() {
         hide_msg
     );
     assert!(
-        hide_msg.contains("git-gpg trust"),
+        hide_msg.contains("git-veil trust"),
         "the pin-missing message must state the remedy, got: {}",
         hide_msg
     );
@@ -2613,7 +2613,7 @@ fn verify_fails_closed_when_pin_missing() {
         reveal_msg.contains("no local pin")
             && reveal_msg.contains("repo+owner@github.com")
             && reveal_msg.contains("(from remote 'origin')")
-            && reveal_msg.contains("git-gpg trust"),
+            && reveal_msg.contains("git-veil trust"),
         "reveal must fail with the pin-missing message naming repo_id, remote and remedy, got: {}",
         reveal_msg
     );
@@ -2654,7 +2654,7 @@ fn verify_fails_closed_when_pin_mismatches() {
 
     // (a) rewrite the committed trust.json to map the repo's repo_id to the
     // attacker's fingerprint...
-    let trust_path = repo_temp.path().join(".git-gpg/trust.json");
+    let trust_path = repo_temp.path().join(".git-veil/trust.json");
     let mut tampered_trust = TrustStore::load_from_file(&trust_path).unwrap();
     tampered_trust.add_trust("repo+owner@github.com".to_string(), attacker_fingerprint.clone());
     tampered_trust.save_to_file(&trust_path).unwrap();
@@ -2675,7 +2675,7 @@ fn verify_fails_closed_when_pin_mismatches() {
     let signature = sign_keyring_content(&content_to_sign, &attacker_sec, None)
         .expect("the attacker must be able to sign their own keyring");
     attacker_ring.signature = Some(signature);
-    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    let keyring_path = repo_temp.path().join(".git-veil/keyring");
     std::fs::write(&keyring_path, attacker_ring.serialize()).unwrap();
     let keyring_before = std::fs::read(&keyring_path).unwrap();
 
@@ -2697,7 +2697,7 @@ fn verify_fails_closed_when_pin_mismatches() {
         msg
     );
     assert!(
-        msg.contains("re-run git-gpg trust"),
+        msg.contains("re-run git-veil trust"),
         "the mismatch message must state the remedy, got: {}",
         msg
     );
@@ -2752,7 +2752,7 @@ fn decrypt_failure_mentions_recipient_or_passphrase_causes() {
         msg
     );
     assert!(
-        msg.contains("GITGPG_PASSPHRASE") && msg.contains("--passphrase-stdin"),
+        msg.contains("GITVEIL_PASSPHRASE") && msg.contains("--passphrase-stdin"),
         "the message must point at the passphrase remedies, got: {}",
         msg
     );
@@ -2784,7 +2784,7 @@ fn trust_error_names_remote_and_repo_id() {
         msg
     );
     assert!(
-        msg.contains("git-gpg trust repo+owner@github.com <keyfile>"),
+        msg.contains("git-veil trust repo+owner@github.com <keyfile>"),
         "the error must state the trust remedy, got: {}",
         msg
     );
@@ -3016,7 +3016,7 @@ fn sanitized_pin_filename_is_stable() {
 // ============================================================================
 // In-place ciphertext storage: hide writes <plaintext>.secret BESIDE the
 // plaintext, not into a gitignored mirror tree. Written Red/Green: the old
-// .git-gpg/secrets/<path>/<name>.asc scheme fails every test below.
+// .git-veil/secrets/<path>/<name>.asc scheme fails every test below.
 // ============================================================================
 
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) {
@@ -3064,7 +3064,7 @@ fn hide_writes_ciphertext_next_to_plaintext() {
         );
     }
     assert!(
-        !repo_temp.path().join(".git-gpg/secrets").exists(),
+        !repo_temp.path().join(".git-veil/secrets").exists(),
         "hide must not create a mirror secrets tree"
     );
 }
@@ -3106,7 +3106,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
 
-    // Simulate a clone: copy .git-gpg/ and every .secret ciphertext into a
+    // Simulate a clone: copy .git-veil/ and every .secret ciphertext into a
     // NEW directory, but not the plaintext (hide deleted it) and not the
     // gpg-home. Reveal runs with the SAME gpg_home, so the per-machine trust
     // pin is already present — the pin is keyed by the repo_id derived from
@@ -3124,7 +3124,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
             .expect("run git");
         assert!(status.success(), "git {:?} failed", args);
     }
-    copy_dir_all(&repo_temp.path().join(".git-gpg"), &clone.path().join(".git-gpg"));
+    copy_dir_all(&repo_temp.path().join(".git-veil"), &clone.path().join(".git-veil"));
     std::fs::copy(
         repo_temp.path().join("secret.env.secret"),
         clone.path().join("secret.env.secret"),
@@ -3420,7 +3420,7 @@ fn base64_encode_public_key_round_trips_through_decode() {
 // trust, tell and hide gates (fail-closed, naming the offending key)
 // ============================================================================
 
-use git_gpg::{validate_public_key_for_use, KeyUse};
+use git_veil::{validate_public_key_for_use, KeyUse};
 use pgp::composed::{SignedKeyDetails, SignedPublicKey};
 use pgp::packet::{
     KeyFlags, RevocationCode, SignatureConfig, SignatureType, Subpacket, SubpacketData,
@@ -3570,7 +3570,7 @@ fn expired_key_is_rejected_by_trust() {
         err
     );
     assert!(
-        !std::fs::read_to_string(repo_temp.path().join(".git-gpg/trust.json"))
+        !std::fs::read_to_string(repo_temp.path().join(".git-veil/trust.json"))
             .unwrap_or_default()
             .contains(&fingerprint),
         "trust store must not record the rejected key"
@@ -3612,7 +3612,7 @@ fn revoked_key_is_rejected_by_tell() {
     );
 
     let keyring_text =
-        std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
     assert!(
         keyring.entries.iter().all(|e| e.email != "bob@example.com"),
@@ -3649,7 +3649,7 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
     // Craft a SIGNED keyring containing the valid alice entry plus the
     // expired bob entry (as a stolen/colluding keyring commit would).
     let mut keyring = Keyring::parse(
-        &std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap(),
+        &std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap(),
     )
     .unwrap();
     keyring
@@ -3670,7 +3670,7 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
         extract_content_to_verify_from_keyring(&keyring.serialize()).expect("extract content");
     keyring.signature =
         Some(sign_keyring_content(&content, &owner_sec, None).expect("sign keyring"));
-    std::fs::write(repo_temp.path().join(".git-gpg/keyring"), keyring.serialize()).unwrap();
+    std::fs::write(repo_temp.path().join(".git-veil/keyring"), keyring.serialize()).unwrap();
 
     let plaintext = "API_KEY=s3cr3t-value\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();

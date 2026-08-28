@@ -1,6 +1,6 @@
------BEGIN GIT-GPG KEYRING-----
+-----BEGIN GIT-VEIL KEYRING-----
 two:fields
 four:a:b:c:d
 empty:::
 ::::::::::::::::::::
------END GIT-GPG KEYRING-----
+-----END GIT-VEIL KEYRING-----

@@ -15,7 +15,7 @@ use crate::pubkey::extract_email_from_user_id;
 /// equals the address extracted from one of the key's user-IDs — never
 /// substring matching (the same semantics as find_private_key_by_email).
 /// The store may hold the key only as a private half (imported via
-/// `git-gpg import`); the output is always re-armoured from the PUBLIC
+/// `git-veil import`); the output is always re-armoured from the PUBLIC
 /// half, so private key material can never leak through export.
 ///
 /// Errors: no matching key (naming the store paths) or an ambiguous match —

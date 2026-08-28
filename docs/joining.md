@@ -21,14 +21,14 @@ You can only reveal files that were encrypted after you were added. The
 owner runs, on their machine:
 
 ```sh
-$ git-gpg tell newcomer@example.com newcomer.pub
+$ git-veil tell newcomer@example.com newcomer.pub
 ✓ Added newcomer@example.com to keyring
 ```
 
 (You send them your public key first: generate a key pair as in step 1 of
-[docs/solo.md](solo.md) with your own email — git-gpg has **no** key
-generation — then export it from your key store with `git-gpg import
-key.asc` followed by `git-gpg export newcomer@example.com --output
+[docs/solo.md](solo.md) with your own email — git-veil has **no** key
+generation — then export it from your key store with `git-veil import
+key.asc` followed by `git-veil export newcomer@example.com --output
 newcomer.pub`; `gpg --armor --export newcomer@example.com > newcomer.pub`
 works too.)
 
@@ -36,13 +36,13 @@ Then — critical — the owner re-hides, because files hidden before you were
 told do not have you as a recipient:
 
 ```sh
-$ git-gpg reveal
-$ git-gpg hide
+$ git-veil reveal
+$ git-veil hide
 ✓ Keyring signature verified
 ...
 Encrypted: .env
 ✓ Files hidden
-$ git add .git-gpg/keyring .env.secret
+$ git add .git-veil/keyring .env.secret
 $ git commit -m "Add newcomer to keyring and re-hide"
 $ git push
 ```
@@ -60,26 +60,26 @@ $ cd demo
 $ git config user.email newcomer@example.com
 ```
 
-What just happened: you cloned ciphertext plus `.git-gpg/` (keyring,
+What just happened: you cloned ciphertext plus `.git-veil/` (keyring,
 trust.json, tracked.json). Decrypting commands resolve your identity from
 `git config user.email` — or pass `--email` explicitly.
 
 ### 2. Import your own private key
 
 ```sh
-$ git-gpg import newcomer-private-key.asc
+$ git-veil import newcomer-private-key.asc
 + imported: newcomer@example.com (1A2B3C4D5E6F…)
 Summary: 1 imported, 0 skipped
 ```
 
 What just happened: your private key sits in the per-machine key store
-`$HOME/.git-gpg/secret-keys.pgp` (never committed). Import ONLY your own
+`$HOME/.git-veil/secret-keys.pgp` (never committed). Import ONLY your own
 key; the owner's public half arrives as the `owner.pub` file.
 
 ### 3. Print the repository ID
 
 ```sh
-$ git-gpg show-repo-id
+$ git-veil show-repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
@@ -92,21 +92,21 @@ loudly. Non-`origin` remotes: add `--remote <name>`.
 ### 4. Pin the owner's key — per machine
 
 ```sh
-$ git-gpg trust demo+example@github.com owner.pub
+$ git-veil trust demo+example@github.com owner.pub
 ✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
 ✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
 ```
 
 What just happened: the owner key was verified (it must carry the
 repository email and be unexpired/unrevoked/signed) and its fingerprint
-was pinned in YOUR `$HOME/.git-gpg`, outside the repository. Every gated
+was pinned in YOUR `$HOME/.git-veil`, outside the repository. Every gated
 command verifies the keyring signature against this pin and fails closed
 without it. A new clone or machine has no pin — run `trust` there again.
 
 ### 5. Check who is in the keyring
 
 ```sh
-$ git-gpg list-keys
+$ git-veil list-keys
 ✓ Keyring signature verified (signed by pinned trusted key)
 Keys in keyring:
   example@github.com (22fb3bcb…)
@@ -121,7 +121,7 @@ yet — nothing on your side can fix that.
 ### 6. Reveal
 
 ```sh
-$ git-gpg reveal
+$ git-veil reveal
 ✓ Keyring signature verified
 Signed by fingerprint: 22fb3bcb…
 Repository ID: demo+example@github.com
@@ -140,7 +140,7 @@ the last hidden version.
 
 - `no local pin for …` — you have not run `trust` on this machine (step 4).
 - `user newcomer@example.com not found in keyring; check --email, or ask
-  the owner to add you with git-gpg tell` — the owner has not run `tell`
+  the owner to add you with git-veil tell` — the owner has not run `tell`
   (or has not pushed the updated keyring; `git pull` first).
 - `decryption failed: this ciphertext was not encrypted to your key …` —
   the owner told you but did not re-`hide` (or you are on an old commit;

@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-cat 1  "git-gpg-cat " 
+.TH git-veil-cat 1  "git-veil-cat " 
 .SH NAME
-git\-gpg\-cat \- Decrypt a single tracked file to stdout
+git\-veil\-cat \- Decrypt a single tracked file to stdout
 .SH SYNOPSIS
-\fBgit\-gpg cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Decrypt a single tracked file to stdout
 .SH OPTIONS
@@ -16,10 +16,10 @@ Your email address
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -33,6 +33,6 @@ signature is verified against the pinned trusted key first, and the file
 must be tracked with its ciphertext present beside it.
 
 EXAMPLES
-  $ git\-gpg cat .env
-  $ git\-gpg cat .env \-\-email alice@example.com
-  $ git\-gpg cat .env \-\-passphrase\-stdin < pass.txt
+  $ git\-veil cat .env
+  $ git\-veil cat .env \-\-email alice@example.com
+  $ git\-veil cat .env \-\-passphrase\-stdin < pass.txt

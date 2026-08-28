@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::{
+use git_veil::{
     extract_content_to_verify_from_keyring, extract_signature_from_keyring, SIG_BEGIN, SIG_END,
 };
 
@@ -18,8 +18,8 @@ fuzz_target!(|data: &[u8]| {
     // the verify content always ends with the keyring END marker
     if let Ok(content) = extract_content_to_verify_from_keyring(s) {
         assert!(
-            content.ends_with(git_gpg::END_MARKER),
-            "verify content must end with the END GIT-GPG KEYRING marker"
+            content.ends_with(git_veil::END_MARKER),
+            "verify content must end with the END GIT-VEIL KEYRING marker"
         );
     }
 });

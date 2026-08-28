@@ -30,7 +30,7 @@ pub fn sign_keyring_content(
         &passphrase,
         HashAlgorithm::Sha256,
         cursor,
-    ).context("Failed to create detached signature (wrong passphrase? if this key is passphrase-protected, supply it via GITGPG_PASSPHRASE or --passphrase-stdin)")?;
+    ).context("Failed to create detached signature (wrong passphrase? if this key is passphrase-protected, supply it via GITVEIL_PASSPHRASE or --passphrase-stdin)")?;
     
     let armored = signature.to_armored_string(Default::default())
         .context("Failed to armor signature")?;
@@ -52,7 +52,7 @@ pub fn verify_keyring_signature(keyring_content: &str, signature: &str, signing_
 /// Extracts the signature section from a keyring text.
 ///
 /// The detached signature is BY CONVENTION the LAST PGP signature block,
-/// after the END GIT-GPG KEYRING marker. Extraction therefore searches
+/// after the END GIT-VEIL KEYRING marker. Extraction therefore searches
 /// backwards from the end of the text so a stray signature marker inside
 /// the keyring body cannot desynchronise the verify path.
 /// (`Keyring::parse` extracts the signature independently; its positional
@@ -72,10 +72,10 @@ pub fn extract_signature_from_keyring(keyring_text: &str) -> Result<String> {
     Ok(keyring_text[sig_begin..sig_end + SIG_END.len()].to_string())
 }
 
-/// Extracts the content to verify (everything up to and including END GIT-GPG KEYRING marker).
+/// Extracts the content to verify (everything up to and including END GIT-VEIL KEYRING marker).
 pub fn extract_content_to_verify_from_keyring(keyring_text: &str) -> Result<String> {
     let end_idx = keyring_text
         .find(END_MARKER)
-        .context("No END GIT-GPG KEYRING marker found")?;
+        .context("No END GIT-VEIL KEYRING marker found")?;
     Ok(keyring_text[..end_idx + END_MARKER.len()].to_string())
 }

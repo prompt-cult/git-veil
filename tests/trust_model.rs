@@ -1,10 +1,10 @@
-//! Trust-model, keyring and command-flow tests for git-gpg.
+//! Trust-model, keyring and command-flow tests for git-veil.
 //!
 //! Pure-function contracts (URL parsing, keyring parse/serialize, trust store,
 //! signature primitives) are asserted directly here; end-to-end command
 //! contracts live in tests/features.rs and tests/cli.rs.
 
-use git_gpg::*;
+use git_veil::*;
 use std::path::PathBuf;
 use pgp::composed::{SecretKeyParamsBuilder, SubkeyParamsBuilder, KeyType, EncryptionCaps};
 use rand::thread_rng;
@@ -443,7 +443,7 @@ fn parse_error_never_echoes_the_input() {
 
 #[test]
 fn test_keyring_format_single_entry() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-VEIL KEYRING-----";
     let keyring = Keyring::parse(content).unwrap();
     assert_eq!(keyring.entries.len(), 1);
     assert_eq!(keyring.entries[0].email, "alice@example.com");
@@ -453,21 +453,21 @@ fn test_keyring_format_single_entry() {
 
 #[test]
 fn test_keyring_format_multiple_entries() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123\nbob@work.com:ZGVm:DEF456\n-----END GIT-GPG KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:YWJj:ABC123\nbob@work.com:ZGVm:DEF456\n-----END GIT-VEIL KEYRING-----";
     let keyring = Keyring::parse(content).unwrap();
     assert_eq!(keyring.entries.len(), 2);
 }
 
 #[test]
 fn test_keyring_parse_with_markers() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\n-----END GIT-GPG KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\n-----END GIT-VEIL KEYRING-----";
     let result = Keyring::parse(content);
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_keyring_parse_with_signature() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig\n-----END PGP SIGNATURE-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-VEIL KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig\n-----END PGP SIGNATURE-----";
     let keyring = Keyring::parse(content).unwrap();
     assert!(keyring.signature.is_some());
     assert_eq!(keyring.entries.len(), 1);
@@ -475,21 +475,21 @@ fn test_keyring_parse_with_signature() {
 
 #[test]
 fn test_keyring_parse_empty() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\n-----END GIT-GPG KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\n-----END GIT-VEIL KEYRING-----";
     let keyring = Keyring::parse(content).unwrap();
     assert_eq!(keyring.entries.len(), 0);
 }
 
 #[test]
 fn test_keyring_parse_missing_end_marker_fails() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:YWJj:ABC123";
     let result = Keyring::parse(content);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_keyring_parse_malformed_entry_fails() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\nmalformed_entry_no_colons\n-----END GIT-GPG KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nmalformed_entry_no_colons\n-----END GIT-VEIL KEYRING-----";
     let result = Keyring::parse(content);
     assert!(result.is_err());
 }
@@ -499,11 +499,11 @@ fn test_keyring_serialize_single_entry() {
     let mut keyring = Keyring::new();
     keyring.add_entry("alice@example.com".into(), "YWJj".into(), "ABC123".into()).unwrap();
     let serialized = keyring.serialize();
-    assert!(serialized.contains("-----BEGIN GIT-GPG KEYRING-----"));
+    assert!(serialized.contains("-----BEGIN GIT-VEIL KEYRING-----"));
     assert!(serialized.contains("alice@example.com"));
     assert!(serialized.contains("YWJj"));
     assert!(serialized.contains("ABC123"));
-    assert!(serialized.contains("-----END GIT-GPG KEYRING-----"));
+    assert!(serialized.contains("-----END GIT-VEIL KEYRING-----"));
 }
 
 #[test]
@@ -845,7 +845,7 @@ fn test_sign_and_verify_roundtrip() {
 
 #[test]
 fn test_extract_signature_from_keyring() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\n-----END GIT-GPG KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig123\n-----END PGP SIGNATURE-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\n-----END GIT-VEIL KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig123\n-----END PGP SIGNATURE-----";
     let sig = extract_signature_from_keyring(content).unwrap();
     assert!(sig.contains("sig123"));
 }
@@ -856,7 +856,7 @@ fn extract_signature_from_keyring_takes_last_signature_block() {
 
     // The keyring body carries a decoy PGP SIGNATURE marker inside a stored
     // entry line; the real detached signature follows the END marker.
-    let base = "-----BEGIN GIT-GPG KEYRING-----\ndecoy:YWJj:-----BEGIN PGP SIGNATURE-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----";
+    let base = "-----BEGIN GIT-VEIL KEYRING-----\ndecoy:YWJj:-----BEGIN PGP SIGNATURE-----\nalice@example.com:YWJj:ABC123\n-----END GIT-VEIL KEYRING-----";
     let signature = sign_keyring_content(base, &secret_key, None).expect("signing should succeed");
     let full = format!("{}\n{}", base, signature);
 
@@ -873,7 +873,7 @@ fn extract_signature_from_keyring_takes_last_signature_block() {
 #[test]
 fn extract_signature_from_keyring_matches_keyring_parse() {
     let (secret_key, _public_key) = generate_test_key("owner@example.com");
-    let base = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----";
+    let base = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-VEIL KEYRING-----";
     let signature = sign_keyring_content(base, &secret_key, None).expect("signing should succeed");
     let full = format!("{}\n{}", base, signature);
 
@@ -888,7 +888,7 @@ fn extract_signature_from_keyring_matches_keyring_parse() {
 
 #[test]
 fn test_extract_content_to_verify_from_keyring() {
-    let content = "-----BEGIN GIT-GPG KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-GPG KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig\n-----END PGP SIGNATURE-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:YWJj:ABC123\n-----END GIT-VEIL KEYRING-----\n-----BEGIN PGP SIGNATURE-----\nsig\n-----END PGP SIGNATURE-----";
     let to_verify = extract_content_to_verify_from_keyring(content).unwrap();
     assert!(to_verify.contains("alice@example.com"));
     assert!(!to_verify.contains("PGP SIGNATURE"));
@@ -914,7 +914,7 @@ fn test_verify_detached_signature() {
 #[test]
 fn test_sign_empty_keyring() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
-    let empty_keyring = "-----BEGIN GIT-GPG KEYRING-----\n-----END GIT-GPG KEYRING-----\n";
+    let empty_keyring = "-----BEGIN GIT-VEIL KEYRING-----\n-----END GIT-VEIL KEYRING-----\n";
     
     // Sign empty keyring
     let signature = sign_keyring_content(empty_keyring, &secret_key, None).expect("signing empty keyring should succeed");
@@ -1005,7 +1005,7 @@ fn test_decrypt_with_gpg_key() {
 fn test_custom_gpg_home_location() {
     let _temp = tempfile::tempdir().unwrap();
     let home = default_gpg_home().expect("HOME must be set to resolve the default gpg home");
-    assert!(home.exists() || home.to_str().unwrap().contains(".git-gpg"));
+    assert!(home.exists() || home.to_str().unwrap().contains(".git-veil"));
 }
 
 // ============================================================================
@@ -1013,28 +1013,28 @@ fn test_custom_gpg_home_location() {
 // ============================================================================
 
 #[test]
-fn test_init_creates_git_gpg_directory() {
+fn test_init_creates_git_veil_directory() {
     let temp = tempfile::tempdir().unwrap();
     cmd_init(temp.path()).unwrap();
-    assert!(temp.path().join(".git-gpg").exists());
+    assert!(temp.path().join(".git-veil").exists());
 }
 
 #[test]
 fn test_init_creates_empty_keyring_with_markers() {
     let temp = tempfile::tempdir().unwrap();
     cmd_init(temp.path()).unwrap();
-    let keyring_path = temp.path().join(".git-gpg").join("keyring");
+    let keyring_path = temp.path().join(".git-veil").join("keyring");
     assert!(keyring_path.exists());
     let content = std::fs::read_to_string(keyring_path).unwrap();
-    assert!(content.contains("-----BEGIN GIT-GPG KEYRING-----"));
-    assert!(content.contains("-----END GIT-GPG KEYRING-----"));
+    assert!(content.contains("-----BEGIN GIT-VEIL KEYRING-----"));
+    assert!(content.contains("-----END GIT-VEIL KEYRING-----"));
 }
 
 #[test]
 fn test_init_creates_empty_trust_json() {
     let temp = tempfile::tempdir().unwrap();
     cmd_init(temp.path()).unwrap();
-    let trust_path = temp.path().join(".git-gpg").join("trust.json");
+    let trust_path = temp.path().join(".git-veil").join("trust.json");
     assert!(trust_path.exists());
 }
 
@@ -1042,7 +1042,7 @@ fn test_init_creates_empty_trust_json() {
 fn test_init_creates_empty_tracked_json() {
     let temp = tempfile::tempdir().unwrap();
     cmd_init(temp.path()).unwrap();
-    let tracked_path = temp.path().join(".git-gpg").join("tracked.json");
+    let tracked_path = temp.path().join(".git-veil").join("tracked.json");
     assert!(tracked_path.exists());
 }
 
@@ -1056,8 +1056,8 @@ fn init_no_longer_creates_secrets_dir_or_gitignore_entry() {
     cmd_init(temp.path()).unwrap();
 
     assert!(
-        !temp.path().join(".git-gpg").join("secrets").exists(),
-        "init must not create a .git-gpg/secrets directory"
+        !temp.path().join(".git-veil").join("secrets").exists(),
+        "init must not create a .git-veil/secrets directory"
     );
     let gitignore_after =
         std::fs::read(temp.path().join(".gitignore")).unwrap();
@@ -1066,8 +1066,8 @@ fn init_no_longer_creates_secrets_dir_or_gitignore_entry() {
         ".gitignore must be byte-identical after init"
     );
     assert!(
-        !gitignore_after.windows(b".git-gpg".len()).any(|w| w == b".git-gpg"),
-        ".gitignore must gain no git-gpg entry, got: {:?}",
+        !gitignore_after.windows(b".git-veil".len()).any(|w| w == b".git-veil"),
+        ".gitignore must gain no git-veil entry, got: {:?}",
         String::from_utf8_lossy(&gitignore_after)
     );
 }
@@ -1103,7 +1103,7 @@ fn init_refuses_to_reset_existing_trust() {
     .expect("cmd_trust must succeed");
 
     let snapshot = |name: &str| {
-        std::fs::read(temp.path().join(".git-gpg").join(name))
+        std::fs::read(temp.path().join(".git-veil").join(name))
             .unwrap_or_else(|e| panic!("{} must exist before the second init: {}", name, e))
     };
     let keyring_before = snapshot("keyring");
@@ -1141,18 +1141,18 @@ fn init_still_works_on_fresh_repo_and_half_initialized_repo() {
     // Fresh repo: init must succeed.
     let fresh = tempfile::tempdir().unwrap();
     cmd_init(fresh.path()).expect("fresh init must succeed");
-    assert!(fresh.path().join(".git-gpg/trust.json").exists());
+    assert!(fresh.path().join(".git-veil/trust.json").exists());
 
-    // Half-initialised repo A: .git-gpg/ exists, trust.json absent.
+    // Half-initialised repo A: .git-veil/ exists, trust.json absent.
     let half_a = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(half_a.path().join(".git-gpg")).unwrap();
-    cmd_init(half_a.path()).expect("init with .git-gpg/ but no trust.json must succeed");
+    std::fs::create_dir_all(half_a.path().join(".git-veil")).unwrap();
+    cmd_init(half_a.path()).expect("init with .git-veil/ but no trust.json must succeed");
 
-    // Half-initialised repo B: .git-gpg/ exists, trust.json present but empty.
+    // Half-initialised repo B: .git-veil/ exists, trust.json present but empty.
     let half_b = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(half_b.path().join(".git-gpg")).unwrap();
+    std::fs::create_dir_all(half_b.path().join(".git-veil")).unwrap();
     std::fs::write(
-        half_b.path().join(".git-gpg/trust.json"),
+        half_b.path().join(".git-veil/trust.json"),
         "{\"trusted_keys\":{}}",
     )
     .unwrap();
@@ -1167,8 +1167,8 @@ fn test_init_leaves_existing_gitignore_untouched() {
     let content = std::fs::read_to_string(temp.path().join(".gitignore")).unwrap();
     assert!(content.contains("/target"));
     assert!(
-        !content.contains(".git-gpg"),
-        "init must not append any .git-gpg line, got: {}",
+        !content.contains(".git-veil"),
+        "init must not append any .git-veil line, got: {}",
         content
     );
 }
@@ -1255,7 +1255,7 @@ fn test_tell_fails_if_trust_not_established() {
         msg
     );
     assert!(
-        msg.contains("git-gpg trust repo+user@github.com <keyfile>"),
+        msg.contains("git-veil trust repo+user@github.com <keyfile>"),
         "the failure must state the trust remedy, got: {}",
         msg
     );
@@ -1336,7 +1336,7 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
 #[test]
 fn tell_failure_leaves_existing_keyring_untouched() {
     let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
-    let keyring_path = repo_temp.path().join(".git-gpg/keyring");
+    let keyring_path = repo_temp.path().join(".git-veil/keyring");
     let keyring_before = std::fs::read(&keyring_path).unwrap();
 
     let (_bob_sec, bob_pub) = generate_test_key("bob@example.com");
@@ -1500,7 +1500,7 @@ fn test_list_keys_empty_keyring() {
         msg
     );
     assert!(
-        msg.contains("(from remote 'origin')") && msg.contains("git-gpg trust"),
+        msg.contains("(from remote 'origin')") && msg.contains("git-veil trust"),
         "list-keys failure must name the remote and the trust remedy, got: {}",
         msg
     );
@@ -1544,7 +1544,7 @@ fn test_add_multiple_files_to_tracked_json() {
     cmd_add(temp.path(), vec!["file1.txt".to_string(), "file2.txt".to_string()])
         .expect("multi-file cmd_add must succeed");
 
-    let tracked = TrackedFiles::load(&temp.path().join(".git-gpg").join("tracked.json"))
+    let tracked = TrackedFiles::load(&temp.path().join(".git-veil").join("tracked.json"))
         .expect("tracked.json must stay loadable after a multi-file add");
     let names: Vec<String> = tracked
         .files
@@ -1786,14 +1786,14 @@ fn test_reveal_missing_encrypted_file_fails() {
 // ============================================================================
 
 #[test]
-fn test_clean_removes_git_gpg_directory() {
+fn test_clean_removes_git_veil_directory() {
     let temp = tempfile::tempdir().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
     let result = cmd_clean(temp.path(), false);
     assert!(result.is_ok());
-    assert!(!temp.path().join(".git-gpg").exists());
+    assert!(!temp.path().join(".git-veil").exists());
 }
 
 #[test]
@@ -1828,7 +1828,7 @@ fn test_clean_idempotent() {
 // Phase 6: Clean Command — --yes safety gate
 //
 // Written Red/Green: pre-fix, cmd_clean took no `yes` argument and removed
-// .git-gpg/ unconditionally, so these tests failed to compile (missing
+// .git-veil/ unconditionally, so these tests failed to compile (missing
 // argument) and the refusal contracts had no implementation.
 // ============================================================================
 
@@ -1857,8 +1857,8 @@ fn clean_without_yes_refuses_to_destroy_ciphertext() {
         msg
     );
     assert!(
-        temp.path().join(".git-gpg").exists(),
-        "a refused clean must leave .git-gpg intact"
+        temp.path().join(".git-veil").exists(),
+        "a refused clean must leave .git-veil intact"
     );
     assert!(
         temp.path().join("secret.env.secret").exists(),
@@ -1883,8 +1883,8 @@ fn clean_without_yes_refuses_when_tracked_files_exist() {
         err
     );
     assert!(
-        temp.path().join(".git-gpg").exists(),
-        "a refused clean must leave .git-gpg intact"
+        temp.path().join(".git-veil").exists(),
+        "a refused clean must leave .git-veil intact"
     );
 }
 
@@ -1899,8 +1899,8 @@ fn clean_with_yes_destroys_state() {
     cmd_clean(temp.path(), true).expect("clean --yes must proceed");
 
     assert!(
-        !temp.path().join(".git-gpg").exists(),
-        "clean --yes must remove .git-gpg"
+        !temp.path().join(".git-veil").exists(),
+        "clean --yes must remove .git-veil"
     );
 }
 
@@ -1912,7 +1912,7 @@ fn clean_without_yes_succeeds_when_nothing_tracked() {
     cmd_clean(temp.path(), false)
         .expect("clean of a repo with nothing tracked must not require --yes");
 
-    assert!(!temp.path().join(".git-gpg").exists());
+    assert!(!temp.path().join(".git-veil").exists());
 }
 
 // ============================================================================
@@ -2135,7 +2135,7 @@ fn test_not_in_git_repo_fails_gracefully() {
 }
 
 #[test]
-fn test_git_gpg_not_initialized_fails_gracefully() {
+fn test_git_veil_not_initialized_fails_gracefully() {
     let temp = tempfile::tempdir().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     
@@ -2149,9 +2149,9 @@ fn test_corrupted_trust_json_fails_gracefully() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    std::fs::write(temp.path().join(".git-gpg").join("trust.json"), "corrupted").unwrap();
+    std::fs::write(temp.path().join(".git-veil").join("trust.json"), "corrupted").unwrap();
     
-    let result = TrustStore::load_from_file(&temp.path().join(".git-gpg").join("trust.json"));
+    let result = TrustStore::load_from_file(&temp.path().join(".git-veil").join("trust.json"));
     assert!(result.is_err());
 }
 
@@ -2161,9 +2161,9 @@ fn test_corrupted_tracked_json_fails_gracefully() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    std::fs::write(temp.path().join(".git-gpg").join("tracked.json"), "corrupted").unwrap();
+    std::fs::write(temp.path().join(".git-veil").join("tracked.json"), "corrupted").unwrap();
     
-    let result = TrackedFiles::load(&temp.path().join(".git-gpg").join("tracked.json"));
+    let result = TrackedFiles::load(&temp.path().join(".git-veil").join("tracked.json"));
     assert!(result.is_err());
 }
 
@@ -2173,9 +2173,9 @@ fn test_corrupted_keyring_fails_gracefully() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    std::fs::write(temp.path().join(".git-gpg").join("keyring"), "corrupted").unwrap();
+    std::fs::write(temp.path().join(".git-veil").join("keyring"), "corrupted").unwrap();
     
-    let content = std::fs::read_to_string(temp.path().join(".git-gpg").join("keyring")).unwrap();
+    let content = std::fs::read_to_string(temp.path().join(".git-veil").join("keyring")).unwrap();
     let result = Keyring::parse(&content);
     assert!(result.is_err());
 }
@@ -2187,7 +2187,7 @@ fn test_missing_keyring_file_fails_gracefully() {
     std::process::Command::new("git").current_dir(temp.path()).args(&["remote", "add", "origin", "git@github.com:user/repo.git"]).output().unwrap();
     cmd_init(temp.path()).unwrap();
     
-    std::fs::remove_file(temp.path().join(".git-gpg").join("keyring")).unwrap();
+    std::fs::remove_file(temp.path().join(".git-veil").join("keyring")).unwrap();
     
     let result = cmd_verify_keyring(temp.path(), "origin", &PathBuf::from("/tmp"));
     assert!(result.is_err());

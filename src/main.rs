@@ -2,7 +2,7 @@ use clap::{CommandFactory as _, Parser as _};
 use std::path::PathBuf;
 use anyhow::{Context as _, Result};
 
-use git_gpg::{
+use git_veil::{
     cli::{Cli, Commands},
     cmd_init, cmd_import, cmd_export, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove,
     cmd_list, cmd_hide, cmd_reveal, cmd_unhide, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id,
@@ -21,7 +21,7 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 }
 
 /// Resolves the key store location for commands that consume a gpg_home:
-/// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.git-gpg`.
+/// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.git-veil`.
 /// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
 /// show-repo-id) never fail on an unset HOME. list-keys is no longer in this
 /// set: it verifies the keyring signature against the pinned key, so it
@@ -31,7 +31,7 @@ fn resolve_gpg_home(gpg_home: Option<PathBuf>) -> Result<PathBuf> {
 }
 
 /// Resolves the passphrase for private-key use, mirroring resolve_email/
-/// resolve_gpg_home: `--passphrase-stdin` wins over the `GITGPG_PASSPHRASE`
+/// resolve_gpg_home: `--passphrase-stdin` wins over the `GITVEIL_PASSPHRASE`
 /// environment variable; when both are absent, None is returned and the key
 /// is unlocked with an empty passphrase (back-compat with unprotected keys).
 /// Interactive tty prompting is deliberately deferred. The passphrase is
@@ -49,19 +49,19 @@ fn resolve_passphrase(passphrase_stdin: bool) -> Result<Option<String>> {
         }
         return Ok(Some(line));
     }
-    match std::env::var("GITGPG_PASSPHRASE") {
+    match std::env::var("GITVEIL_PASSPHRASE") {
         Ok(value) => Ok(Some(value)),
         Err(std::env::VarError::NotPresent) => Ok(None),
         Err(std::env::VarError::NotUnicode(_)) => {
             // Never propagate the value into the error message.
-            anyhow::bail!("GITGPG_PASSPHRASE is not valid UTF-8")
+            anyhow::bail!("GITVEIL_PASSPHRASE is not valid UTF-8")
         }
     }
 }
 
-/// Intercepts `git-gpg help [cmd]` so that per the UX spec the command's
+/// Intercepts `git-veil help [cmd]` so that per the UX spec the command's
 /// discussion + EXAMPLES (its after_long_help content) render FIRST and the
-/// usage/options block renders LAST. `git-gpg <cmd> --help` keeps clap's
+/// usage/options block renders LAST. `git-veil <cmd> --help` keeps clap's
 /// native order (options before after_long_help), matching the man pages.
 fn handle_help_subcommand(rest: &[String]) -> Result<()> {
     let mut root = Cli::command();
@@ -152,10 +152,10 @@ fn main() -> Result<()> {
             cmd_list_keys(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
         }
         Commands::Clean { yes } => cmd_clean(&repo_root, yes)?,
-        Commands::Completions { shell } => git_gpg::cli::run_completions(shell),
+        Commands::Completions { shell } => git_veil::cli::run_completions(shell),
         Commands::Manpages { output_dir } => {
             let dir = output_dir.unwrap_or_else(|| PathBuf::from("man"));
-            git_gpg::cli::run_manpages(&dir)?;
+            git_veil::cli::run_manpages(&dir)?;
         }
     }
 

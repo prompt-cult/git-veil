@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-changes 1  "git-gpg-changes " 
+.TH git-veil-changes 1  "git-veil-changes " 
 .SH NAME
-git\-gpg\-changes \- Report where plaintext differs from the last hidden version
+git\-veil\-changes \- Report where plaintext differs from the last hidden version
 .SH SYNOPSIS
-\fBgit\-gpg changes\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBgit\-veil changes\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Report where plaintext differs from the last hidden version
 .SH OPTIONS
@@ -16,10 +16,10 @@ Your email address
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -34,6 +34,6 @@ ciphertext, or no plaintext on disk, are skipped with a note and are not
 counted as changed.
 
 EXAMPLES
-  $ git\-gpg changes                # check every tracked file
-  $ git\-gpg changes .env           # check one file
-  $ git\-gpg changes \-\-passphrase\-stdin < pass.txt
+  $ git\-veil changes                # check every tracked file
+  $ git\-veil changes .env           # check one file
+  $ git\-veil changes \-\-passphrase\-stdin < pass.txt

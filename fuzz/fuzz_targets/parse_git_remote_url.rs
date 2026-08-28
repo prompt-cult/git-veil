@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::{derive_repo_id, parse_git_remote_url};
+use git_veil::{derive_repo_id, parse_git_remote_url};
 
 fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };

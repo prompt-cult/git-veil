@@ -816,7 +816,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "git-gpg"
+name = "git-veil"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -832,10 +832,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "git-gpg-fuzz"
+name = "git-veil-fuzz"
 version = "0.0.0"
 dependencies = [
- "git-gpg",
+ "git-veil",
  "libfuzzer-sys",
  "pgp",
  "rand",

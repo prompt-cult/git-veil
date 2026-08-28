@@ -1,2 +1,2 @@
------BEGIN GIT-GPG KEYRING-----
+-----BEGIN GIT-VEIL KEYRING-----
 alice@example.com:YWJj:ABC123

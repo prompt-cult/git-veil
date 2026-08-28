@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-completions 1  "git-gpg-completions " 
+.TH git-veil-completions 1  "git-veil-completions " 
 .SH NAME
-git\-gpg\-completions \- Emit a shell completion script for the given shell to stdout
+git\-veil\-completions \- Emit a shell completion script for the given shell to stdout
 .SH SYNOPSIS
-\fBgit\-gpg completions\fR [\fB\-h\fR|\fB\-\-help\fR] <\fISHELL\fR> 
+\fBgit\-veil completions\fR [\fB\-h\fR|\fB\-\-help\fR] <\fISHELL\fR> 
 .SH DESCRIPTION
 Emit a shell completion script for the given shell to stdout
 .SH OPTIONS
@@ -31,11 +31,11 @@ powershell
 zsh
 .RE
 .SH EXTRA
-Writes a shell completion script for the git\-gpg CLI to stdout. The
+Writes a shell completion script for the git\-veil CLI to stdout. The
 script is generated from the live clap definition, so it always matches
 the installed binary.
 
 EXAMPLES
-  $ git\-gpg completions bash > /etc/bash_completion.d/git\-gpg
-  $ git\-gpg completions zsh > "${fpath[1]}/_git\-gpg"
-  $ git\-gpg completions fish > ~/.config/fish/completions/git\-gpg.fish
+  $ git\-veil completions bash > /etc/bash_completion.d/git\-veil
+  $ git\-veil completions zsh > "${fpath[1]}/_git\-veil"
+  $ git\-veil completions fish > ~/.config/fish/completions/git\-veil.fish

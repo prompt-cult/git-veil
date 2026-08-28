@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_gpg::{
+use git_veil::{
     split_armored_private_key_blocks, split_armored_public_key_blocks, PRIVATE_KEY_BEGIN,
     PRIVATE_KEY_END, PUBLIC_KEY_BEGIN, PUBLIC_KEY_END,
 };

@@ -1,8 +1,8 @@
 //! CLI end-to-end tests.
 //!
-//! These spawn the real `git-gpg` binary via assert_cmd. Each test builds its
+//! These spawn the real `git-veil` binary via assert_cmd. Each test builds its
 //! own temporary git repository and fake $HOME, so every child process gets an
-//! isolated GNUPGHOME ($HOME/.git-gpg) without touching the test process's
+//! isolated GNUPGHOME ($HOME/.git-veil) without touching the test process's
 //! working directory or environment — hence no #[serial] is needed.
 
 use assert_cmd::Command;
@@ -92,17 +92,17 @@ fn git(repo: &Path, args: &[&str]) {
 }
 
 fn run(repo: &Path, home: &Path, args: &[&str]) -> std::process::Output {
-    Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .current_dir(repo)
         .env("HOME", home)
-        .env_remove("GITGPG_PASSPHRASE")
+        .env_remove("GITVEIL_PASSPHRASE")
         .args(args)
         .output()
-        .expect("run git-gpg")
+        .expect("run git-veil")
 }
 
-/// Runs the binary with GITGPG_PASSPHRASE set for this invocation only, so
+/// Runs the binary with GITVEIL_PASSPHRASE set for this invocation only, so
 /// env-var tests cannot leak the passphrase into other child processes.
 fn run_with_passphrase_env(
     repo: &Path,
@@ -110,27 +110,27 @@ fn run_with_passphrase_env(
     args: &[&str],
     passphrase: &str,
 ) -> std::process::Output {
-    Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .current_dir(repo)
         .env("HOME", home)
-        .env("GITGPG_PASSPHRASE", passphrase)
+        .env("GITVEIL_PASSPHRASE", passphrase)
         .args(args)
         .output()
-        .expect("run git-gpg")
+        .expect("run git-veil")
 }
 
 /// Runs the binary with `input` piped to stdin (for --passphrase-stdin).
 fn run_with_stdin(repo: &Path, home: &Path, args: &[&str], input: &str) -> std::process::Output {
-    Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .current_dir(repo)
         .env("HOME", home)
-        .env_remove("GITGPG_PASSPHRASE")
+        .env_remove("GITVEIL_PASSPHRASE")
         .args(args)
         .write_stdin(input)
         .output()
-        .expect("run git-gpg")
+        .expect("run git-veil")
 }
 
 /// Builds a temp repo (with origin remote and local user.email) plus a fake
@@ -156,7 +156,7 @@ fn setup_told_repo() -> (
     let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
 
-    write_multi_key_secret_keys(&home_temp.path().join(".git-gpg"), &[owner_sec, alice_sec]);
+    write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec, alice_sec]);
 
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
@@ -280,14 +280,14 @@ fn cat_outputs_plaintext_to_stdout() {
 #[test]
 fn cli_help_and_version_exit_zero() {
     for args in [&["--help"][..], &["--version"][..]] {
-        let out = Command::cargo_bin("git-gpg")
-            .expect("git-gpg binary must be buildable")
+        let out = Command::cargo_bin("git-veil")
+            .expect("git-veil binary must be buildable")
             .args(args)
             .output()
-            .expect("run git-gpg");
+            .expect("run git-veil");
         assert!(
             out.status.success(),
-            "git-gpg {:?} must exit 0, got {:?}",
+            "git-veil {:?} must exit 0, got {:?}",
             args,
             out.status
         );
@@ -296,17 +296,17 @@ fn cli_help_and_version_exit_zero() {
 
 #[test]
 fn bare_help_lists_every_command_with_one_liner() {
-    // `git-gpg help` must be a table of contents: every subcommand name with
+    // `git-veil help` must be a table of contents: every subcommand name with
     // a one-line purpose, NOT a flag dump of the root or any subcommand.
-    let out = Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    let out = Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .args(["help"])
         .output()
-        .expect("run git-gpg");
+        .expect("run git-veil");
 
     assert!(
         out.status.success(),
-        "git-gpg help must exit 0, got {:?}",
+        "git-veil help must exit 0, got {:?}",
         out.status
     );
 
@@ -336,7 +336,7 @@ fn bare_help_lists_every_command_with_one_liner() {
     ] {
         assert!(
             stdout.contains(name),
-            "git-gpg help must list every subcommand; missing: {name}\n---\n{stdout}"
+            "git-veil help must list every subcommand; missing: {name}\n---\n{stdout}"
         );
     }
 
@@ -345,23 +345,23 @@ fn bare_help_lists_every_command_with_one_liner() {
     // subcommands but never to the table of contents.
     assert!(
         !stdout.contains("--gpg-home"),
-        "git-gpg help must be a one-liner table of contents, not a flag dump\n---\n{stdout}"
+        "git-veil help must be a one-liner table of contents, not a flag dump\n---\n{stdout}"
     );
 }
 
 #[test]
 fn help_hide_shows_workflow_and_examples() {
-    // `git-gpg help hide` must show the long-form workflow discussion and
+    // `git-veil help hide` must show the long-form workflow discussion and
     // commented examples, not just the flag list.
-    let out = Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    let out = Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .args(["help", "hide"])
         .output()
-        .expect("run git-gpg");
+        .expect("run git-veil");
 
     assert!(
         out.status.success(),
-        "git-gpg help hide must exit 0, got {:?}",
+        "git-veil help hide must exit 0, got {:?}",
         out.status
     );
 
@@ -369,7 +369,7 @@ fn help_hide_shows_workflow_and_examples() {
     for marker in ["init", "trust", "tell", "add", "secret", "#"] {
         assert!(
             stdout.contains(marker),
-            "git-gpg help hide must discuss the workflow (missing: {marker})\n---\n{stdout}"
+            "git-veil help hide must discuss the workflow (missing: {marker})\n---\n{stdout}"
         );
     }
 
@@ -377,37 +377,37 @@ fn help_hide_shows_workflow_and_examples() {
     // usage/options block for `help <cmd>`.
     let examples_pos = stdout
         .find("EXAMPLES")
-        .expect("git-gpg help hide must contain an EXAMPLES section");
+        .expect("git-veil help hide must contain an EXAMPLES section");
     let usage_pos = stdout
         .find("Usage:")
-        .expect("git-gpg help hide must contain a Usage block");
+        .expect("git-veil help hide must contain a Usage block");
     assert!(
         examples_pos < usage_pos,
-        "EXAMPLES must render before Usage for `git-gpg help hide`\n---\n{stdout}"
+        "EXAMPLES must render before Usage for `git-veil help hide`\n---\n{stdout}"
     );
 }
 
 #[test]
 fn help_unknown_command_exits_nonzero() {
-    let out = Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    let out = Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .args(["help", "nosuchcmd"])
         .output()
-        .expect("run git-gpg");
+        .expect("run git-veil");
 
     assert!(
         !out.status.success(),
-        "git-gpg help nosuchcmd must exit nonzero, got success"
+        "git-veil help nosuchcmd must exit nonzero, got success"
     );
 }
 
 #[test]
 fn manpage_for_hide_contains_workflow_text() {
     // The committed man page must carry the same workflow discussion that
-    // `git-gpg help hide` shows, because clap_mangen renders it from the
+    // `git-veil help hide` shows, because clap_mangen renders it from the
     // same clap definition.
     let man_page = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("docs/man/git-gpg-hide.1");
+        .join("docs/man/git-veil-hide.1");
     let content = std::fs::read_to_string(&man_page).expect("read committed man page");
 
     for marker in ["init", "trust", "tell", "add", "secret"] {
@@ -423,12 +423,12 @@ fn cli_reports_nonzero_exit_on_failure() {
     // A directory that is not a git repo: show-repo-id must fail loudly.
     let not_a_repo = tempfile::tempdir().unwrap();
 
-    let out = Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    let out = Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .current_dir(not_a_repo.path())
         .args(["show-repo-id"])
         .output()
-        .expect("run git-gpg");
+        .expect("run git-veil");
 
     assert!(
         !out.status.success(),
@@ -449,19 +449,19 @@ fn home_free_subcommands_work_without_home_set() {
     git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
 
     let run_without_home = |args: &[&str]| {
-        Command::cargo_bin("git-gpg")
-            .expect("git-gpg binary must be buildable")
+        Command::cargo_bin("git-veil")
+            .expect("git-veil binary must be buildable")
             .current_dir(repo_temp.path())
             .env_remove("HOME")
             .args(args)
             .output()
-            .expect("run git-gpg")
+            .expect("run git-veil")
     };
 
     let out = run_without_home(&["init"]);
     assert!(
         out.status.success(),
-        "git-gpg init without HOME must exit 0: stdout={:?} stderr={:?}",
+        "git-veil init without HOME must exit 0: stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
@@ -477,7 +477,7 @@ fn home_free_subcommands_work_without_home_set() {
         let out = run_without_home(args);
         assert!(
             out.status.success(),
-            "git-gpg {:?} without HOME must exit 0: stdout={:?} stderr={:?}",
+            "git-veil {:?} without HOME must exit 0: stdout={:?} stderr={:?}",
             args,
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
@@ -511,8 +511,8 @@ fn cli_clean_requires_yes_flag() {
         combined
     );
     assert!(
-        repo_temp.path().join(".git-gpg").exists(),
-        "a refused clean must leave .git-gpg intact"
+        repo_temp.path().join(".git-veil").exists(),
+        "a refused clean must leave .git-veil intact"
     );
     assert!(
         repo_temp.path().join("secret.env.secret").exists(),
@@ -527,8 +527,8 @@ fn cli_clean_requires_yes_flag() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
-        !repo_temp.path().join(".git-gpg").exists(),
-        "clean --yes must remove .git-gpg"
+        !repo_temp.path().join(".git-veil").exists(),
+        "clean --yes must remove .git-veil"
     );
 }
 
@@ -564,7 +564,7 @@ fn cli_unhide_decrypts_one_file() {
 //
 // Written Red/Green: pre-fix the binary only unlocked keys with an empty
 // passphrase, so these tests failed at runtime (unknown --passphrase-stdin
-// flag; GITGPG_PASSPHRASE ignored).
+// flag; GITVEIL_PASSPHRASE ignored).
 // ============================================================================
 
 /// Builds a temp repo (origin remote + local user.email) plus a fake home
@@ -583,7 +583,7 @@ fn setup_repo_with_protected_owner_key(passphrase: &str) -> (tempfile::TempDir, 
     git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
 
     let (owner_sec, owner_pub) = generate_protected_test_key("owner@github.com", passphrase);
-    write_multi_key_secret_keys(&home_temp.path().join(".git-gpg"), &[owner_sec]);
+    write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec]);
 
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
@@ -626,7 +626,7 @@ fn protected_key_decrypts_with_passphrase_from_env_var() {
     );
     assert!(
         out.status.success(),
-        "tell with GITGPG_PASSPHRASE must succeed: stdout={:?} stderr={:?}",
+        "tell with GITVEIL_PASSPHRASE must succeed: stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
@@ -642,7 +642,7 @@ fn protected_key_decrypts_with_passphrase_from_env_var() {
     );
     assert!(
         out.status.success(),
-        "reveal with GITGPG_PASSPHRASE set must succeed: stdout={:?} stderr={:?}",
+        "reveal with GITVEIL_PASSPHRASE set must succeed: stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
@@ -754,11 +754,11 @@ fn passphrase_stdin_reads_exactly_one_line() {
 #[test]
 fn cli_completions_emit_scripts() {
     for shell in ["bash", "zsh", "fish"] {
-        let out = Command::cargo_bin("git-gpg")
-            .expect("git-gpg binary must be buildable")
+        let out = Command::cargo_bin("git-veil")
+            .expect("git-veil binary must be buildable")
             .args(["completions", shell])
             .output()
-            .expect("run git-gpg");
+            .expect("run git-veil");
 
         assert!(
             out.status.success(),
@@ -773,7 +773,7 @@ fn cli_completions_emit_scripts() {
         );
         let script = String::from_utf8_lossy(&out.stdout);
         assert!(
-            script.contains("git-gpg"),
+            script.contains("git-veil"),
             "completions {} script must reference the binary name, got: {}",
             shell,
             script
@@ -785,11 +785,11 @@ fn cli_completions_emit_scripts() {
 fn cli_manpages_write_files() {
     let dir = tempfile::tempdir().unwrap();
 
-    let out = Command::cargo_bin("git-gpg")
-        .expect("git-gpg binary must be buildable")
+    let out = Command::cargo_bin("git-veil")
+        .expect("git-veil binary must be buildable")
         .args(["manpages", dir.path().to_str().unwrap()])
         .output()
-        .expect("run git-gpg");
+        .expect("run git-veil");
 
     assert!(
         out.status.success(),
@@ -798,13 +798,13 @@ fn cli_manpages_write_files() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let root_page = dir.path().join("git-gpg.1");
-    let root_content = std::fs::read(&root_page).expect("git-gpg.1 must exist");
-    assert_th_roff(&root_content, "git-gpg.1");
+    let root_page = dir.path().join("git-veil.1");
+    let root_content = std::fs::read(&root_page).expect("git-veil.1 must exist");
+    assert_th_roff(&root_content, "git-veil.1");
 
     // The expected per-subcommand man pages are derived from the real clap
     // definition (the lib's Cli), not a hardcoded list that could drift.
-    let mut expected: Vec<String> = git_gpg::cli::Cli::command()
+    let mut expected: Vec<String> = git_veil::cli::Cli::command()
         .get_subcommands()
         .map(|sub| sub.get_name().to_string())
         .collect();
@@ -814,11 +814,11 @@ fn cli_manpages_write_files() {
         "the Cli definition must expose subcommands"
     );
     for name in expected {
-        let page = dir.path().join(format!("git-gpg-{}.1", name));
+        let page = dir.path().join(format!("git-veil-{}.1", name));
         let content = std::fs::read(&page).unwrap_or_else(|_| {
             panic!("man page for subcommand {} must exist at {:?}", name, page)
         });
-        assert_th_roff(&content, &format!("git-gpg-{}.1", name));
+        assert_th_roff(&content, &format!("git-veil-{}.1", name));
     }
 }
 
@@ -937,7 +937,7 @@ fn cli_export_round_trip_into_tell() {
     );
 
     let keyring_text =
-        std::fs::read_to_string(repo_b.path().join(".git-gpg/keyring")).unwrap();
+        std::fs::read_to_string(repo_b.path().join(".git-veil/keyring")).unwrap();
     assert!(
         keyring_text.contains("alice@example.com"),
         "keyring must contain alice after telling the exported key, got: {}",
@@ -948,7 +948,7 @@ fn cli_export_round_trip_into_tell() {
 // ============================================================================
 // tell hints to re-hide: after telling a new collaborator, existing
 // ciphertext (hidden before the tell) does not include their key, so the
-// owner must be reminded to run `git-gpg hide` again.
+// owner must be reminded to run `git-veil hide` again.
 // ============================================================================
 
 #[test]
@@ -980,13 +980,13 @@ fn cli_tell_hints_to_rehide_when_ciphertext_exists() {
         stdout
     );
     assert!(
-        stdout.contains("git-gpg hide"),
+        stdout.contains("git-veil hide"),
         "the hint must name the hide command, got: {}",
         stdout
     );
 
     let keyring_text =
-        std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap();
+        std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     assert!(
         keyring_text.contains("alice@example.com") && keyring_text.contains("bob@example.com"),
         "the keyring must contain both entries after the tell, got: {}",
@@ -1011,7 +1011,7 @@ fn cli_tell_no_hint_when_nothing_hidden() {
     let (_, bob_pub) = generate_test_key("bob@example.com");
 
     write_multi_key_secret_keys(
-        &home_temp.path().join(".git-gpg"),
+        &home_temp.path().join(".git-veil"),
         &[owner_sec, alice_sec],
     );
     let owner_keyfile = repo_temp.path().join("owner.pub");
@@ -1089,7 +1089,7 @@ fn cli_removekey_round_trip() {
 
     let (alice_sec, _) = generate_test_key("alice@example.com");
     let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
-    let bob_fingerprint = git_gpg::extract_key_fingerprint(&bob_pub);
+    let bob_fingerprint = git_veil::extract_key_fingerprint(&bob_pub);
     for (name, key) in [
         ("alice-priv.asc", &alice_sec),
         ("bob-priv.asc", &bob_sec),
@@ -1200,7 +1200,7 @@ fn cli_whoami_prints_email_and_key_store() {
     let home_temp = tempfile::tempdir().unwrap();
     git(repo_temp.path(), &["init"]);
     git(repo_temp.path(), &["config", "user.email", "alice@example.com"]);
-    std::fs::create_dir_all(home_temp.path().join(".git-gpg")).unwrap();
+    std::fs::create_dir_all(home_temp.path().join(".git-veil")).unwrap();
 
     let out = run(repo_temp.path(), home_temp.path(), &["whoami"]);
 
@@ -1222,8 +1222,8 @@ fn cli_whoami_prints_email_and_key_store() {
         stdout
     );
     assert!(
-        stdout.contains(&home_temp.path().join(".git-gpg").to_string_lossy().to_string()),
-        "whoami must print the resolved $HOME/.git-gpg key store path, got: {}",
+        stdout.contains(&home_temp.path().join(".git-veil").to_string_lossy().to_string()),
+        "whoami must print the resolved $HOME/.git-veil key store path, got: {}",
         stdout
     );
 }
@@ -1231,7 +1231,7 @@ fn cli_whoami_prints_email_and_key_store() {
 #[test]
 fn cli_list_keys_prints_entries_and_count() {
     let (repo_temp, home_temp, _owner_pub, alice_pub) = setup_told_repo();
-    let alice_fingerprint = git_gpg::extract_key_fingerprint(&alice_pub);
+    let alice_fingerprint = git_veil::extract_key_fingerprint(&alice_pub);
 
     let out = run(repo_temp.path(), home_temp.path(), &["list-keys"]);
 
@@ -1259,8 +1259,8 @@ fn cli_list_keys_prints_entries_and_count() {
     );
 
     // The count line must agree with the keyring actually on disk.
-    let keyring = git_gpg::Keyring::parse(
-        &std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap(),
+    let keyring = git_veil::Keyring::parse(
+        &std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap(),
     )
     .unwrap();
     assert!(
@@ -1277,7 +1277,7 @@ fn cli_list_keys_prints_entries_and_count() {
 #[test]
 fn cli_verify_keyring_prints_repo_id_and_signer() {
     let (repo_temp, home_temp, owner_pub, _alice_pub) = setup_told_repo();
-    let owner_fingerprint = git_gpg::extract_key_fingerprint(&owner_pub);
+    let owner_fingerprint = git_veil::extract_key_fingerprint(&owner_pub);
 
     let out = run(repo_temp.path(), home_temp.path(), &["verify-keyring"]);
 
@@ -1303,8 +1303,8 @@ fn cli_verify_keyring_prints_repo_id_and_signer() {
         "verify-keyring must name the trusted signer fingerprint {owner_fingerprint}, got: {}",
         stdout
     );
-    let keyring = git_gpg::Keyring::parse(
-        &std::fs::read_to_string(repo_temp.path().join(".git-gpg/keyring")).unwrap(),
+    let keyring = git_veil::Keyring::parse(
+        &std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap(),
     )
     .unwrap();
     assert!(
@@ -1335,8 +1335,8 @@ fn re_trust_with_different_key_prints_repin_notice() {
     // trust run changes the machine's pinned record for the repo.
     let (_a_sec, a_pub) = generate_test_key("owner@github.com");
     let (_b_sec, b_pub) = generate_test_key("owner@github.com");
-    let a_fp = git_gpg::extract_key_fingerprint(&a_pub);
-    let b_fp = git_gpg::extract_key_fingerprint(&b_pub);
+    let a_fp = git_veil::extract_key_fingerprint(&a_pub);
+    let b_fp = git_veil::extract_key_fingerprint(&b_pub);
     assert_ne!(
         a_fp, b_fp,
         "the two generated keys must have distinct fingerprints"
@@ -1393,8 +1393,8 @@ fn re_trust_with_different_key_prints_repin_notice() {
     );
 
     // The pin on disk must now name the NEW fingerprint.
-    let pin = git_gpg::TrustPinStore::read_pin(
-        &home_temp.path().join(".git-gpg"),
+    let pin = git_veil::TrustPinStore::read_pin(
+        &home_temp.path().join(".git-veil"),
         "repo+owner@github.com",
     )
     .unwrap()
@@ -1420,7 +1420,7 @@ fn cli_init_and_clean_output_shapes() {
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains("✓ git-gpg initialized"),
+        stdout.contains("✓ git-veil initialized"),
         "init must print its success line, got: {}",
         stdout
     );
@@ -1441,7 +1441,7 @@ fn cli_init_and_clean_output_shapes() {
         stdout
     );
     assert!(
-        !repo_temp.path().join(".git-gpg").exists(),
-        "clean --yes must remove .git-gpg"
+        !repo_temp.path().join(".git-veil").exists(),
+        "clean --yes must remove .git-veil"
     );
 }

@@ -37,13 +37,13 @@ pub fn cmd_changes(
 
     // Find user's entry
     keyring.find_by_email(email)
-        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-gpg tell", email))?;
+        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
 
     // Find user's private key
     let private_key = find_private_key_by_email(gpg_home, email)?;
 
     // Load tracked files
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     // Resolve the requested files to their repo-relative tracked forms
@@ -60,7 +60,7 @@ pub fn cmd_changes(
             )?;
 
             if !tracked.files.contains(&relative) {
-                anyhow::bail!("file not tracked: {}; run git-gpg add '{}' to track it", file, file);
+                anyhow::bail!("file not tracked: {}; run git-veil add '{}' to track it", file, file);
             }
 
             resolved.push(relative);

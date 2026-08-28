@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-remove 1  "git-gpg-remove " 
+.TH git-veil-remove 1  "git-veil-remove " 
 .SH NAME
-git\-gpg\-remove \- Untrack files (leaves any ciphertext in place)
+git\-veil\-remove \- Untrack files (leaves any ciphertext in place)
 .SH SYNOPSIS
-\fBgit\-gpg remove\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil remove\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
 Untrack files (leaves any ciphertext in place)
 .SH OPTIONS
@@ -15,12 +15,12 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 <\fIFILES\fR>
 File(s) to remove
 .SH EXTRA
-Untracks files (removes them from .git\-gpg/tracked.json). The plaintext
+Untracks files (removes them from .git\-veil/tracked.json). The plaintext
 may already be gone — hide deletes it — so the file does not need to
 exist. Untracking is not decrypting: any <name>.secret ciphertext is left
 in place; restore the plaintext with unhide or reveal first if you want
 it gone too.
 
 EXAMPLES
-  $ git\-gpg remove .env
-  $ git\-gpg remove config/credentials.yml
+  $ git\-veil remove .env
+  $ git\-veil remove config/credentials.yml

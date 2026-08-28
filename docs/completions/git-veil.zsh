@@ -1,8 +1,8 @@
-#compdef git-gpg
+#compdef git-veil
 
 autoload -U is-at-least
 
-_git-gpg() {
+_git-veil() {
     typeset -A opt_args
     typeset -a _arguments_options
     local ret=1
@@ -19,14 +19,14 @@ _git-gpg() {
 '--help[Print help]' \
 '-V[Print version]' \
 '--version[Print version]' \
-":: :_git-gpg_commands" \
-"*::: :->git-gpg" \
+":: :_git-veil_commands" \
+"*::: :->git-veil" \
 && ret=0
     case $state in
-    (git-gpg)
+    (git-veil)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:git-gpg-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:git-veil-command-$line[1]:"
         case $line[1] in
             (init)
 _arguments "${_arguments_options[@]}" : \
@@ -36,7 +36,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) containing armoured private key blocks:_default' \
@@ -45,7 +45,7 @@ _arguments "${_arguments_options[@]}" : \
 (export)
 _arguments "${_arguments_options[@]}" : \
 '--output=[Write the armoured public key to this file instead of stdout]:OUTPUT:_files' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':identifier -- Email or fingerprint of the key to export:_default' \
@@ -53,7 +53,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (removekey)
 _arguments "${_arguments_options[@]}" : \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '--yes[Confirm destructive removals\: required when the target is the only private key in the store, and to remove ALL keys when the email matches several]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -63,7 +63,7 @@ _arguments "${_arguments_options[@]}" : \
 (trust)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':repo_id -- Repository ID (e.g., fara+simbo1905@github.com):_default' \
@@ -73,8 +73,8 @@ _arguments "${_arguments_options[@]}" : \
 (tell)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
-'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Collaborator'\''s email:_default' \
@@ -84,8 +84,8 @@ _arguments "${_arguments_options[@]}" : \
 (removeperson)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
-'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Email of the collaborator to remove:_default' \
@@ -114,7 +114,7 @@ _arguments "${_arguments_options[@]}" : \
 (hide)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -123,8 +123,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
-'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -133,8 +133,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
-'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':file -- File to decrypt:_default' \
@@ -144,8 +144,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
-'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':file -- File to unhide:_default' \
@@ -155,8 +155,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
-'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) to check (default\: all tracked files):_default' \
@@ -172,7 +172,7 @@ _arguments "${_arguments_options[@]}" : \
 (whoami)
 _arguments "${_arguments_options[@]}" : \
 '--email=[Email override]:EMAIL:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -180,7 +180,7 @@ _arguments "${_arguments_options[@]}" : \
 (verify-keyring)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -188,7 +188,7 @@ _arguments "${_arguments_options[@]}" : \
 (list-keys)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-gpg)]:GPG_HOME:_files' \
+'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -216,7 +216,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_git-gpg__subcmd__help_commands" \
+":: :_git-veil__subcmd__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -224,7 +224,7 @@ _arguments "${_arguments_options[@]}" : \
     (help)
         words=($line[1] "${words[@]}")
         (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:git-gpg-help-command-$line[1]:"
+        curcontext="${curcontext%:*:*}:git-veil-help-command-$line[1]:"
         case $line[1] in
             (init)
 _arguments "${_arguments_options[@]}" : \
@@ -327,11 +327,11 @@ esac
 esac
 }
 
-(( $+functions[_git-gpg_commands] )) ||
-_git-gpg_commands() {
+(( $+functions[_git-veil_commands] )) ||
+_git-veil_commands() {
     local commands; commands=(
-'init:Initialize git-gpg state (.git-gpg/) in the current repository' \
-'import:Import your private key(s) into the git-gpg key store' \
+'init:Initialize git-veil state (.git-veil/) in the current repository' \
+'import:Import your private key(s) into the git-veil key store' \
 'export:Export an armoured public key from the local key store' \
 'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Verify and pin the repository owner'\''s signing key (per machine)' \
@@ -346,51 +346,51 @@ _git-gpg_commands() {
 'unhide:Decrypt one tracked file back to plaintext and delete its ciphertext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity and key store git-gpg will use' \
+'whoami:Show the identity and key store git-veil will use' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
-'clean:Remove the .git-gpg state directory (--yes required when data would be lost)' \
+'clean:Remove the .git-veil state directory (--yes required when data would be lost)' \
 'completions:Emit a shell completion script for the given shell to stdout' \
-'manpages:Write roff man pages (git-gpg.1 plus one per subcommand) to a directory' \
+'manpages:Write roff man pages (git-veil.1 plus one per subcommand) to a directory' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
-    _describe -t commands 'git-gpg commands' commands "$@"
+    _describe -t commands 'git-veil commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__add_commands] )) ||
-_git-gpg__subcmd__add_commands() {
+(( $+functions[_git-veil__subcmd__add_commands] )) ||
+_git-veil__subcmd__add_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg add commands' commands "$@"
+    _describe -t commands 'git-veil add commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__cat_commands] )) ||
-_git-gpg__subcmd__cat_commands() {
+(( $+functions[_git-veil__subcmd__cat_commands] )) ||
+_git-veil__subcmd__cat_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg cat commands' commands "$@"
+    _describe -t commands 'git-veil cat commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__changes_commands] )) ||
-_git-gpg__subcmd__changes_commands() {
+(( $+functions[_git-veil__subcmd__changes_commands] )) ||
+_git-veil__subcmd__changes_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg changes commands' commands "$@"
+    _describe -t commands 'git-veil changes commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__clean_commands] )) ||
-_git-gpg__subcmd__clean_commands() {
+(( $+functions[_git-veil__subcmd__clean_commands] )) ||
+_git-veil__subcmd__clean_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg clean commands' commands "$@"
+    _describe -t commands 'git-veil clean commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__completions_commands] )) ||
-_git-gpg__subcmd__completions_commands() {
+(( $+functions[_git-veil__subcmd__completions_commands] )) ||
+_git-veil__subcmd__completions_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg completions commands' commands "$@"
+    _describe -t commands 'git-veil completions commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__export_commands] )) ||
-_git-gpg__subcmd__export_commands() {
+(( $+functions[_git-veil__subcmd__export_commands] )) ||
+_git-veil__subcmd__export_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg export commands' commands "$@"
+    _describe -t commands 'git-veil export commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help_commands] )) ||
-_git-gpg__subcmd__help_commands() {
+(( $+functions[_git-veil__subcmd__help_commands] )) ||
+_git-veil__subcmd__help_commands() {
     local commands; commands=(
-'init:Initialize git-gpg state (.git-gpg/) in the current repository' \
-'import:Import your private key(s) into the git-gpg key store' \
+'init:Initialize git-veil state (.git-veil/) in the current repository' \
+'import:Import your private key(s) into the git-veil key store' \
 'export:Export an armoured public key from the local key store' \
 'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Verify and pin the repository owner'\''s signing key (per machine)' \
@@ -405,214 +405,214 @@ _git-gpg__subcmd__help_commands() {
 'unhide:Decrypt one tracked file back to plaintext and delete its ciphertext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity and key store git-gpg will use' \
+'whoami:Show the identity and key store git-veil will use' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
-'clean:Remove the .git-gpg state directory (--yes required when data would be lost)' \
+'clean:Remove the .git-veil state directory (--yes required when data would be lost)' \
 'completions:Emit a shell completion script for the given shell to stdout' \
-'manpages:Write roff man pages (git-gpg.1 plus one per subcommand) to a directory' \
+'manpages:Write roff man pages (git-veil.1 plus one per subcommand) to a directory' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
-    _describe -t commands 'git-gpg help commands' commands "$@"
+    _describe -t commands 'git-veil help commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__add_commands] )) ||
-_git-gpg__subcmd__help__subcmd__add_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__add_commands] )) ||
+_git-veil__subcmd__help__subcmd__add_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help add commands' commands "$@"
+    _describe -t commands 'git-veil help add commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__cat_commands] )) ||
-_git-gpg__subcmd__help__subcmd__cat_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__cat_commands] )) ||
+_git-veil__subcmd__help__subcmd__cat_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help cat commands' commands "$@"
+    _describe -t commands 'git-veil help cat commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__changes_commands] )) ||
-_git-gpg__subcmd__help__subcmd__changes_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__changes_commands] )) ||
+_git-veil__subcmd__help__subcmd__changes_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help changes commands' commands "$@"
+    _describe -t commands 'git-veil help changes commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__clean_commands] )) ||
-_git-gpg__subcmd__help__subcmd__clean_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__clean_commands] )) ||
+_git-veil__subcmd__help__subcmd__clean_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help clean commands' commands "$@"
+    _describe -t commands 'git-veil help clean commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__completions_commands] )) ||
-_git-gpg__subcmd__help__subcmd__completions_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__completions_commands] )) ||
+_git-veil__subcmd__help__subcmd__completions_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help completions commands' commands "$@"
+    _describe -t commands 'git-veil help completions commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__export_commands] )) ||
-_git-gpg__subcmd__help__subcmd__export_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__export_commands] )) ||
+_git-veil__subcmd__help__subcmd__export_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help export commands' commands "$@"
+    _describe -t commands 'git-veil help export commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__help_commands] )) ||
-_git-gpg__subcmd__help__subcmd__help_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__help_commands] )) ||
+_git-veil__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help help commands' commands "$@"
+    _describe -t commands 'git-veil help help commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__hide_commands] )) ||
-_git-gpg__subcmd__help__subcmd__hide_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__hide_commands] )) ||
+_git-veil__subcmd__help__subcmd__hide_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help hide commands' commands "$@"
+    _describe -t commands 'git-veil help hide commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__import_commands] )) ||
-_git-gpg__subcmd__help__subcmd__import_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__import_commands] )) ||
+_git-veil__subcmd__help__subcmd__import_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help import commands' commands "$@"
+    _describe -t commands 'git-veil help import commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__init_commands] )) ||
-_git-gpg__subcmd__help__subcmd__init_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__init_commands] )) ||
+_git-veil__subcmd__help__subcmd__init_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help init commands' commands "$@"
+    _describe -t commands 'git-veil help init commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__list_commands] )) ||
-_git-gpg__subcmd__help__subcmd__list_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__list_commands] )) ||
+_git-veil__subcmd__help__subcmd__list_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help list commands' commands "$@"
+    _describe -t commands 'git-veil help list commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__list-keys_commands] )) ||
-_git-gpg__subcmd__help__subcmd__list-keys_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__list-keys_commands] )) ||
+_git-veil__subcmd__help__subcmd__list-keys_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help list-keys commands' commands "$@"
+    _describe -t commands 'git-veil help list-keys commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__manpages_commands] )) ||
-_git-gpg__subcmd__help__subcmd__manpages_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__manpages_commands] )) ||
+_git-veil__subcmd__help__subcmd__manpages_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help manpages commands' commands "$@"
+    _describe -t commands 'git-veil help manpages commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__remove_commands] )) ||
-_git-gpg__subcmd__help__subcmd__remove_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__remove_commands] )) ||
+_git-veil__subcmd__help__subcmd__remove_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help remove commands' commands "$@"
+    _describe -t commands 'git-veil help remove commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__removekey_commands] )) ||
-_git-gpg__subcmd__help__subcmd__removekey_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__removekey_commands] )) ||
+_git-veil__subcmd__help__subcmd__removekey_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help removekey commands' commands "$@"
+    _describe -t commands 'git-veil help removekey commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__removeperson_commands] )) ||
-_git-gpg__subcmd__help__subcmd__removeperson_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__removeperson_commands] )) ||
+_git-veil__subcmd__help__subcmd__removeperson_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help removeperson commands' commands "$@"
+    _describe -t commands 'git-veil help removeperson commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__reveal_commands] )) ||
-_git-gpg__subcmd__help__subcmd__reveal_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__reveal_commands] )) ||
+_git-veil__subcmd__help__subcmd__reveal_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help reveal commands' commands "$@"
+    _describe -t commands 'git-veil help reveal commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__show-repo-id_commands] )) ||
-_git-gpg__subcmd__help__subcmd__show-repo-id_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__show-repo-id_commands] )) ||
+_git-veil__subcmd__help__subcmd__show-repo-id_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help show-repo-id commands' commands "$@"
+    _describe -t commands 'git-veil help show-repo-id commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__tell_commands] )) ||
-_git-gpg__subcmd__help__subcmd__tell_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__tell_commands] )) ||
+_git-veil__subcmd__help__subcmd__tell_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help tell commands' commands "$@"
+    _describe -t commands 'git-veil help tell commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__trust_commands] )) ||
-_git-gpg__subcmd__help__subcmd__trust_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__trust_commands] )) ||
+_git-veil__subcmd__help__subcmd__trust_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help trust commands' commands "$@"
+    _describe -t commands 'git-veil help trust commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__unhide_commands] )) ||
-_git-gpg__subcmd__help__subcmd__unhide_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__unhide_commands] )) ||
+_git-veil__subcmd__help__subcmd__unhide_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help unhide commands' commands "$@"
+    _describe -t commands 'git-veil help unhide commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__verify-keyring_commands] )) ||
-_git-gpg__subcmd__help__subcmd__verify-keyring_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__verify-keyring_commands] )) ||
+_git-veil__subcmd__help__subcmd__verify-keyring_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help verify-keyring commands' commands "$@"
+    _describe -t commands 'git-veil help verify-keyring commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__help__subcmd__whoami_commands] )) ||
-_git-gpg__subcmd__help__subcmd__whoami_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__whoami_commands] )) ||
+_git-veil__subcmd__help__subcmd__whoami_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg help whoami commands' commands "$@"
+    _describe -t commands 'git-veil help whoami commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__hide_commands] )) ||
-_git-gpg__subcmd__hide_commands() {
+(( $+functions[_git-veil__subcmd__hide_commands] )) ||
+_git-veil__subcmd__hide_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg hide commands' commands "$@"
+    _describe -t commands 'git-veil hide commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__import_commands] )) ||
-_git-gpg__subcmd__import_commands() {
+(( $+functions[_git-veil__subcmd__import_commands] )) ||
+_git-veil__subcmd__import_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg import commands' commands "$@"
+    _describe -t commands 'git-veil import commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__init_commands] )) ||
-_git-gpg__subcmd__init_commands() {
+(( $+functions[_git-veil__subcmd__init_commands] )) ||
+_git-veil__subcmd__init_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg init commands' commands "$@"
+    _describe -t commands 'git-veil init commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__list_commands] )) ||
-_git-gpg__subcmd__list_commands() {
+(( $+functions[_git-veil__subcmd__list_commands] )) ||
+_git-veil__subcmd__list_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg list commands' commands "$@"
+    _describe -t commands 'git-veil list commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__list-keys_commands] )) ||
-_git-gpg__subcmd__list-keys_commands() {
+(( $+functions[_git-veil__subcmd__list-keys_commands] )) ||
+_git-veil__subcmd__list-keys_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg list-keys commands' commands "$@"
+    _describe -t commands 'git-veil list-keys commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__manpages_commands] )) ||
-_git-gpg__subcmd__manpages_commands() {
+(( $+functions[_git-veil__subcmd__manpages_commands] )) ||
+_git-veil__subcmd__manpages_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg manpages commands' commands "$@"
+    _describe -t commands 'git-veil manpages commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__remove_commands] )) ||
-_git-gpg__subcmd__remove_commands() {
+(( $+functions[_git-veil__subcmd__remove_commands] )) ||
+_git-veil__subcmd__remove_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg remove commands' commands "$@"
+    _describe -t commands 'git-veil remove commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__removekey_commands] )) ||
-_git-gpg__subcmd__removekey_commands() {
+(( $+functions[_git-veil__subcmd__removekey_commands] )) ||
+_git-veil__subcmd__removekey_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg removekey commands' commands "$@"
+    _describe -t commands 'git-veil removekey commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__removeperson_commands] )) ||
-_git-gpg__subcmd__removeperson_commands() {
+(( $+functions[_git-veil__subcmd__removeperson_commands] )) ||
+_git-veil__subcmd__removeperson_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg removeperson commands' commands "$@"
+    _describe -t commands 'git-veil removeperson commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__reveal_commands] )) ||
-_git-gpg__subcmd__reveal_commands() {
+(( $+functions[_git-veil__subcmd__reveal_commands] )) ||
+_git-veil__subcmd__reveal_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg reveal commands' commands "$@"
+    _describe -t commands 'git-veil reveal commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__show-repo-id_commands] )) ||
-_git-gpg__subcmd__show-repo-id_commands() {
+(( $+functions[_git-veil__subcmd__show-repo-id_commands] )) ||
+_git-veil__subcmd__show-repo-id_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg show-repo-id commands' commands "$@"
+    _describe -t commands 'git-veil show-repo-id commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__tell_commands] )) ||
-_git-gpg__subcmd__tell_commands() {
+(( $+functions[_git-veil__subcmd__tell_commands] )) ||
+_git-veil__subcmd__tell_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg tell commands' commands "$@"
+    _describe -t commands 'git-veil tell commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__trust_commands] )) ||
-_git-gpg__subcmd__trust_commands() {
+(( $+functions[_git-veil__subcmd__trust_commands] )) ||
+_git-veil__subcmd__trust_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg trust commands' commands "$@"
+    _describe -t commands 'git-veil trust commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__unhide_commands] )) ||
-_git-gpg__subcmd__unhide_commands() {
+(( $+functions[_git-veil__subcmd__unhide_commands] )) ||
+_git-veil__subcmd__unhide_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg unhide commands' commands "$@"
+    _describe -t commands 'git-veil unhide commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__verify-keyring_commands] )) ||
-_git-gpg__subcmd__verify-keyring_commands() {
+(( $+functions[_git-veil__subcmd__verify-keyring_commands] )) ||
+_git-veil__subcmd__verify-keyring_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg verify-keyring commands' commands "$@"
+    _describe -t commands 'git-veil verify-keyring commands' commands "$@"
 }
-(( $+functions[_git-gpg__subcmd__whoami_commands] )) ||
-_git-gpg__subcmd__whoami_commands() {
+(( $+functions[_git-veil__subcmd__whoami_commands] )) ||
+_git-veil__subcmd__whoami_commands() {
     local commands; commands=()
-    _describe -t commands 'git-gpg whoami commands' commands "$@"
+    _describe -t commands 'git-veil whoami commands' commands "$@"
 }
 
-if [ "$funcstack[1]" = "_git-gpg" ]; then
-    _git-gpg "$@"
+if [ "$funcstack[1]" = "_git-veil" ]; then
+    _git-veil "$@"
 else
-    compdef _git-gpg git-gpg
+    compdef _git-veil git-veil
 fi

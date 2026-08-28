@@ -18,7 +18,7 @@ use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input, Tracked
 /// `<name>.secret` file (untracking is not decrypting); unhide/reveal handle
 /// the ciphertext.
 pub fn cmd_remove(repo_root: &Path, files: Vec<String>) -> Result<()> {
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
 
     let mut count = 0;
@@ -31,7 +31,7 @@ pub fn cmd_remove(repo_root: &Path, files: Vec<String>) -> Result<()> {
         )?;
 
         if !tracked.files.contains(&relative) {
-            anyhow::bail!("file not tracked: {}; run git-gpg add '{}' to track it", file, file);
+            anyhow::bail!("file not tracked: {}; run git-veil add '{}' to track it", file, file);
         }
         tracked.remove(&relative);
         count += 1;

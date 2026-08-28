@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-tell 1  "git-gpg-tell " 
+.TH git-veil-tell 1  "git-veil-tell " 
 .SH NAME
-git\-gpg\-tell \- Add a collaborator\*(Aqs public key to the keyring and re\-sign it
+git\-veil\-tell \- Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-gpg tell\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
+\fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
 .SH DESCRIPTION
 Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 .SH OPTIONS
@@ -13,10 +13,10 @@ Add a collaborator\*(Aqs public key to the keyring and re\-sign it
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITGPG_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -38,5 +38,5 @@ this machine, and the owner\*(Aqs private key in the local key store
 (import). Next steps: add files, then hide.
 
 EXAMPLES
-  $ git\-gpg tell alice@example.com alice.pub
-  $ git\-gpg tell alice@example.com alice.pub \-\-passphrase\-stdin < pass.txt
+  $ git\-veil tell alice@example.com alice.pub
+  $ git\-veil tell alice@example.com alice.pub \-\-passphrase\-stdin < pass.txt

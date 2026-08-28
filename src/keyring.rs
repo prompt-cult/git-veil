@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 
 use crate::armour::{SIG_BEGIN, SIG_END};
 
-pub const BEGIN_MARKER: &str = "-----BEGIN GIT-GPG KEYRING-----";
-pub const END_MARKER: &str = "-----END GIT-GPG KEYRING-----";
+pub const BEGIN_MARKER: &str = "-----BEGIN GIT-VEIL KEYRING-----";
+pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
 
 #[derive(Debug, Clone)]
 pub struct KeyringEntry {
@@ -29,10 +29,10 @@ impl Keyring {
     pub fn parse(content: &str) -> Result<Self> {
         let begin_idx = content
             .find(BEGIN_MARKER)
-            .context("Missing BEGIN GIT-GPG KEYRING marker")?;
+            .context("Missing BEGIN GIT-VEIL KEYRING marker")?;
         let end_idx = content
             .find(END_MARKER)
-            .context("Missing END GIT-GPG KEYRING marker")?;
+            .context("Missing END GIT-VEIL KEYRING marker")?;
 
         // The END marker must come strictly after the full BEGIN marker:
         // anything else (END before BEGIN, or an END overlapping the BEGIN
@@ -41,7 +41,7 @@ impl Keyring {
         // parse error — never a slicing panic.
         if end_idx < begin_idx + BEGIN_MARKER.len() {
             anyhow::bail!(
-                "Malformed keyring: END GIT-GPG KEYRING marker precedes or overlaps the BEGIN marker"
+                "Malformed keyring: END GIT-VEIL KEYRING marker precedes or overlaps the BEGIN marker"
             );
         }
 

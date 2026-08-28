@@ -55,13 +55,13 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
     cmd_verify_keyring(repo_root, remote_name, gpg_home)?;
 
     // Load keyring
-    let keyring_path = repo_root.join(".git-gpg/keyring");
+    let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_text = fs::read_to_string(&keyring_path)
         .context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
 
     if keyring.entries.is_empty() {
-        anyhow::bail!("No keys in keyring. Add collaborators with 'git-gpg tell' first.");
+        anyhow::bail!("No keys in keyring. Add collaborators with 'git-veil tell' first.");
     }
 
     // Decode all public keys
@@ -86,7 +86,7 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
     }
 
     // Load tracked files
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     if tracked.files.is_empty() {

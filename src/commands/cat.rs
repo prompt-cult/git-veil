@@ -20,13 +20,13 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
 
     // Find user's entry
     keyring.find_by_email(email)
-        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-gpg tell", email))?;
+        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
 
     // Find user's private key
     let private_key = find_private_key_by_email(gpg_home, email)?;
 
     // Load tracked files
-    let tracked_path = repo_root.join(".git-gpg/tracked.json");
+    let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     // Resolve the user-supplied path to its repo-relative form
@@ -38,7 +38,7 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
     )?;
 
     if !tracked.files.contains(&relative) {
-        anyhow::bail!("file not tracked: {}; run git-gpg add '{}' to track it", file, file);
+        anyhow::bail!("file not tracked: {}; run git-veil add '{}' to track it", file, file);
     }
 
     // Lstat gate: refuse if the tracked path is a committed symlink or not a
@@ -54,7 +54,7 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
 
     // Check encrypted file exists
     if !encrypted_path.exists() {
-        anyhow::bail!("Encrypted file not found: {}; run git-gpg hide to create it", encrypted_path.display());
+        anyhow::bail!("Encrypted file not found: {}; run git-veil hide to create it", encrypted_path.display());
     }
 
     // Read encrypted content

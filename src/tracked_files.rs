@@ -19,7 +19,7 @@ pub struct TrackedFiles {
 /// plaintext as `<name>.secret`, so every tracked path is used both for
 /// reads and for sibling writes). This is the shared boundary check used
 /// when loading tracked.json and before any path use in hide/reveal, so a
-/// malicious tracked.json (committed by any repo writer) cannot make git-gpg
+/// malicious tracked.json (committed by any repo writer) cannot make git-veil
 /// read or write outside the repository.
 pub fn validate_tracked_path(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty() {

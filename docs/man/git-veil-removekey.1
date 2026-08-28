@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-removekey 1  "git-gpg-removekey " 
+.TH git-veil-removekey 1  "git-veil-removekey " 
 .SH NAME
-git\-gpg\-removekey \- Remove a key from the local key store (destructive, local\-only)
+git\-veil\-removekey \- Remove a key from the local key store (destructive, local\-only)
 .SH SYNOPSIS
-\fBgit\-gpg removekey\fR [\fB\-\-yes\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+\fBgit\-veil removekey\fR [\fB\-\-yes\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
 Remove a key from the local key store (destructive, local\-only)
 .SH OPTIONS
@@ -13,7 +13,7 @@ Remove a key from the local key store (destructive, local\-only)
 Confirm destructive removals: required when the target is the only private key in the store, and to remove ALL keys when the email matches several
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -22,7 +22,7 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 Fingerprint or exact case\-insensitive email of the key(s) to remove
 .SH EXTRA
 Drops key material from the LOCAL key store: every armoured block in
-$HOME/.git\-gpg/secret\-keys.pgp and public\-keys.pgp whose key\*(Aqs
+$HOME/.git\-veil/secret\-keys.pgp and public\-keys.pgp whose key\*(Aqs
 fingerprint matches the identifier, or whose exact case\-insensitive email
 matches, is removed from both stores. Prefer the FINGERPRINT when it is
 not unambiguous which key you mean — a shared email that matches several
@@ -45,7 +45,7 @@ removekey never deletes a corrupt store. On success a per\-store summary
 prints the fingerprints removed.
 
 EXAMPLES
-  $ git\-gpg removekey 9A1F...                     # by fingerprint (preferred)
-  $ git\-gpg removekey bob@example.com             # exact case\-insensitive email
-  $ git\-gpg removekey bob@example.com \-\-yes       # confirm only\-private\-key removal
-  $ git\-gpg removekey bob@example.com \-\-gpg\-home /path/to/store
+  $ git\-veil removekey 9A1F...                     # by fingerprint (preferred)
+  $ git\-veil removekey bob@example.com             # exact case\-insensitive email
+  $ git\-veil removekey bob@example.com \-\-yes       # confirm only\-private\-key removal
+  $ git\-veil removekey bob@example.com \-\-gpg\-home /path/to/store

@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-gpg-hide 1  "git-gpg-hide " 
+.TH git-veil-hide 1  "git-veil-hide " 
 .SH NAME
-git\-gpg\-hide \- Encrypt all tracked files to the keyring and delete the plaintexts
+git\-veil\-hide \- Encrypt all tracked files to the keyring and delete the plaintexts
 .SH SYNOPSIS
-\fBgit\-gpg hide\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil hide\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Encrypt all tracked files to the keyring and delete the plaintexts
 .SH OPTIONS
@@ -13,7 +13,7 @@ Encrypt all tracked files to the keyring and delete the plaintexts
 Git remote name
 .TP
 \fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
-Key store directory (default: $HOME/.git\-gpg)
+Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -24,13 +24,13 @@ plaintext, and leaves <name>.secret beside where the plaintext was
 the .secret files: a fresh clone carrying only ciphertext stays
 decryptable by every keyring member via reveal.
 
-hide only works after the repository is initialized (git\-gpg init), the
-owner\*(Aqs key is trusted on this machine (git\-gpg trust), collaborators are
-in the keyring (git\-gpg tell), and files are tracked (git\-gpg add).
+hide only works after the repository is initialized (git\-veil init), the
+owner\*(Aqs key is trusted on this machine (git\-veil trust), collaborators are
+in the keyring (git\-veil tell), and files are tracked (git\-veil add).
 Before encrypting anything, the keyring signature is verified against the
 pinned trusted key. unhide, reveal and cat invert hide.
 
 EXAMPLES
-  $ git\-gpg hide    # encrypt all tracked files, delete the plaintexts
-  $ git\-gpg hide \-\-remote upstream
+  $ git\-veil hide    # encrypt all tracked files, delete the plaintexts
+  $ git\-veil hide \-\-remote upstream
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files

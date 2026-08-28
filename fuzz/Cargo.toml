@@ -1,5 +1,5 @@
 [package]
-name = "git-gpg-fuzz"
+name = "git-veil-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -13,7 +13,7 @@ pgp = "0.19"
 rand = "0.8"
 serde_json = "1.0"
 
-[dependencies.git-gpg]
+[dependencies.git-veil]
 path = ".."
 
 [[bin]]
