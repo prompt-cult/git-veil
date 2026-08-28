@@ -61,7 +61,7 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
     let keyring = Keyring::parse(&keyring_text)?;
 
     if keyring.entries.is_empty() {
-        anyhow::bail!("No keys in keyring. Add collaborators with 'git gpg tell' first.");
+        anyhow::bail!("No keys in keyring. Add collaborators with 'git-gpg tell' first.");
     }
 
     // Decode all public keys

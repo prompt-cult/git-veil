@@ -20,7 +20,7 @@ pub fn cmd_tell(repo_root: &Path, email: &str, collaborator_key_path: &str, remo
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
         anyhow::anyhow!(
-            "no trust established for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            "no trust established for {} (from remote '{}'); run git-gpg trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,
             remote_name,
             repo_id

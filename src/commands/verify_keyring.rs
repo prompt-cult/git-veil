@@ -55,7 +55,7 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     let trusted_fingerprint = match trust_store.get_trusted_fingerprint(&repo_id) {
         Some(fingerprint) => fingerprint,
         None => anyhow::bail!(
-            "no trust established for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            "no trust established for {} (from remote '{}'); run git-gpg trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,
             remote_name,
             repo_id
@@ -68,7 +68,7 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     match TrustPinStore::read_pin(gpg_home, &repo_id)? {
         Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
         Some(pinned) => anyhow::bail!(
-            "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git gpg trust {} <keyfile>",
+            "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git-gpg trust {} <keyfile>",
             repo_id,
             remote_name,
             pinned,
@@ -76,7 +76,7 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
             repo_id
         ),
         None => anyhow::bail!(
-            "no local pin for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            "no local pin for {} (from remote '{}'); run git-gpg trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,
             remote_name,
             repo_id

@@ -1197,7 +1197,7 @@ fn test_tell_fails_if_trust_not_established() {
         msg
     );
     assert!(
-        msg.contains("git gpg trust repo+user@github.com <keyfile>"),
+        msg.contains("git-gpg trust repo+user@github.com <keyfile>"),
         "the failure must state the trust remedy, got: {}",
         msg
     );
@@ -1442,7 +1442,7 @@ fn test_list_keys_empty_keyring() {
         msg
     );
     assert!(
-        msg.contains("(from remote 'origin')") && msg.contains("git gpg trust"),
+        msg.contains("(from remote 'origin')") && msg.contains("git-gpg trust"),
         "list-keys failure must name the remote and the trust remedy, got: {}",
         msg
     );

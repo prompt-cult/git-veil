@@ -15,7 +15,7 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
         anyhow::anyhow!(
-            "no trust established for {} (from remote '{}'); run git gpg trust {} <keyfile> to pin this repository's key on this machine",
+            "no trust established for {} (from remote '{}'); run git-gpg trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,
             remote_name,
             repo_id
@@ -38,7 +38,7 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
     // Find the entry by exact email
     if keyring.find_by_email(email_to_remove).is_none() {
         anyhow::bail!(
-            "'{}' not found in keyring; check the email against git gpg list-keys",
+            "'{}' not found in keyring; check the email against git-gpg list-keys",
             email_to_remove
         );
     }

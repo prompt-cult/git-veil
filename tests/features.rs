@@ -2283,7 +2283,7 @@ fn verify_fails_closed_when_pin_missing() {
         hide_msg
     );
     assert!(
-        hide_msg.contains("git gpg trust"),
+        hide_msg.contains("git-gpg trust"),
         "the pin-missing message must state the remedy, got: {}",
         hide_msg
     );
@@ -2297,7 +2297,7 @@ fn verify_fails_closed_when_pin_missing() {
         reveal_msg.contains("no local pin")
             && reveal_msg.contains("repo+owner@github.com")
             && reveal_msg.contains("(from remote 'origin')")
-            && reveal_msg.contains("git gpg trust"),
+            && reveal_msg.contains("git-gpg trust"),
         "reveal must fail with the pin-missing message naming repo_id, remote and remedy, got: {}",
         reveal_msg
     );
@@ -2381,7 +2381,7 @@ fn verify_fails_closed_when_pin_mismatches() {
         msg
     );
     assert!(
-        msg.contains("re-run git gpg trust"),
+        msg.contains("re-run git-gpg trust"),
         "the mismatch message must state the remedy, got: {}",
         msg
     );
@@ -2468,7 +2468,7 @@ fn trust_error_names_remote_and_repo_id() {
         msg
     );
     assert!(
-        msg.contains("git gpg trust repo+owner@github.com <keyfile>"),
+        msg.contains("git-gpg trust repo+owner@github.com <keyfile>"),
         "the error must state the trust remedy, got: {}",
         msg
     );
