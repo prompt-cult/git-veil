@@ -2093,6 +2093,259 @@ fn cat_rejects_path_escaping_the_repo() {
 }
 
 // ============================================================================
+// committed tracked.json + committed symlink: read gates refuse symlinks
+//
+// tracked.json is attacker-writable repo content. A committed symlink at a
+// tracked path must never be followed: hide/cat/changes would read outside
+// the repo and exfiltrate via ciphertext, and reveal/unhide would write
+// through the link (or silently replace it).
+// ============================================================================
+
+/// Scans `dir` recursively; true if any `*.secret` file contains `needle`.
+fn any_secret_file_contains(dir: &std::path::Path, needle: &str) -> bool {
+    let mut found = false;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                found = found || any_secret_file_contains(&path, needle);
+            } else if path.to_string_lossy().ends_with(".secret") {
+                if let Ok(content) = std::fs::read(&path) {
+                    found = found || String::from_utf8_lossy(&content).contains(needle);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// Attack setup: a trusted repo whose committed tracked.json names
+/// `link.txt` — a symlink inside the repo targeting `../<outside_name>`,
+/// a file OUTSIDE the repository. Returns
+/// (repo_temp, gpg_home, owner_pub, outside_file, link_path).
+fn setup_tracked_symlink_repo(
+    outside_name: &str,
+) -> (
+    tempfile::TempDir,
+    PathBuf,
+    pgp::composed::SignedPublicKey,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+
+    let outside_file = repo_temp.path().parent().unwrap().join(outside_name);
+    std::fs::write(&outside_file, "VICTIM-SSH-PRIVATE-KEY").unwrap();
+    std::os::unix::fs::symlink(
+        format!("../{}", outside_name),
+        repo_temp.path().join("link.txt"),
+    )
+    .unwrap();
+
+    // Attacker-committed tracked.json naming the symlink: the entry itself
+    // is relative and passes C2 validation — only the lstat gate can see
+    // that it is a symlink.
+    write_tracked_json(repo_temp.path(), &["link.txt"]);
+
+    let link_path = repo_temp.path().join("link.txt");
+    (repo_temp, gpg_home, owner_pub, outside_file, link_path)
+}
+
+#[test]
+fn hide_refuses_tracked_symlink() {
+    let (repo_temp, gpg_home, _owner_pub, outside_file, link_path) =
+        setup_tracked_symlink_repo("outside-hide.txt");
+
+    let result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+
+    let err = result
+        .err()
+        .expect("hide must refuse to read a tracked symlink");
+    assert!(
+        err.to_string().contains("symlink"),
+        "the error must say the tracked path is a symlink, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("link.txt"),
+        "the error must name the offending path, got: {}",
+        err
+    );
+    assert!(
+        link_path
+            .symlink_metadata()
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false),
+        "hide must not delete or replace the committed symlink"
+    );
+    assert_eq!(
+        std::fs::read(&outside_file).unwrap(),
+        b"VICTIM-SSH-PRIVATE-KEY".as_slice(),
+        "the file outside the repo must be untouched"
+    );
+    assert!(
+        !repo_temp.path().join("link.txt.secret").exists(),
+        "hide must not write a ciphertext for a tracked symlink"
+    );
+    assert!(
+        !any_secret_file_contains(repo_temp.path(), "VICTIM-SSH-PRIVATE-KEY"),
+        "the outside file's content must never appear in any .secret in the repo"
+    );
+
+    let _ = std::fs::remove_file(&outside_file);
+}
+
+#[test]
+fn cat_refuses_tracked_symlink() {
+    let (repo_temp, gpg_home, owner_pub, outside_file, link_path) =
+        setup_tracked_symlink_repo("outside-cat.txt");
+
+    // A planted ciphertext beside the symlink: in the vulnerable state cat
+    // happily decrypts it, so the red failure is a success, not a parse error.
+    let planted = repo_temp.path().join("link.txt.secret");
+    std::fs::write(
+        &planted,
+        encrypt_to_gpg_key(b"ATTACKER-PLANTED", &owner_pub).unwrap(),
+    )
+    .unwrap();
+
+    let result = cmd_cat(
+        repo_temp.path(),
+        "link.txt",
+        "owner@github.com",
+        "origin",
+        &gpg_home,
+        None,
+    );
+
+    let err = result
+        .err()
+        .expect("cat must refuse to operate on a tracked symlink");
+    assert!(
+        err.to_string().contains("symlink"),
+        "the error must say the tracked path is a symlink, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("link.txt"),
+        "the error must name the offending path, got: {}",
+        err
+    );
+    assert!(
+        link_path
+            .symlink_metadata()
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false),
+        "cat must not delete or replace the committed symlink"
+    );
+    assert_eq!(
+        std::fs::read(&outside_file).unwrap(),
+        b"VICTIM-SSH-PRIVATE-KEY".as_slice(),
+        "the file outside the repo must be untouched"
+    );
+
+    let _ = std::fs::remove_file(&outside_file);
+}
+
+#[test]
+fn changes_refuses_tracked_symlink() {
+    let (repo_temp, gpg_home, owner_pub, outside_file, link_path) =
+        setup_tracked_symlink_repo("outside-changes.txt");
+
+    // A planted ciphertext beside the symlink: in the vulnerable state
+    // changes reads the outside file THROUGH the link and diffs it, leaking
+    // its lines in the output.
+    let planted = repo_temp.path().join("link.txt.secret");
+    std::fs::write(
+        &planted,
+        encrypt_to_gpg_key(b"ATTACKER-PLANTED", &owner_pub).unwrap(),
+    )
+    .unwrap();
+
+    let result = cmd_changes(
+        repo_temp.path(),
+        vec![],
+        "owner@github.com",
+        "origin",
+        &gpg_home,
+        None,
+    );
+
+    let err = result
+        .err()
+        .expect("changes must refuse to read a tracked symlink");
+    assert!(
+        err.to_string().contains("symlink"),
+        "the error must say the tracked path is a symlink, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("link.txt"),
+        "the error must name the offending path, got: {}",
+        err
+    );
+    assert!(
+        link_path
+            .symlink_metadata()
+            .map(|m| m.file_type().is_symlink())
+            .unwrap_or(false),
+        "changes must not delete or replace the committed symlink"
+    );
+    assert_eq!(
+        std::fs::read(&outside_file).unwrap(),
+        b"VICTIM-SSH-PRIVATE-KEY".as_slice(),
+        "the file outside the repo must be untouched"
+    );
+
+    let _ = std::fs::remove_file(&outside_file);
+}
+
+#[test]
+fn reveal_refuses_to_write_through_symlink() {
+    let (repo_temp, gpg_home, owner_pub, outside_file, link_path) =
+        setup_tracked_symlink_repo("outside-reveal.txt");
+
+    let planted = repo_temp.path().join("link.txt.secret");
+    std::fs::write(
+        &planted,
+        encrypt_to_gpg_key(b"pwned", &owner_pub).unwrap(),
+    )
+    .unwrap();
+
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+
+    let err = result
+        .err()
+        .expect("reveal must refuse to write through a tracked symlink");
+    assert!(
+        err.to_string().contains("symlink"),
+        "the error must say the tracked path is a symlink, got: {}",
+        err
+    );
+    assert!(
+        err.to_string().contains("link.txt"),
+        "the error must name the offending path, got: {}",
+        err
+    );
+    assert!(
+        link_path.is_symlink(),
+        "reveal must not replace the committed symlink with a regular file"
+    );
+    assert_eq!(
+        std::fs::read_link(&link_path).unwrap(),
+        std::path::Path::new("../outside-reveal.txt"),
+        "the link must still point where it did"
+    );
+    assert_eq!(
+        std::fs::read(&outside_file).unwrap(),
+        b"VICTIM-SSH-PRIVATE-KEY".as_slice(),
+        "the link target outside the repo must be untouched"
+    );
+
+    let _ = std::fs::remove_file(&outside_file);
+}
+
+// ============================================================================
 // changes: report where on-disk plaintext differs from the last hidden version
 // ============================================================================
 

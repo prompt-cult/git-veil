@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
-use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input};
+use crate::tracked_files::{ensure_regular_file, PathResolveMode, resolve_repo_relative_input};
 use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
 
 /// Splits bytes into lines on '\n' for the compact text diff.
@@ -70,6 +70,11 @@ pub fn cmd_changes(
 
     let mut changed = Vec::new();
     for file in &targets {
+        // Lstat gate: refuse if the tracked path is a committed symlink —
+        // reading the on-disk plaintext through it would diff (and print)
+        // the link target outside the repository.
+        ensure_regular_file(repo_root, file)?;
+
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
 

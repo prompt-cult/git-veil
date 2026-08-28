@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
-use crate::tracked_files::validate_tracked_path;
+use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email, Keyring, TrackedFiles};
 
 /// Decrypts all tracked files using the user's private key.
@@ -42,6 +42,11 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
+
+        // Lstat gate: writing the plaintext through a committed symlink
+        // would corrupt the link target outside the repo (or silently
+        // replace the link); refuse for consistency with the read gates.
+        ensure_regular_file(repo_root, file)?;
 
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);

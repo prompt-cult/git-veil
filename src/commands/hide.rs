@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
-use crate::tracked_files::validate_tracked_path;
+use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, validate_public_key_for_use, KeyUse, Keyring, TrackedFiles};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
@@ -97,6 +97,11 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
+
+        // Lstat gate: a committed tracked.json can name a committed symlink
+        // pointing outside the repo; reading through it would exfiltrate the
+        // link target into the ciphertext written back to the repo.
+        ensure_regular_file(repo_root, file)?;
 
         // Read plaintext
         let plaintext = fs::read(repo_root.join(file))

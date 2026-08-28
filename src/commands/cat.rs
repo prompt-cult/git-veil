@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
-use crate::tracked_files::{PathResolveMode, resolve_repo_relative_input};
+use crate::tracked_files::{ensure_regular_file, PathResolveMode, resolve_repo_relative_input};
 use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
 
 /// Decrypts a single tracked file to stdout without touching disk state.
@@ -40,6 +40,10 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
     if !tracked.files.contains(&relative) {
         anyhow::bail!("file not tracked: {}; run git-gpg add '{}' to track it", file, file);
     }
+
+    // Lstat gate: refuse if the tracked path is a committed symlink or not a
+    // regular file (absent is fine — the plaintext is normally hidden).
+    ensure_regular_file(repo_root, &relative)?;
 
     // Compute encrypted path
     let encrypted_path = encrypted_path_for(repo_root, &relative);

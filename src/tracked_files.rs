@@ -50,6 +50,44 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Defence in depth: the tracked path, as it exists on disk under
+/// `repo_root`, must not be a symlink and must be a regular file.
+///
+/// A committed tracked.json can name a path another repo writer has
+/// committed as a SYMLINK pointing outside the repository (e.g.
+/// `innocent.txt` -> `/home/victim/.ssh/id_rsa`). Opening such a path for
+/// reading would leak the link target into ciphertext committed back to the
+/// repo (hide), or print/diff it (cat/changes); writing through it would
+/// corrupt the link target or silently replace the link. The lstat gate
+/// (symlink_metadata, which does not follow the link) rejects this,
+/// naming the path. A path that does not exist on disk is accepted: for
+/// cat/changes/reveal/unhide the plaintext is normally ABSENT (the file is
+/// hidden and only the `.secret` ciphertext remains).
+pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
+    let full_path = repo_root.join(file);
+    let metadata = match fs::symlink_metadata(&full_path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("Failed to stat tracked path: {}", file.display()));
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        anyhow::bail!(
+            "tracked path is a symlink; refusing to read — remove the link and re-add the real file: {}",
+            file.display()
+        );
+    }
+    if !metadata.is_file() {
+        anyhow::bail!(
+            "tracked path is not a regular file: {}",
+            file.display()
+        );
+    }
+    Ok(())
+}
+
 /// Defence in depth: lexically joins `path` under a repository root and
 /// resolves `.`/`..` components; the result must still be inside that root.
 /// The component check in `validate_tracked_path` already rejects `..`, so
