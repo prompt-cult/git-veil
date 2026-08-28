@@ -19,6 +19,9 @@ themselves. The keyring of collaborator public keys in `.git-gpg/keyring` is
 signed by that trusted key, and the signature is verified before any
 encryption, decryption or keyring mutation. Every gated command fails closed:
 without a pin, or with a signature that does not verify, nothing is touched.
+The key store and its pins are the trust boundary for every repository that
+uses that store, so sharing one store across mutually distrusting repositories
+is not advised.
 
 ## Installation
 

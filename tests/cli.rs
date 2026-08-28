@@ -1314,6 +1314,97 @@ fn cli_verify_keyring_prints_repo_id_and_signer() {
     );
 }
 
+// ============================================================================
+// trust re-pin notice: re-trusting with a DIFFERENT key silently rewrites the
+// machine's pinned record, so the change must be announced loudly first.
+// ============================================================================
+
+#[test]
+fn re_trust_with_different_key_prints_repin_notice() {
+    let repo_temp = tempfile::tempdir().unwrap();
+    let home_temp = tempfile::tempdir().unwrap();
+
+    git(repo_temp.path(), &["init"]);
+    git(
+        repo_temp.path(),
+        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
+    );
+    git(repo_temp.path(), &["config", "user.email", "owner@github.com"]);
+
+    // Two DIFFERENT keys carrying the same owner identity: only the second
+    // trust run changes the machine's pinned record for the repo.
+    let (_a_sec, a_pub) = generate_test_key("owner@github.com");
+    let (_b_sec, b_pub) = generate_test_key("owner@github.com");
+    let a_fp = git_gpg::extract_key_fingerprint(&a_pub);
+    let b_fp = git_gpg::extract_key_fingerprint(&b_pub);
+    assert_ne!(
+        a_fp, b_fp,
+        "the two generated keys must have distinct fingerprints"
+    );
+
+    write_public_key_file(&a_pub, &repo_temp.path().join("owner-a.pub"));
+    write_public_key_file(&b_pub, &repo_temp.path().join("owner-b.pub"));
+
+    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
+    assert!(out.status.success(), "init failed: {:?}", out.stderr);
+
+    // First-ever trust: no pin exists yet, so there is nothing being
+    // replaced and the notice must stay quiet.
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["trust", "repo+owner@github.com", "owner-a.pub"],
+    );
+    assert!(out.status.success(), "first trust failed: {:?}", out.stderr);
+    assert!(
+        !String::from_utf8_lossy(&out.stdout).contains("⚠ replacing"),
+        "first-ever trust must not print the re-pin notice, got: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    // Re-trust with a different key: the notice must name the repo and BOTH
+    // fingerprints, and the trust run must still succeed.
+    let out = run(
+        repo_temp.path(),
+        home_temp.path(),
+        &["trust", "repo+owner@github.com", "owner-b.pub"],
+    );
+    assert!(
+        out.status.success(),
+        "re-trust with a different key must still succeed: stdout={:?} stderr={:?}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("⚠ replacing the previously pinned fingerprint"),
+        "re-trust with a different key must print the re-pin notice, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains(&a_fp) && stdout.contains(&b_fp),
+        "the notice must name both the old ({a_fp}) and new ({b_fp}) fingerprints, got: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("repo+owner@github.com"),
+        "the notice must name the repository ID, got: {}",
+        stdout
+    );
+
+    // The pin on disk must now name the NEW fingerprint.
+    let pin = git_gpg::TrustPinStore::read_pin(
+        &home_temp.path().join(".git-gpg"),
+        "repo+owner@github.com",
+    )
+    .unwrap()
+    .expect("pin must exist after re-trust");
+    assert_eq!(
+        pin, b_fp,
+        "the pin must record the newly trusted fingerprint"
+    );
+}
+
 #[test]
 fn cli_init_and_clean_output_shapes() {
     let repo_temp = tempfile::tempdir().unwrap();

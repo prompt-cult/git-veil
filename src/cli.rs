@@ -154,6 +154,11 @@ The provided repo_id must match the one computed from the remote push URL
 (see show-repo-id), the key file must carry the repository's email
 identity, and the key must not be expired, revoked or unsigned.
 
+Trust domain: the key store named by --gpg-home holds this machine's pins
+for EVERY repository that uses that store, so the store and its pins are
+one trust boundary. Sharing a single store across mutually distrusting
+repositories is not advised; use a separate --gpg-home per trust domain.
+
 Requires init first. Typical next step: tell.
 
 EXAMPLES
@@ -169,7 +174,8 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-gpg)
+        /// Key store directory (default: $HOME/.git-gpg). The store and its
+        /// pins are the trust boundary for every repository that uses it.
         #[arg(long)]
         gpg_home: Option<PathBuf>,
     },

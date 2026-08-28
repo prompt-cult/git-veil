@@ -46,6 +46,20 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
     // Import key to GPG home
     import_key_to_gpg_home(gpg_home, &key_content)?;
 
+    // Re-trust visibility: if a pin already exists for this repo and names a
+    // DIFFERENT fingerprint, this machine's record of the repository's trust
+    // anchor is about to CHANGE — say so loudly before rewriting it. Trust is
+    // the explicit re-pin action, so we proceed; the notice is the point. An
+    // identical re-pin is idempotent and stays quiet.
+    if let Some(previous) = TrustPinStore::read_pin(gpg_home, repo_id)? {
+        if !previous.eq_ignore_ascii_case(&fingerprint) {
+            println!(
+                "⚠ replacing the previously pinned fingerprint {} for {} with {}",
+                previous, repo_id, fingerprint
+            );
+        }
+    }
+
     // Update trust store
     let trust_path = repo_root.join(".git-gpg/trust.json");
     let mut trust_store = TrustStore::load_from_file(&trust_path)?;
@@ -54,6 +68,12 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
 
     // Pin the fingerprint on this machine, outside the repo: trust.json is
     // committed (attacker-writable), so the local pin is the real anchor.
+    //
+    // Ordering invariant: trust.json is written BEFORE the pin. verify
+    // compares the committed trust.json fingerprint against this pin and
+    // fails closed on a missing or mismatched pin, so if the process dies
+    // between the two writes the result is fail-closed (mismatch), never a
+    // state where a changed anchor verifies without an explicit re-pin.
     TrustPinStore::write_pin(gpg_home, repo_id, &fingerprint)
         .context("Failed to write local trust pin")?;
 
