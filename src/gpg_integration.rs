@@ -6,10 +6,16 @@ use rand::thread_rng;
 use std::fs;
 use std::path::PathBuf;
 
-/// Returns the default GPG home directory (~/.gnupg).
-pub fn default_gpg_home() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home).join(".gnupg")
+/// Returns the default GPG home directory (`$HOME/.gnupg`).
+///
+/// Errors when `HOME` is unset or empty instead of silently falling back to
+/// a world-writable location such as `/tmp`, where an attacker on a
+/// multi-user system could plant or tamper with key material.
+pub fn default_gpg_home() -> Result<PathBuf> {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".gnupg")),
+        _ => anyhow::bail!("HOME is not set; cannot locate the key store; pass --gpg-home"),
+    }
 }
 
 /// Imports an armoured public key to the GPG home directory.

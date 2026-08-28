@@ -5,9 +5,10 @@
 
 use git_gpg::{
     check_email_in_identities, cmd_add, cmd_hide, cmd_init, cmd_remove, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_verify_keyring, encrypt_to_gpg_key, extract_content_to_verify_from_keyring,
-    extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
-    sign_keyring_content, Keyring, KeyringEntry, TrustStore, TrackedFiles,
+    cmd_trust, cmd_verify_keyring, default_gpg_home, encrypt_to_gpg_key,
+    extract_content_to_verify_from_keyring, extract_key_fingerprint, find_private_key_by_email,
+    find_private_key_by_fingerprint, sign_keyring_content, Keyring, KeyringEntry, TrustStore,
+    TrackedFiles,
 };
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
@@ -74,6 +75,54 @@ fn setup_git_repo_with_origin_remote() -> tempfile::TempDir {
 fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &PathBuf) {
     let armored = public_key.to_armored_string(Default::default()).unwrap();
     std::fs::write(path, armored).unwrap();
+}
+
+// ============================================================================
+// default_gpg_home refuses to fall back to /tmp when HOME is unset (M6)
+// ============================================================================
+
+#[test]
+#[serial]
+fn default_gpg_home_errors_when_home_unset() {
+    let saved = std::env::var("HOME").ok();
+    std::env::remove_var("HOME");
+
+    let result = default_gpg_home();
+
+    match saved {
+        Some(v) => std::env::set_var("HOME", v),
+        None => std::env::remove_var("HOME"),
+    }
+
+    let err = result
+        .err()
+        .expect("unset HOME must be an error, not a silent /tmp fallback");
+    assert!(
+        err.to_string().contains("HOME"),
+        "the error must mention HOME, got: {}",
+        err
+    );
+}
+
+#[test]
+#[serial]
+fn default_gpg_home_uses_home_when_set() {
+    let saved = std::env::var("HOME").ok();
+    let temp = tempfile::tempdir().unwrap();
+    std::env::set_var("HOME", temp.path());
+
+    let result = default_gpg_home();
+
+    match saved {
+        Some(v) => std::env::set_var("HOME", v),
+        None => std::env::remove_var("HOME"),
+    }
+
+    assert_eq!(
+        result.expect("a set HOME must resolve to $HOME/.gnupg"),
+        temp.path().join(".gnupg"),
+        "default_gpg_home must be $HOME/.gnupg"
+    );
 }
 
 // ============================================================================

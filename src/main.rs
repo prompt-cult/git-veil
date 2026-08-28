@@ -154,7 +154,7 @@ fn resolve_email(email: Option<String>) -> Result<String> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let gpg_home = default_gpg_home();
+    let gpg_home = default_gpg_home()?;
 
     match cli.command {
         Commands::Init => cmd_init()?,

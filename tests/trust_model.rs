@@ -688,7 +688,7 @@ fn test_decrypt_with_gpg_key() {
 #[serial]
 fn test_custom_gpg_home_location() {
     let _temp = tempfile::tempdir().unwrap();
-    let home = default_gpg_home();
+    let home = default_gpg_home().expect("HOME must be set to resolve the default gpg home");
     assert!(home.exists() || home.to_str().unwrap().contains(".gnupg"));
 }
 
@@ -2198,7 +2198,10 @@ fn test_tampered_keyring_blocks_hide() {
     std::fs::write(&keyring_path, tampered_content).unwrap();
     
     // Hide should fail with tampered keyring
-    let result = cmd_hide("origin", &default_gpg_home());
+    let result = cmd_hide(
+        "origin",
+        &default_gpg_home().expect("HOME must be set to resolve the default gpg home"),
+    );
     assert!(result.is_err());
 }
 
@@ -2217,7 +2220,11 @@ fn test_tampered_keyring_blocks_reveal() {
     std::fs::write(&keyring_path, tampered_content).unwrap();
     
     // Reveal should fail with tampered keyring
-    let result = cmd_reveal("alice@example.com", "origin", &default_gpg_home());
+    let result = cmd_reveal(
+        "alice@example.com",
+        "origin",
+        &default_gpg_home().expect("HOME must be set to resolve the default gpg home"),
+    );
     assert!(result.is_err());
 }
 
