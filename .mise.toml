@@ -1,3 +1,4 @@
 [tools]
 rust = "stable"
+# real GnuPG binary, used only by the tests/interop.rs contract tests
 gpg = "system"

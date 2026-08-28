@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
-use crate::gpg_integration::split_armored_private_key_blocks;
+use crate::openpgp::split_armored_private_key_blocks;
 use crate::pubkey::extract_email_from_user_id;
 use pgp::types::KeyDetails;
 
@@ -18,19 +18,19 @@ fn primary_user_id(key: &SignedSecretKey) -> String {
 }
 
 /// Imports armoured private key blocks from one or more files into the
-/// tool-owned key store (<gpg_home>/secret-keys.pgp).
+/// tool-owned key store (<key_store>/secret-keys.pgp).
 ///
 /// Relative key-file paths resolve against `repo_root`. Each file must
 /// contain at least one parseable private key block, or the command refuses
 /// it. Keys whose fingerprint is already present in the secret key store are
 /// skipped rather than duplicated. On success the store is written as
 /// newline-separated armoured private key blocks, the exact multi-block
-/// format the reader in gpg_integration.rs supports.
-pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Result<()> {
+/// format the reader in openpgp.rs supports.
+pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Result<()> {
     if files.is_empty() {
         anyhow::bail!("no key files given; pass one or more armoured private key files, e.g. git-veil import alice.pgp");
     }
-    let secret_keys_path = gpg_home.join("secret-keys.pgp");
+    let secret_keys_path = key_store.join("secret-keys.pgp");
 
     let mut secret_keys_content = if secret_keys_path.exists() {
         fs::read_to_string(&secret_keys_path).context("Failed to read secret-keys.pgp")?
@@ -97,7 +97,7 @@ pub fn cmd_import(repo_root: &Path, files: &[String], gpg_home: &PathBuf) -> Res
         }
     }
 
-    fs::create_dir_all(gpg_home).context("Failed to create key store directory")?;
+    fs::create_dir_all(key_store).context("Failed to create key store directory")?;
     // Atomic append = read-existing (above) + write_atomic(whole content).
     // The O(n) rewrite of the accumulated store is the accepted trade at
     // this scale (a handful of armoured blocks); a torn secret-keys store

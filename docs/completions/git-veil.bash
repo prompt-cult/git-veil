@@ -189,7 +189,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__cat)
-            opts="-h --email --remote --gpg-home --passphrase-stdin --help"
+            opts="-h --email --remote --key-store --passphrase-stdin --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -203,7 +203,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -215,7 +215,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__changes)
-            opts="-h --email --remote --gpg-home --passphrase-stdin --help"
+            opts="-h --email --remote --key-store --passphrase-stdin --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -229,7 +229,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -269,7 +269,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__export)
-            opts="-h --output --gpg-home --help"
+            opts="-h --output --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -279,7 +279,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -627,7 +627,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__hide)
-            opts="-h --remote --gpg-home --help"
+            opts="-h --remote --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -637,7 +637,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -649,13 +649,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__import)
-            opts="-h --gpg-home --help"
+            opts="-h --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -695,7 +695,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__list__subcmd__keys)
-            opts="-h --remote --gpg-home --help"
+            opts="-h --remote --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -705,7 +705,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -745,13 +745,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__removekey)
-            opts="-h --yes --gpg-home --help"
+            opts="-h --yes --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -763,7 +763,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__removeperson)
-            opts="-h --remote --gpg-home --passphrase-stdin --help"
+            opts="-h --remote --key-store --passphrase-stdin --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -773,7 +773,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -785,7 +785,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__reveal)
-            opts="-h --email --remote --gpg-home --passphrase-stdin --help"
+            opts="-h --email --remote --key-store --passphrase-stdin --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -799,7 +799,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -829,7 +829,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__tell)
-            opts="-h --remote --gpg-home --passphrase-stdin --help"
+            opts="-h --remote --key-store --passphrase-stdin --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -839,7 +839,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -851,7 +851,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__trust)
-            opts="-h --remote --gpg-home --help"
+            opts="-h --remote --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -861,7 +861,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -873,7 +873,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__unhide)
-            opts="-h --email --remote --gpg-home --passphrase-stdin --help"
+            opts="-h --email --remote --key-store --passphrase-stdin --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -887,7 +887,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -899,7 +899,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__verify__subcmd__keyring)
-            opts="-h --remote --gpg-home --help"
+            opts="-h --remote --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -909,7 +909,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -921,7 +921,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__whoami)
-            opts="-h --email --gpg-home --help"
+            opts="-h --email --key-store --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -931,7 +931,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --gpg-home)
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

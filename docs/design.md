@@ -153,7 +153,7 @@ always either the old content or the new content, never a mix. Covered writes:
 the keyring (src/commands/init.rs:41, src/commands/tell.rs:96,
 src/commands/removeperson.rs:67), tracked.json (src/tracked_files.rs:265),
 trust.json and pins (src/trust_store.rs:41, 103), the secret- and public-key
-stores (src/commands/import.rs:106, src/gpg_integration.rs:44), ciphertext
+stores (src/commands/import.rs:106, src/openpgp.rs:44), ciphertext
 (src/commands/hide.rs:147), restored plaintext (src/commands/reveal.rs:97,
 src/commands/unhide.rs:96), export output (src/commands/export.rs:78), and the
 removekey rewrite (src/commands/removekey.rs:234). Key-store appends are

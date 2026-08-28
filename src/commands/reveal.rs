@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email, Keyring, TrackedFiles};
+use crate::{cmd_verify_keyring, decrypt_with_private_key, find_private_key_by_email, Keyring, TrackedFiles};
 
 /// Decrypts all tracked files using the user's private key.
 ///
@@ -13,9 +13,9 @@ use crate::{cmd_verify_keyring, decrypt_with_gpg_key, find_private_key_by_email,
 /// validated before any use, so a malicious committed tracked.json cannot
 /// make reveal write attacker-chosen plaintext to an arbitrary path outside
 /// the repository.
-pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<()> {
+pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, key_store: &PathBuf, passphrase: Option<&str>) -> Result<()> {
     // Verify keyring signature first
-    cmd_verify_keyring(repo_root, remote_name, gpg_home)?;
+    cmd_verify_keyring(repo_root, remote_name, key_store)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -28,7 +28,7 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
         .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
 
     // Find user's private key
-    let private_key = find_private_key_by_email(gpg_home, email)?;
+    let private_key = find_private_key_by_email(key_store, email)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -73,7 +73,7 @@ pub fn cmd_reveal(repo_root: &Path, email: &str, remote_name: &str, gpg_home: &P
             .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
 
         // Decrypt
-        let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
+        let plaintext = decrypt_with_private_key(&ciphertext, &private_key, passphrase)?;
 
         prepared.push((file.clone(), encrypted_path, plaintext));
     }

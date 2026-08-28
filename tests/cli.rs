@@ -2,7 +2,7 @@
 //!
 //! These spawn the real `git-veil` binary via assert_cmd. Each test builds its
 //! own temporary git repository and fake $HOME, so every child process gets an
-//! isolated GNUPGHOME ($HOME/.git-veil) without touching the test process's
+//! isolated key store ($HOME/.git-veil) without touching the test process's
 //! working directory or environment — hence no #[serial] is needed.
 
 use assert_cmd::Command;
@@ -65,7 +65,7 @@ fn generate_protected_test_key(
     (secret_key, public_key)
 }
 
-fn write_multi_key_secret_keys(gpg_home: &Path, keys: &[pgp::composed::SignedSecretKey]) {
+fn write_multi_key_secret_keys(key_store: &Path, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
         if !content.is_empty() {
@@ -73,8 +73,8 @@ fn write_multi_key_secret_keys(gpg_home: &Path, keys: &[pgp::composed::SignedSec
         }
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
-    std::fs::create_dir_all(gpg_home).unwrap();
-    std::fs::write(gpg_home.join("secret-keys.pgp"), content).unwrap();
+    std::fs::create_dir_all(key_store).unwrap();
+    std::fs::write(key_store.join("secret-keys.pgp"), content).unwrap();
 }
 
 fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Path) {
@@ -341,10 +341,10 @@ fn bare_help_lists_every_command_with_one_liner() {
     }
 
     // A flag dump would enumerate subcommand options here; the one-liner
-    // list must not. --gpg-home is a stable marker: it belongs to several
+    // list must not. --key-store is a stable marker: it belongs to several
     // subcommands but never to the table of contents.
     assert!(
-        !stdout.contains("--gpg-home"),
+        !stdout.contains("--key-store"),
         "git-veil help must be a one-liner table of contents, not a flag dump\n---\n{stdout}"
     );
 }
@@ -440,9 +440,9 @@ fn cli_reports_nonzero_exit_on_failure() {
 fn home_free_subcommands_work_without_home_set() {
     // init/add/remove/list/clean never touch the key store, so they must
     // succeed even with HOME removed from the environment (previously
-    // default_gpg_home() errored before command dispatch). list-keys is NOT
+    // default_key_store() errored before command dispatch). list-keys is NOT
     // in this set any more: it verifies the keyring signature against the
-    // pinned trusted key, so it consumes a gpg_home and requires trust.
+    // pinned trusted key, so it consumes a key_store and requires trust.
     let repo_temp = tempfile::tempdir().unwrap();
 
     git(repo_temp.path(), &["init"]);
@@ -838,7 +838,7 @@ fn assert_th_roff(content: &[u8], label: &str) {
 #[test]
 fn cli_export_round_trip_into_tell() {
     // Machine A: alice imports her private key and exports her PUBLIC key —
-    // no gpg CLI involved in the handoff.
+    // no external tool involved in the handoff.
     let repo_a = tempfile::tempdir().unwrap();
     let home_a = tempfile::tempdir().unwrap();
     let (alice_sec, _) = generate_test_key("alice@example.com");

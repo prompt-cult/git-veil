@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-cat \- Decrypt a single tracked file to stdout
 .SH SYNOPSIS
-\fBgit\-veil cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Decrypt a single tracked file to stdout
 .SH OPTIONS
@@ -15,7 +15,7 @@ Your email address
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR

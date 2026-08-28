@@ -14,19 +14,19 @@ use std::path::PathBuf;
 /// Errors when `HOME` is unset or empty instead of silently falling back to
 /// a world-writable location such as `/tmp`, where an attacker on a
 /// multi-user system could plant or tamper with key material.
-pub fn default_gpg_home() -> Result<PathBuf> {
+pub fn default_key_store() -> Result<PathBuf> {
     match std::env::var("HOME") {
         Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".git-veil")),
         _ => anyhow::bail!(
-            "HOME is not set; cannot locate the key store ($HOME/.git-veil); pass --gpg-home"
+            "HOME is not set; cannot locate the key store ($HOME/.git-veil); pass --key-store"
         ),
     }
 }
 
 /// Imports an armoured public key to the key store (public-keys.pgp).
-pub fn import_key_to_gpg_home(gpg_home: &PathBuf, armored_key: &str) -> Result<()> {
-    fs::create_dir_all(gpg_home).context("Failed to create key store directory")?;
-    let public_keys_path = gpg_home.join("public-keys.pgp");
+pub fn import_key_to_store(key_store: &PathBuf, armored_key: &str) -> Result<()> {
+    fs::create_dir_all(key_store).context("Failed to create key store directory")?;
+    let public_keys_path = key_store.join("public-keys.pgp");
 
     let mut existing = if public_keys_path.exists() {
         fs::read_to_string(&public_keys_path)?
@@ -103,12 +103,12 @@ pub fn split_armored_public_key_blocks(
 /// Loads every public key the local key store knows about.
 ///
 /// Sources, in file order: the armoured public key blocks in
-/// `<gpg_home>/public-keys.pgp` (populated by trust), then the public halves
-/// of the imported private keys in `<gpg_home>/secret-keys.pgp` (populated
+/// `<key_store>/public-keys.pgp` (populated by trust), then the public halves
+/// of the imported private keys in `<key_store>/secret-keys.pgp` (populated
 /// by import). The result is deduplicated by fingerprint, first occurrence
 /// winning. Both stores may be absent (fresh machine): an empty Vec is
 /// returned, not an error — callers decide what "nothing found" means.
-pub fn load_public_keys_from_store(gpg_home: &PathBuf) -> Result<Vec<SignedPublicKey>> {
+pub fn load_public_keys_from_store(key_store: &PathBuf) -> Result<Vec<SignedPublicKey>> {
     let mut keys: Vec<SignedPublicKey> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
 
@@ -119,7 +119,7 @@ pub fn load_public_keys_from_store(gpg_home: &PathBuf) -> Result<Vec<SignedPubli
         }
     };
 
-    let public_keys_path = gpg_home.join("public-keys.pgp");
+    let public_keys_path = key_store.join("public-keys.pgp");
     if public_keys_path.exists() {
         let content = fs::read_to_string(&public_keys_path)
             .context("Failed to read public-keys.pgp")?;
@@ -130,7 +130,7 @@ pub fn load_public_keys_from_store(gpg_home: &PathBuf) -> Result<Vec<SignedPubli
         }
     }
 
-    let secret_keys_path = gpg_home.join("secret-keys.pgp");
+    let secret_keys_path = key_store.join("secret-keys.pgp");
     if secret_keys_path.exists() {
         let content = fs::read_to_string(&secret_keys_path)
             .context("Failed to read secret-keys.pgp")?;
@@ -145,8 +145,8 @@ pub fn load_public_keys_from_store(gpg_home: &PathBuf) -> Result<Vec<SignedPubli
 }
 
 /// Loads and parses every private key in the key store.
-fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
-    let secret_keys_path = gpg_home.join("secret-keys.pgp");
+fn load_secret_keys(key_store: &PathBuf) -> Result<Vec<SignedSecretKey>> {
+    let secret_keys_path = key_store.join("secret-keys.pgp");
     let content = fs::read_to_string(&secret_keys_path)
         .context("Failed to read secret-keys.pgp")?;
 
@@ -169,8 +169,8 @@ fn load_secret_keys(gpg_home: &PathBuf) -> Result<Vec<SignedSecretKey>> {
 ///
 /// Matching is exact equality (case-insensitive) between the requested email
 /// and the address extracted from each user-ID — never substring matching.
-pub fn find_private_key_by_email(gpg_home: &PathBuf, email: &str) -> Result<SignedSecretKey> {
-    let keys = load_secret_keys(gpg_home)?;
+pub fn find_private_key_by_email(key_store: &PathBuf, email: &str) -> Result<SignedSecretKey> {
+    let keys = load_secret_keys(key_store)?;
     let wanted = email.trim().to_lowercase();
 
     keys.into_iter()
@@ -184,8 +184,8 @@ pub fn find_private_key_by_email(gpg_home: &PathBuf, email: &str) -> Result<Sign
 }
 
 /// Finds a private key by fingerprint in the key store.
-pub fn find_private_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Result<SignedSecretKey> {
-    let keys = load_secret_keys(gpg_home)?;
+pub fn find_private_key_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Result<SignedSecretKey> {
+    let keys = load_secret_keys(key_store)?;
 
     let wanted = fingerprint.to_uppercase();
     keys.into_iter()
@@ -199,7 +199,7 @@ pub fn find_private_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) ->
 /// empty passphrase (unprotected keys). Interactive tty prompting is
 /// deliberately deferred — callers source the passphrase from
 /// `GITVEIL_PASSPHRASE` or `--passphrase-stdin` (see main.rs).
-pub fn decrypt_with_gpg_key(
+pub fn decrypt_with_private_key(
     ciphertext: &str,
     private_key: &SignedSecretKey,
     passphrase: Option<&str>,
@@ -236,10 +236,10 @@ pub fn decrypt_with_gpg_key(
 
 /// Encrypts plaintext to a single public key.
 ///
-/// Convenience wrapper around [`encrypt_to_gpg_keys`] for the common
+/// Convenience wrapper around [`encrypt_to_public_keys`] for the common
 /// single-recipient case.
-pub fn encrypt_to_gpg_key(plaintext: &[u8], public_key: &SignedPublicKey) -> Result<String> {
-    encrypt_to_gpg_keys(plaintext, std::slice::from_ref(public_key))
+pub fn encrypt_to_public_key(plaintext: &[u8], public_key: &SignedPublicKey) -> Result<String> {
+    encrypt_to_public_keys(plaintext, std::slice::from_ref(public_key))
 }
 
 /// Encrypts plaintext to ALL the given public keys as ONE OpenPGP message.
@@ -248,7 +248,7 @@ pub fn encrypt_to_gpg_key(plaintext: &[u8], public_key: &SignedPublicKey) -> Res
 /// so every listed key can decrypt the identical ciphertext. For each
 /// recipient the encryption subkey is selected by key flags exactly as for
 /// a single recipient. SEIPD v1 with AES-256 and an empty literal filename.
-pub fn encrypt_to_gpg_keys(plaintext: &[u8], public_keys: &[SignedPublicKey]) -> Result<String> {
+pub fn encrypt_to_public_keys(plaintext: &[u8], public_keys: &[SignedPublicKey]) -> Result<String> {
     use pgp::composed::MessageBuilder;
     use pgp::crypto::sym::SymmetricKeyAlgorithm;
 

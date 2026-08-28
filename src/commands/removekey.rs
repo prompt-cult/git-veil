@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::fs_atomic::write_atomic;
-use crate::gpg_integration::{split_armored_private_key_blocks, split_armored_public_key_blocks};
+use crate::openpgp::{split_armored_private_key_blocks, split_armored_public_key_blocks};
 use crate::pubkey::extract_email_from_user_id;
 use pgp::types::KeyDetails;
 
@@ -121,7 +121,7 @@ fn display_fingerprint(block: &StoreBlock) -> String {
 }
 
 /// Removes key material from the LOCAL key store: every armoured block in
-/// `<gpg_home>/secret-keys.pgp` and `<gpg_home>/public-keys.pgp` whose key's
+/// `<key_store>/secret-keys.pgp` and `<key_store>/public-keys.pgp` whose key's
 /// fingerprint matches `identifier`, or whose exact case-insensitive email
 /// matches, is dropped.
 ///
@@ -142,9 +142,9 @@ fn display_fingerprint(block: &StoreBlock) -> String {
 /// truncated) store refuses the whole command untouched (repair it by hand
 /// — a corrupt store is never deleted), and only then are the remaining
 /// blocks re-serialised and written back via write_atomic.
-pub fn cmd_removekey(gpg_home: &PathBuf, identifier: &str, yes: bool) -> Result<()> {
-    let secret_path = gpg_home.join("secret-keys.pgp");
-    let public_path = gpg_home.join("public-keys.pgp");
+pub fn cmd_removekey(key_store: &PathBuf, identifier: &str, yes: bool) -> Result<()> {
+    let secret_path = key_store.join("secret-keys.pgp");
+    let public_path = key_store.join("public-keys.pgp");
 
     // Read and parse BOTH stores before any decision or write: a corrupt
     // store refuses the whole command before anything can be removed.
@@ -173,7 +173,7 @@ pub fn cmd_removekey(gpg_home: &PathBuf, identifier: &str, yes: bool) -> Result<
         anyhow::bail!(
             "No key matching '{}' found in the key store {} (secret-keys.pgp, public-keys.pgp); removekey only removes keys this machine's local store holds",
             identifier,
-            gpg_home.display()
+            key_store.display()
         );
     }
 
@@ -197,7 +197,7 @@ pub fn cmd_removekey(gpg_home: &PathBuf, identifier: &str, yes: bool) -> Result<
         anyhow::bail!(
             "Multiple keys match '{}' in the key store {}; pass a fingerprint instead of an email, or re-run with --yes to remove ALL of them. Matching fingerprints:\n  {}",
             identifier,
-            gpg_home.display(),
+            key_store.display(),
             matched_fingerprints
                 .iter()
                 .cloned()

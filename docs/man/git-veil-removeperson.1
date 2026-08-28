@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-removeperson \- Remove a collaborator from the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil removeperson\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
+\fBgit\-veil removeperson\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
 .SH DESCRIPTION
 Remove a collaborator from the keyring and re\-sign it
 .SH OPTIONS
@@ -12,7 +12,7 @@ Remove a collaborator from the keyring and re\-sign it
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR

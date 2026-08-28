@@ -52,7 +52,7 @@ impl TrustStore {
 }
 
 /// Per-machine trust pins, stored OUTSIDE the repository in the tool-owned
-/// key store: `<gpg_home>/trust-pins/<sanitized-repo-id>` holds the pinned
+/// key store: `<key_store>/trust-pins/<sanitized-repo-id>` holds the pinned
 /// fingerprint.
 ///
 /// trust.json (repo_id -> fingerprint) is committed to the repository and
@@ -88,17 +88,17 @@ impl TrustPinStore {
         out
     }
 
-    /// The path of the pin file for `repo_id` under `gpg_home`.
-    pub fn pin_path(gpg_home: &Path, repo_id: &str) -> PathBuf {
-        gpg_home
+    /// The path of the pin file for `repo_id` under `key_store`.
+    pub fn pin_path(key_store: &Path, repo_id: &str) -> PathBuf {
+        key_store
             .join(Self::PIN_DIR)
             .join(Self::sanitize_repo_id(repo_id))
     }
 
     /// Writes the pinned fingerprint for `repo_id`, creating the pin
     /// directory as needed.
-    pub fn write_pin(gpg_home: &Path, repo_id: &str, fingerprint: &str) -> Result<()> {
-        let path = Self::pin_path(gpg_home, repo_id);
+    pub fn write_pin(key_store: &Path, repo_id: &str, fingerprint: &str) -> Result<()> {
+        let path = Self::pin_path(key_store, repo_id);
         fs::create_dir_all(path.parent().expect("pin path always has a parent"))?;
         write_atomic(&path, fingerprint.as_bytes())?;
         Ok(())
@@ -106,8 +106,8 @@ impl TrustPinStore {
 
     /// Reads the pinned fingerprint for `repo_id`; `Ok(None)` when no pin
     /// exists yet (the fresh-clone state).
-    pub fn read_pin(gpg_home: &Path, repo_id: &str) -> Result<Option<String>> {
-        let path = Self::pin_path(gpg_home, repo_id);
+    pub fn read_pin(key_store: &Path, repo_id: &str) -> Result<Option<String>> {
+        let path = Self::pin_path(key_store, repo_id);
         if !path.exists() {
             return Ok(None);
         }

@@ -36,7 +36,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) containing armoured private key blocks:_default' \
@@ -45,7 +45,7 @@ _arguments "${_arguments_options[@]}" : \
 (export)
 _arguments "${_arguments_options[@]}" : \
 '--output=[Write the armoured public key to this file instead of stdout]:OUTPUT:_files' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':identifier -- Email or fingerprint of the key to export:_default' \
@@ -53,7 +53,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (removekey)
 _arguments "${_arguments_options[@]}" : \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--yes[Confirm destructive removals\: required when the target is the only private key in the store, and to remove ALL keys when the email matches several]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -63,7 +63,7 @@ _arguments "${_arguments_options[@]}" : \
 (trust)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':repo_id -- Repository ID (e.g., fara+simbo1905@github.com):_default' \
@@ -73,7 +73,7 @@ _arguments "${_arguments_options[@]}" : \
 (tell)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -84,7 +84,7 @@ _arguments "${_arguments_options[@]}" : \
 (removeperson)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -114,7 +114,7 @@ _arguments "${_arguments_options[@]}" : \
 (hide)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -123,7 +123,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -133,7 +133,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -144,7 +144,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -155,7 +155,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--passphrase-stdin[Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -172,7 +172,7 @@ _arguments "${_arguments_options[@]}" : \
 (whoami)
 _arguments "${_arguments_options[@]}" : \
 '--email=[Email override]:EMAIL:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -180,7 +180,7 @@ _arguments "${_arguments_options[@]}" : \
 (verify-keyring)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -188,7 +188,7 @@ _arguments "${_arguments_options[@]}" : \
 (list-keys)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--gpg-home=[Key store directory (default\: \$HOME/.git-veil)]:GPG_HOME:_files' \
+'--key-store=[Key store directory (default\: \$HOME/.git-veil)]:KEY_STORE:_files' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0

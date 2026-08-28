@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-reveal \- Decrypt all tracked files back to plaintext
 .SH SYNOPSIS
-\fBgit\-veil reveal\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil reveal\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Decrypt all tracked files back to plaintext
 .SH OPTIONS
@@ -15,7 +15,7 @@ Your email address
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-\-passphrase\-stdin\fR
@@ -24,15 +24,25 @@ Read the passphrase for a passphrase\-protected private key from stdin (exactly 
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Decrypts every tracked file whose .secret ciphertext exists back to its
-plaintext path, using your private key from the local key store. The
-keyring signature is verified against the pinned trusted key before any
-decryption. Your identity comes from git config user.email or \-\-email;
-passphrase\-protected keys take the passphrase from GITVEIL_PASSPHRASE or
-\-\-passphrase\-stdin.
+Decrypts every tracked file back to its plaintext path, using your private
+key from the local key store. The keyring signature is verified against
+the pinned trusted key before any decryption. Your identity comes from
+git config user.email or \-\-email; passphrase\-protected keys take the
+passphrase from GITVEIL_PASSPHRASE or \-\-passphrase\-stdin.
 
 reveal is the inverse of hide for all files; unhide does one file and
 deletes its ciphertext; cat prints one file without touching disk state.
+
+reveal is TWO\-PHASE and ALL\-OR\-NOTHING: EVERY tracked file must have its
+\&.secret ciphertext present and decrypt successfully. Phase 1 verifies and
+decrypts all files in memory — if any ciphertext is missing or cannot be
+decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
+(only after every decryption succeeded) writes each plaintext atomically
+and then deletes each ciphertext; a ciphertext is deleted only after its
+own plaintext is durably on disk. If a phase\-2 write fails part\-way, the
+remaining plaintexts are still written, only ciphertexts whose plaintext
+landed are deleted, and reveal reports exactly what was done and what was
+left before exiting with an error.
 
 EXAMPLES
   $ git\-veil reveal

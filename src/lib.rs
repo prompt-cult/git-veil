@@ -10,7 +10,7 @@ mod keyring;
 mod trust_store;
 mod pubkey;
 mod signature;
-mod gpg_integration;
+mod openpgp;
 mod tracked_files;
 mod commands;
 
@@ -36,7 +36,7 @@ pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_tr
 pub use armour::{PRIVATE_KEY_BEGIN, PRIVATE_KEY_END, PUBLIC_KEY_BEGIN, PUBLIC_KEY_END, SIG_BEGIN, SIG_END};
 pub use fs_atomic::write_atomic;
 pub use commands::whoami::cmd_whoami;
-pub use gpg_integration::{decrypt_with_gpg_key, default_gpg_home, encrypt_to_gpg_key, encrypt_to_gpg_keys, find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_gpg_home, load_public_keys_from_store, split_armored_private_key_blocks, split_armored_public_key_blocks};
+pub use openpgp::{decrypt_with_private_key, default_key_store, encrypt_to_public_key, encrypt_to_public_keys, find_private_key_by_email, find_private_key_by_fingerprint, import_key_to_store, load_public_keys_from_store, split_armored_private_key_blocks, split_armored_public_key_blocks};
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};
 pub use pubkey::{base64_decode_public_key, base64_encode_public_key, check_email_in_identities, extract_email_from_user_id, extract_key_fingerprint, extract_key_identities, parse_armored_public_key, validate_public_key_for_use, KeyUse};
 pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};

@@ -6,7 +6,7 @@ use git_veil::{
     cli::{Cli, Commands},
     cmd_init, cmd_import, cmd_export, cmd_trust, cmd_tell, cmd_removeperson, cmd_add, cmd_remove,
     cmd_list, cmd_hide, cmd_reveal, cmd_unhide, cmd_cat, cmd_changes, cmd_clean, cmd_show_repo_id,
-    cmd_whoami, cmd_verify_keyring, cmd_list_keys, cmd_removekey, default_gpg_home,
+    cmd_whoami, cmd_verify_keyring, cmd_list_keys, cmd_removekey, default_key_store,
     get_git_config_email,
 };
 
@@ -20,18 +20,18 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
     }
 }
 
-/// Resolves the key store location for commands that consume a gpg_home:
-/// an explicit `--gpg-home` wins; otherwise fall back to `$HOME/.git-veil`.
+/// Resolves the key store location for commands that consume a key_store:
+/// an explicit `--key-store` wins; otherwise fall back to `$HOME/.git-veil`.
 /// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
 /// show-repo-id) never fail on an unset HOME. list-keys is no longer in this
 /// set: it verifies the keyring signature against the pinned key, so it
-/// consumes a gpg_home like every other gated command.
-fn resolve_gpg_home(gpg_home: Option<PathBuf>) -> Result<PathBuf> {
-    gpg_home.map(Ok).unwrap_or_else(default_gpg_home)
+/// consumes a key_store like every other gated command.
+fn resolve_key_store(key_store: Option<PathBuf>) -> Result<PathBuf> {
+    key_store.map(Ok).unwrap_or_else(default_key_store)
 }
 
 /// Resolves the passphrase for private-key use, mirroring resolve_email/
-/// resolve_gpg_home: `--passphrase-stdin` wins over the `GITVEIL_PASSPHRASE`
+/// resolve_key_store: `--passphrase-stdin` wins over the `GITVEIL_PASSPHRASE`
 /// environment variable; when both are absent, None is returned and the key
 /// is unlocked with an empty passphrase (back-compat with unprotected keys).
 /// Interactive tty prompting is deliberately deferred. The passphrase is
@@ -95,61 +95,61 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init => cmd_init(&repo_root)?,
-        Commands::Import { files, gpg_home: opt } => {
-            cmd_import(&repo_root, &files, &resolve_gpg_home(opt)?)?;
+        Commands::Import { files, key_store: opt } => {
+            cmd_import(&repo_root, &files, &resolve_key_store(opt)?)?;
         }
-        Commands::Export { identifier, output, gpg_home: opt } => {
-            cmd_export(&resolve_gpg_home(opt)?, &identifier, output.as_deref())?;
+        Commands::Export { identifier, output, key_store: opt } => {
+            cmd_export(&resolve_key_store(opt)?, &identifier, output.as_deref())?;
         }
-        Commands::RemoveKey { identifier, yes, gpg_home: opt } => {
-            cmd_removekey(&resolve_gpg_home(opt)?, &identifier, yes)?;
+        Commands::RemoveKey { identifier, yes, key_store: opt } => {
+            cmd_removekey(&resolve_key_store(opt)?, &identifier, yes)?;
         }
-        Commands::Trust { repo_id, signing_key, remote, gpg_home: opt } => {
-            cmd_trust(&repo_root, &repo_id, &signing_key, &remote, &resolve_gpg_home(opt)?)?;
+        Commands::Trust { repo_id, signing_key, remote, key_store: opt } => {
+            cmd_trust(&repo_root, &repo_id, &signing_key, &remote, &resolve_key_store(opt)?)?;
         }
-        Commands::Tell { email, public_key, remote, gpg_home: opt, passphrase_stdin } => {
+        Commands::Tell { email, public_key, remote, key_store: opt, passphrase_stdin } => {
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_tell(&repo_root, &email, &public_key, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+            cmd_tell(&repo_root, &email, &public_key, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
         }
-        Commands::RemovePerson { email, remote, gpg_home: opt, passphrase_stdin } => {
+        Commands::RemovePerson { email, remote, key_store: opt, passphrase_stdin } => {
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_removeperson(&repo_root, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+            cmd_removeperson(&repo_root, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
         }
         Commands::Add { files } => cmd_add(&repo_root, files)?,
         Commands::Remove { files } => cmd_remove(&repo_root, files)?,
         Commands::List => cmd_list(&repo_root)?,
-        Commands::Hide { remote, gpg_home: opt } => {
-            cmd_hide(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
+        Commands::Hide { remote, key_store: opt } => {
+            cmd_hide(&repo_root, &remote, &resolve_key_store(opt)?)?;
         }
-        Commands::Reveal { email, remote, gpg_home: opt, passphrase_stdin } => {
+        Commands::Reveal { email, remote, key_store: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_reveal(&repo_root, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+            cmd_reveal(&repo_root, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
         }
-        Commands::Cat { file, email, remote, gpg_home: opt, passphrase_stdin } => {
+        Commands::Cat { file, email, remote, key_store: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_cat(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+            cmd_cat(&repo_root, &file, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
         }
-        Commands::Unhide { file, email, remote, gpg_home: opt, passphrase_stdin } => {
+        Commands::Unhide { file, email, remote, key_store: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_unhide(&repo_root, &file, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+            cmd_unhide(&repo_root, &file, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
         }
-        Commands::Changes { files, email, remote, gpg_home: opt, passphrase_stdin } => {
+        Commands::Changes { files, email, remote, key_store: opt, passphrase_stdin } => {
             let email = resolve_email(&repo_root, email)?;
             let passphrase = resolve_passphrase(passphrase_stdin)?;
-            cmd_changes(&repo_root, files, &email, &remote, &resolve_gpg_home(opt)?, passphrase.as_deref())?;
+            cmd_changes(&repo_root, files, &email, &remote, &resolve_key_store(opt)?, passphrase.as_deref())?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&repo_root, &remote)?,
-        Commands::Whoami { email, gpg_home: opt } => {
-            cmd_whoami(&repo_root, email.as_deref(), &resolve_gpg_home(opt)?)?;
+        Commands::Whoami { email, key_store: opt } => {
+            cmd_whoami(&repo_root, email.as_deref(), &resolve_key_store(opt)?)?;
         }
-        Commands::VerifyKeyring { remote, gpg_home: opt } => {
-            cmd_verify_keyring(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
+        Commands::VerifyKeyring { remote, key_store: opt } => {
+            cmd_verify_keyring(&repo_root, &remote, &resolve_key_store(opt)?)?;
         }
-        Commands::ListKeys { remote, gpg_home: opt } => {
-            cmd_list_keys(&repo_root, &remote, &resolve_gpg_home(opt)?)?;
+        Commands::ListKeys { remote, key_store: opt } => {
+            cmd_list_keys(&repo_root, &remote, &resolve_key_store(opt)?)?;
         }
         Commands::Clean { yes } => cmd_clean(&repo_root, yes)?,
         Commands::Completions { shell } => git_veil::cli::run_completions(shell),

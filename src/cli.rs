@@ -49,7 +49,7 @@ duplicated.
 
 EXAMPLES
   $ git-veil import my-key.asc
-  $ git-veil import key1.asc key2.asc --gpg-home /path/to/store
+  $ git-veil import key1.asc key2.asc --key-store /path/to/store
 ")]
     Import {
         /// File(s) containing armoured private key blocks
@@ -57,7 +57,7 @@ EXAMPLES
         files: Vec<String>,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Export an armoured public key from the local key store
@@ -65,7 +65,8 @@ EXAMPLES
 Prints — or with --output writes — the armoured PUBLIC key for the given
 email or fingerprint, read from the local key store on this machine
 ($HOME/.git-veil). This is the key handoff between collaborators without
-the gpg CLI: the local store only holds keys THIS machine knows about
+any external OpenPGP tool: the local store only holds keys THIS machine
+knows about
 (your imported private key and any key trust has pinned), so each
 collaborator runs export on their OWN machine and sends the .pub file to
 the owner, who adds it to the keyring with tell. It cannot export a
@@ -92,7 +93,7 @@ EXAMPLES
         output: Option<PathBuf>,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Remove a key from the local key store (destructive, local-only)
@@ -125,7 +126,7 @@ EXAMPLES
   $ git-veil removekey 9A1F...                     # by fingerprint (preferred)
   $ git-veil removekey bob@example.com             # exact case-insensitive email
   $ git-veil removekey bob@example.com --yes       # confirm only-private-key removal
-  $ git-veil removekey bob@example.com --gpg-home /path/to/store
+  $ git-veil removekey bob@example.com --key-store /path/to/store
 ")]
     RemoveKey {
         /// Fingerprint or exact case-insensitive email of the key(s) to remove
@@ -137,7 +138,7 @@ EXAMPLES
         yes: bool,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Verify and pin the repository owner's signing key (per machine)
@@ -154,10 +155,10 @@ The provided repo_id must match the one computed from the remote push URL
 (see show-repo-id), the key file must carry the repository's email
 identity, and the key must not be expired, revoked or unsigned.
 
-Trust domain: the key store named by --gpg-home holds this machine's pins
+Trust domain: the key store named by --key-store holds this machine's pins
 for EVERY repository that uses that store, so the store and its pins are
 one trust boundary. Sharing a single store across mutually distrusting
-repositories is not advised; use a separate --gpg-home per trust domain.
+repositories is not advised; use a separate --key-store per trust domain.
 
 Requires init first. Typical next step: tell.
 
@@ -177,7 +178,7 @@ EXAMPLES
         /// Key store directory (default: $HOME/.git-veil). The store and its
         /// pins are the trust boundary for every repository that uses it.
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Add a collaborator's public key to the keyring and re-sign it
@@ -206,7 +207,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
         /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
         /// environment variable; never pass a passphrase as a CLI argument.
@@ -239,7 +240,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
         /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
         /// environment variable; never pass a passphrase as a CLI argument.
@@ -332,7 +333,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Decrypt all tracked files back to plaintext
@@ -371,7 +372,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
         /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
         /// environment variable; never pass a passphrase as a CLI argument.
@@ -402,7 +403,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
         /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
         /// environment variable; never pass a passphrase as a CLI argument.
@@ -434,7 +435,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
         /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
         /// environment variable; never pass a passphrase as a CLI argument.
@@ -466,7 +467,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
         /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
         /// environment variable; never pass a passphrase as a CLI argument.
@@ -509,7 +510,7 @@ EXAMPLES
         email: Option<String>,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Verify the keyring signature against the pinned trusted key
@@ -532,7 +533,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// List keyring keys after verifying the keyring signature
@@ -555,7 +556,7 @@ EXAMPLES
         remote: String,
         /// Key store directory (default: $HOME/.git-veil)
         #[arg(long)]
-        gpg_home: Option<PathBuf>,
+        key_store: Option<PathBuf>,
     },
 
     /// Remove the .git-veil state directory (--yes required when data would be lost)

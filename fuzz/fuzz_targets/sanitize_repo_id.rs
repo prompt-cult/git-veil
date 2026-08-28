@@ -25,7 +25,7 @@ fuzz_target!(|data: &[u8]| {
         "sanitization must not inflate beyond 3x, got {sanitized} from {s}"
     );
 
-    // pin_path is always strictly inside <gpg_home>/trust-pins/
+    // pin_path is always strictly inside <key_store>/trust-pins/
     let home = Path::new("/home/fuzz");
     let pin = TrustPinStore::pin_path(home, s);
     assert!(pin.starts_with(home.join("trust-pins")));

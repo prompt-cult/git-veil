@@ -4,13 +4,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::armour::{SIG_BEGIN};
-use crate::gpg_integration::split_armored_public_key_blocks;
+use crate::openpgp::split_armored_public_key_blocks;
 use crate::{derive_repo_id, extract_key_fingerprint, get_remote_push_url, parse_armored_public_key, verify_keyring_signature, TrustPinStore, TrustStore, Keyring, extract_content_to_verify_from_keyring, extract_signature_from_keyring};
 
 /// Loads the public key matching `fingerprint` from the key store
 /// (public-keys.pgp).
-fn load_public_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Result<SignedPublicKey> {
-    let public_keys_path = gpg_home.join("public-keys.pgp");
+fn load_public_key_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Result<SignedPublicKey> {
+    let public_keys_path = key_store.join("public-keys.pgp");
     let content = fs::read_to_string(&public_keys_path)
         .context("Failed to read public-keys.pgp")?;
 
@@ -36,7 +36,7 @@ fn load_public_key_by_fingerprint(gpg_home: &PathBuf, fingerprint: &str) -> Resu
 /// signature made by the trusted key.
 ///
 /// Returns the repository ID, the trusted signer fingerprint, and the parsed keyring.
-pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<(String, String, Keyring)> {
+pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<(String, String, Keyring)> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
 
@@ -59,7 +59,7 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     // trust.json is committed to the repo and therefore attacker-writable;
     // it is never a sufficient anchor on its own. Require the per-machine
     // pin written by cmd_trust, and fail closed on any disagreement.
-    match TrustPinStore::read_pin(gpg_home, &repo_id)? {
+    match TrustPinStore::read_pin(key_store, &repo_id)? {
         Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
         Some(pinned) => anyhow::bail!(
             "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git-veil trust {} <keyfile>",
@@ -78,7 +78,7 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
     }
 
     // Load signing public key
-    let public_key = load_public_key_by_fingerprint(gpg_home, trusted_fingerprint)?;
+    let public_key = load_public_key_by_fingerprint(key_store, trusted_fingerprint)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -104,9 +104,9 @@ pub fn verify_keyring_against_trust(repo_root: &Path, remote_name: &str, gpg_hom
 }
 
 /// Verifies the keyring signature against the trusted signing key.
-pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<()> {
     let (repo_id, fingerprint, keyring) =
-        verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+        verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     println!("✓ Keyring signature verified");
     println!("Signed by fingerprint: {}", fingerprint);

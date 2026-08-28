@@ -50,61 +50,61 @@ complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "completions" -d '
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "manpages" -d 'Write roff man pages (git-veil.1 plus one per subcommand) to a directory'
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c git-veil -n "__fish_git_veil_using_subcommand import" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand import" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand import" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l output -d 'Write the armoured public key to this file instead of stdout' -r -F
-complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c git-veil -n "__fish_git_veil_using_subcommand removekey" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand removekey" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand removekey" -l yes -d 'Confirm destructive removals: required when the target is the only private key in the store, and to remove ALL keys when the email matches several'
 complete -c git-veil -n "__fish_git_veil_using_subcommand removekey" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l key-store -d 'Key store directory (default: $HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l passphrase-stdin -d 'Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument'
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l passphrase-stdin -d 'Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument'
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand list" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l passphrase-stdin -d 'Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument'
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l passphrase-stdin -d 'Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument'
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand unhide" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand unhide" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand unhide" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand unhide" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand unhide" -l passphrase-stdin -d 'Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument'
 complete -c git-veil -n "__fish_git_veil_using_subcommand unhide" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l passphrase-stdin -d 'Read the passphrase for a passphrase-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument'
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand show-repo-id" -l remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand show-repo-id" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l email -d 'Email override' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keyring" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keyring" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keyring" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keyring" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l remote -d 'Git remote name' -r
-complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l gpg-home -d 'Key store directory (default: $HOME/.git-veil)' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l key-store -d 'Key store directory (default: $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand clean" -l yes -d 'Confirm destruction of tracked state and any ciphertext. Required when the clean would destroy tracked files or their in-place `<name>.secret` ciphertext (which may be the only remaining copy)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand clean" -s h -l help -d 'Print help (see more with \'--help\')'

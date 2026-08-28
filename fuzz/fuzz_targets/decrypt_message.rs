@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use git_veil::decrypt_with_gpg_key;
+use git_veil::decrypt_with_private_key;
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use rand::thread_rng;
 use std::sync::LazyLock;
@@ -29,7 +29,7 @@ static FIXED_SECRET_KEY: LazyLock<pgp::composed::SignedSecretKey> = LazyLock::ne
 
 fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };
-    if let Err(err) = decrypt_with_gpg_key(s, &FIXED_SECRET_KEY, None) {
+    if let Err(err) = decrypt_with_private_key(s, &FIXED_SECRET_KEY, None) {
         let message = format!("{err:#}");
         // the empty string is a substring of everything — only meaningful
         // for non-trivial inputs

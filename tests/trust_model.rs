@@ -45,7 +45,7 @@ fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Pat
     std::fs::write(path, armored).unwrap();
 }
 
-fn write_multi_key_secret_keys(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
+fn write_multi_key_secret_keys(key_store: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
         if !content.is_empty() {
@@ -53,8 +53,8 @@ fn write_multi_key_secret_keys(gpg_home: &PathBuf, keys: &[pgp::composed::Signed
         }
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
-    std::fs::create_dir_all(gpg_home).unwrap();
-    std::fs::write(gpg_home.join("secret-keys.pgp"), content).unwrap();
+    std::fs::create_dir_all(key_store).unwrap();
+    std::fs::write(key_store.join("secret-keys.pgp"), content).unwrap();
 }
 
 fn setup_git_repo_with_origin_remote() -> tempfile::TempDir {
@@ -84,29 +84,29 @@ fn setup_trusted_repo_with_owner_in_keyring() -> (tempfile::TempDir, PathBuf) {
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secret_keys(&gpg_home, &[owner_sec]);
+    write_multi_key_secret_keys(&key_store, &[owner_sec]);
 
     cmd_tell(
         repo_temp.path(),
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
-    (repo_temp, gpg_home)
+    (repo_temp, key_store)
 }
 
 // ============================================================================
@@ -925,50 +925,50 @@ fn test_sign_empty_keyring() {
 }
 
 // ============================================================================
-// Phase 2: GPG Integration
+// Phase 2: OpenPGP Integration
 // ============================================================================
 
 #[test]
-fn test_import_key_to_gpg_home() {
+fn test_import_key_to_store() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
     let armored = public_key.to_armored_string(Default::default()).unwrap();
     
-    let result = import_key_to_gpg_home(&gpg_home, &armored);
+    let result = import_key_to_store(&key_store, &armored);
     assert!(result.is_ok());
-    assert!(gpg_home.join("public-keys.pgp").exists());
+    assert!(key_store.join("public-keys.pgp").exists());
 }
 
 #[test]
 fn test_find_private_key_by_email() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
     
     // Write to secret-keys.pgp
-    std::fs::write(gpg_home.join("secret-keys.pgp"), &armored).unwrap();
+    std::fs::write(key_store.join("secret-keys.pgp"), &armored).unwrap();
     
-    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let result = find_private_key_by_email(&key_store, "alice@example.com");
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_find_private_key_by_fingerprint() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let fingerprint = extract_key_fingerprint(&public_key);
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
     
     // Write to secret-keys.pgp
-    std::fs::write(gpg_home.join("secret-keys.pgp"), &armored).unwrap();
+    std::fs::write(key_store.join("secret-keys.pgp"), &armored).unwrap();
     
-    let result = find_private_key_by_fingerprint(&gpg_home, &fingerprint);
+    let result = find_private_key_by_fingerprint(&key_store, &fingerprint);
     assert!(result.is_ok());
 }
 
@@ -980,31 +980,31 @@ fn test_find_private_key_not_found() {
 }
 
 #[test]
-fn test_encrypt_to_gpg_key() {
+fn test_encrypt_to_public_key() {
     let (_secret_key, public_key) = generate_test_key("alice@example.com");
     let plaintext = b"Hello, World!";
     
-    let encrypted = encrypt_to_gpg_key(plaintext, &public_key).expect("encryption should succeed");
+    let encrypted = encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
     assert!(encrypted.contains("-----BEGIN PGP MESSAGE-----"));
     assert!(encrypted.contains("-----END PGP MESSAGE-----"));
 }
 
 #[test]
-fn test_decrypt_with_gpg_key() {
+fn test_decrypt_with_private_key() {
     let (secret_key, public_key) = generate_test_key("alice@example.com");
     let plaintext = b"Hello, World!";
     
-    let encrypted = encrypt_to_gpg_key(plaintext, &public_key).expect("encryption should succeed");
-    let decrypted = decrypt_with_gpg_key(&encrypted, &secret_key, None).expect("decryption should succeed");
+    let encrypted = encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
+    let decrypted = decrypt_with_private_key(&encrypted, &secret_key, None).expect("decryption should succeed");
     
     assert_eq!(decrypted, plaintext);
 }
 
 #[test]
 #[serial]
-fn test_custom_gpg_home_location() {
+fn test_custom_key_store_location() {
     let _temp = tempfile::tempdir().unwrap();
-    let home = default_gpg_home().expect("HOME must be set to resolve the default gpg home");
+    let home = default_key_store().expect("HOME must be set to resolve the default key store");
     assert!(home.exists() || home.to_str().unwrap().contains(".git-veil"));
 }
 
@@ -1092,13 +1092,13 @@ fn init_refuses_to_reset_existing_trust() {
     let owner_keyfile = temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     cmd_trust(
         temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
@@ -1215,7 +1215,7 @@ fn test_trust_validates_repo_id_matches_remote() {
 // trust_accepts_owner_key_matching_user_at_service_email and
 // trust_rejects_key_without_owner_email; persistence/pin by trust_writes_local_pin
 // and verify_fails_closed_when_pin_mismatches (tests/features.rs); key import and
-// trust-store update by test_import_key_to_gpg_home and
+// trust-store update by test_import_key_to_store and
 // test_trust_store_update_existing_trust (this file); remote-name resolution by
 // test_get_remote_push_url_custom_remote; non-repo failure by
 // test_get_remote_push_url_nonexistent_remote_fails and cli_reports_nonzero_exit_on_failure.
@@ -1230,9 +1230,9 @@ fn test_trust_validates_repo_id_matches_remote() {
 // deleted: those contracts are asserted by tell_first_entry_on_fresh_repo_succeeds
 // (tests/features.rs, entry present + keyring signed) and the primitives
 // test_extract_key_fingerprint / test_base64_encode_public_key (this file).
-// Custom-remote / custom-gpg-home pass-through is covered by
+// Custom-remote / custom-key-store pass-through is covered by
 // test_get_remote_push_url_custom_remote and the features.rs tell tests, which
-// all run against an explicit repo-local gpg home.
+// all run against an explicit repo-local key store.
 
 #[test]
 fn test_tell_fails_if_trust_not_established() {
@@ -1263,7 +1263,7 @@ fn test_tell_fails_if_trust_not_established() {
 
 #[test]
 fn test_tell_validates_email_not_in_key_fails() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
     // A real key whose identity does NOT contain the email claimed for it.
     let (_bob_sec, bob_pub) = generate_test_key("bob@example.com");
@@ -1275,7 +1275,7 @@ fn test_tell_validates_email_not_in_key_fails() {
         "alice@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
     let err = result
         .err()
@@ -1288,7 +1288,7 @@ fn test_tell_validates_email_not_in_key_fails() {
 }
 
 #[test]
-fn test_tell_fails_if_signing_key_not_in_gpg_home() {
+fn test_tell_fails_if_signing_key_not_in_key_store() {
     let repo_temp = setup_git_repo_with_origin_remote();
     cmd_init(repo_temp.path()).unwrap();
 
@@ -1298,13 +1298,13 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
     let (_owner_sec, owner_pub) = generate_test_key("owner@github.com");
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
@@ -1314,14 +1314,14 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
 
     // The secret key store holds only the COLLABORATOR's secret key, not the trusted
     // owner key tell must sign with.
-    write_multi_key_secret_keys(&gpg_home, &[alice_sec]);
+    write_multi_key_secret_keys(&key_store, &[alice_sec]);
 
     let result = cmd_tell(
         repo_temp.path(),
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
     let err = result
         .err()
@@ -1335,7 +1335,7 @@ fn test_tell_fails_if_signing_key_not_in_gpg_home() {
 
 #[test]
 fn tell_failure_leaves_existing_keyring_untouched() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
     let keyring_path = repo_temp.path().join(".git-veil/keyring");
     let keyring_before = std::fs::read(&keyring_path).unwrap();
 
@@ -1350,7 +1350,7 @@ fn tell_failure_leaves_existing_keyring_untouched() {
         "alice@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
     assert!(result.is_err(), "the mismatched tell must be rejected");
 
@@ -1422,19 +1422,19 @@ fn test_whoami_from_email_flag_override() {
     assert!(result.is_ok());
 }
 
-// test_whoami_displays_gpg_home_location deleted: byte-identical to
+// test_whoami_displays_key_store_location deleted: byte-identical to
 // test_whoami_from_git_config_user_email; the stdout it promised is not
 // assertable in-process (println capture needs tests/cli.rs).
 
 #[test]
-fn test_whoami_displays_custom_gpg_home() {
+fn test_whoami_displays_custom_key_store() {
     let temp = tempfile::tempdir().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["init"]).output().unwrap();
     std::process::Command::new("git").current_dir(temp.path()).args(&["config", "user.email", "test@example.com"]).output().unwrap();
     
-    let gpg_home = temp.path().join("custom-gpg");
-    std::fs::create_dir_all(&gpg_home).unwrap();
-    let result = cmd_whoami(temp.path(), None, &gpg_home);
+    let key_store = temp.path().join("custom-store");
+    std::fs::create_dir_all(&key_store).unwrap();
+    let result = cmd_whoami(temp.path(), None, &key_store);
     assert!(result.is_ok());
 }
 
@@ -1513,9 +1513,9 @@ fn test_list_keys_empty_keyring() {
 
 #[test]
 fn test_list_keys_single_entry() {
-    let (repo_temp, _gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, _key_store) = setup_trusted_repo_with_owner_in_keyring();
 
-    let result = cmd_list_keys(repo_temp.path(), "origin", &_gpg_home);
+    let result = cmd_list_keys(repo_temp.path(), "origin", &_key_store);
     assert!(
         result.is_ok(),
         "list-keys over a populated keyring must succeed: {:?}",
@@ -1698,27 +1698,27 @@ fn test_list_multiple_files() {
 // and hide_writes_ciphertext_next_to_plaintext, directory preservation by
 // hide_then_reveal_in_subdirectory, trust/signature failure by
 // verify_fails_closed_when_pin_missing and verify_fails_closed_when_pin_mismatches
-// (all tests/features.rs). Custom-remote / custom-gpg-home pass-through is
+// (all tests/features.rs). Custom-remote / custom-key-store pass-through is
 // covered by test_get_remote_push_url_custom_remote and the features.rs tests,
-// which run against explicit repo-local gpg homes.
+// which run against explicit repo-local key stores.
 
 #[test]
 fn test_hide_empty_tracked_list_succeeds() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
-    cmd_hide(repo_temp.path(), "origin", &gpg_home)
+    cmd_hide(repo_temp.path(), "origin", &key_store)
         .expect("hide with nothing tracked must be a successful no-op");
 }
 
 #[test]
 fn test_hide_missing_tracked_file_fails() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
     std::fs::remove_file(repo_temp.path().join("secret.env")).unwrap();
 
-    let result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let err = result
         .err()
         .expect("hide must abort when a tracked file is missing from disk");
@@ -1749,9 +1749,9 @@ fn test_hide_missing_tracked_file_fails() {
 
 #[test]
 fn test_reveal_fails_if_email_not_in_keyring() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
-    let result = cmd_reveal(repo_temp.path(), "mallory@evil.com", "origin", &gpg_home, None);
+    let result = cmd_reveal(repo_temp.path(), "mallory@evil.com", "origin", &key_store, None);
     let err = result
         .err()
         .expect("reveal for an email absent from the keyring must fail");
@@ -1764,13 +1764,13 @@ fn test_reveal_fails_if_email_not_in_keyring() {
 
 #[test]
 fn test_reveal_missing_encrypted_file_fails() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (repo_temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
     // Tracked and on disk, but never hidden: no secret.env.secret exists.
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
     let err = result
         .err()
         .expect("reveal without the ciphertext file must fail");
@@ -1834,11 +1834,11 @@ fn test_clean_idempotent() {
 
 #[test]
 fn clean_without_yes_refuses_to_destroy_ciphertext() {
-    let (temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
     std::fs::write(temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     assert!(temp.path().join("secret.env.secret").exists());
 
     let result = cmd_clean(temp.path(), false);
@@ -1868,7 +1868,7 @@ fn clean_without_yes_refuses_to_destroy_ciphertext() {
 
 #[test]
 fn clean_without_yes_refuses_when_tracked_files_exist() {
-    let (temp, _gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (temp, _key_store) = setup_trusted_repo_with_owner_in_keyring();
 
     std::fs::write(temp.path().join("plain.env"), "not yet hidden").unwrap();
     cmd_add(temp.path(), vec!["plain.env".to_string()]).expect("cmd_add must succeed");
@@ -1890,11 +1890,11 @@ fn clean_without_yes_refuses_when_tracked_files_exist() {
 
 #[test]
 fn clean_with_yes_destroys_state() {
-    let (temp, gpg_home) = setup_trusted_repo_with_owner_in_keyring();
+    let (temp, key_store) = setup_trusted_repo_with_owner_in_keyring();
 
     std::fs::write(temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     cmd_clean(temp.path(), true).expect("clean --yes must proceed");
 
@@ -2002,7 +2002,7 @@ fn test_full_workflow_hide_reveal_roundtrip() {
     
     // Test encryption/decryption roundtrip
     let plaintext = b"secret content";
-    let encrypted = encrypt_to_gpg_key(plaintext, &public_key).expect("encryption should succeed");
+    let encrypted = encrypt_to_public_key(plaintext, &public_key).expect("encryption should succeed");
     assert!(encrypted.contains("-----BEGIN PGP MESSAGE-----"));
 }
 
@@ -2082,17 +2082,17 @@ fn test_multiple_remotes_workflow() {
 }
 
 #[test]
-fn test_custom_gpg_home_workflow() {
+fn test_custom_key_store_workflow() {
     let temp = tempfile::tempdir().unwrap();
-    let custom_gpg_home = temp.path().join("custom-gpg");
-    std::fs::create_dir_all(&custom_gpg_home).unwrap();
+    let custom_key_store = temp.path().join("custom-store");
+    std::fs::create_dir_all(&custom_key_store).unwrap();
     
     let (secret_key, _public_key) = generate_test_key("alice@example.com");
     let armored = secret_key.to_armored_string(Default::default()).unwrap();
     
-    // Import to custom GPG home
-    import_key_to_gpg_home(&custom_gpg_home, &armored).unwrap();
-    assert!(custom_gpg_home.join("public-keys.pgp").exists());
+    // Import to custom key store
+    import_key_to_store(&custom_key_store, &armored).unwrap();
+    assert!(custom_key_store.join("public-keys.pgp").exists());
 }
 
 #[test]
@@ -2102,7 +2102,7 @@ fn test_binary_file_encryption_workflow() {
     // Binary data
     let binary_data: Vec<u8> = (0..255).collect();
     
-    let encrypted = encrypt_to_gpg_key(&binary_data, &public_key).expect("encryption should succeed");
+    let encrypted = encrypt_to_public_key(&binary_data, &public_key).expect("encryption should succeed");
     assert!(encrypted.contains("-----BEGIN PGP MESSAGE-----"));
 }
 

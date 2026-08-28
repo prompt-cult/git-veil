@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_gpg_keys, validate_public_key_for_use, KeyUse, Keyring, TrackedFiles};
+use crate::{base64_decode_public_key, cmd_verify_keyring, encrypt_to_public_keys, validate_public_key_for_use, KeyUse, Keyring, TrackedFiles};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -50,9 +50,9 @@ pub(crate) fn ensure_ciphertext_beside_plaintext(
 /// Tracked paths are repo-relative (relative to `repo_root`) and are
 /// validated before any use, so a malicious committed tracked.json cannot
 /// make hide read or write outside the repository.
-pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<()> {
     // Verify keyring signature first
-    cmd_verify_keyring(repo_root, remote_name, gpg_home)?;
+    cmd_verify_keyring(repo_root, remote_name, key_store)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -118,7 +118,7 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Resu
         // Encrypt to EVERY key in the keyring: the collaboration promise is
         // that any collaborator can reveal, so the one ciphertext carries a
         // PKESK per recipient.
-        let ciphertext = encrypt_to_gpg_keys(&plaintext, &public_keys)?;
+        let ciphertext = encrypt_to_public_keys(&plaintext, &public_keys)?;
 
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);

@@ -6,7 +6,7 @@ use crate::fs_atomic::write_atomic;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::{ensure_regular_file, PathResolveMode, resolve_repo_relative_input};
 use crate::{
-    decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles,
+    decrypt_with_private_key, find_private_key_by_email, TrackedFiles,
     verify_keyring_against_trust,
 };
 
@@ -30,11 +30,11 @@ pub fn cmd_unhide(
     file: &str,
     email: &str,
     remote_name: &str,
-    gpg_home: &PathBuf,
+    key_store: &PathBuf,
     passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify keyring signature first: never decrypt against an unverified keyring
-    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
     keyring
@@ -42,7 +42,7 @@ pub fn cmd_unhide(
         .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
 
     // Find user's private key
-    let private_key = find_private_key_by_email(gpg_home, email)?;
+    let private_key = find_private_key_by_email(key_store, email)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -82,7 +82,7 @@ pub fn cmd_unhide(
         .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
 
     // Decrypt
-    let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
+    let plaintext = decrypt_with_private_key(&ciphertext, &private_key, passphrase)?;
 
     // Write plaintext back to the tracked path
     if let Some(parent) = relative.parent() {

@@ -17,7 +17,7 @@ upstream-corpus strategy.
 | `trust_store_load` | `TrustStore::deserialize` | serialize∘deserialize roundtrip stability |
 | `sanitize_repo_id` | `TrustPinStore::sanitize_repo_id`, `pin_path` | output stays in `[A-Za-z0-9._%-]`, never `/`, never `.`/`..`, ≤3x input length; pin path always inside `<home>/trust-pins/` |
 | `tracked_files_load` | `validate_tracked_path`, `TrackedFiles::load` | accepted paths stay under the repo root; `load` Ok ⇒ every entry passes `validate_tracked_path` |
-| `decrypt_message` | `decrypt_with_gpg_key` against one lazily-generated fixed key | error messages never echo the ciphertext or key material |
+| `decrypt_message` | `decrypt_with_private_key` against one lazily-generated fixed key | error messages never echo the ciphertext or key material |
 
 ## Running
 

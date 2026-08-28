@@ -11,7 +11,7 @@
 //! so the user's real GnuPG state is never touched.
 
 use git_veil::{
-    cmd_import, decrypt_with_gpg_key, encrypt_to_gpg_key, find_private_key_by_email,
+    cmd_import, decrypt_with_private_key, encrypt_to_public_key, find_private_key_by_email,
     parse_armored_public_key,
 };
 use std::path::Path;
@@ -123,8 +123,8 @@ fn roundtrips_gpg_generated_key(primary: &str, subkey: &str) -> anyhow::Result<(
     let public_key = secret_key.to_public_key();
 
     let plaintext = b"hello from git-veil interop";
-    let ciphertext = encrypt_to_gpg_key(plaintext, &public_key).expect("encrypt to imported key");
-    let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key, None).expect("decrypt with imported key");
+    let ciphertext = encrypt_to_public_key(plaintext, &public_key).expect("encrypt to imported key");
+    let decrypted = decrypt_with_private_key(&ciphertext, &secret_key, None).expect("decrypt with imported key");
     assert_eq!(decrypted, plaintext, "round-trip through imported gpg key must preserve bytes");
     Ok(())
 }
@@ -165,7 +165,7 @@ fn our_ciphertext_is_readable_by_gpg() {
     let public_key = parse_armored_public_key(&public_armored).expect("parse gpg public key");
 
     let plaintext = b"readable by gpg";
-    let ciphertext = encrypt_to_gpg_key(plaintext, &public_key).expect("encrypt with git-veil");
+    let ciphertext = encrypt_to_public_key(plaintext, &public_key).expect("encrypt with git-veil");
     let ciphertext_file = temp.path().join("message.asc");
     std::fs::write(&ciphertext_file, &ciphertext).expect("write ciphertext file");
 
@@ -270,21 +270,21 @@ fn gpg_protected_secret_key_imports_and_decrypts_with_passphrase() {
         .expect("find imported protected secret key");
 
     let plaintext = b"protected interop payload";
-    let ciphertext = encrypt_to_gpg_key(plaintext, &secret_key.to_public_key())
+    let ciphertext = encrypt_to_public_key(plaintext, &secret_key.to_public_key())
         .expect("encrypt to imported key");
 
     // Without the passphrase the ciphertext must not decrypt.
     assert!(
-        decrypt_with_gpg_key(&ciphertext, &secret_key, None).is_err(),
+        decrypt_with_private_key(&ciphertext, &secret_key, None).is_err(),
         "the protected key must not decrypt with an empty passphrase"
     );
     // With the wrong passphrase it must not decrypt either.
     assert!(
-        decrypt_with_gpg_key(&ciphertext, &secret_key, Some("wrong-pass")).is_err(),
+        decrypt_with_private_key(&ciphertext, &secret_key, Some("wrong-pass")).is_err(),
         "the protected key must not decrypt with the wrong passphrase"
     );
     // With the correct passphrase it must decrypt.
-    let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key, Some("test-pass"))
+    let decrypted = decrypt_with_private_key(&ciphertext, &secret_key, Some("test-pass"))
         .expect("decrypt with the correct passphrase");
     assert_eq!(
         decrypted, plaintext,

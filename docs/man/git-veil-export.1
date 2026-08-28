@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-export \- Export an armoured public key from the local key store
 .SH SYNOPSIS
-\fBgit\-veil export\fR [\fB\-\-output\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+\fBgit\-veil export\fR [\fB\-\-output\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
 Export an armoured public key from the local key store
 .SH OPTIONS
@@ -12,7 +12,7 @@ Export an armoured public key from the local key store
 \fB\-\-output\fR \fI<OUTPUT>\fR
 Write the armoured public key to this file instead of stdout
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -24,7 +24,8 @@ Email or fingerprint of the key to export
 Prints — or with \-\-output writes — the armoured PUBLIC key for the given
 email or fingerprint, read from the local key store on this machine
 ($HOME/.git\-veil). This is the key handoff between collaborators without
-the gpg CLI: the local store only holds keys THIS machine knows about
+any external OpenPGP tool: the local store only holds keys THIS machine
+knows about
 (your imported private key and any key trust has pinned), so each
 collaborator runs export on their OWN machine and sends the .pub file to
 the owner, who adds it to the keyring with tell. It cannot export a

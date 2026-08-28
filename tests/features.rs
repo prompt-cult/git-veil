@@ -7,10 +7,10 @@ use git_veil::{
     base64_decode_public_key, base64_encode_public_key, check_email_in_identities, cmd_add,
     cmd_cat, cmd_changes, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_remove,
     cmd_removekey, cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide,
-    cmd_verify_keyring, cmd_list_keys, decrypt_with_gpg_key, default_gpg_home,
-    encrypt_to_gpg_key, export_public_key, extract_content_to_verify_from_keyring,
+    cmd_verify_keyring, cmd_list_keys, decrypt_with_private_key, default_key_store,
+    encrypt_to_public_key, export_public_key, extract_content_to_verify_from_keyring,
     extract_key_fingerprint, find_private_key_by_email, find_private_key_by_fingerprint,
-    import_key_to_gpg_home, parse_armored_public_key, parse_git_remote_url,
+    import_key_to_store, parse_armored_public_key, parse_git_remote_url,
     sign_keyring_content, verify_keyring_against_trust, write_atomic, Keyring, KeyringEntry,
     TrustPinStore, TrustStore, TrackedFiles,
 };
@@ -77,7 +77,7 @@ fn generate_protected_test_key(
     (secret_key, public_key)
 }
 
-fn write_multi_key_secret_keys(gpg_home: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
+fn write_multi_key_secret_keys(key_store: &PathBuf, keys: &[pgp::composed::SignedSecretKey]) {
     let mut content = String::new();
     for key in keys {
         if !content.is_empty() {
@@ -85,12 +85,12 @@ fn write_multi_key_secret_keys(gpg_home: &PathBuf, keys: &[pgp::composed::Signed
         }
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
     }
-    write_secret_keys_content(gpg_home, &content);
+    write_secret_keys_content(key_store, &content);
 }
 
-fn write_secret_keys_content(gpg_home: &PathBuf, content: &str) {
-    std::fs::create_dir_all(gpg_home).unwrap();
-    std::fs::write(gpg_home.join("secret-keys.pgp"), content).unwrap();
+fn write_secret_keys_content(key_store: &PathBuf, content: &str) {
+    std::fs::create_dir_all(key_store).unwrap();
+    std::fs::write(key_store.join("secret-keys.pgp"), content).unwrap();
 }
 
 fn setup_git_repo_with_origin_remote() -> tempfile::TempDir {
@@ -115,16 +115,16 @@ fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Pat
 }
 
 // ============================================================================
-// default_gpg_home refuses to fall back to /tmp when HOME is unset (M6)
+// default_key_store refuses to fall back to /tmp when HOME is unset (M6)
 // ============================================================================
 
 #[test]
 #[serial]
-fn default_gpg_home_errors_when_home_unset() {
+fn default_key_store_errors_when_home_unset() {
     let saved = std::env::var("HOME").ok();
     std::env::remove_var("HOME");
 
-    let result = default_gpg_home();
+    let result = default_key_store();
 
     match saved {
         Some(v) => std::env::set_var("HOME", v),
@@ -148,7 +148,7 @@ fn default_key_store_is_home_git_veil() {
     let temp = tempfile::tempdir().unwrap();
     std::env::set_var("HOME", temp.path());
 
-    let result = default_gpg_home();
+    let result = default_key_store();
 
     match saved {
         Some(v) => std::env::set_var("HOME", v),
@@ -169,13 +169,13 @@ fn default_key_store_is_home_git_veil() {
 #[test]
 fn find_private_key_by_email_selects_matching_key_when_not_first_in_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let (bob, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    write_multi_key_secret_keys(&gpg_home, &[alice, bob]);
+    write_multi_key_secret_keys(&key_store, &[alice, bob]);
 
-    let key = find_private_key_by_email(&gpg_home, "bob@example.com").expect(
+    let key = find_private_key_by_email(&key_store, "bob@example.com").expect(
         "bob's key should be found even though alice's key comes first",
     );
     assert_eq!(
@@ -188,13 +188,13 @@ fn find_private_key_by_email_selects_matching_key_when_not_first_in_secret_key_s
 #[test]
 fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let (bob, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    write_multi_key_secret_keys(&gpg_home, &[alice, bob]);
+    write_multi_key_secret_keys(&key_store, &[alice, bob]);
 
-    let key = find_private_key_by_fingerprint(&gpg_home, &bob_fingerprint).expect(
+    let key = find_private_key_by_fingerprint(&key_store, &bob_fingerprint).expect(
         "bob's key should be found even though alice's key comes first",
     );
     assert_eq!(
@@ -207,21 +207,21 @@ fn find_private_key_by_fingerprint_selects_matching_key_when_not_first_in_secret
 #[test]
 fn find_private_key_by_email_fails_when_no_key_matches() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
-    write_multi_key_secret_keys(&gpg_home, &[alice]);
+    write_multi_key_secret_keys(&key_store, &[alice]);
 
-    let result = find_private_key_by_email(&gpg_home, "carol@example.com");
+    let result = find_private_key_by_email(&key_store, "carol@example.com");
     assert!(result.is_err(), "unknown email must not match any key");
 }
 
 #[test]
 fn find_private_key_by_email_errors_on_empty_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
-    write_secret_keys_content(&gpg_home, "");
+    let key_store = temp.path().to_path_buf();
+    write_secret_keys_content(&key_store, "");
 
-    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let result = find_private_key_by_email(&key_store, "alice@example.com");
 
     let err = result.err().expect("an empty secret key store must not yield any key");
     assert!(
@@ -239,7 +239,7 @@ fn find_private_key_by_email_errors_on_empty_secret_key_store() {
 #[test]
 fn find_private_key_by_email_ignores_garbage_between_blocks() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let (bob, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
@@ -249,9 +249,9 @@ fn find_private_key_by_email_ignores_garbage_between_blocks() {
         "this leading text is not a key at all\n{}\n>>> random junk between blocks <<<\n{}\ntrailing junk",
         alice_armored, bob_armored
     );
-    write_secret_keys_content(&gpg_home, &content);
+    write_secret_keys_content(&key_store, &content);
 
-    let key = find_private_key_by_email(&gpg_home, "bob@example.com")
+    let key = find_private_key_by_email(&key_store, "bob@example.com")
         .expect("bob's key must be found despite junk text around the blocks");
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
@@ -263,7 +263,7 @@ fn find_private_key_by_email_ignores_garbage_between_blocks() {
 #[test]
 fn find_private_key_by_email_errors_on_truncated_final_block() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let (bob, _) = generate_test_key("bob@example.com");
     let alice_armored = alice.to_armored_string(Default::default()).unwrap();
@@ -271,9 +271,9 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
     let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
     let truncated_bob = bob_armored[..bob_armored.find(end_marker).unwrap()].to_string();
     let content = format!("{}\n{}", alice_armored, truncated_bob);
-    write_secret_keys_content(&gpg_home, &content);
+    write_secret_keys_content(&key_store, &content);
 
-    let bob_result = find_private_key_by_email(&gpg_home, "bob@example.com");
+    let bob_result = find_private_key_by_email(&key_store, "bob@example.com");
 
     let bob_err = bob_result.err().expect(
         "a secret key store whose final block is truncated must not yield any key",
@@ -304,7 +304,7 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
     // healthy-looking prefix, because truncation may itself be an attack
     // (an attacker who can truncate the secret key store must not be able to quietly
     // remove keys from use).
-    let alice_result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let alice_result = find_private_key_by_email(&key_store, "alice@example.com");
 
     let alice_err = alice_result.err().expect(
         "a corrupt secret key store must be rejected in full: even keys before the truncated tail must not be served",
@@ -319,14 +319,14 @@ fn find_private_key_by_email_errors_on_truncated_final_block() {
 #[test]
 fn find_private_key_by_email_errors_on_truncated_only_secret_key_store() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (alice, _) = generate_test_key("alice@example.com");
     let alice_armored = alice.to_armored_string(Default::default()).unwrap();
     let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
     let truncated = alice_armored[..alice_armored.find(end_marker).unwrap()].to_string();
-    write_secret_keys_content(&gpg_home, &truncated);
+    write_secret_keys_content(&key_store, &truncated);
 
-    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let result = find_private_key_by_email(&key_store, "alice@example.com");
 
     let err = result
         .err()
@@ -346,17 +346,17 @@ fn find_private_key_by_email_errors_on_truncated_only_secret_key_store() {
 #[test]
 fn find_private_key_by_email_returns_first_matching_key_when_email_is_duplicated() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
     let (carol_second, _) = generate_test_key("carol@example.com");
     let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
-    write_multi_key_secret_keys(&gpg_home, &[carol_first, carol_second]);
+    write_multi_key_secret_keys(&key_store, &[carol_first, carol_second]);
 
     // Documented current behaviour: when two keys in the secret key store claim the
     // same email, the first matching key in file order wins. Treating
     // duplicated emails as an ambiguity error is out of scope here and is
     // reviewed under a separate task.
-    let key = find_private_key_by_email(&gpg_home, "carol@example.com")
+    let key = find_private_key_by_email(&key_store, "carol@example.com")
         .expect("a key matching the duplicated email must be found");
     assert_eq!(
         extract_key_fingerprint(&key.to_public_key()),
@@ -424,13 +424,13 @@ fn email_matching_requires_exact_address() {
 #[test]
 fn find_private_key_by_email_requires_exact_address() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (evil, _) = generate_test_key("xalice@example.com.evil.net");
     let (alice, alice_pub) = generate_test_key("alice@example.com");
     let alice_fingerprint = extract_key_fingerprint(&alice_pub);
-    write_multi_key_secret_keys(&gpg_home, &[evil, alice]);
+    write_multi_key_secret_keys(&key_store, &[evil, alice]);
 
-    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let result = find_private_key_by_email(&key_store, "alice@example.com");
     let key = result.expect(
         "alice's exact key must be found even though another key's address contains the query as a substring",
     );
@@ -444,11 +444,11 @@ fn find_private_key_by_email_requires_exact_address() {
 #[test]
 fn find_private_key_by_email_rejects_substring_only_match() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (evil, _) = generate_test_key("xalice@example.com.evil.net");
-    write_multi_key_secret_keys(&gpg_home, &[evil]);
+    write_multi_key_secret_keys(&key_store, &[evil]);
 
-    let result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let result = find_private_key_by_email(&key_store, "alice@example.com");
     assert!(
         result.is_err(),
         "a key whose address merely contains the query as a substring must not be returned"
@@ -469,12 +469,12 @@ fn bare_user_id_without_angle_brackets_still_matches() {
     );
 
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
+    let key_store = temp.path().to_path_buf();
     let (plain_sec, plain_sec_pub) = generate_test_key_with_uid("plain@example.com");
     let stored_fingerprint = extract_key_fingerprint(&plain_sec_pub);
-    write_multi_key_secret_keys(&gpg_home, &[plain_sec]);
+    write_multi_key_secret_keys(&key_store, &[plain_sec]);
 
-    let found = find_private_key_by_email(&gpg_home, "plain@example.com")
+    let found = find_private_key_by_email(&key_store, "plain@example.com")
         .expect("a bare user-ID key in the secret key store must be findable by exact email");
     assert_eq!(
         extract_key_fingerprint(&found.to_public_key()),
@@ -616,7 +616,7 @@ fn keyring_find_by_email_is_case_insensitive() {
 #[test]
 fn tell_twice_same_email_updates_rather_than_duplicates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -626,7 +626,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("first tell must succeed");
 
@@ -638,7 +638,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
@@ -648,7 +648,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
         .iter()
         .filter(|e| e.email == "alice@example.com")
         .count();
-    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &key_store);
 
     second_tell.expect("second tell for the same email must succeed");
     assert_eq!(
@@ -673,7 +673,7 @@ fn tell_twice_same_email_updates_rather_than_duplicates() {
 #[test]
 fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@x.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -683,7 +683,7 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
         "alice@x.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("first tell must succeed");
 
@@ -692,7 +692,7 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
         "ALICE@X.COM",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("second tell with different email case must succeed");
 
@@ -709,7 +709,7 @@ fn tell_twice_with_different_email_case_updates_rather_than_duplicates() {
         "the first-seen stored email casing must be preserved, got: {:?}",
         keyring.entries[0]
     );
-    cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home)
+    cmd_verify_keyring(repo_temp.path(), "origin", &key_store)
         .expect("keyring must still verify after case-variant tell");
 }
 
@@ -727,14 +727,14 @@ fn trust_accepts_owner_key_matching_user_at_service_email() {
     let keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &keyfile);
 
-    let gpg_temp = tempfile::tempdir().unwrap();
+    let store_temp = tempfile::tempdir().unwrap();
 
     let result = cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         keyfile.to_str().unwrap(),
         "origin",
-        &gpg_temp.path().to_path_buf(),
+        &store_temp.path().to_path_buf(),
     );
 
     assert!(
@@ -754,14 +754,14 @@ fn trust_rejects_key_without_owner_email() {
     let keyfile = repo_temp.path().join("evil.pub");
     write_public_key_file(&evil_pub, &keyfile);
 
-    let gpg_temp = tempfile::tempdir().unwrap();
+    let store_temp = tempfile::tempdir().unwrap();
 
     let result = cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         keyfile.to_str().unwrap(),
         "origin",
-        &gpg_temp.path().to_path_buf(),
+        &store_temp.path().to_path_buf(),
     );
 
     let err = result.err().expect("evil key must not be trusted");
@@ -776,9 +776,9 @@ fn trust_rejects_key_without_owner_email() {
 // Tell must not launder trust (C1): verify incoming keyring signature first
 // ============================================================================
 
-/// Sets up a repo with trust established for owner@github.com and a gpg home
+/// Sets up a repo with trust established for owner@github.com and a key store
 /// containing the owner key (public-keys.pgp, via cmd_trust) plus the given secret keys
-/// in the secret key store. Returns (repo_temp, gpg_home).
+/// in the secret key store. Returns (repo_temp, key_store).
 fn setup_trusted_repo_with_secret_keys(
     secret_keys: &[pgp::composed::SignedSecretKey],
 ) -> (tempfile::TempDir, PathBuf) {
@@ -790,28 +790,28 @@ fn setup_trusted_repo_with_secret_keys(
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
     let mut store_keys: Vec<pgp::composed::SignedSecretKey> = vec![owner_sec];
     store_keys.extend_from_slice(secret_keys);
-    write_multi_key_secret_keys(&gpg_home, &store_keys);
+    write_multi_key_secret_keys(&key_store, &store_keys);
 
-    (repo_temp, gpg_home)
+    (repo_temp, key_store)
 }
 
 #[test]
 fn tell_rejects_unsigned_keyring_containing_entries() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     // Overwrite the keyring with a well-formed but UNSIGNED keyring that
     // already contains an attacker entry.
@@ -833,7 +833,7 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
     assert!(
@@ -848,10 +848,10 @@ fn tell_rejects_unsigned_keyring_containing_entries() {
 
 /// Sets up a trusted repo whose signed keyring contains only alice, and
 /// tampers the keyring file by appending an attacker entry plus a bogus
-/// signature. Returns (repo_temp, gpg_home, keyring_path).
+/// signature. Returns (repo_temp, key_store, keyring_path).
 fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::PathBuf) {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -860,7 +860,7 @@ fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::Path
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
@@ -879,15 +879,15 @@ fn setup_tampered_keyring_repo() -> (tempfile::TempDir, PathBuf, std::path::Path
     );
     std::fs::write(&keyring_path, tampered.serialize()).unwrap();
 
-    (repo_temp, gpg_home, keyring_path)
+    (repo_temp, key_store, keyring_path)
 }
 
 #[test]
 fn list_keys_on_tampered_keyring_fails_closed() {
-    let (repo_temp, gpg_home, keyring_path) = setup_tampered_keyring_repo();
+    let (repo_temp, key_store, keyring_path) = setup_tampered_keyring_repo();
     let keyring_before = std::fs::read(&keyring_path).unwrap();
 
-    let result = cmd_list_keys(repo_temp.path(), "origin", &gpg_home);
+    let result = cmd_list_keys(repo_temp.path(), "origin", &key_store);
     let keyring_after = std::fs::read(&keyring_path).unwrap();
 
     let err = result
@@ -907,7 +907,7 @@ fn list_keys_on_tampered_keyring_fails_closed() {
 #[test]
 fn list_keys_on_valid_keyring_succeeds_and_reports_verification() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -916,11 +916,11 @@ fn list_keys_on_valid_keyring_succeeds_and_reports_verification() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
-    cmd_list_keys(repo_temp.path(), "origin", &gpg_home)
+    cmd_list_keys(repo_temp.path(), "origin", &key_store)
         .expect("list-keys over a validly signed keyring must succeed");
 }
 
@@ -930,11 +930,11 @@ fn list_keys_on_valid_keyring_succeeds_and_reports_verification() {
 
 #[test]
 fn verify_keyring_reports_trusted_fingerprint() {
-    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, owner_pub) = setup_repo_with_owner_in_keyring();
     let owner_fingerprint = extract_key_fingerprint(&owner_pub);
 
     let (repo_id, fingerprint, _keyring) =
-        verify_keyring_against_trust(repo_temp.path(), "origin", &gpg_home)
+        verify_keyring_against_trust(repo_temp.path(), "origin", &key_store)
             .expect("verification must succeed on a trusted repo");
 
     assert_eq!(
@@ -945,7 +945,7 @@ fn verify_keyring_reports_trusted_fingerprint() {
         fingerprint, owner_fingerprint,
         "the returned fingerprint must be the trusted owner key's fingerprint"
     );
-    let pin = TrustPinStore::read_pin(&gpg_home, &repo_id)
+    let pin = TrustPinStore::read_pin(&key_store, &repo_id)
         .expect("reading the pin must not error")
         .expect("cmd_trust must have pinned this repo on this machine");
     assert_eq!(
@@ -957,7 +957,7 @@ fn verify_keyring_reports_trusted_fingerprint() {
 #[test]
 fn tell_rejects_keyring_signed_by_wrong_key() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     // Forge a keyring containing a third-party entry, signed by a key that is
     // NOT the trusted owner key. Sign the canonical content verify_keyring
@@ -987,7 +987,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
     assert!(
@@ -999,7 +999,7 @@ fn tell_rejects_keyring_signed_by_wrong_key() {
 #[test]
 fn tell_first_entry_on_fresh_repo_succeeds() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1009,7 +1009,7 @@ fn tell_first_entry_on_fresh_repo_succeeds() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
     let keyring_text =
@@ -1064,7 +1064,7 @@ fn tell_fails_when_collaborator_key_cannot_encrypt() {
     // key, no encryption subkey at all.
     let alice_pub = generate_subkeyless_test_key("alice@example.com");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1077,7 +1077,7 @@ fn tell_fails_when_collaborator_key_cannot_encrypt() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
     let keyring_after = std::fs::read(&keyring_path).unwrap();
@@ -1122,7 +1122,7 @@ fn tell_canary_does_not_appear_anywhere() {
     }
 
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1132,7 +1132,7 @@ fn tell_canary_does_not_appear_anywhere() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("tell with an encryptable key must succeed");
 
@@ -1152,7 +1152,7 @@ fn tell_canary_does_not_appear_anywhere() {
 fn removeperson_removes_entry_and_resigns() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
     let (_, bob_pub) = generate_test_key("bob@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1164,22 +1164,22 @@ fn removeperson_removes_entry_and_resigns() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("tell alice must succeed");
     cmd_tell(        repo_temp.path(),
         "bob@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("tell bob must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home, None);
+    let remove_result = cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &key_store, None);
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
-    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &key_store);
 
     remove_result.expect("removeperson must succeed for an existing collaborator");
     assert_eq!(
@@ -1199,7 +1199,7 @@ fn removeperson_removes_entry_and_resigns() {
 #[test]
 fn removeperson_removes_entry_regardless_of_email_case() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1209,15 +1209,15 @@ fn removeperson_removes_entry_regardless_of_email_case() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("tell alice must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "ALICE@EXAMPLE.COM", "origin", &gpg_home, None);
+    let remove_result = cmd_removeperson(repo_temp.path(), "ALICE@EXAMPLE.COM", "origin", &key_store, None);
 
     let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).unwrap();
-    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &key_store);
 
     remove_result.expect(
         "removeperson must remove the entry regardless of email case, matching the case-insensitive reveal lookup",
@@ -1233,7 +1233,7 @@ fn removeperson_removes_entry_regardless_of_email_case() {
 #[test]
 fn removeperson_unknown_email_fails() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1243,11 +1243,11 @@ fn removeperson_unknown_email_fails() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("tell alice must succeed");
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "carol@example.com", "origin", &gpg_home, None);
+    let remove_result = cmd_removeperson(repo_temp.path(), "carol@example.com", "origin", &key_store, None);
 
     let err = remove_result.err().expect("removing an unknown email must fail");
     assert!(
@@ -1267,7 +1267,7 @@ fn removeperson_requires_trust() {
         repo_temp.path(),
         "alice@example.com",
         "origin",
-        &repo_temp.path().join("gpg-home"), None
+        &repo_temp.path().join("key-store"), None
     );
 
     assert!(
@@ -1280,7 +1280,7 @@ fn removeperson_requires_trust() {
 #[test]
 fn removeperson_rejects_tampered_keyring() {
     let (_, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1290,7 +1290,7 @@ fn removeperson_rejects_tampered_keyring() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("tell alice must succeed");
 
@@ -1314,7 +1314,7 @@ fn removeperson_rejects_tampered_keyring() {
     forged.signature = Some(signature);
     std::fs::write(repo_temp.path().join(".git-veil/keyring"), forged.serialize()).unwrap();
 
-    let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &gpg_home, None);
+    let remove_result = cmd_removeperson(repo_temp.path(), "mallory@evil.com", "origin", &key_store, None);
 
     let keyring_text_after = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
 
@@ -1379,18 +1379,18 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     let trust_result = cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     );
 
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    write_multi_key_secret_keys(&gpg_home, &[owner_sec, alice_sec]);
+    write_multi_key_secret_keys(&key_store, &[owner_sec, alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1400,10 +1400,10 @@ fn fresh_repo_init_trust_tell_verify_happy_path() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
-    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home);
+    let verify_result = cmd_verify_keyring(repo_temp.path(), "origin", &key_store);
 
     trust_result.expect("cmd_trust must succeed on a fresh repo");
     tell_result.expect("cmd_tell must succeed on a fresh repo");
@@ -1443,29 +1443,29 @@ fn setup_repo_with_owner_in_keyring()
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secret_keys(&gpg_home, &[owner_sec]);
+    write_multi_key_secret_keys(&key_store, &[owner_sec]);
 
     cmd_tell(
         repo_temp.path(),
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
-    (repo_temp, gpg_home, owner_pub)
+    (repo_temp, key_store, owner_pub)
 }
 
 #[test]
@@ -1566,7 +1566,7 @@ fn remove_rejects_file_outside_repo() {
 
 #[test]
 fn remove_works_on_currently_hidden_file() {
-    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _owner_pub) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("a.env"), "alpha").unwrap();
     std::fs::write(repo_temp.path().join("b.env"), "beta").unwrap();
@@ -1575,7 +1575,7 @@ fn remove_works_on_currently_hidden_file() {
         vec!["a.env".to_string(), "b.env".to_string()],
     )
     .expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     // hide deleted the plaintexts and left ciphertexts beside them
     assert!(
@@ -1656,11 +1656,11 @@ fn remove_still_rejects_paths_outside_the_repo() {
 
 #[test]
 fn reveal_refuses_escaping_tracked_path() {
-    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, owner_pub) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("secret.env"), "topsecret").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     assert!(
         repo_temp.path().join("secret.env.secret").exists(),
         "hide must write the ciphertext beside the plaintext"
@@ -1672,7 +1672,7 @@ fn reveal_refuses_escaping_tracked_path() {
     // ciphertext for ../outside.txt would land beside the repo as
     // outside.txt.secret.
     write_tracked_json(repo_temp.path(), &["../outside.txt"]);
-    let ciphertext = encrypt_to_gpg_key(b"pwned", &owner_pub).unwrap();
+    let ciphertext = encrypt_to_public_key(b"pwned", &owner_pub).unwrap();
     let planted = repo_temp
         .path()
         .parent()
@@ -1687,7 +1687,7 @@ fn reveal_refuses_escaping_tracked_path() {
         .join("outside.txt");
     let _ = std::fs::remove_file(&target);
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
 
     let target_exists = target.exists();
     let _ = std::fs::remove_file(&target);
@@ -1716,7 +1716,7 @@ fn reveal_refuses_escaping_tracked_path() {
 #[test]
 fn hide_then_reveal_restores_exact_bytes() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1726,7 +1726,7 @@ fn hide_then_reveal_restores_exact_bytes() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1735,12 +1735,12 @@ fn hide_then_reveal_restores_exact_bytes() {
 
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let plaintext_gone_after_hide = !repo_temp.path().join("secret.env").exists();
     let ciphertext_after_hide =
         repo_temp.path().join("secret.env.secret").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
     let restored = std::fs::read(repo_temp.path().join("secret.env"));
     let ciphertext_gone_after_reveal =
         !repo_temp.path().join("secret.env.secret").exists();
@@ -1773,7 +1773,7 @@ fn hide_then_reveal_restores_exact_bytes() {
 #[test]
 fn hide_then_reveal_in_subdirectory() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1783,7 +1783,7 @@ fn hide_then_reveal_in_subdirectory() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1794,12 +1794,12 @@ fn hide_then_reveal_in_subdirectory() {
 
     cmd_add(repo_temp.path(), vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let plaintext_gone_after_hide = !repo_temp.path().join(tracked_rel).exists();
     let ciphertext_after_hide = repo_temp.path().join("a/b/c/secret.env.secret")
     .exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
     let restored = std::fs::read(repo_temp.path().join(tracked_rel));
     let ciphertext_gone_after_reveal = !repo_temp.path().join("a/b/c/secret.env.secret")
     .exists();
@@ -1832,7 +1832,7 @@ fn hide_then_reveal_in_subdirectory() {
 #[test]
 fn hide_reveal_roundtrip_binary_file() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1842,7 +1842,7 @@ fn hide_reveal_roundtrip_binary_file() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1851,10 +1851,10 @@ fn hide_reveal_roundtrip_binary_file() {
 
     cmd_add(repo_temp.path(), vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let plaintext_gone_after_hide = !repo_temp.path().join("blob.bin").exists();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
     let restored = std::fs::read(repo_temp.path().join("blob.bin"));
 
     hide_result.expect("cmd_hide must succeed");
@@ -1884,12 +1884,12 @@ fn hide_reveal_roundtrip_binary_file() {
 
 #[test]
 fn ciphertext_filename_is_full_name_plus_secret() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("notes"), "no extension here\n").unwrap();
     cmd_add(repo_temp.path(), vec!["notes".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let ciphertext_exists =
         repo_temp.path().join("notes.secret").exists();
     let mangled_exists =
@@ -1908,12 +1908,12 @@ fn ciphertext_filename_is_full_name_plus_secret() {
 
 #[test]
 fn ciphertext_filename_for_dotfile() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join(".env"), "DOTENV=1\n").unwrap();
     cmd_add(repo_temp.path(), vec![".env".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let ciphertext_exists =
         repo_temp.path().join(".env.secret").exists();
     let mangled_exists =
@@ -1938,7 +1938,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         ("a.tar.gz", b"double-extension archive bytes".to_vec()),
     ];
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -1948,7 +1948,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
@@ -1958,7 +1958,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
             .unwrap_or_else(|e| panic!("cmd_add must succeed for {}: {:?}", name, e));
     }
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let ciphertexts_exist: Vec<(String, bool)> = cases
         .iter()
         .map(|(name, _)| {
@@ -1972,7 +1972,7 @@ fn hide_then_reveal_roundtrip_fully_preserves_file_names() {
         })
         .collect();
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
     let restored: Vec<(String, Option<Vec<u8>>)> = cases
         .iter()
         .map(|(name, _)| (name.to_string(), std::fs::read(repo_temp.path().join(name)).ok()))
@@ -2042,10 +2042,10 @@ fn symlink_outside_repo_is_rejected() {
 // ============================================================================
 
 /// Full flow: init -> trust -> tell(alice) -> add -> hide, with alice's key
-/// in the secret key store. Returns (repo_temp, gpg_home).
+/// in the secret key store. Returns (repo_temp, key_store).
 fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -2055,23 +2055,23 @@ fn setup_hidden_repo_with_alice_key() -> (tempfile::TempDir, PathBuf) {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
-    (repo_temp, gpg_home)
+    (repo_temp, key_store)
 }
 
 #[test]
 fn cat_returns_exact_bytes_without_touching_disk() {
-    let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+    let (repo_temp, key_store) = setup_hidden_repo_with_alice_key();
 
     let plaintext: &str = "API_KEY=cat-s3cr3t\nDB_PASSWORD=hunter2\n# unicode: héllo — 日本語\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
-    let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &gpg_home, None);
+    let cat_result = cmd_cat(repo_temp.path(), "secret.env", "alice@example.com", "origin", &key_store, None);
     let ciphertext_still_exists =
         repo_temp.path().join("secret.env.secret").exists();
     let no_plaintext_on_disk = !repo_temp.path().join("secret.env").exists();
@@ -2097,9 +2097,9 @@ fn cat_returns_exact_bytes_without_touching_disk() {
 
 #[test]
 fn cat_fails_for_untracked_file() {
-    let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+    let (repo_temp, key_store) = setup_hidden_repo_with_alice_key();
 
-    let result = cmd_cat(repo_temp.path(), "not-tracked.env", "alice@example.com", "origin", &gpg_home, None);
+    let result = cmd_cat(repo_temp.path(), "not-tracked.env", "alice@example.com", "origin", &key_store, None);
 
     let err = result.err().expect("cat of an untracked file must fail");
     assert!(
@@ -2111,13 +2111,13 @@ fn cat_fails_for_untracked_file() {
 
 #[test]
 fn cat_rejects_path_escaping_the_repo() {
-    let (repo_temp, gpg_home) = setup_hidden_repo_with_alice_key();
+    let (repo_temp, key_store) = setup_hidden_repo_with_alice_key();
 
     std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
-    let dotdot_result = cmd_cat(repo_temp.path(), "../outside.txt", "alice@example.com", "origin", &gpg_home, None);
+    let dotdot_result = cmd_cat(repo_temp.path(), "../outside.txt", "alice@example.com", "origin", &key_store, None);
     let outside = repo_temp.path().parent().unwrap().join("outside.txt");
     std::fs::write(&outside, "nope").unwrap();
     let absolute_result = cmd_cat(
@@ -2125,7 +2125,7 @@ fn cat_rejects_path_escaping_the_repo() {
         outside.to_str().unwrap(),
         "alice@example.com",
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
     let absolute_exists = outside.exists();
     let _ = std::fs::remove_file(&outside);
@@ -2184,7 +2184,7 @@ fn any_secret_file_contains(dir: &std::path::Path, needle: &str) -> bool {
 /// Attack setup: a trusted repo whose committed tracked.json names
 /// `link.txt` — a symlink inside the repo targeting `../<outside_name>`,
 /// a file OUTSIDE the repository. Returns
-/// (repo_temp, gpg_home, owner_pub, outside_file, link_path).
+/// (repo_temp, key_store, owner_pub, outside_file, link_path).
 fn setup_tracked_symlink_repo(
     outside_name: &str,
 ) -> (
@@ -2194,7 +2194,7 @@ fn setup_tracked_symlink_repo(
     std::path::PathBuf,
     std::path::PathBuf,
 ) {
-    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, owner_pub) = setup_repo_with_owner_in_keyring();
 
     let outside_file = repo_temp.path().parent().unwrap().join(outside_name);
     std::fs::write(&outside_file, "VICTIM-SSH-PRIVATE-KEY").unwrap();
@@ -2210,15 +2210,15 @@ fn setup_tracked_symlink_repo(
     write_tracked_json(repo_temp.path(), &["link.txt"]);
 
     let link_path = repo_temp.path().join("link.txt");
-    (repo_temp, gpg_home, owner_pub, outside_file, link_path)
+    (repo_temp, key_store, owner_pub, outside_file, link_path)
 }
 
 #[test]
 fn hide_refuses_tracked_symlink() {
-    let (repo_temp, gpg_home, _owner_pub, outside_file, link_path) =
+    let (repo_temp, key_store, _owner_pub, outside_file, link_path) =
         setup_tracked_symlink_repo("outside-hide.txt");
 
-    let result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let result = cmd_hide(repo_temp.path(), "origin", &key_store);
 
     let err = result
         .err()
@@ -2259,7 +2259,7 @@ fn hide_refuses_tracked_symlink() {
 
 #[test]
 fn cat_refuses_tracked_symlink() {
-    let (repo_temp, gpg_home, owner_pub, outside_file, link_path) =
+    let (repo_temp, key_store, owner_pub, outside_file, link_path) =
         setup_tracked_symlink_repo("outside-cat.txt");
 
     // A planted ciphertext beside the symlink: in the vulnerable state cat
@@ -2267,7 +2267,7 @@ fn cat_refuses_tracked_symlink() {
     let planted = repo_temp.path().join("link.txt.secret");
     std::fs::write(
         &planted,
-        encrypt_to_gpg_key(b"ATTACKER-PLANTED", &owner_pub).unwrap(),
+        encrypt_to_public_key(b"ATTACKER-PLANTED", &owner_pub).unwrap(),
     )
     .unwrap();
 
@@ -2276,7 +2276,7 @@ fn cat_refuses_tracked_symlink() {
         "link.txt",
         "owner@github.com",
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     );
 
@@ -2311,7 +2311,7 @@ fn cat_refuses_tracked_symlink() {
 
 #[test]
 fn changes_refuses_tracked_symlink() {
-    let (repo_temp, gpg_home, owner_pub, outside_file, link_path) =
+    let (repo_temp, key_store, owner_pub, outside_file, link_path) =
         setup_tracked_symlink_repo("outside-changes.txt");
 
     // A planted ciphertext beside the symlink: in the vulnerable state
@@ -2320,7 +2320,7 @@ fn changes_refuses_tracked_symlink() {
     let planted = repo_temp.path().join("link.txt.secret");
     std::fs::write(
         &planted,
-        encrypt_to_gpg_key(b"ATTACKER-PLANTED", &owner_pub).unwrap(),
+        encrypt_to_public_key(b"ATTACKER-PLANTED", &owner_pub).unwrap(),
     )
     .unwrap();
 
@@ -2329,7 +2329,7 @@ fn changes_refuses_tracked_symlink() {
         vec![],
         "owner@github.com",
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     );
 
@@ -2364,17 +2364,17 @@ fn changes_refuses_tracked_symlink() {
 
 #[test]
 fn reveal_refuses_to_write_through_symlink() {
-    let (repo_temp, gpg_home, owner_pub, outside_file, link_path) =
+    let (repo_temp, key_store, owner_pub, outside_file, link_path) =
         setup_tracked_symlink_repo("outside-reveal.txt");
 
     let planted = repo_temp.path().join("link.txt.secret");
     std::fs::write(
         &planted,
-        encrypt_to_gpg_key(b"pwned", &owner_pub).unwrap(),
+        encrypt_to_public_key(b"pwned", &owner_pub).unwrap(),
     )
     .unwrap();
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
 
     let err = result
         .err()
@@ -2413,17 +2413,17 @@ fn reveal_refuses_to_write_through_symlink() {
 
 #[test]
 fn changes_reports_no_changes_when_plaintext_matches() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     let plaintext = "API_KEY=s3cr3t-value\nDB_PASSWORD=hunter2\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     // Re-create the plaintext with IDENTICAL bytes, as if revealed and untouched.
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
     let ciphertext_still_exists =
         repo_temp.path().join("secret.env.secret").exists();
 
@@ -2445,15 +2445,15 @@ fn changes_reports_no_changes_when_plaintext_matches() {
 
 #[test]
 fn changes_reports_modified_file() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=old-value\n").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=NEW-value\nDB=hunter2\n").unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
 
     let changed = result.expect("cmd_changes must succeed for a modified file");
     assert_eq!(
@@ -2466,14 +2466,14 @@ fn changes_reports_modified_file() {
 
 #[test]
 fn changes_ignores_missing_plaintext() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=s3cr3t\n").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     // hide deleted the plaintext; it is still hidden but absent on disk.
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
 
     let changed = result.expect("missing plaintext must be skipped, not an error");
     assert!(
@@ -2489,14 +2489,14 @@ fn changes_ignores_missing_plaintext() {
 
 #[test]
 fn changes_fails_for_untracked_file() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     let result = cmd_changes(
         repo_temp.path(),
         vec!["not-tracked.env".to_string()],
         "owner@github.com",
         "origin",
-        &gpg_home, None
+        &key_store, None
     );
 
     let err = result.err().expect("changes for an untracked file must fail");
@@ -2509,17 +2509,17 @@ fn changes_fails_for_untracked_file() {
 
 #[test]
 fn changes_detects_binary_difference() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     let original: Vec<u8> = vec![0u8, 1, 2, 3, 255];
     std::fs::write(repo_temp.path().join("blob.bin"), &original).unwrap();
     cmd_add(repo_temp.path(), vec!["blob.bin".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     let modified: Vec<u8> = vec![0u8, 1, 2, 3, 254, 9];
     std::fs::write(repo_temp.path().join("blob.bin"), &modified).unwrap();
 
-    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_changes(repo_temp.path(), vec![], "owner@github.com", "origin", &key_store, None);
 
     let changed = result.expect("cmd_changes must succeed for a binary file");
     assert_eq!(
@@ -2547,22 +2547,22 @@ fn trust_writes_local_pin() {
     let keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &keyfile);
 
-    let gpg_home = tempfile::tempdir().unwrap().path().to_path_buf();
+    let key_store = tempfile::tempdir().unwrap().path().to_path_buf();
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
     assert!(
-        gpg_home.join("trust-pins").is_dir(),
+        key_store.join("trust-pins").is_dir(),
         "the pin must live in the tool-owned key store, not inside the repo"
     );
-    let pin = TrustPinStore::read_pin(&gpg_home, "repo+owner@github.com")
+    let pin = TrustPinStore::read_pin(&key_store, "repo+owner@github.com")
         .expect("reading the pin must not error");
     assert_eq!(
         pin.as_deref(),
@@ -2573,17 +2573,17 @@ fn trust_writes_local_pin() {
 
 #[test]
 fn verify_fails_closed_when_pin_missing() {
-    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, owner_pub) = setup_repo_with_owner_in_keyring();
 
     // A fresh clone arrives with trust.json + signed keyring committed but
     // NO per-machine pin: simulate that by deleting the pin this machine
     // wrote during cmd_trust.
-    std::fs::remove_dir_all(gpg_home.join("trust-pins")).unwrap();
+    std::fs::remove_dir_all(key_store.join("trust-pins")).unwrap();
 
     std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let hide_err = hide_result
         .err()
         .expect("hide without a local pin must fail closed");
@@ -2604,7 +2604,7 @@ fn verify_fails_closed_when_pin_missing() {
         hide_msg
     );
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
     let reveal_err = reveal_result
         .err()
         .expect("reveal without a local pin must fail closed");
@@ -2627,26 +2627,26 @@ fn verify_fails_closed_when_pin_missing() {
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("re-running cmd_trust must succeed");
 
-    cmd_hide(repo_temp.path(), "origin", &gpg_home)
+    cmd_hide(repo_temp.path(), "origin", &key_store)
         .expect("hide must succeed once the pin is re-established");
-    cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None)
+    cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None)
         .expect("reveal must succeed once the pin is re-established");
 }
 
 #[test]
 fn verify_fails_closed_when_pin_mismatches() {
-    let (repo_temp, gpg_home, owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, owner_pub) = setup_repo_with_owner_in_keyring();
     let owner_fingerprint = extract_key_fingerprint(&owner_pub);
 
     // FULL ATTACK SIMULATION: the attacker's key already exists in the
     // victim's local key store (imported for an unrelated repo).
     let (attacker_sec, attacker_pub) = generate_test_key("attacker@evil.com");
-    import_key_to_gpg_home(
-        &gpg_home,
+    import_key_to_store(
+        &key_store,
         &attacker_pub.to_armored_string(Default::default()).unwrap(),
     )
     .unwrap();
@@ -2679,7 +2679,7 @@ fn verify_fails_closed_when_pin_mismatches() {
     std::fs::write(&keyring_path, attacker_ring.serialize()).unwrap();
     let keyring_before = std::fs::read(&keyring_path).unwrap();
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     let keyring_after = std::fs::read(&keyring_path).unwrap();
 
     let err = hide_result.err().expect(
@@ -2716,11 +2716,11 @@ fn verify_fails_closed_when_pin_mismatches() {
 
 #[test]
 fn decrypt_failure_mentions_recipient_or_passphrase_causes() {
-    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _owner_pub) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     // Replace the owner's secret key with a DIFFERENT valid key that claims
     // the SAME email. The keyring entry still matches by email, the trust
@@ -2728,9 +2728,9 @@ fn decrypt_failure_mentions_recipient_or_passphrase_causes() {
     // ciphertext — the exact case where wrong-recipient and wrong-passphrase
     // are indistinguishable at the decrypt layer.
     let wrong_key = generate_test_key("owner@github.com").0;
-    write_multi_key_secret_keys(&gpg_home, &[wrong_key]);
+    write_multi_key_secret_keys(&key_store, &[wrong_key]);
 
-    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
     let err = result
         .err()
         .expect("decrypting owner ciphertext with a different key must fail");
@@ -2765,7 +2765,7 @@ fn trust_error_names_remote_and_repo_id() {
 
     // Remote exists, but no trust was ever established: the gated command
     // must name the remote consulted, the derived repo_id and the remedy.
-    // The gpg home is never touched — the failure happens at the trust check.
+    // The key store is never touched — the failure happens at the trust check.
     let home_temp = tempfile::tempdir().unwrap();
     let result = cmd_hide(repo_temp.path(), "origin", &home_temp.path().to_path_buf());
     let err = result
@@ -2801,7 +2801,7 @@ fn trust_error_names_remote_and_repo_id() {
 /// Sets up a trusted repo whose keyring contains the owner plus the given
 /// collaborators (each added via cmd_tell, the keyring signed by the trusted
 /// owner key), and whose secret key store holds every secret key (owner + all
-/// collaborators). Returns (repo_temp, gpg_home).
+/// collaborators). Returns (repo_temp, key_store).
 fn setup_repo_with_owner_and_collaborators(
     collaborator_emails: &[&str],
 ) -> (tempfile::TempDir, PathBuf) {
@@ -2813,27 +2813,27 @@ fn setup_repo_with_owner_and_collaborators(
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
     // tell signs with the trusted owner key, so the owner's secret must be
     // in the secret key store before any tell runs.
-    write_multi_key_secret_keys(&gpg_home, std::slice::from_ref(&owner_sec));
+    write_multi_key_secret_keys(&key_store, std::slice::from_ref(&owner_sec));
 
     cmd_tell(
         repo_temp.path(),
         "owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed for the owner");
 
@@ -2848,7 +2848,7 @@ fn setup_repo_with_owner_and_collaborators(
             email,
             keyfile.to_str().unwrap(),
             "origin",
-            &gpg_home, None
+            &key_store, None
         )
         .unwrap_or_else(|e| panic!("cmd_tell must succeed for {}: {:?}", email, e));
 
@@ -2859,29 +2859,29 @@ fn setup_repo_with_owner_and_collaborators(
     // collaborators) so each participant can decrypt/verify locally.
     let mut secret_keys = vec![owner_sec];
     secret_keys.extend(collaborator_secrets);
-    write_multi_key_secret_keys(&gpg_home, &secret_keys);
+    write_multi_key_secret_keys(&key_store, &secret_keys);
 
-    (repo_temp, gpg_home)
+    (repo_temp, key_store)
 }
 
 #[test]
 fn hide_encrypts_to_every_key_in_keyring() {
     let emails = ["alice@example.com", "bob@example.com", "carol@example.com"];
-    let (repo_temp, gpg_home) = setup_repo_with_owner_and_collaborators(&emails);
+    let (repo_temp, key_store) = setup_repo_with_owner_and_collaborators(&emails);
 
     let plaintext: &str = "SHARED_SECRET=every-collaborator-can-reveal\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     let ciphertext = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
         .expect("hide must write the ciphertext beside the plaintext");
 
     for email in emails {
-        let secret_key = find_private_key_by_email(&gpg_home, email)
+        let secret_key = find_private_key_by_email(&key_store, email)
             .unwrap_or_else(|e| panic!("secret key store must hold {}'s secret key: {}", email, e));
-        let decrypted = decrypt_with_gpg_key(&ciphertext, &secret_key, None)
+        let decrypted = decrypt_with_private_key(&ciphertext, &secret_key, None)
             .unwrap_or_else(|e| panic!("{} must be able to decrypt the shared ciphertext: {}", email, e));
         assert_eq!(
             decrypted,
@@ -2895,14 +2895,14 @@ fn hide_encrypts_to_every_key_in_keyring() {
 #[test]
 fn reveal_works_for_each_collaborator_after_hide() {
     let emails = ["alice@example.com", "bob@example.com", "carol@example.com"];
-    let (repo_temp, gpg_home) = setup_repo_with_owner_and_collaborators(&emails);
+    let (repo_temp, key_store) = setup_repo_with_owner_and_collaborators(&emails);
 
     let plaintext: &str = "ROUND_TRIP=per-collaborator-reveal\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
     for email in emails {
-        cmd_hide(repo_temp.path(), "origin", &gpg_home)
+        cmd_hide(repo_temp.path(), "origin", &key_store)
             .unwrap_or_else(|e| panic!("cmd_hide must succeed before {}'s reveal: {:?}", email, e));
         assert!(
             !repo_temp.path().join("secret.env").exists()
@@ -2911,7 +2911,7 @@ fn reveal_works_for_each_collaborator_after_hide() {
             email
         );
 
-        cmd_reveal(repo_temp.path(), email, "origin", &gpg_home, None)
+        cmd_reveal(repo_temp.path(), email, "origin", &key_store, None)
             .unwrap_or_else(|e| panic!("{} must be able to cmd_reveal the hidden file: {:?}", email, e));
 
         let restored = std::fs::read(repo_temp.path().join("secret.env"))
@@ -2928,44 +2928,44 @@ fn reveal_works_for_each_collaborator_after_hide() {
 #[test]
 fn removed_collaborator_cannot_decrypt_after_removeperson_and_rehide() {
     let emails = ["alice@example.com", "bob@example.com", "carol@example.com"];
-    let (repo_temp, gpg_home) = setup_repo_with_owner_and_collaborators(&emails);
+    let (repo_temp, key_store) = setup_repo_with_owner_and_collaborators(&emails);
 
     let plaintext: &str = "REVOCATION=boot-the-removed-collaborator\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
     // Before removal: ALL three collaborators decrypt the SAME ciphertext.
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("first hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("first hide must succeed");
     let ciphertext_before = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
         .expect("ciphertext must exist after the first hide");
     for email in emails {
-        let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
-        let decrypted = decrypt_with_gpg_key(&ciphertext_before, &secret_key, None)
+        let secret_key = find_private_key_by_email(&key_store, email).unwrap();
+        let decrypted = decrypt_with_private_key(&ciphertext_before, &secret_key, None)
             .unwrap_or_else(|e| panic!("before removal, {} must be able to decrypt: {}", email, e));
         assert_eq!(decrypted, plaintext.as_bytes());
     }
 
     // Revoke Bob, then re-hide (reveal as Alice restores the plaintext first).
-    cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &gpg_home, None)
+    cmd_removeperson(repo_temp.path(), "bob@example.com", "origin", &key_store, None)
         .expect("cmd_removeperson must succeed");
-    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None)
+    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None)
         .expect("reveal as alice must restore the plaintext for the re-hide");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home)
+    cmd_hide(repo_temp.path(), "origin", &key_store)
         .expect("re-hide after removal must succeed");
     let ciphertext_after = std::fs::read_to_string(repo_temp.path().join("secret.env.secret"))
         .expect("ciphertext must exist after the re-hide");
 
     // Bob's key must now FAIL against the new ciphertext.
-    let bob_key = find_private_key_by_email(&gpg_home, "bob@example.com").unwrap();
+    let bob_key = find_private_key_by_email(&key_store, "bob@example.com").unwrap();
     assert!(
-        decrypt_with_gpg_key(&ciphertext_after, &bob_key, None).is_err(),
+        decrypt_with_private_key(&ciphertext_after, &bob_key, None).is_err(),
         "the removed collaborator must NOT be able to decrypt ciphertext written after their removal"
     );
 
     // Alice and Carol must still decrypt the new ciphertext.
     for email in ["alice@example.com", "carol@example.com"] {
-        let secret_key = find_private_key_by_email(&gpg_home, email).unwrap();
-        let decrypted = decrypt_with_gpg_key(&ciphertext_after, &secret_key, None)
+        let secret_key = find_private_key_by_email(&key_store, email).unwrap();
+        let decrypted = decrypt_with_private_key(&ciphertext_after, &secret_key, None)
             .unwrap_or_else(|e| panic!("after removal, {} must still be able to decrypt: {}", email, e));
         assert_eq!(decrypted, plaintext.as_bytes());
     }
@@ -3034,7 +3034,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) {
 
 #[test]
 fn hide_writes_ciphertext_next_to_plaintext() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     let cases: Vec<(&str, &str)> = vec![
         ("sub/dir/secret.env", "NESTED=1\n"),
@@ -3048,7 +3048,7 @@ fn hide_writes_ciphertext_next_to_plaintext() {
             .unwrap_or_else(|e| panic!("cmd_add must succeed for {}: {:?}", name, e));
     }
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
     hide_result.expect("cmd_hide must succeed");
 
     for (name, _) in &cases {
@@ -3071,17 +3071,17 @@ fn hide_writes_ciphertext_next_to_plaintext() {
 
 #[test]
 fn reveal_restores_plaintext_and_removes_secret_file() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     let plaintext = "INVERSE=exact-bytes-restored\n";
     std::fs::create_dir_all(repo_temp.path().join("sub/dir")).unwrap();
     let tracked_rel = "sub/dir/secret.env";
     std::fs::write(repo_temp.path().join(tracked_rel), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec![tracked_rel.to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     assert!(repo_temp.path().join(format!("{}.secret", tracked_rel)).exists());
 
-    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(repo_temp.path(), "owner@github.com", "origin", &key_store, None);
     reveal_result.expect("cmd_reveal must succeed");
 
     let restored = std::fs::read(repo_temp.path().join(tracked_rel))
@@ -3099,19 +3099,19 @@ fn reveal_restores_plaintext_and_removes_secret_file() {
 
 #[test]
 fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
-    let (repo_temp, gpg_home, _) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _) = setup_repo_with_owner_in_keyring();
 
     let plaintext = "FRESH_CLONE=decryptable-by-design\n";
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     // Simulate a clone: copy .git-veil/ and every .secret ciphertext into a
     // NEW directory, but not the plaintext (hide deleted it) and not the
-    // gpg-home. Reveal runs with the SAME gpg_home, so the per-machine trust
+    // key-store. Reveal runs with the SAME key_store, so the per-machine trust
     // pin is already present — the pin is keyed by the repo_id derived from
     // the origin URL, which the clone shares, so no re-run of cmd_trust is
-    // needed (this is the documented "gpg-home already holds the pin" path).
+    // needed (this is the documented "key-store already holds the pin" path).
     let clone = tempfile::tempdir().unwrap();
     for args in [
         vec!["init"],
@@ -3135,7 +3135,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
         "the clone must not contain the plaintext"
     );
 
-    let reveal_result = cmd_reveal(clone.path(), "owner@github.com", "origin", &gpg_home, None);
+    let reveal_result = cmd_reveal(clone.path(), "owner@github.com", "origin", &key_store, None);
     reveal_result.expect("reveal in a fresh clone holding only .secret files must succeed");
 
     let restored = std::fs::read(clone.path().join("secret.env"))
@@ -3154,7 +3154,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
 // ============================================================================
 // Passphrase-protected private keys
 //
-// Written Red/Green: pre-fix, decrypt_with_gpg_key and sign_keyring_content
+// Written Red/Green: pre-fix, decrypt_with_private_key and sign_keyring_content
 // hardcode an empty passphrase, so a passphrase-protected private key is
 // unusable by this tool. These tests target the NEW signatures (with an
 // Option<&str> passphrase), so their first failure was a compile error.
@@ -3163,7 +3163,7 @@ fn fresh_clone_with_secrets_but_without_plaintext_reveals() {
 /// Sets up a trusted repo whose owner key is protected by the given
 /// passphrase (secret key store holds the protected secret; trust + public-keys.pgp are
 /// public-key-only, so no passphrase is needed to establish trust).
-/// Returns (repo_temp, gpg_home, owner_keyfile_path).
+/// Returns (repo_temp, key_store, owner_keyfile_path).
 fn setup_repo_with_protected_owner(
     passphrase: &str,
 ) -> (tempfile::TempDir, PathBuf, PathBuf) {
@@ -3175,20 +3175,20 @@ fn setup_repo_with_protected_owner(
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
 
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secret_keys(&gpg_home, &[owner_sec]);
+    write_multi_key_secret_keys(&key_store, &[owner_sec]);
 
-    (repo_temp, gpg_home, owner_keyfile)
+    (repo_temp, key_store, owner_keyfile)
 }
 
 #[test]
@@ -3196,10 +3196,10 @@ fn protected_key_cannot_decrypt_with_empty_passphrase() {
     let (protected_sec, protected_pub) =
         generate_protected_test_key("protected@example.com", "correct horse");
     let plaintext = b"locked payload";
-    let ciphertext = encrypt_to_gpg_key(plaintext, &protected_pub)
+    let ciphertext = encrypt_to_public_key(plaintext, &protected_pub)
         .expect("encrypting to the public key must not need the passphrase");
 
-    let result = decrypt_with_gpg_key(&ciphertext, &protected_sec, None);
+    let result = decrypt_with_private_key(&ciphertext, &protected_sec, None);
 
     let Err(err) = result else {
         panic!("a passphrase-protected key must not decrypt with an empty passphrase");
@@ -3213,7 +3213,7 @@ fn protected_key_cannot_decrypt_with_empty_passphrase() {
 
     // With the correct passphrase the same ciphertext decrypts.
     let decrypted =
-        decrypt_with_gpg_key(&ciphertext, &protected_sec, Some("correct horse"))
+        decrypt_with_private_key(&ciphertext, &protected_sec, Some("correct horse"))
             .expect("the correct passphrase must unlock the protected key");
     assert_eq!(
         decrypted, plaintext,
@@ -3223,7 +3223,7 @@ fn protected_key_cannot_decrypt_with_empty_passphrase() {
 
 #[test]
 fn signing_with_protected_key_requires_passphrase() {
-    let (repo_temp, gpg_home, owner_keyfile) = setup_repo_with_protected_owner("correct horse");
+    let (repo_temp, key_store, owner_keyfile) = setup_repo_with_protected_owner("correct horse");
     let owner_key_path = owner_keyfile.to_str().unwrap();
 
     // No passphrase at all: signing the keyring must fail with a clear hint.
@@ -3232,7 +3232,7 @@ fn signing_with_protected_key_requires_passphrase() {
         "owner@github.com",
         owner_key_path,
         "origin",
-        &gpg_home,
+        &key_store,
         None
     );
     let Err(err) = no_passphrase else {
@@ -3250,7 +3250,7 @@ fn signing_with_protected_key_requires_passphrase() {
         "owner@github.com",
         owner_key_path,
         "origin",
-        &gpg_home,
+        &key_store,
         Some("correct horse with typo")
     );
     assert!(
@@ -3264,12 +3264,12 @@ fn signing_with_protected_key_requires_passphrase() {
         "owner@github.com",
         owner_key_path,
         "origin",
-        &gpg_home,
+        &key_store,
         Some("correct horse")
     )
     .expect("tell with the correct passphrase must succeed");
 
-    cmd_verify_keyring(repo_temp.path(), "origin", &gpg_home)
+    cmd_verify_keyring(repo_temp.path(), "origin", &key_store)
         .expect("the keyring signature made with the correct passphrase must verify");
 }
 
@@ -3281,10 +3281,10 @@ fn protected_key_in_secret_key_store_is_findable_without_passphrase() {
     let (protected_sec, _) =
         generate_protected_test_key("locked@example.com", "correct horse");
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().to_path_buf();
-    write_multi_key_secret_keys(&gpg_home, &[protected_sec]);
+    let key_store = temp.path().to_path_buf();
+    write_multi_key_secret_keys(&key_store, &[protected_sec]);
 
-    find_private_key_by_email(&gpg_home, "locked@example.com")
+    find_private_key_by_email(&key_store, "locked@example.com")
         .expect("a passphrase-protected key must be findable (parsed) without the passphrase");
 }
 
@@ -3297,7 +3297,7 @@ fn protected_key_in_secret_key_store_is_findable_without_passphrase() {
 
 #[test]
 fn unhide_restores_plaintext_and_removes_secret_for_one_file() {
-    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _owner_pub) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("a.env"), "alpha secret").unwrap();
     std::fs::write(repo_temp.path().join("b.env"), "beta secret").unwrap();
@@ -3306,14 +3306,14 @@ fn unhide_restores_plaintext_and_removes_secret_for_one_file() {
         vec!["a.env".to_string(), "b.env".to_string()],
     )
     .expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     cmd_unhide(
         repo_temp.path(),
         "a.env",
         "owner@github.com",
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     )
     .expect("cmd_unhide must succeed for a tracked, hidden file");
@@ -3339,18 +3339,18 @@ fn unhide_restores_plaintext_and_removes_secret_for_one_file() {
 
 #[test]
 fn unhide_fails_for_untracked_file() {
-    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _owner_pub) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("tracked.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["tracked.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     let result = cmd_unhide(
         repo_temp.path(),
         "untracked.env",
         "owner@github.com",
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     );
 
@@ -3369,11 +3369,11 @@ fn unhide_fails_for_untracked_file() {
 
 #[test]
 fn unhide_fails_when_secret_missing() {
-    let (repo_temp, gpg_home, _owner_pub) = setup_repo_with_owner_in_keyring();
+    let (repo_temp, key_store, _owner_pub) = setup_repo_with_owner_in_keyring();
 
     std::fs::write(repo_temp.path().join("tracked.env"), "s3cret").unwrap();
     cmd_add(repo_temp.path(), vec!["tracked.env".to_string()]).expect("cmd_add must succeed");
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     std::fs::remove_file(repo_temp.path().join("tracked.env.secret")).unwrap();
 
     let result = cmd_unhide(
@@ -3381,7 +3381,7 @@ fn unhide_fails_when_secret_missing() {
         "tracked.env",
         "owner@github.com",
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     );
 
@@ -3548,14 +3548,14 @@ fn expired_key_is_rejected_by_trust() {
     let keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&expired_pub, &keyfile);
 
-    let gpg_temp = tempfile::tempdir().unwrap();
+    let store_temp = tempfile::tempdir().unwrap();
 
     let result = cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         keyfile.to_str().unwrap(),
         "origin",
-        &gpg_temp.path().to_path_buf(),
+        &store_temp.path().to_path_buf(),
     );
 
     let err = result.err().expect("expired key must not be trusted");
@@ -3576,14 +3576,14 @@ fn expired_key_is_rejected_by_trust() {
         "trust store must not record the rejected key"
     );
     assert!(
-        !TrustPinStore::pin_path(gpg_temp.path(), "repo+owner@github.com").exists(),
+        !TrustPinStore::pin_path(store_temp.path(), "repo+owner@github.com").exists(),
         "no local trust pin may be written for a rejected key"
     );
 }
 
 #[test]
 fn revoked_key_is_rejected_by_tell() {
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[]);
 
     let (_sec, revoked_pub) = revoked_public_key("bob@example.com", RevocationCode::KeyCompromised);
     let fingerprint = extract_key_fingerprint(&revoked_pub);
@@ -3595,7 +3595,7 @@ fn revoked_key_is_rejected_by_tell() {
         "bob@example.com",
         bob_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     );
 
@@ -3633,18 +3633,18 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
 
     let owner_keyfile = repo_temp.path().join("owner.pub");
     write_public_key_file(&owner_pub, &owner_keyfile);
-    let gpg_home = repo_temp.path().join("gpg-home");
+    let key_store = repo_temp.path().join("key-store");
 
     cmd_trust(
         repo_temp.path(),
         "repo+owner@github.com",
         owner_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
     )
     .expect("cmd_trust must succeed");
 
-    write_multi_key_secret_keys(&gpg_home, &[owner_sec.clone(), alice_sec]);
+    write_multi_key_secret_keys(&key_store, &[owner_sec.clone(), alice_sec]);
 
     // Craft a SIGNED keyring containing the valid alice entry plus the
     // expired bob entry (as a stolen/colluding keyring commit would).
@@ -3676,7 +3676,7 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
     std::fs::write(repo_temp.path().join("secret.env"), plaintext).unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
-    let hide_result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let hide_result = cmd_hide(repo_temp.path(), "origin", &key_store);
 
     let err = hide_result
         .err()
@@ -3706,7 +3706,7 @@ fn hide_fails_closed_naming_invalid_keyring_entry() {
 #[test]
 fn valid_keys_still_pass_all_gates() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -3716,7 +3716,7 @@ fn valid_keys_still_pass_all_gates() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home,
+        &key_store,
         None,
     )
     .expect("cmd_tell must succeed with a valid key");
@@ -3724,13 +3724,13 @@ fn valid_keys_still_pass_all_gates() {
     std::fs::write(repo_temp.path().join("secret.env"), "API_KEY=s3cr3t\n").unwrap();
     cmd_add(repo_temp.path(), vec!["secret.env".to_string()]).expect("cmd_add must succeed");
 
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
     assert!(
         repo_temp.path().join("secret.env.secret").exists(),
         "hide must produce ciphertext for valid keys"
     );
 
-    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None)
+    cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None)
         .expect("cmd_reveal must succeed");
     assert_eq!(
         std::fs::read_to_string(repo_temp.path().join("secret.env")).unwrap(),
@@ -3967,9 +3967,9 @@ fn write_atomic_failure_leaves_original_intact() {
 #[test]
 fn atomic_store_write_survives_simulated_tear() {
     let repo_temp = tempfile::tempdir().unwrap();
-    let gpg_temp = tempfile::tempdir().unwrap();
-    let gpg_home = gpg_temp.path().to_path_buf();
-    let store_path = gpg_home.join("secret-keys.pgp");
+    let store_temp = tempfile::tempdir().unwrap();
+    let key_store = store_temp.path().to_path_buf();
+    let store_path = key_store.join("secret-keys.pgp");
 
     let (alice_secret, alice_pub) = generate_test_key("alice@example.com");
     let (bob_secret, bob_pub) = generate_test_key("bob@example.com");
@@ -3983,7 +3983,7 @@ fn atomic_store_write_survives_simulated_tear() {
         alice_secret.to_armored_string(Default::default()).unwrap(),
     )
     .unwrap();
-    cmd_import(repo_temp.path(), &["alice.asc".to_string()], &gpg_home)
+    cmd_import(repo_temp.path(), &["alice.asc".to_string()], &key_store)
         .expect("first import must succeed");
 
     // Second import: the APPEND path — cmd_import reads the existing
@@ -3996,7 +3996,7 @@ fn atomic_store_write_survives_simulated_tear() {
         bob_secret.to_armored_string(Default::default()).unwrap(),
     )
     .unwrap();
-    cmd_import(repo_temp.path(), &["bob.asc".to_string()], &gpg_home)
+    cmd_import(repo_temp.path(), &["bob.asc".to_string()], &key_store)
         .expect("second (append) import must succeed");
 
     // The final store must parse and contain BOTH keys.
@@ -4010,42 +4010,42 @@ fn atomic_store_write_survives_simulated_tear() {
         2,
         "the store must contain exactly two private key blocks after the append"
     );
-    find_private_key_by_fingerprint(&gpg_home, &alice_fp)
+    find_private_key_by_fingerprint(&key_store, &alice_fp)
         .expect("alice's key must parse out of the appended store");
-    find_private_key_by_fingerprint(&gpg_home, &bob_fp)
+    find_private_key_by_fingerprint(&key_store, &bob_fp)
         .expect("bob's key must parse out of the appended store");
 
-    assert_no_temp_files(&gpg_home, "after the append through the atomic path");
+    assert_no_temp_files(&key_store, "after the append through the atomic path");
 }
 
 // ============================================================================
-// export: armoured public key handoff without the gpg CLI
+// export: armoured public key handoff with no external tool involved
 // ============================================================================
 
 /// Imports a secret key into the key store via cmd_import — the way a
 /// collaborator's machine normally ends up knowing its own key.
 fn import_secret_key(
     repo_root: &std::path::Path,
-    gpg_home: &PathBuf,
+    key_store: &PathBuf,
     secret_key: &pgp::composed::SignedSecretKey,
     file_name: &str,
 ) {
     let key_file = repo_root.join(file_name);
     std::fs::write(&key_file, secret_key.to_armored_string(Default::default()).unwrap())
         .expect("write armoured private key file");
-    cmd_import(repo_root, &[file_name.to_string()], gpg_home)
+    cmd_import(repo_root, &[file_name.to_string()], key_store)
         .expect("cmd_import must succeed");
 }
 
 #[test]
 fn export_writes_armoured_public_key_by_email() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let alice_fingerprint = extract_key_fingerprint(&alice_pub);
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let armored = export_public_key(&gpg_home, "alice@example.com")
+    let armored = export_public_key(&key_store, "alice@example.com")
         .expect("export by email must succeed");
 
     assert!(
@@ -4065,15 +4065,15 @@ fn export_writes_armoured_public_key_by_email() {
 #[test]
 fn export_writes_to_output_file_atomically() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let stdout_variant = export_public_key(&gpg_home, "alice@example.com")
+    let stdout_variant = export_public_key(&key_store, "alice@example.com")
         .expect("stdout-variant export must succeed");
 
     let out_path = temp.path().join("alice.pub");
-    cmd_export(&gpg_home, "alice@example.com", Some(out_path.as_path()))
+    cmd_export(&key_store, "alice@example.com", Some(out_path.as_path()))
         .expect("export to an output file must succeed");
 
     let file_content =
@@ -4099,11 +4099,11 @@ fn export_writes_to_output_file_atomically() {
 #[test]
 fn export_errors_for_unknown_identifier() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let result = export_public_key(&gpg_home, "carol@example.com");
+    let result = export_public_key(&key_store, "carol@example.com");
 
     let err = result.err().expect("an unknown identifier must not export any key");
     assert!(
@@ -4121,17 +4121,17 @@ fn export_errors_for_unknown_identifier() {
 #[test]
 fn export_errors_for_ambiguous_email() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     // Two DIFFERENT keys sharing one email (both UIDs "Test User <carol@…>"):
     // importing both puts two same-email keys in the store.
     let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
     let (carol_second, carol_second_pub) = generate_test_key("carol@example.com");
     let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
     let second_fingerprint = extract_key_fingerprint(&carol_second_pub);
-    import_secret_key(temp.path(), &gpg_home, &carol_first, "carol1-priv.asc");
-    import_secret_key(temp.path(), &gpg_home, &carol_second, "carol2-priv.asc");
+    import_secret_key(temp.path(), &key_store, &carol_first, "carol1-priv.asc");
+    import_secret_key(temp.path(), &key_store, &carol_second, "carol2-priv.asc");
 
-    let result = export_public_key(&gpg_home, "carol@example.com");
+    let result = export_public_key(&key_store, "carol@example.com");
 
     let err = result
         .err()
@@ -4147,11 +4147,11 @@ fn export_errors_for_ambiguous_email() {
 #[test]
 fn export_never_emits_private_key_material() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let armored = export_public_key(&gpg_home, "alice@example.com")
+    let armored = export_public_key(&key_store, "alice@example.com")
         .expect("export from a store holding the private key must still succeed");
 
     assert!(
@@ -4164,14 +4164,14 @@ fn export_never_emits_private_key_material() {
 #[test]
 fn export_by_fingerprint_selects_the_exact_key() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, _) = generate_test_key("alice@example.com");
     let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
-    import_secret_key(temp.path(), &gpg_home, &bob_sec, "bob-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &bob_sec, "bob-priv.asc");
 
-    let armored = export_public_key(&gpg_home, &bob_fingerprint)
+    let armored = export_public_key(&key_store, &bob_fingerprint)
         .expect("export by fingerprint must succeed");
 
     let reparsed =
@@ -4188,24 +4188,24 @@ fn export_by_fingerprint_selects_the_exact_key() {
 // ============================================================================
 
 /// Writes the given public keys as the armoured public-keys.pgp store,
-/// mirroring the format import_key_to_gpg_home accumulates.
-fn write_public_keys_store(gpg_home: &PathBuf, keys: &[&pgp::composed::SignedPublicKey]) {
-    std::fs::create_dir_all(gpg_home).unwrap();
+/// mirroring the format import_key_to_store accumulates.
+fn write_public_keys_store(key_store: &PathBuf, keys: &[&pgp::composed::SignedPublicKey]) {
+    std::fs::create_dir_all(key_store).unwrap();
     let mut content = String::new();
     for key in keys {
         content.push_str(&key.to_armored_string(Default::default()).unwrap());
         content.push('\n');
     }
-    std::fs::write(gpg_home.join("public-keys.pgp"), content).unwrap();
+    std::fs::write(key_store.join("public-keys.pgp"), content).unwrap();
 }
 
 /// Splits an armoured key store file into its blocks and returns each
 /// block key's fingerprint — the test-side twin of the store splitters.
-fn fingerprints_in_store(gpg_home: &PathBuf, file: &str, private: bool) -> Vec<String> {
+fn fingerprints_in_store(key_store: &PathBuf, file: &str, private: bool) -> Vec<String> {
     use pgp::composed::Deserializable;
 
     let content =
-        std::fs::read_to_string(gpg_home.join(file)).expect("store file must exist to be read");
+        std::fs::read_to_string(key_store.join(file)).expect("store file must exist to be read");
     let (begin, end_marker) = if private {
         (
             "-----BEGIN PGP PRIVATE KEY BLOCK-----",
@@ -4238,19 +4238,19 @@ fn fingerprints_in_store(gpg_home: &PathBuf, file: &str, private: bool) -> Vec<S
 #[test]
 fn removekey_drops_only_matching_blocks() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
     let alice_fingerprint = extract_key_fingerprint(&alice_pub);
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
-    import_secret_key(temp.path(), &gpg_home, &bob_sec, "bob-priv.asc");
-    write_public_keys_store(&gpg_home, &[&alice_pub, &bob_pub]);
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &bob_sec, "bob-priv.asc");
+    write_public_keys_store(&key_store, &[&alice_pub, &bob_pub]);
 
-    cmd_removekey(&gpg_home, &bob_fingerprint, false)
+    cmd_removekey(&key_store, &bob_fingerprint, false)
         .expect("removekey by fingerprint must succeed");
 
-    let secret_fps = fingerprints_in_store(&gpg_home, "secret-keys.pgp", true);
+    let secret_fps = fingerprints_in_store(&key_store, "secret-keys.pgp", true);
     assert!(
         secret_fps.contains(&alice_fingerprint),
         "secret-keys.pgp must retain alice's key after removing bob, got: {:?}",
@@ -4261,14 +4261,14 @@ fn removekey_drops_only_matching_blocks() {
         "secret-keys.pgp must drop bob's key, got: {:?}",
         secret_fps
     );
-    let public_fps = fingerprints_in_store(&gpg_home, "public-keys.pgp", false);
+    let public_fps = fingerprints_in_store(&key_store, "public-keys.pgp", false);
     assert!(
         public_fps.contains(&alice_fingerprint) && !public_fps.contains(&bob_fingerprint),
         "public-keys.pgp must retain alice and drop bob, got: {:?}",
         public_fps
     );
 
-    let alice = find_private_key_by_email(&gpg_home, "alice@example.com")
+    let alice = find_private_key_by_email(&key_store, "alice@example.com")
         .expect("the retained key must still parse out of the store and be findable");
     assert_eq!(
         extract_key_fingerprint(&alice.to_public_key()),
@@ -4276,26 +4276,26 @@ fn removekey_drops_only_matching_blocks() {
         "the retained key must be alice's key"
     );
 
-    assert_no_temp_files(&gpg_home, "after removekey");
+    assert_no_temp_files(&key_store, "after removekey");
 }
 
 #[test]
 fn removekey_by_email_removes_case_insensitively() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
     let alice_fingerprint = extract_key_fingerprint(&alice_pub);
     let bob_fingerprint = extract_key_fingerprint(&bob_pub);
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
-    import_secret_key(temp.path(), &gpg_home, &bob_sec, "bob-priv.asc");
-    write_public_keys_store(&gpg_home, &[&alice_pub, &bob_pub]);
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &bob_sec, "bob-priv.asc");
+    write_public_keys_store(&key_store, &[&alice_pub, &bob_pub]);
 
-    cmd_removekey(&gpg_home, "BOB@Example.COM", false)
+    cmd_removekey(&key_store, "BOB@Example.COM", false)
         .expect("removekey by email must match case-insensitively");
 
-    let secret_fps = fingerprints_in_store(&gpg_home, "secret-keys.pgp", true);
-    let public_fps = fingerprints_in_store(&gpg_home, "public-keys.pgp", false);
+    let secret_fps = fingerprints_in_store(&key_store, "secret-keys.pgp", true);
+    let public_fps = fingerprints_in_store(&key_store, "public-keys.pgp", false);
     assert!(
         !secret_fps.contains(&bob_fingerprint) && !public_fps.contains(&bob_fingerprint),
         "bob's key must be gone from both stores, secret: {:?}, public: {:?}",
@@ -4313,19 +4313,19 @@ fn removekey_by_email_removes_case_insensitively() {
 #[test]
 fn removekey_ambiguous_email_requires_yes() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (carol_first, carol_first_pub) = generate_test_key("carol@example.com");
     let (carol_second, carol_second_pub) = generate_test_key("carol@example.com");
     let first_fingerprint = extract_key_fingerprint(&carol_first_pub);
     let second_fingerprint = extract_key_fingerprint(&carol_second_pub);
-    import_secret_key(temp.path(), &gpg_home, &carol_first, "carol1-priv.asc");
-    import_secret_key(temp.path(), &gpg_home, &carol_second, "carol2-priv.asc");
-    write_public_keys_store(&gpg_home, &[&carol_first_pub, &carol_second_pub]);
+    import_secret_key(temp.path(), &key_store, &carol_first, "carol1-priv.asc");
+    import_secret_key(temp.path(), &key_store, &carol_second, "carol2-priv.asc");
+    write_public_keys_store(&key_store, &[&carol_first_pub, &carol_second_pub]);
 
-    let secret_before = std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap();
-    let public_before = std::fs::read_to_string(gpg_home.join("public-keys.pgp")).unwrap();
+    let secret_before = std::fs::read_to_string(key_store.join("secret-keys.pgp")).unwrap();
+    let public_before = std::fs::read_to_string(key_store.join("public-keys.pgp")).unwrap();
 
-    let result = cmd_removekey(&gpg_home, "carol@example.com", false);
+    let result = cmd_removekey(&key_store, "carol@example.com", false);
 
     let err = result
         .err()
@@ -4337,21 +4337,21 @@ fn removekey_ambiguous_email_requires_yes() {
         err
     );
     assert_eq!(
-        std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap(),
+        std::fs::read_to_string(key_store.join("secret-keys.pgp")).unwrap(),
         secret_before,
         "a refused removekey must leave secret-keys.pgp untouched"
     );
     assert_eq!(
-        std::fs::read_to_string(gpg_home.join("public-keys.pgp")).unwrap(),
+        std::fs::read_to_string(key_store.join("public-keys.pgp")).unwrap(),
         public_before,
         "a refused removekey must leave public-keys.pgp untouched"
     );
 
-    cmd_removekey(&gpg_home, "carol@example.com", true)
+    cmd_removekey(&key_store, "carol@example.com", true)
         .expect("removekey with --yes must remove ALL ambiguous matches");
 
-    let secret_fps = fingerprints_in_store(&gpg_home, "secret-keys.pgp", true);
-    let public_fps = fingerprints_in_store(&gpg_home, "public-keys.pgp", false);
+    let secret_fps = fingerprints_in_store(&key_store, "secret-keys.pgp", true);
+    let public_fps = fingerprints_in_store(&key_store, "public-keys.pgp", false);
     assert!(
         secret_fps.is_empty(),
         "with --yes both carol keys must be gone from secret-keys.pgp, got: {:?}",
@@ -4367,13 +4367,13 @@ fn removekey_ambiguous_email_requires_yes() {
 #[test]
 fn removekey_refuses_to_destroy_last_private_key_without_yes() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let before = std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap();
+    let before = std::fs::read_to_string(key_store.join("secret-keys.pgp")).unwrap();
 
-    let result = cmd_removekey(&gpg_home, "alice@example.com", false);
+    let result = cmd_removekey(&key_store, "alice@example.com", false);
 
     let err = result.err().expect(
         "removing the only private key without --yes must refuse",
@@ -4394,22 +4394,22 @@ fn removekey_refuses_to_destroy_last_private_key_without_yes() {
         err
     );
     assert_eq!(
-        std::fs::read_to_string(gpg_home.join("secret-keys.pgp")).unwrap(),
+        std::fs::read_to_string(key_store.join("secret-keys.pgp")).unwrap(),
         before,
         "a refused removekey must leave the store untouched"
     );
 
-    cmd_removekey(&gpg_home, "alice@example.com", true)
+    cmd_removekey(&key_store, "alice@example.com", true)
         .expect("removekey --yes must proceed on the only private key");
 
-    let after = std::fs::read_to_string(gpg_home.join("secret-keys.pgp"))
+    let after = std::fs::read_to_string(key_store.join("secret-keys.pgp"))
         .expect("the store file must still exist after removing its only key");
     assert!(
         after.is_empty(),
         "with --yes the single-key store must become empty, got: {}",
         after
     );
-    let find_result = find_private_key_by_email(&gpg_home, "alice@example.com");
+    let find_result = find_private_key_by_email(&key_store, "alice@example.com");
     let find_err = find_result
         .err()
         .expect("an empty store must not yield any key");
@@ -4423,22 +4423,22 @@ fn removekey_refuses_to_destroy_last_private_key_without_yes() {
 #[test]
 fn removekey_leaves_corrupt_store_untouched() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
     let (bob_sec, _) = generate_test_key("bob@example.com");
     let alice_armored = alice_sec.to_armored_string(Default::default()).unwrap();
     let bob_armored = bob_sec.to_armored_string(Default::default()).unwrap();
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
-    write_public_keys_store(&gpg_home, &[&alice_pub]);
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
+    write_public_keys_store(&key_store, &[&alice_pub]);
     // Corrupt the secret store with an unterminated (truncated) block.
     let end_marker = "-----END PGP PRIVATE KEY BLOCK-----";
     let truncated_bob = bob_armored[..bob_armored.find(end_marker).unwrap()].to_string();
     let corrupt = format!("{}\n{}", alice_armored, truncated_bob);
-    std::fs::write(gpg_home.join("secret-keys.pgp"), &corrupt).unwrap();
-    let before = std::fs::read(gpg_home.join("secret-keys.pgp")).unwrap();
-    let public_before = std::fs::read(gpg_home.join("public-keys.pgp")).unwrap();
+    std::fs::write(key_store.join("secret-keys.pgp"), &corrupt).unwrap();
+    let before = std::fs::read(key_store.join("secret-keys.pgp")).unwrap();
+    let public_before = std::fs::read(key_store.join("public-keys.pgp")).unwrap();
 
-    let result = cmd_removekey(&gpg_home, "alice@example.com", true);
+    let result = cmd_removekey(&key_store, "alice@example.com", true);
 
     let err = result
         .err()
@@ -4449,12 +4449,12 @@ fn removekey_leaves_corrupt_store_untouched() {
         err
     );
     assert_eq!(
-        std::fs::read(gpg_home.join("secret-keys.pgp")).unwrap(),
+        std::fs::read(key_store.join("secret-keys.pgp")).unwrap(),
         before,
         "a corrupt store must be left byte-identical"
     );
     assert_eq!(
-        std::fs::read(gpg_home.join("public-keys.pgp")).unwrap(),
+        std::fs::read(key_store.join("public-keys.pgp")).unwrap(),
         public_before,
         "no other store may be rewritten when one store is corrupt"
     );
@@ -4463,11 +4463,11 @@ fn removekey_leaves_corrupt_store_untouched() {
 #[test]
 fn removekey_unknown_identifier_errors() {
     let temp = tempfile::tempdir().unwrap();
-    let gpg_home = temp.path().join("gpg-home");
+    let key_store = temp.path().join("key-store");
     let (alice_sec, _) = generate_test_key("alice@example.com");
-    import_secret_key(temp.path(), &gpg_home, &alice_sec, "alice-priv.asc");
+    import_secret_key(temp.path(), &key_store, &alice_sec, "alice-priv.asc");
 
-    let result = cmd_removekey(&gpg_home, "carol@example.com", false);
+    let result = cmd_removekey(&key_store, "carol@example.com", false);
 
     let err = result
         .err()
@@ -4498,7 +4498,7 @@ fn removekey_unknown_identifier_errors() {
 #[test]
 fn hide_failure_leaves_everything_unchanged() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -4508,7 +4508,7 @@ fn hide_failure_leaves_everything_unchanged() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
@@ -4519,7 +4519,7 @@ fn hide_failure_leaves_everything_unchanged() {
     // hit, leaving a mixed state.
     write_tracked_json(repo_temp.path(), &["one.env", "two.env"]);
 
-    let result = cmd_hide(repo_temp.path(), "origin", &gpg_home);
+    let result = cmd_hide(repo_temp.path(), "origin", &key_store);
 
     let err = result
         .err()
@@ -4548,7 +4548,7 @@ fn hide_failure_leaves_everything_unchanged() {
 #[test]
 fn reveal_failure_leaves_everything_unchanged() {
     let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (repo_temp, gpg_home) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
+    let (repo_temp, key_store) = setup_trusted_repo_with_secret_keys(&[alice_sec]);
 
     let alice_keyfile = repo_temp.path().join("alice.pub");
     write_public_key_file(&alice_pub, &alice_keyfile);
@@ -4558,21 +4558,21 @@ fn reveal_failure_leaves_everything_unchanged() {
         "alice@example.com",
         alice_keyfile.to_str().unwrap(),
         "origin",
-        &gpg_home, None
+        &key_store, None
     )
     .expect("cmd_tell must succeed");
 
     std::fs::write(repo_temp.path().join("one.env"), "ONE=1\n").unwrap();
     std::fs::write(repo_temp.path().join("two.env"), "TWO=2\n").unwrap();
     write_tracked_json(repo_temp.path(), &["one.env", "two.env"]);
-    cmd_hide(repo_temp.path(), "origin", &gpg_home).expect("cmd_hide must succeed");
+    cmd_hide(repo_temp.path(), "origin", &key_store).expect("cmd_hide must succeed");
 
     // Delete two.env's ciphertext: reveal must refuse. Pre-fix, one.env was
     // ALREADY revealed (ciphertext deleted, plaintext restored) when the
     // missing-ciphertext failure hit, leaving a mixed state.
     std::fs::remove_file(repo_temp.path().join("two.env.secret")).unwrap();
 
-    let result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &gpg_home, None);
+    let result = cmd_reveal(repo_temp.path(), "alice@example.com", "origin", &key_store, None);
 
     let err = result
         .err()

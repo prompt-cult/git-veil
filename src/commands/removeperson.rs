@@ -6,7 +6,7 @@ use crate::fs_atomic::write_atomic;
 use crate::{derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint, get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore};
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
-pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<()> {
+pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &str, key_store: &PathBuf, passphrase: Option<&str>) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -27,7 +27,7 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
     // (the fresh-init state); a keyring containing entries must already carry a
     // valid signature from the trusted key, otherwise removeperson would launder
     // trust by re-signing attacker-supplied content.
-    verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+    verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -52,7 +52,7 @@ pub fn cmd_removeperson(repo_root: &Path, email_to_remove: &str, remote_name: &s
     // Re-sign with the TRUSTED key: removeperson curates the keyring exactly
     // like tell does, so it must sign with the key verify_keyring checks
     // against, never with any collaborator's key.
-    let signing_key = find_private_key_by_fingerprint(gpg_home, trusted_fingerprint)?;
+    let signing_key = find_private_key_by_fingerprint(key_store, trusted_fingerprint)?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of

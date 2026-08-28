@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_gpg_home, validate_public_key_for_use, KeyUse, TrustPinStore, TrustStore};
+use crate::{derive_repo_id, get_remote_push_url, parse_armored_public_key, extract_key_fingerprint, check_email_in_identities, import_key_to_store, validate_public_key_for_use, KeyUse, TrustPinStore, TrustStore};
 
 /// Establishes trust for a repository by verifying the owner's signing key.
-pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
+pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote_name: &str, key_store: &PathBuf) -> Result<()> {
     // Get push URL and derive repo ID
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let computed_repo_id = derive_repo_id(&push_url)?;
@@ -43,15 +43,15 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
         anyhow::bail!("Refusing to trust key: {}", cause);
     }
 
-    // Import key to GPG home
-    import_key_to_gpg_home(gpg_home, &key_content)?;
+    // Import key to the key store
+    import_key_to_store(key_store, &key_content)?;
 
     // Re-trust visibility: if a pin already exists for this repo and names a
     // DIFFERENT fingerprint, this machine's record of the repository's trust
     // anchor is about to CHANGE — say so loudly before rewriting it. Trust is
     // the explicit re-pin action, so we proceed; the notice is the point. An
     // identical re-pin is idempotent and stays quiet.
-    if let Some(previous) = TrustPinStore::read_pin(gpg_home, repo_id)? {
+    if let Some(previous) = TrustPinStore::read_pin(key_store, repo_id)? {
         if !previous.eq_ignore_ascii_case(&fingerprint) {
             println!(
                 "⚠ replacing the previously pinned fingerprint {} for {} with {}",
@@ -74,7 +74,7 @@ pub fn cmd_trust(repo_root: &Path, repo_id: &str, signing_key_path: &str, remote
     // fails closed on a missing or mismatched pin, so if the process dies
     // between the two writes the result is fail-closed (mismatch), never a
     // state where a changed anchor verifies without an explicit re-pin.
-    TrustPinStore::write_pin(gpg_home, repo_id, &fingerprint)
+    TrustPinStore::write_pin(key_store, repo_id, &fingerprint)
         .context("Failed to write local trust pin")?;
 
     println!("✓ Trusted key for {} (fingerprint: {})", repo_id, fingerprint);

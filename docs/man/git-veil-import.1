@@ -4,12 +4,12 @@
 .SH NAME
 git\-veil\-import \- Import your private key(s) into the git\-veil key store
 .SH SYNOPSIS
-\fBgit\-veil import\fR [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil import\fR [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
 Import your private key(s) into the git\-veil key store
 .SH OPTIONS
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -29,4 +29,4 @@ duplicated.
 
 EXAMPLES
   $ git\-veil import my\-key.asc
-  $ git\-veil import key1.asc key2.asc \-\-gpg\-home /path/to/store
+  $ git\-veil import key1.asc key2.asc \-\-key\-store /path/to/store

@@ -4,7 +4,7 @@ use pgp::types::KeyDetails;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
-use crate::gpg_integration::load_public_keys_from_store;
+use crate::openpgp::load_public_keys_from_store;
 use crate::pubkey::extract_email_from_user_id;
 
 /// Resolves `identifier` (an email address or a key fingerprint, matched
@@ -21,8 +21,8 @@ use crate::pubkey::extract_email_from_user_id;
 /// Errors: no matching key (naming the store paths) or an ambiguous match —
 /// several distinct keys share the requested email — listing every matching
 /// fingerprint so the caller can disambiguate by fingerprint.
-pub fn export_public_key(gpg_home: &PathBuf, identifier: &str) -> Result<String> {
-    let keys = load_public_keys_from_store(gpg_home)?;
+pub fn export_public_key(key_store: &PathBuf, identifier: &str) -> Result<String> {
+    let keys = load_public_keys_from_store(key_store)?;
     let wanted_email = identifier.trim().to_lowercase();
     let wanted_fingerprint = identifier.trim().to_uppercase();
 
@@ -41,7 +41,7 @@ pub fn export_public_key(gpg_home: &PathBuf, identifier: &str) -> Result<String>
         anyhow::bail!(
             "No key matching '{}' found in the key store {} (public-keys.pgp, secret-keys.pgp); export only finds keys this machine knows — collaborators must run export on their own machine",
             identifier,
-            gpg_home.display()
+            key_store.display()
         );
     }
     if matched.len() > 1 {
@@ -52,7 +52,7 @@ pub fn export_public_key(gpg_home: &PathBuf, identifier: &str) -> Result<String>
         anyhow::bail!(
             "Multiple keys match '{}' in the key store {}; pass a fingerprint instead of an email. Matching fingerprints:\n  {}",
             identifier,
-            gpg_home.display(),
+            key_store.display(),
             fingerprints.join("\n  ")
         );
     }
@@ -69,11 +69,12 @@ pub fn export_public_key(gpg_home: &PathBuf, identifier: &str) -> Result<String>
 /// Exports the armoured PUBLIC key for `identifier` from the local key
 /// store: to stdout, or atomically to `output` when given.
 ///
-/// This is the no-gpg-CLI key handoff: each collaborator runs export on
+/// This is the external-tool-free key handoff: each collaborator runs
+/// export on
 /// their OWN machine and hands the .pub file to the owner, who adds it to
 /// the keyring with tell. export does not touch the repository.
-pub fn cmd_export(gpg_home: &PathBuf, identifier: &str, output: Option<&Path>) -> Result<()> {
-    let armored = export_public_key(gpg_home, identifier)?;
+pub fn cmd_export(key_store: &PathBuf, identifier: &str, output: Option<&Path>) -> Result<()> {
+    let armored = export_public_key(key_store, identifier)?;
     match output {
         Some(path) => write_atomic(path, armored.as_bytes())
             .with_context(|| format!("Failed to write exported key to {}", path.display()))?,

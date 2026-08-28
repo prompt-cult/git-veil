@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::tracked_files::{ensure_regular_file, PathResolveMode, resolve_repo_relative_input};
-use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
+use crate::{decrypt_with_private_key, find_private_key_by_email, TrackedFiles, verify_keyring_against_trust};
 
 /// Decrypts a single tracked file to stdout without touching disk state.
 ///
@@ -14,16 +14,16 @@ use crate::{decrypt_with_gpg_key, find_private_key_by_email, TrackedFiles, verif
 /// resolve against `repo_root`; tracked paths are stored repo-relative and
 /// are validated, so the ciphertext path can never escape the repository
 /// root.
-pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg_home: &PathBuf, passphrase: Option<&str>) -> Result<Vec<u8>> {
+pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, key_store: &PathBuf, passphrase: Option<&str>) -> Result<Vec<u8>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
-    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, gpg_home)?;
+    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
     keyring.find_by_email(email)
         .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
 
     // Find user's private key
-    let private_key = find_private_key_by_email(gpg_home, email)?;
+    let private_key = find_private_key_by_email(key_store, email)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -62,7 +62,7 @@ pub fn cmd_cat(repo_root: &Path, file: &str, email: &str, remote_name: &str, gpg
         .with_context(|| format!("Failed to read encrypted file: {}", encrypted_path.display()))?;
 
     // Decrypt
-    let plaintext = decrypt_with_gpg_key(&ciphertext, &private_key, passphrase)?;
+    let plaintext = decrypt_with_private_key(&ciphertext, &private_key, passphrase)?;
 
     // Write plaintext to stdout
     std::io::stdout()

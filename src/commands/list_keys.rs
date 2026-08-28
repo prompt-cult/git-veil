@@ -14,8 +14,8 @@ use crate::{verify_keyring_against_trust, Keyring};
 /// never mistake an audit of a tampered ring for a clean one. A repo with no
 /// trust established or no local pin fails closed like every other gated
 /// command.
-pub fn cmd_list_keys(repo_root: &Path, remote_name: &str, gpg_home: &PathBuf) -> Result<()> {
-    match verify_keyring_against_trust(repo_root, remote_name, gpg_home) {
+pub fn cmd_list_keys(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<()> {
+    match verify_keyring_against_trust(repo_root, remote_name, key_store) {
         Ok((_repo_id, _fingerprint, keyring)) => {
             println!("✓ Keyring signature verified (signed by pinned trusted key)");
             print_keyring(&keyring);

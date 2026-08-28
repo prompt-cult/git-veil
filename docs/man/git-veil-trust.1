@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-trust \- Verify and pin the repository owner\*(Aqs signing key (per machine)
 .SH SYNOPSIS
-\fBgit\-veil trust\fR [\fB\-\-remote\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> <\fISIGNING_KEY\fR> 
+\fBgit\-veil trust\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> <\fISIGNING_KEY\fR> 
 .SH DESCRIPTION
 Verify and pin the repository owner\*(Aqs signing key (per machine)
 .SH OPTIONS
@@ -12,7 +12,7 @@ Verify and pin the repository owner\*(Aqs signing key (per machine)
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -36,10 +36,10 @@ The provided repo_id must match the one computed from the remote push URL
 (see show\-repo\-id), the key file must carry the repository\*(Aqs email
 identity, and the key must not be expired, revoked or unsigned.
 
-Trust domain: the key store named by \-\-gpg\-home holds this machine\*(Aqs pins
+Trust domain: the key store named by \-\-key\-store holds this machine\*(Aqs pins
 for EVERY repository that uses that store, so the store and its pins are
 one trust boundary. Sharing a single store across mutually distrusting
-repositories is not advised; use a separate \-\-gpg\-home per trust domain.
+repositories is not advised; use a separate \-\-key\-store per trust domain.
 
 Requires init first. Typical next step: tell.
 

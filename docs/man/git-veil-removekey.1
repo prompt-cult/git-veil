@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-removekey \- Remove a key from the local key store (destructive, local\-only)
 .SH SYNOPSIS
-\fBgit\-veil removekey\fR [\fB\-\-yes\fR] [\fB\-\-gpg\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+\fBgit\-veil removekey\fR [\fB\-\-yes\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
 Remove a key from the local key store (destructive, local\-only)
 .SH OPTIONS
@@ -12,7 +12,7 @@ Remove a key from the local key store (destructive, local\-only)
 \fB\-\-yes\fR
 Confirm destructive removals: required when the target is the only private key in the store, and to remove ALL keys when the email matches several
 .TP
-\fB\-\-gpg\-home\fR \fI<GPG_HOME>\fR
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -48,4 +48,4 @@ EXAMPLES
   $ git\-veil removekey 9A1F...                     # by fingerprint (preferred)
   $ git\-veil removekey bob@example.com             # exact case\-insensitive email
   $ git\-veil removekey bob@example.com \-\-yes       # confirm only\-private\-key removal
-  $ git\-veil removekey bob@example.com \-\-gpg\-home /path/to/store
+  $ git\-veil removekey bob@example.com \-\-key\-store /path/to/store
