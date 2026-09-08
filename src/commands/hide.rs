@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use crate::fs_atomic::write_atomic;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{
-    base64_decode_public_key, cmd_verify_keyring, encrypt_to_public_keys,
-    validate_public_key_for_use, KeyUse, Keyring, TrackedFiles,
+    cmd_verify_keyring, encrypt_to_recipients, parse_recipient,
+    Keyring, TrackedFiles,
 };
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
@@ -64,28 +64,12 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
         anyhow::bail!("No keys in keyring. Add collaborators with 'git-veil tell' first.");
     }
 
-    // Decode all public keys
-    let public_keys: Vec<_> = keyring
+    // Parse all recipient strings
+    let recipients: Vec<_> = keyring
         .entries
         .iter()
-        .map(|e| base64_decode_public_key(&e.base64_key))
+        .map(|e| parse_recipient(&e.recipient))
         .collect::<Result<Vec<_>>>()?;
-
-    // Key-validity policy: EVERY keyring key must be valid for encryption
-    // use. Fail-closed, naming the offending keyring entry — a secrets tool
-    // must never silently narrow its recipient set by skipping an invalid
-    // key. This runs before any file is touched, so no ciphertext or
-    // plaintext state changes when a key is rejected.
-    for (entry, key) in keyring.entries.iter().zip(public_keys.iter()) {
-        if let Err(cause) = validate_public_key_for_use(key, KeyUse::Encrypt) {
-            anyhow::bail!(
-                "keyring entry '{}' (fingerprint {}) is not usable for encryption: {}",
-                entry.email,
-                entry.fingerprint,
-                cause
-            );
-        }
-    }
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -120,7 +104,7 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
         // Encrypt to EVERY key in the keyring: the collaboration promise is
         // that any collaborator can reveal, so the one ciphertext carries a
         // PKESK per recipient.
-        let ciphertext = encrypt_to_public_keys(&plaintext, &public_keys)?;
+        let ciphertext = encrypt_to_recipients(&plaintext, &recipients)?;
 
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
@@ -129,7 +113,7 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
         // root, beside its plaintext
         ensure_ciphertext_beside_plaintext(repo_root, file, &encrypted_path)?;
 
-        prepared.push((file.clone(), encrypted_path, ciphertext.into_bytes()));
+        prepared.push((file.clone(), encrypted_path, ciphertext));
     }
 
     // PHASE 2 (only reached after every encryption succeeded): write each

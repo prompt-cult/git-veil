@@ -1,201 +1,149 @@
 use anyhow::{Context, Result};
-use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::fs_atomic::write_atomic;
-use crate::openpgp::{split_armored_private_key_blocks, split_armored_public_key_blocks};
-use crate::pubkey::extract_email_from_user_id;
-use pgp::types::KeyDetails;
+use crate::age_crypto::{parse_identity, recipient_from_identity, fingerprint_for_recipient};
 
-/// One armoured key block parsed out of a key store, with the matching
-/// fields (fingerprint and user-ID emails) lifted out for lookup.
-struct StoreBlock {
+/// One key line parsed out of a key store file.
+struct StoreLine {
     text: String,
     fingerprint: String,
-    emails: Vec<String>,
+    recipient: String,
 }
 
-/// A key store file parsed into blocks. `exists` is false when the store
+/// A key store file parsed into lines. `exists` is false when the store
 /// file is absent (fresh machine) — absent stores are never created.
 struct StoreContents {
     path: PathBuf,
     exists: bool,
-    blocks: Vec<StoreBlock>,
+    lines: Vec<StoreLine>,
 }
 
-fn lift_users(users: &[pgp::types::SignedUser]) -> Vec<String> {
-    users
-        .iter()
-        .map(|u| String::from_utf8_lossy(u.id.id()).into_owned())
-        .collect()
-}
-
-/// Loads and parses the armoured PRIVATE key store (secret-keys.pgp).
-///
-/// An absent store yields `exists: false`. A store with an unterminated
-/// block, or a block that does not parse, is a hard error: removekey must
-/// never rewrite a store it cannot fully understand, and the caller must
-/// refuse (and leave the file untouched) rather than drop anything.
-fn load_private_store(path: &PathBuf) -> Result<StoreContents> {
+/// Loads and parses the identities store (identities.txt).
+fn load_identity_store(path: &PathBuf) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
             path: path.clone(),
             exists: false,
-            blocks: Vec::new(),
+            lines: Vec::new(),
         });
     }
-    let content = std::fs::read_to_string(path).context("Failed to read secret-keys.pgp")?;
-    let texts = split_armored_private_key_blocks(&content, path)?;
-    let mut blocks = Vec::new();
-    for text in texts {
-        let (key, _headers) = SignedSecretKey::from_string(&text).with_context(|| {
-            format!(
-                "Failed to parse private key block in {} (corrupt key store); refusing to modify it — repair the store manually",
-                path.display()
-            )
-        })?;
-        blocks.push(StoreBlock {
-            text,
-            fingerprint: key.fingerprint().to_string().to_uppercase(),
-            emails: lift_users(&key.details.users),
+    let content = std::fs::read_to_string(path).context("Failed to read identities.txt")?;
+    let mut lines = Vec::new();
+    for line in content.lines() {
+        let line_str = line.trim();
+        if line_str.is_empty() || line_str.starts_with('#') {
+            continue;
+        }
+        if let Ok(identity) = parse_identity(line_str) {
+            let recipient = recipient_from_identity(&identity);
+            let fingerprint = fingerprint_for_recipient(&recipient);
+            lines.push(StoreLine {
+                text: line_str.to_string(),
+                fingerprint,
+                recipient,
+            });
+        }
+    }
+    Ok(StoreContents {
+        path: path.clone(),
+        exists: true,
+        lines,
+    })
+}
+
+/// Loads and parses the recipients store (recipients.txt).
+fn load_recipient_store(path: &PathBuf) -> Result<StoreContents> {
+    if !path.exists() {
+        return Ok(StoreContents {
+            path: path.clone(),
+            exists: false,
+            lines: Vec::new(),
+        });
+    }
+    let content = std::fs::read_to_string(path).context("Failed to read recipients.txt")?;
+    let mut lines = Vec::new();
+    for line in content.lines() {
+        let line_str = line.trim();
+        if line_str.is_empty() || line_str.starts_with('#') {
+            continue;
+        }
+        let fingerprint = fingerprint_for_recipient(line_str);
+        lines.push(StoreLine {
+            text: line_str.to_string(),
+            fingerprint,
+            recipient: line_str.to_string(),
         });
     }
     Ok(StoreContents {
         path: path.clone(),
         exists: true,
-        blocks,
+        lines,
     })
 }
 
-/// Loads and parses the armoured PUBLIC key store (public-keys.pgp).
-/// Same contract as [`load_private_store`].
-fn load_public_store(path: &PathBuf) -> Result<StoreContents> {
-    if !path.exists() {
-        return Ok(StoreContents {
-            path: path.clone(),
-            exists: false,
-            blocks: Vec::new(),
-        });
-    }
-    let content = std::fs::read_to_string(path).context("Failed to read public-keys.pgp")?;
-    let texts = split_armored_public_key_blocks(&content, path)?;
-    let mut blocks = Vec::new();
-    for text in texts {
-        let (key, _headers) = SignedPublicKey::from_string(&text).with_context(|| {
-            format!(
-                "Failed to parse public key block in {} (corrupt key store); refusing to modify it — repair the store manually",
-                path.display()
-            )
-        })?;
-        blocks.push(StoreBlock {
-            text,
-            fingerprint: key.fingerprint().to_string().to_uppercase(),
-            emails: lift_users(&key.details.users),
-        });
-    }
-    Ok(StoreContents {
-        path: path.clone(),
-        exists: true,
-        blocks,
-    })
+/// Matching: the identifier equals the key's fingerprint (case-insensitively),
+/// or equals the recipient string.
+fn line_matches(line: &StoreLine, wanted_fingerprint: &str, wanted_recipient: &str) -> bool {
+    line.fingerprint == wanted_fingerprint || line.recipient == wanted_recipient
 }
 
-/// Matching is exact equality (the same semantics as export and
-/// find_private_key_by_email): the identifier equals the key's fingerprint
-/// (case-insensitively), or equals the address extracted from one of the
-/// key's user-IDs — never substring matching.
-fn block_matches(block: &StoreBlock, wanted_fingerprint: &str, wanted_email: &str) -> bool {
-    block.fingerprint == wanted_fingerprint
-        || block
-            .emails
-            .iter()
-            .any(|email| extract_email_from_user_id(email).is_some_and(|addr| addr == wanted_email))
-}
-
-/// Fingerprints are matched and stored uppercase; the rest of the tool
-/// (export, list-keys) prints them lowercase hex, so displayed strings
-/// follow that convention.
-fn display_fingerprint(block: &StoreBlock) -> String {
-    block.fingerprint.to_lowercase()
-}
-
-/// Removes key material from the LOCAL key store: every armoured block in
-/// `<key_store>/secret-keys.pgp` and `<key_store>/public-keys.pgp` whose key's
-/// fingerprint matches `identifier`, or whose exact case-insensitive email
-/// matches, is dropped.
-///
-/// This is DESTRUCTIVE and local-only: it does NOT touch any repository,
-/// keyring or trust state, and it does NOT revoke the key — old ciphertext
-/// encrypted to it stays decryptable by whoever holds it. Revoking a
-/// departing collaborator is removeperson + re-hide (docs/departing.md).
-///
-/// Guards, mirroring clean:
-/// - if the target key is the only private key in secret-keys.pgp, the
-///   removal refuses without `--yes` (without it nothing can be decrypted);
-/// - an email matching several distinct keys is ambiguous: the fingerprints
-///   are listed and nothing is removed without `--yes` (which removes ALL
-///   of them — passing the fingerprint is the safer way to remove one).
-///
-/// The rewrite is atomic and lossless for the retained blocks: both stores
-/// are fully read and parsed BEFORE any decision, a corrupt (e.g.
-/// truncated) store refuses the whole command untouched (repair it by hand
-/// — a corrupt store is never deleted), and only then are the remaining
-/// blocks re-serialised and written back via write_atomic.
+/// Removes key material from the LOCAL key store: every line in
+/// `<key_store>/identities.txt` and `<key_store>/recipients.txt` whose
+/// fingerprint matches `identifier`, or whose recipient string matches, is dropped.
 pub fn cmd_removekey(key_store: &PathBuf, identifier: &str, yes: bool) -> Result<()> {
-    let secret_path = key_store.join("secret-keys.pgp");
-    let public_path = key_store.join("public-keys.pgp");
+    let identities_path = key_store.join("identities.txt");
+    let recipients_path = key_store.join("recipients.txt");
 
-    // Read and parse BOTH stores before any decision or write: a corrupt
-    // store refuses the whole command before anything can be removed.
-    let secret_store = load_private_store(&secret_path)?;
-    let public_store = load_public_store(&public_path)?;
+    let identity_store = load_identity_store(&identities_path)?;
+    let recipient_store = load_recipient_store(&recipients_path)?;
 
-    let wanted_email = identifier.trim().to_lowercase();
-    let wanted_fingerprint = identifier.trim().to_uppercase();
+    let wanted_recipient = identifier.trim();
+    let wanted_fingerprint = identifier.trim().to_lowercase();
 
-    let secret_matches: Vec<usize> = secret_store
-        .blocks
+    let identity_matches: Vec<usize> = identity_store
+        .lines
         .iter()
         .enumerate()
-        .filter(|(_, block)| block_matches(block, &wanted_fingerprint, &wanted_email))
+        .filter(|(_, line)| line_matches(line, &wanted_fingerprint, wanted_recipient))
         .map(|(i, _)| i)
         .collect();
-    let public_matches: Vec<usize> = public_store
-        .blocks
+    let recipient_matches: Vec<usize> = recipient_store
+        .lines
         .iter()
         .enumerate()
-        .filter(|(_, block)| block_matches(block, &wanted_fingerprint, &wanted_email))
+        .filter(|(_, line)| line_matches(line, &wanted_fingerprint, wanted_recipient))
         .map(|(i, _)| i)
         .collect();
 
-    if secret_matches.is_empty() && public_matches.is_empty() {
+    if identity_matches.is_empty() && recipient_matches.is_empty() {
         anyhow::bail!(
-            "No key matching '{}' found in the key store {} (secret-keys.pgp, public-keys.pgp); removekey only removes keys this machine's local store holds",
+            "No key matching '{}' found in the key store {} (identities.txt, recipients.txt); removekey only removes keys this machine's local store holds",
             identifier,
             key_store.display()
         );
     }
 
-    // Danger guard: the target is the only private key in secret-keys.pgp.
-    if !secret_matches.is_empty() && secret_store.blocks.len() == 1 && !yes {
+    // Danger guard: the target is the only identity in identities.txt.
+    if !identity_matches.is_empty() && identity_store.lines.len() == 1 && !yes {
         anyhow::bail!(
-            "Refusing to remove '{}': this is your only private key; without it you cannot decrypt anything — pass --yes to confirm",
+            "Refusing to remove '{}': this is your only identity; without it you cannot decrypt anything — pass --yes to confirm",
             identifier
         );
     }
 
     // Ambiguity guard: several DISTINCT keys match the identifier.
     let mut matched_fingerprints: BTreeSet<String> = BTreeSet::new();
-    for i in &secret_matches {
-        matched_fingerprints.insert(display_fingerprint(&secret_store.blocks[*i]));
+    for i in &identity_matches {
+        matched_fingerprints.insert(identity_store.lines[*i].fingerprint.clone());
     }
-    for i in &public_matches {
-        matched_fingerprints.insert(display_fingerprint(&public_store.blocks[*i]));
+    for i in &recipient_matches {
+        matched_fingerprints.insert(recipient_store.lines[*i].fingerprint.clone());
     }
     if matched_fingerprints.len() > 1 && !yes {
         anyhow::bail!(
-            "Multiple keys match '{}' in the key store {}; pass a fingerprint instead of an email, or re-run with --yes to remove ALL of them. Matching fingerprints:\n  {}",
+            "Multiple keys match '{}' in the key store {}; pass a fingerprint instead, or re-run with --yes to remove ALL of them. Matching fingerprints:\n  {}",
             identifier,
             key_store.display(),
             matched_fingerprints
@@ -206,11 +154,10 @@ pub fn cmd_removekey(key_store: &PathBuf, identifier: &str, yes: bool) -> Result
         );
     }
 
-    // Rewrite only the stores that hold matching blocks; the retained blocks
-    // are written back verbatim in the store's canonical format.
+    // Rewrite only the stores that hold matching lines.
     for (store, matches) in [
-        (&secret_store, &secret_matches),
-        (&public_store, &public_matches),
+        (&identity_store, &identity_matches),
+        (&recipient_store, &recipient_matches),
     ] {
         if matches.is_empty() {
             if store.exists {
@@ -222,12 +169,12 @@ pub fn cmd_removekey(key_store: &PathBuf, identifier: &str, yes: bool) -> Result
         }
         let removed: Vec<String> = matches
             .iter()
-            .map(|i| display_fingerprint(&store.blocks[*i]))
+            .map(|i| store.lines[*i].fingerprint.clone())
             .collect();
         let mut retained = String::new();
-        for (i, block) in store.blocks.iter().enumerate() {
+        for (i, line) in store.lines.iter().enumerate() {
             if !matches.contains(&i) {
-                retained.push_str(&block.text);
+                retained.push_str(&line.text);
                 retained.push('\n');
             }
         }
