@@ -1,10 +1,10 @@
 # git-veil
 
-git-veil is a git-secret work-alike: a tool for storing encrypted secrets in a
-git repository, written in Rust. It uses [age] encryption (via the pure-Rust
-[`age` crate][age-crate]) for secrecy and [Ed25519][ed25519] signing (via
-[`ed25519-dalek`][dalek]) for keyring integrity — no PGP, no GPG, no external
-crypto process. All cryptographic operations happen in-process.
+A tool for storing encrypted secrets in a git repository, written in Rust.
+It uses [age] encryption (via the pure-Rust [`age` crate][age-crate]) for
+secrecy and [Ed25519][ed25519] signing (via [`ed25519-dalek`][dalek]) for
+keyring integrity — no PGP, no GPG, no external crypto process. All
+cryptographic operations happen in-process.
 
 [age]: https://age-encryption.org
 [age-crate]: https://crates.io/crates/age
@@ -34,6 +34,36 @@ without a pin, or with a signature that does not verify, nothing is touched.
 The key store and its pins are the trust boundary for every repository that
 uses that store, so sharing one store across mutually distrusting repositories
 is not advised.
+
+## Quick start (solo)
+
+Prerequisite: an age identity (see [Key setup](#key-setup) below) and an
+Ed25519 signing keypair.
+
+```sh
+git-veil init                                   # create .git-veil/ state
+git-veil import my-age-identity.txt              # import your age identity into the local key store
+git-veil show-repo-id                           # print the repository ID
+git-veil trust demo+example@github.com owner.signing   # pin the signing key
+git-veil tell example@github.com my-recipient.txt      # add yourself to the signed keyring
+echo .env >> .gitignore                        # ignore the plaintext name
+git-veil add .env                               # track the file
+git-veil hide                                   # encrypt: .env -> .env.secret, plaintext deleted
+git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
+git commit -m "Add encrypted secrets"
+git-veil reveal                                 # decrypt back when you need the plaintext
+```
+
+The `.secret` ciphertext files are standard age-encrypted blobs. You can
+verify interoperability with any age-compatible tool:
+
+```sh
+# git-veil encrypted, age CLI decrypts:
+age -d -i my-age-identity.txt .env.secret
+
+# age CLI encrypted, git-veil decrypts (via reveal/cat):
+echo "test" | age -r age1... -o .env.secret && git-veil cat .env
+```
 
 ## Installation
 
@@ -100,37 +130,12 @@ to a file and passes it to `trust`:
 #   line 2: your age recipient string (optional, for convenience)
 ```
 
-## Quick start (solo)
-
-Prerequisite: an age identity (see [Key setup](#key-setup) above) and an
-Ed25519 signing keypair.
-
-```sh
-git-veil init                                   # create .git-veil/ state
-git-veil import my-age-identity.txt              # import your age identity into the local key store
-git-veil show-repo-id                           # print the repository ID
-git-veil trust demo+example@github.com owner.signing   # pin the signing key
-git-veil tell example@github.com my-recipient.txt      # add yourself to the signed keyring
-echo .env >> .gitignore                        # ignore the plaintext name
-git-veil add .env                               # track the file
-git-veil hide                                   # encrypt: .env -> .env.secret, plaintext deleted
-git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
-git commit -m "Add encrypted secrets"
-git-veil reveal                                 # decrypt back when you need the plaintext
-```
-
-The `.secret` ciphertext files are standard age-encrypted blobs. You can
-verify interoperability with any age-compatible tool:
-
-```sh
-# git-veil encrypted, age CLI decrypts:
-age -d -i my-age-identity.txt .env.secret
-
-# age CLI encrypted, git-veil decrypts (via reveal/cat):
-echo "test" | age -r age1... -o .env.secret && git-veil cat .env
-```
-
 ## Commands
+
+git-veil is a CLI tool inspired by git-secret, yet uses the more modern and
+compact `age` encryption tools rather than the older `pgp`/`gpg` tools. The
+underlying algorithms are common to many tools; it is the key formats and
+ergonomics that differ — such as a smaller final binary size.
 
 | Command          | Purpose                                                                 |
 |------------------|-------------------------------------------------------------------------|
