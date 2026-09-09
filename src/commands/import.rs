@@ -1,49 +1,41 @@
 use anyhow::{Context, Result};
-use pgp::composed::{Deserializable, SignedSecretKey};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
-use crate::openpgp::split_armored_private_key_blocks;
-use crate::pubkey::extract_email_from_user_id;
-use pgp::types::KeyDetails;
+use crate::age_crypto::{parse_identity, recipient_from_identity, fingerprint_for_recipient};
 
-fn primary_user_id(key: &SignedSecretKey) -> String {
-    key.details
-        .users
-        .first()
-        .map(|u| String::from_utf8_lossy(u.id.id()).into_owned())
-        .unwrap_or_else(|| "<no user id>".to_string())
-}
-
-/// Imports armoured private key blocks from one or more files into the
-/// tool-owned key store (<key_store>/secret-keys.pgp).
+/// Imports age identity strings from one or more files into the
+/// tool-owned key store (<key_store>/identities.txt).
 ///
 /// Relative key-file paths resolve against `repo_root`. Each file must
-/// contain at least one parseable private key block, or the command refuses
-/// it. Keys whose fingerprint is already present in the secret key store are
+/// contain at least one parseable age identity line, or the command refuses
+/// it. Identities whose fingerprint is already present in the store are
 /// skipped rather than duplicated. On success the store is written as
-/// newline-separated armoured private key blocks, the exact multi-block
-/// format the reader in openpgp.rs supports.
+/// newline-separated identity strings.
 pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Result<()> {
     if files.is_empty() {
-        anyhow::bail!("no key files given; pass one or more armoured private key files, e.g. git-veil import alice.pgp");
+        anyhow::bail!("no key files given; pass one or more age identity files, e.g. git-veil import alice.age");
     }
-    let secret_keys_path = key_store.join("secret-keys.pgp");
+    let identities_path = key_store.join("identities.txt");
 
-    let mut secret_keys_content = if secret_keys_path.exists() {
-        fs::read_to_string(&secret_keys_path).context("Failed to read secret-keys.pgp")?
+    let mut identities_content = if identities_path.exists() {
+        fs::read_to_string(&identities_path).context("Failed to read identities.txt")?
     } else {
         String::new()
     };
 
-    // Fingerprints already present in the secret key store (uppercase hex for
-    // case-insensitive comparison).
+    // Fingerprints already present in the identity store
     let mut known: HashSet<String> = HashSet::new();
-    for block in split_armored_private_key_blocks(&secret_keys_content, &secret_keys_path)? {
-        if let Ok((key, _)) = SignedSecretKey::from_string(&block) {
-            known.insert(key.fingerprint().to_string().to_uppercase());
+    for line in identities_content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Ok(identity) = parse_identity(line) {
+            let recipient = recipient_from_identity(&identity);
+            known.insert(fingerprint_for_recipient(&recipient));
         }
     }
 
@@ -54,59 +46,51 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Re
         let resolved = repo_root.join(file);
         let content = fs::read_to_string(&resolved)
             .with_context(|| format!("Failed to read key file {}", file))?;
-        let blocks = split_armored_private_key_blocks(&content, &resolved)?;
-        if blocks.is_empty() {
-            anyhow::bail!("No private key blocks found in {}", file);
-        }
 
         let mut parseable = 0usize;
-        for block in &blocks {
-            let key = match SignedSecretKey::from_string(block) {
-                Ok((key, _headers)) => key,
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let identity = match parse_identity(line) {
+                Ok(identity) => identity,
                 Err(err) => {
-                    println!("! skipped unparseable block in {}: {}", file, err);
+                    println!("! skipped unparseable line in {}: {}", file, err);
                     continue;
                 }
             };
             parseable += 1;
 
-            let fingerprint = key.fingerprint().to_string().to_uppercase();
-            let user_id = primary_user_id(&key);
-            // Print the extracted email when the UID carries one; otherwise
-            // fall back to the raw UID so the output stays informative.
-            let display = extract_email_from_user_id(&user_id).unwrap_or_else(|| user_id.clone());
+            let recipient = recipient_from_identity(&identity);
+            let fingerprint = fingerprint_for_recipient(&recipient);
 
             if known.contains(&fingerprint) {
                 skipped += 1;
                 println!(
                     "= skipped (already imported): {} ({})",
-                    display, fingerprint
+                    recipient, fingerprint
                 );
             } else {
-                if !secret_keys_content.is_empty() && !secret_keys_content.ends_with('\n') {
-                    secret_keys_content.push('\n');
+                if !identities_content.is_empty() && !identities_content.ends_with('\n') {
+                    identities_content.push('\n');
                 }
-                secret_keys_content.push_str(block);
-                secret_keys_content.push('\n');
+                identities_content.push_str(line);
+                identities_content.push('\n');
                 known.insert(fingerprint.clone());
                 imported += 1;
-                println!("+ imported: {} ({})", display, fingerprint);
+                println!("+ imported: {} ({})", recipient, fingerprint);
             }
         }
 
         if parseable == 0 {
-            anyhow::bail!("No parseable private key blocks in {}", file);
+            anyhow::bail!("No parseable age identity lines in {}", file);
         }
     }
 
     fs::create_dir_all(key_store).context("Failed to create key store directory")?;
-    // Atomic append = read-existing (above) + write_atomic(whole content).
-    // The O(n) rewrite of the accumulated store is the accepted trade at
-    // this scale (a handful of armoured blocks); a torn secret-keys store
-    // would brick ALL private-key access (fail-closed), so a partial
-    // write must never be possible.
-    write_atomic(&secret_keys_path, secret_keys_content.as_bytes())
-        .context("Failed to write secret-keys.pgp")?;
+    write_atomic(&identities_path, identities_content.as_bytes())
+        .context("Failed to write identities.txt")?;
 
     println!("Summary: {} imported, {} skipped", imported, skipped);
     Ok(())
