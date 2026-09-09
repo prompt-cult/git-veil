@@ -20,7 +20,7 @@ pub fn cmd_reveal(
     email: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    passphrase: Option<&str>,
+    _passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, key_store)?;

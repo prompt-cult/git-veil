@@ -15,7 +15,7 @@ pub fn cmd_removeperson(
     email_to_remove: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    passphrase: Option<&str>,
+    _passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
@@ -23,7 +23,7 @@ pub fn cmd_removeperson(
 
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
+    let _trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
         anyhow::anyhow!(
             "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,

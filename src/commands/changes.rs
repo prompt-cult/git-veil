@@ -32,7 +32,7 @@ pub fn cmd_changes(
     email: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    passphrase: Option<&str>,
+    _passphrase: Option<&str>,
 ) -> Result<Vec<PathBuf>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
