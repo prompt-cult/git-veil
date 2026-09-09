@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 
-use crate::armour::{SIG_BEGIN, SIG_END};
 
 pub const BEGIN_MARKER: &str = "-----BEGIN GIT-VEIL KEYRING-----";
 pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
@@ -8,7 +7,7 @@ pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
 #[derive(Debug, Clone)]
 pub struct KeyringEntry {
     pub email: String,
-    pub base64_key: String,
+    pub recipient: String,
     pub fingerprint: String,
 }
 
@@ -56,17 +55,19 @@ impl Keyring {
                 }
                 Ok(KeyringEntry {
                     email: parts[0].to_string(),
-                    base64_key: parts[1].to_string(),
+                    recipient: parts[1].to_string(),
                     fingerprint: parts[2].to_string(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
 
         let after_end = &content[end_idx + END_MARKER.len()..];
-        let signature = if let (Some(sig_begin), Some(sig_end)) =
-            (after_end.find(SIG_BEGIN), after_end.find(SIG_END))
+        let sig_begin = "-----BEGIN GIT-VEIL SIGNATURE-----";
+        let sig_end = "-----END GIT-VEIL SIGNATURE-----";
+        let signature = if let (Some(sig_begin_idx), Some(sig_end_idx)) =
+            (after_end.find(sig_begin), after_end.find(sig_end))
         {
-            let sig_section = &after_end[sig_begin..sig_end + SIG_END.len()];
+            let sig_section = &after_end[sig_begin_idx..sig_end_idx + sig_end.len()];
             Some(sig_section.to_string())
         } else {
             None
@@ -82,7 +83,7 @@ impl Keyring {
         for entry in &self.entries {
             result.push_str(&format!(
                 "{}:{}:{}\n",
-                entry.email, entry.base64_key, entry.fingerprint
+                entry.email, entry.recipient, entry.fingerprint
             ));
         }
         result.push_str(END_MARKER);
@@ -101,7 +102,7 @@ impl Keyring {
     ///
     /// # Format constraint
     ///
-    /// The serialized keyring line format is `email:base64_key:fingerprint`
+    /// The serialized keyring line format is `email:recipient:fingerprint`
     /// with `:` as the field separator, so the email MUST NOT contain `:`.
     /// A colon would produce a 4-field line that every subsequent
     /// [`Keyring::parse`] rejects with "Malformed keyring entry", bricking
@@ -110,7 +111,7 @@ impl Keyring {
     pub fn add_entry(
         &mut self,
         email: String,
-        base64_key: String,
+        recipient: String,
         fingerprint: String,
     ) -> Result<()> {
         if email.contains(':') {
@@ -125,12 +126,12 @@ impl Keyring {
             .iter_mut()
             .find(|e| e.email.eq_ignore_ascii_case(&email))
         {
-            existing.base64_key = base64_key;
+            existing.recipient = recipient;
             existing.fingerprint = fingerprint;
         } else {
             self.entries.push(KeyringEntry {
                 email,
-                base64_key,
+                recipient,
                 fingerprint,
             });
         }

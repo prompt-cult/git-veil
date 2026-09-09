@@ -1,1479 +1,948 @@
-//! CLI end-to-end tests.
+//! CLI integration tests for the age + Ed25519 crypto stack.
 //!
-//! These spawn the real `git-veil` binary via assert_cmd. Each test builds its
-//! own temporary git repository and fake $HOME, so every child process gets an
-//! isolated key store ($HOME/.git-veil) without touching the test process's
-//! working directory or environment — hence no #[serial] is needed.
+//! These tests exercise the full command pipeline (init -> trust -> tell -> add ->
+//! hide -> reveal/cat/unhide/changes -> removeperson -> verify-keyring -> clean)
+//! using temporary git repositories and in-memory age identities + Ed25519
+//! signing keys. No PGP, no external key servers, no passphrases.
 
-use assert_cmd::Command;
-use clap::CommandFactory as _;
-use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
-use rand::thread_rng;
-use std::path::Path;
+use age::secrecy::ExposeSecret;
+use git_veil::{
+    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import,
+    cmd_init, cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson,
+    cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    cmd_whoami,
+    export_public_key, generate_identity, generate_signing_keypair,
+    import_recipient_to_store,
+    recipient_from_identity, fingerprint_for_recipient,
+    Keyring, TrustPinStore, TrustStore, TrackedFiles,
+};
+use std::fs;
+use std::path::{Path, PathBuf};
 
-fn generate_test_key(
-    email: &str,
-) -> (
-    pgp::composed::SignedSecretKey,
-    pgp::composed::SignedPublicKey,
-) {
-    let mut rng = thread_rng();
+// ---------------------------------------------------------------------------
+// Test harness helpers
+// ---------------------------------------------------------------------------
 
-    let encrypt_subkey = SubkeyParamsBuilder::default()
-        .key_type(KeyType::X25519)
-        .can_encrypt(EncryptionCaps::All)
-        .build()
-        .expect("build encrypt subkey params");
-
-    let params = SecretKeyParamsBuilder::default()
-        .key_type(KeyType::Ed25519)
-        .can_certify(true)
-        .can_sign(true)
-        .primary_user_id(format!("Test User <{}>", email))
-        .passphrase(None)
-        .subkeys(vec![encrypt_subkey])
-        .build()
-        .expect("build key params");
-
-    let secret_key = params.generate(&mut rng).expect("generate key");
-    let public_key = secret_key.to_public_key();
-
-    (secret_key, public_key)
+/// Unique scratch directory per test, cleaned up on drop.
+struct TempDir {
+    path: PathBuf,
 }
 
-fn generate_protected_test_key(
-    email: &str,
-    passphrase: &str,
-) -> (
-    pgp::composed::SignedSecretKey,
-    pgp::composed::SignedPublicKey,
-) {
-    let mut rng = thread_rng();
-
-    let encrypt_subkey = SubkeyParamsBuilder::default()
-        .key_type(KeyType::X25519)
-        .can_encrypt(EncryptionCaps::All)
-        .passphrase(Some(passphrase.to_string()))
-        .build()
-        .expect("build encrypt subkey params");
-
-    let params = SecretKeyParamsBuilder::default()
-        .key_type(KeyType::Ed25519)
-        .can_certify(true)
-        .can_sign(true)
-        .primary_user_id(format!("Test User <{}>", email))
-        .passphrase(Some(passphrase.to_string()))
-        .subkeys(vec![encrypt_subkey])
-        .build()
-        .expect("build key params");
-
-    let secret_key = params.generate(&mut rng).expect("generate key");
-    let public_key = secret_key.to_public_key();
-
-    (secret_key, public_key)
-}
-
-fn write_multi_key_secret_keys(key_store: &Path, keys: &[pgp::composed::SignedSecretKey]) {
-    let mut content = String::new();
-    for key in keys {
-        if !content.is_empty() {
-            content.push('\n');
-        }
-        content.push_str(&key.to_armored_string(Default::default()).unwrap());
+impl TempDir {
+    fn new(label: &str) -> Self {
+        let pid = std::process::id();
+        let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("git-veil-test-{}-{}-{}", label, pid, counter));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        Self { path: dir }
     }
-    std::fs::create_dir_all(key_store).unwrap();
-    std::fs::write(key_store.join("secret-keys.pgp"), content).unwrap();
+
+    fn join(&self, rel: &str) -> PathBuf {
+        self.path.join(rel)
+    }
 }
 
-fn write_public_key_file(public_key: &pgp::composed::SignedPublicKey, path: &Path) {
-    let armored = public_key.to_armored_string(Default::default()).unwrap();
-    std::fs::write(path, armored).unwrap();
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
 }
 
-fn git(repo: &Path, args: &[&str]) {
+static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Initialises a git repo with a remote so `derive_repo_id` works.
+fn init_git_repo(dir: &Path) {
     let status = std::process::Command::new("git")
-        .current_dir(repo)
-        .args(args)
+        .current_dir(dir)
+        .args(["init", "--quiet"])
         .status()
-        .expect("run git");
-    assert!(status.success(), "git {:?} failed", args);
+        .expect("git init");
+    assert!(status.success(), "git init failed");
+
+    let status = std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["config", "user.email", "owner@example.com"])
+        .status()
+        .expect("git config user.email");
+    assert!(status.success());
+
+    let status = std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["config", "user.name", "Test Owner"])
+        .status()
+        .expect("git config user.name");
+    assert!(status.success());
+
+    let status = std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["remote", "add", "origin", "git@github.com:owner/fara.git"])
+        .status()
+        .expect("git remote add");
+    assert!(status.success());
 }
 
-fn run(repo: &Path, home: &Path, args: &[&str]) -> std::process::Output {
-    Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .current_dir(repo)
-        .env("HOME", home)
-        .env_remove("GITVEIL_PASSPHRASE")
-        .args(args)
-        .output()
-        .expect("run git-veil")
+/// The repo_id that `derive_repo_id` will produce for the test remote.
+const TEST_REPO_ID: &str = "fara+owner@github.com";
+
+/// A complete test fixture: git repo, key store, owner identity, owner signing key.
+struct TestRepo {
+    repo: TempDir,
+    key_store: TempDir,
+    _owner_identity: age::x25519::Identity,
+    owner_recipient: String,
+    _owner_signing_key: ed25519_dalek::SigningKey,
+    _owner_verifying_key_hex: String,
 }
 
-/// Runs the binary with GITVEIL_PASSPHRASE set for this invocation only, so
-/// env-var tests cannot leak the passphrase into other child processes.
-fn run_with_passphrase_env(
-    repo: &Path,
-    home: &Path,
-    args: &[&str],
-    passphrase: &str,
-) -> std::process::Output {
-    Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .current_dir(repo)
-        .env("HOME", home)
-        .env("GITVEIL_PASSPHRASE", passphrase)
-        .args(args)
-        .output()
-        .expect("run git-veil")
-}
-
-/// Runs the binary with `input` piped to stdin (for --passphrase-stdin).
-fn run_with_stdin(repo: &Path, home: &Path, args: &[&str], input: &str) -> std::process::Output {
-    Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .current_dir(repo)
-        .env("HOME", home)
-        .env_remove("GITVEIL_PASSPHRASE")
-        .args(args)
-        .write_stdin(input)
-        .output()
-        .expect("run git-veil")
-}
-
-/// Builds a temp repo (with origin remote and local user.email) plus a fake
-/// home holding the owner + collaborator secret keys, runs the CLI flow
-/// init -> trust -> tell, and returns (repo_temp, home_temp, owner_pub,
-/// alice_pub) so stdout-contract tests can assert fingerprints.
-fn setup_told_repo() -> (
-    tempfile::TempDir,
-    tempfile::TempDir,
-    pgp::composed::SignedPublicKey,
-    pgp::composed::SignedPublicKey,
-) {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
-    );
-    git(
-        repo_temp.path(),
-        &["config", "user.email", "alice@example.com"],
-    );
-
-    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
-    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-
-    write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec, alice_sec]);
-
-    let owner_keyfile = repo_temp.path().join("owner.pub");
-    write_public_key_file(&owner_pub, &owner_keyfile);
-    let alice_keyfile = repo_temp.path().join("alice.pub");
-    write_public_key_file(&alice_pub, &alice_keyfile);
-
-    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
-    assert!(out.status.success(), "init failed: {:?}", out.stderr);
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["trust", "repo+owner@github.com", "owner.pub"],
-    );
-    assert!(out.status.success(), "trust failed: {:?}", out.stderr);
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["tell", "alice@example.com", "alice.pub"],
-    );
-    assert!(out.status.success(), "tell failed: {:?}", out.stderr);
-
-    (repo_temp, home_temp, owner_pub, alice_pub)
-}
-
-/// Builds a temp repo (with origin remote and local user.email) plus a fake
-/// home holding the owner + collaborator secret keys, runs the full CLI flow
-/// init -> trust -> tell -> add -> hide, and returns (repo_temp, home_temp).
-fn setup_hidden_repo() -> (tempfile::TempDir, tempfile::TempDir) {
-    let (repo_temp, home_temp, _owner_pub, _alice_pub) = setup_told_repo();
-
-    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
-    let out = run(repo_temp.path(), home_temp.path(), &["add", "secret.env"]);
-    assert!(out.status.success(), "add failed: {:?}", out.stderr);
-
-    let out = run(repo_temp.path(), home_temp.path(), &["hide"]);
-    assert!(out.status.success(), "hide failed: {:?}", out.stderr);
-    assert!(
-        !repo_temp.path().join("secret.env").exists(),
-        "hide must delete the plaintext file"
-    );
-
-    (repo_temp, home_temp)
-}
-
-#[test]
-fn reveal_defaults_to_git_config_user_email() {
-    let (repo_temp, home_temp) = setup_hidden_repo();
-
-    // No --email: the CLI must fall back to `git config user.email`
-    // (alice@example.com), not any hardcoded placeholder address.
-    let out = run(repo_temp.path(), home_temp.path(), &["reveal"]);
-
-    assert!(
-        out.status.success(),
-        "reveal without --email must resolve the email from git config user.email and succeed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
-        b"s3cret",
-        "reveal must restore the original plaintext"
-    );
-}
-
-#[test]
-fn reveal_with_explicit_email_succeeds() {
-    let (repo_temp, home_temp) = setup_hidden_repo();
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["reveal", "--email", "alice@example.com"],
-    );
-
-    assert!(
-        out.status.success(),
-        "reveal with an explicit --email must succeed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
-        b"s3cret",
-        "reveal must restore the original plaintext"
-    );
-}
-
-#[test]
-fn cat_outputs_plaintext_to_stdout() {
-    let (repo_temp, home_temp) = setup_hidden_repo();
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["cat", "secret.env", "--email", "alice@example.com"],
-    );
-
-    assert!(
-        out.status.success(),
-        "cat must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        out.stdout, b"s3cret",
-        "cat must write the exact plaintext bytes to stdout"
-    );
-    assert!(
-        !repo_temp.path().join("secret.env").exists(),
-        "cat must not write a plaintext file to disk"
-    );
-    assert!(
-        repo_temp.path().join("secret.env.secret").exists(),
-        "cat must not delete the ciphertext"
-    );
-}
-
-#[test]
-fn cli_help_and_version_exit_zero() {
-    for args in [&["--help"][..], &["--version"][..]] {
-        let out = Command::cargo_bin("git-veil")
-            .expect("git-veil binary must be buildable")
-            .args(args)
-            .output()
-            .expect("run git-veil");
-        assert!(
-            out.status.success(),
-            "git-veil {:?} must exit 0, got {:?}",
-            args,
-            out.status
-        );
-    }
-}
-
-#[test]
-fn bare_help_lists_every_command_with_one_liner() {
-    // `git-veil help` must be a table of contents: every subcommand name with
-    // a one-line purpose, NOT a flag dump of the root or any subcommand.
-    let out = Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .args(["help"])
-        .output()
-        .expect("run git-veil");
-
-    assert!(
-        out.status.success(),
-        "git-veil help must exit 0, got {:?}",
-        out.status
-    );
-
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    for name in [
-        "init",
-        "import",
-        "export",
-        "trust",
-        "tell",
-        "removeperson",
-        "add",
-        "remove",
-        "list",
-        "hide",
-        "reveal",
-        "cat",
-        "unhide",
-        "changes",
-        "show-repo-id",
-        "whoami",
-        "verify-keyring",
-        "list-keys",
-        "clean",
-        "completions",
-        "manpages",
-    ] {
-        assert!(
-            stdout.contains(name),
-            "git-veil help must list every subcommand; missing: {name}\n---\n{stdout}"
-        );
-    }
-
-    // A flag dump would enumerate subcommand options here; the one-liner
-    // list must not. --key-store is a stable marker: it belongs to several
-    // subcommands but never to the table of contents.
-    assert!(
-        !stdout.contains("--key-store"),
-        "git-veil help must be a one-liner table of contents, not a flag dump\n---\n{stdout}"
-    );
-}
-
-#[test]
-fn help_hide_shows_workflow_and_examples() {
-    // `git-veil help hide` must show the long-form workflow discussion and
-    // commented examples, not just the flag list.
-    let out = Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .args(["help", "hide"])
-        .output()
-        .expect("run git-veil");
-
-    assert!(
-        out.status.success(),
-        "git-veil help hide must exit 0, got {:?}",
-        out.status
-    );
-
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    for marker in ["init", "trust", "tell", "add", "secret", "#"] {
-        assert!(
-            stdout.contains(marker),
-            "git-veil help hide must discuss the workflow (missing: {marker})\n---\n{stdout}"
-        );
-    }
-
-    // UX spec: the discussion + EXAMPLES must render BEFORE the
-    // usage/options block for `help <cmd>`.
-    let examples_pos = stdout
-        .find("EXAMPLES")
-        .expect("git-veil help hide must contain an EXAMPLES section");
-    let usage_pos = stdout
-        .find("Usage:")
-        .expect("git-veil help hide must contain a Usage block");
-    assert!(
-        examples_pos < usage_pos,
-        "EXAMPLES must render before Usage for `git-veil help hide`\n---\n{stdout}"
-    );
-}
-
-#[test]
-fn help_unknown_command_exits_nonzero() {
-    let out = Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .args(["help", "nosuchcmd"])
-        .output()
-        .expect("run git-veil");
-
-    assert!(
-        !out.status.success(),
-        "git-veil help nosuchcmd must exit nonzero, got success"
-    );
-}
-
-#[test]
-fn manpage_for_hide_contains_workflow_text() {
-    // The committed man page must carry the same workflow discussion that
-    // `git-veil help hide` shows, because clap_mangen renders it from the
-    // same clap definition.
-    let man_page =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/man/git-veil-hide.1");
-    let content = std::fs::read_to_string(&man_page).expect("read committed man page");
-
-    for marker in ["init", "trust", "tell", "add", "secret"] {
-        assert!(
-            content.contains(marker),
-            "{man_page:?} must contain the hide workflow text (missing: {marker})"
-        );
-    }
-}
-
-#[test]
-fn cli_reports_nonzero_exit_on_failure() {
-    // A directory that is not a git repo: show-repo-id must fail loudly.
-    let not_a_repo = tempfile::tempdir().unwrap();
-
-    let out = Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .current_dir(not_a_repo.path())
-        .args(["show-repo-id"])
-        .output()
-        .expect("run git-veil");
-
-    assert!(
-        !out.status.success(),
-        "show-repo-id outside a git repo must exit nonzero, got success"
-    );
-}
-
-#[test]
-fn home_free_subcommands_work_without_home_set() {
-    // init/add/remove/list/clean never touch the key store, so they must
-    // succeed even with HOME removed from the environment (previously
-    // default_key_store() errored before command dispatch). list-keys is NOT
-    // in this set any more: it verifies the keyring signature against the
-    // pinned trusted key, so it consumes a key_store and requires trust.
-    let repo_temp = tempfile::tempdir().unwrap();
-
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["config", "user.email", "alice@example.com"],
-    );
-
-    let run_without_home = |args: &[&str]| {
-        Command::cargo_bin("git-veil")
-            .expect("git-veil binary must be buildable")
-            .current_dir(repo_temp.path())
-            .env_remove("HOME")
-            .args(args)
-            .output()
-            .expect("run git-veil")
-    };
-
-    let out = run_without_home(&["init"]);
-    assert!(
-        out.status.success(),
-        "git-veil init without HOME must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
-
-    for args in [
-        &["add", "secret.env"][..],
-        &["list"][..],
-        &["remove", "secret.env"][..],
-        &["clean"][..],
-    ] {
-        let out = run_without_home(args);
-        assert!(
-            out.status.success(),
-            "git-veil {:?} without HOME must exit 0: stdout={:?} stderr={:?}",
-            args,
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        );
-    }
-}
-
-// ============================================================================
-// Safety/UX: clean requires --yes before destroying secret material;
-// unhide restores one hidden file
-// ============================================================================
-
-#[test]
-fn cli_clean_requires_yes_flag() {
-    let (repo_temp, home_temp) = setup_hidden_repo();
-    assert!(repo_temp.path().join("secret.env.secret").exists());
-
-    let out = run(repo_temp.path(), home_temp.path(), &["clean"]);
-    assert!(
-        !out.status.success(),
-        "clean without --yes must refuse to destroy ciphertext, got success"
-    );
-    let combined = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert!(
-        combined.contains("--yes"),
-        "the refusal must explain that --yes is required, got: {}",
-        combined
-    );
-    assert!(
-        repo_temp.path().join(".git-veil").exists(),
-        "a refused clean must leave .git-veil intact"
-    );
-    assert!(
-        repo_temp.path().join("secret.env.secret").exists(),
-        "a refused clean must leave the ciphertext intact"
-    );
-
-    let out = run(repo_temp.path(), home_temp.path(), &["clean", "--yes"]);
-    assert!(
-        out.status.success(),
-        "clean --yes must proceed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert!(
-        !repo_temp.path().join(".git-veil").exists(),
-        "clean --yes must remove .git-veil"
-    );
-}
-
-#[test]
-fn cli_unhide_decrypts_one_file() {
-    let (repo_temp, home_temp) = setup_hidden_repo();
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["unhide", "secret.env", "--email", "alice@example.com"],
-    );
-
-    assert!(
-        out.status.success(),
-        "unhide must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        std::fs::read(repo_temp.path().join("secret.env")).expect("plaintext must be restored"),
-        b"s3cret",
-        "unhide must restore the original plaintext"
-    );
-    assert!(
-        !repo_temp.path().join("secret.env.secret").exists(),
-        "unhide must delete the ciphertext"
-    );
-}
-
-// ============================================================================
-// Passphrase-protected private keys: env var + --passphrase-stdin
-//
-// Written Red/Green: pre-fix the binary only unlocked keys with an empty
-// passphrase, so these tests failed at runtime (unknown --passphrase-stdin
-// flag; GITVEIL_PASSPHRASE ignored).
-// ============================================================================
-
-/// Builds a temp repo (origin remote + local user.email) plus a fake home
-/// whose key store holds ONLY a passphrase-protected owner key, then runs
-/// CLI init + trust (both public-key-only, no passphrase needed).
-/// Returns (repo_temp, home_temp).
-fn setup_repo_with_protected_owner_key(passphrase: &str) -> (tempfile::TempDir, tempfile::TempDir) {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
-    );
-    git(
-        repo_temp.path(),
-        &["config", "user.email", "owner@github.com"],
-    );
-
-    let (owner_sec, owner_pub) = generate_protected_test_key("owner@github.com", passphrase);
-    write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec]);
-
-    let owner_keyfile = repo_temp.path().join("owner.pub");
-    write_public_key_file(&owner_pub, &owner_keyfile);
-
-    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
-    assert!(out.status.success(), "init failed: {:?}", out.stderr);
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["trust", "repo+owner@github.com", "owner.pub"],
-    );
-    assert!(out.status.success(), "trust failed: {:?}", out.stderr);
-
-    (repo_temp, home_temp)
-}
-
-fn track_and_hide(repo: &Path, home: &Path) {
-    std::fs::write(repo.join("secret.env"), "s3cret").unwrap();
-    let out = run(repo, home, &["add", "secret.env"]);
-    assert!(out.status.success(), "add failed: {:?}", out.stderr);
-    let out = run(repo, home, &["hide"]);
-    assert!(out.status.success(), "hide failed: {:?}", out.stderr);
-    assert!(
-        repo.join("secret.env.secret").exists(),
-        "hide must write the ciphertext beside the plaintext"
-    );
-}
-
-#[test]
-fn protected_key_decrypts_with_passphrase_from_env_var() {
-    let (repo_temp, home_temp) = setup_repo_with_protected_owner_key("correct horse");
-
-    // tell signs the keyring with the protected owner key: needs the env var.
-    let out = run_with_passphrase_env(
-        repo_temp.path(),
-        home_temp.path(),
-        &["tell", "owner@github.com", "owner.pub"],
-        "correct horse",
-    );
-    assert!(
-        out.status.success(),
-        "tell with GITVEIL_PASSPHRASE must succeed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    track_and_hide(repo_temp.path(), home_temp.path());
-
-    // Reveal with the env var set: must decrypt.
-    let out = run_with_passphrase_env(
-        repo_temp.path(),
-        home_temp.path(),
-        &["reveal"],
-        "correct horse",
-    );
-    assert!(
-        out.status.success(),
-        "reveal with GITVEIL_PASSPHRASE set must succeed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
-        b"s3cret",
-        "reveal must restore the original plaintext"
-    );
-
-    // Re-hide, then reveal WITHOUT the env var: must fail with a hint.
-    track_and_hide(repo_temp.path(), home_temp.path());
-    let out = run(repo_temp.path(), home_temp.path(), &["reveal"]);
-    assert!(
-        !out.status.success(),
-        "reveal without the passphrase must fail: stdout={:?}",
-        String::from_utf8_lossy(&out.stdout)
-    );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("passphrase"),
-        "the failure must hint that a passphrase may be missing, got: {}",
-        stderr
-    );
-    assert!(
-        !stderr.contains("correct horse"),
-        "the error output must never echo the passphrase value, got: {}",
-        stderr
-    );
-}
-
-#[test]
-fn passphrase_stdin_reads_exactly_one_line() {
-    let (repo_temp, home_temp) = setup_repo_with_protected_owner_key("correct horse");
-
-    // tell reads the passphrase from stdin: exactly the first line.
-    let out = run_with_stdin(
-        repo_temp.path(),
-        home_temp.path(),
-        &[
-            "tell",
-            "owner@github.com",
-            "owner.pub",
-            "--passphrase-stdin",
-        ],
-        "correct horse\nIGNORED SECOND LINE\n",
-    );
-    assert!(
-        out.status.success(),
-        "tell with --passphrase-stdin must read exactly one line: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    track_and_hide(repo_temp.path(), home_temp.path());
-
-    // Reveal with the exact passphrase on stdin: must decrypt. The extra
-    // second line must be ignored (exactly-one-line semantics).
-    let out = run_with_stdin(
-        repo_temp.path(),
-        home_temp.path(),
-        &["reveal", "--passphrase-stdin"],
-        "correct horse\nIGNORED SECOND LINE\n",
-    );
-    assert!(
-        out.status.success(),
-        "reveal with the exact passphrase on stdin must succeed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        std::fs::read(repo_temp.path().join("secret.env")).expect("revealed file must exist"),
-        b"s3cret",
-        "reveal must restore the original plaintext"
-    );
-
-    // A passphrase containing spaces must match exactly: any difference
-    // (extra trailing words) is a wrong passphrase -> clear failure.
-    track_and_hide(repo_temp.path(), home_temp.path());
-    let out = run_with_stdin(
-        repo_temp.path(),
-        home_temp.path(),
-        &["reveal", "--passphrase-stdin"],
-        "correct horse trailing words\n",
-    );
-    assert!(
-        !out.status.success(),
-        "a passphrase that differs after a space must NOT unlock the key"
-    );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("passphrase"),
-        "the failure must hint that a passphrase may be missing, got: {}",
-        stderr
-    );
-
-    // And a plain wrong passphrase fails too.
-    let out = run_with_stdin(
-        repo_temp.path(),
-        home_temp.path(),
-        &["reveal", "--passphrase-stdin"],
-        "hunter2\n",
-    );
-    assert!(
-        !out.status.success(),
-        "a wrong passphrase on stdin must fail"
-    );
-}
-
-// ============================================================================
-// Docs infrastructure: `completions` and `manpages` subcommands generate
-// shell completion scripts and roff man pages FROM the real clap definition.
-// ============================================================================
-
-#[test]
-fn cli_completions_emit_scripts() {
-    for shell in ["bash", "zsh", "fish"] {
-        let out = Command::cargo_bin("git-veil")
-            .expect("git-veil binary must be buildable")
-            .args(["completions", shell])
-            .output()
-            .expect("run git-veil");
-
-        assert!(
-            out.status.success(),
-            "completions {} must exit 0: stderr={:?}",
-            shell,
-            String::from_utf8_lossy(&out.stderr)
-        );
-        assert!(
-            !out.stdout.is_empty(),
-            "completions {} must emit a non-empty script",
-            shell
-        );
-        let script = String::from_utf8_lossy(&out.stdout);
-        assert!(
-            script.contains("git-veil"),
-            "completions {} script must reference the binary name, got: {}",
-            shell,
-            script
-        );
-    }
-}
-
-#[test]
-fn cli_manpages_write_files() {
-    let dir = tempfile::tempdir().unwrap();
-
-    let out = Command::cargo_bin("git-veil")
-        .expect("git-veil binary must be buildable")
-        .args(["manpages", dir.path().to_str().unwrap()])
-        .output()
-        .expect("run git-veil");
-
-    assert!(
-        out.status.success(),
-        "manpages must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    let root_page = dir.path().join("git-veil.1");
-    let root_content = std::fs::read(&root_page).expect("git-veil.1 must exist");
-    assert_th_roff(&root_content, "git-veil.1");
-
-    // The expected per-subcommand man pages are derived from the real clap
-    // definition (the lib's Cli), not a hardcoded list that could drift.
-    let mut expected: Vec<String> = git_veil::cli::Cli::command()
-        .get_subcommands()
-        .map(|sub| sub.get_name().to_string())
-        .collect();
-    expected.sort();
-    assert!(
-        !expected.is_empty(),
-        "the Cli definition must expose subcommands"
-    );
-    for name in expected {
-        let page = dir.path().join(format!("git-veil-{}.1", name));
-        let content = std::fs::read(&page).unwrap_or_else(|_| {
-            panic!("man page for subcommand {} must exist at {:?}", name, page)
-        });
-        assert_th_roff(&content, &format!("git-veil-{}.1", name));
-    }
-}
-
-/// Structural roff validation: the rendered man page must carry a `.TH`
-/// title line naming the page (clap_mangen emits a groff-compatibility
-/// prologue before it, so a whole-file prefix check would be wrong).
-fn assert_th_roff(content: &[u8], label: &str) {
-    let text = String::from_utf8_lossy(content);
-    assert!(
-        text.lines().any(|line| line.starts_with(".TH ")),
-        "{} must be roff with a .TH title line, got: {:?}",
-        label,
-        text.chars().take(80).collect::<String>()
-    );
-}
-
-#[test]
-fn cli_export_round_trip_into_tell() {
-    // Machine A: alice imports her private key and exports her PUBLIC key —
-    // no external tool involved in the handoff.
-    let repo_a = tempfile::tempdir().unwrap();
-    let home_a = tempfile::tempdir().unwrap();
-    let (alice_sec, _) = generate_test_key("alice@example.com");
-    std::fs::write(
-        repo_a.path().join("alice-priv.asc"),
-        alice_sec.to_armored_string(Default::default()).unwrap(),
-    )
-    .unwrap();
-
-    let out = run(repo_a.path(), home_a.path(), &["import", "alice-priv.asc"]);
-    assert!(
-        out.status.success(),
-        "machine A import failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    let alice_pub_path = home_a.path().join("alice.pub");
-    let out = run(
-        repo_a.path(),
-        home_a.path(),
-        &[
-            "export",
-            "alice@example.com",
-            "--output",
-            alice_pub_path.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        out.status.success(),
-        "machine A export failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert!(alice_pub_path.exists(), "export must produce alice.pub");
-    let handed_over = std::fs::read_to_string(&alice_pub_path).expect("read handed-over alice.pub");
-    assert!(
-        handed_over.contains("BEGIN PGP PUBLIC KEY BLOCK")
-            && !handed_over.contains("PRIVATE KEY BLOCK"),
-        "the handed-over file must be an armoured PUBLIC key only, got: {}",
-        handed_over
-    );
-
-    // Machine B (different fake HOME = different key store): the owner
-    // receives alice.pub and tells it into the keyring.
-    let repo_b = tempfile::tempdir().unwrap();
-    let home_b = tempfile::tempdir().unwrap();
-    git(repo_b.path(), &["init"]);
-    git(
-        repo_b.path(),
-        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
-    );
-    git(repo_b.path(), &["config", "user.email", "owner@github.com"]);
-
-    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
-    std::fs::write(
-        repo_b.path().join("owner-priv.asc"),
-        owner_sec.to_armored_string(Default::default()).unwrap(),
-    )
-    .unwrap();
-    let owner_keyfile = repo_b.path().join("owner.pub");
-    write_public_key_file(&owner_pub, &owner_keyfile);
-
-    let out = run(repo_b.path(), home_b.path(), &["init"]);
-    assert!(
-        out.status.success(),
-        "machine B init failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let out = run(repo_b.path(), home_b.path(), &["import", "owner-priv.asc"]);
-    assert!(
-        out.status.success(),
-        "machine B import failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let out = run(
-        repo_b.path(),
-        home_b.path(),
-        &["trust", "repo+owner@github.com", "owner.pub"],
-    );
-    assert!(
-        out.status.success(),
-        "machine B trust failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    // The actual handoff: tell consumes the exported file.
-    let out = run(
-        repo_b.path(),
-        home_b.path(),
-        &[
-            "tell",
-            "alice@example.com",
-            alice_pub_path.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        out.status.success(),
-        "machine B tell of the exported key failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-
-    let keyring_text = std::fs::read_to_string(repo_b.path().join(".git-veil/keyring")).unwrap();
-    assert!(
-        keyring_text.contains("alice@example.com"),
-        "keyring must contain alice after telling the exported key, got: {}",
-        keyring_text
-    );
-}
-
-// ============================================================================
-// tell hints to re-hide: after telling a new collaborator, existing
-// ciphertext (hidden before the tell) does not include their key, so the
-// owner must be reminded to run `git-veil hide` again.
-// ============================================================================
-
-#[test]
-fn cli_tell_hints_to_rehide_when_ciphertext_exists() {
-    // setup_hidden_repo runs init/trust/tell(alice)/add/hide, so a ciphertext
-    // exists that was encrypted to owner+alice only.
-    let (repo_temp, home_temp) = setup_hidden_repo();
-
-    let (_, bob_pub) = generate_test_key("bob@example.com");
-    let bob_keyfile = repo_temp.path().join("bob.pub");
-    write_public_key_file(&bob_pub, &bob_keyfile);
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["tell", "bob@example.com", "bob.pub"],
-    );
-
-    assert!(
-        out.status.success(),
-        "tell must still exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("re-encrypt"),
-        "tell must hint that existing ciphertext needs re-encryption, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("git-veil hide"),
-        "the hint must name the hide command, got: {}",
-        stdout
-    );
-
-    let keyring_text = std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap();
-    assert!(
-        keyring_text.contains("alice@example.com") && keyring_text.contains("bob@example.com"),
-        "the keyring must contain both entries after the tell, got: {}",
-        keyring_text
-    );
-}
-
-#[test]
-fn cli_tell_no_hint_when_nothing_hidden() {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
-    );
-    git(
-        repo_temp.path(),
-        &["config", "user.email", "owner@github.com"],
-    );
-
-    let (owner_sec, owner_pub) = generate_test_key("owner@github.com");
-    let (alice_sec, alice_pub) = generate_test_key("alice@example.com");
-    let (_, bob_pub) = generate_test_key("bob@example.com");
-
-    write_multi_key_secret_keys(&home_temp.path().join(".git-veil"), &[owner_sec, alice_sec]);
-    let owner_keyfile = repo_temp.path().join("owner.pub");
-    write_public_key_file(&owner_pub, &owner_keyfile);
-    let alice_keyfile = repo_temp.path().join("alice.pub");
-    write_public_key_file(&alice_pub, &alice_keyfile);
-    let bob_keyfile = repo_temp.path().join("bob.pub");
-    write_public_key_file(&bob_pub, &bob_keyfile);
-
-    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
-    assert!(out.status.success(), "init failed: {:?}", out.stderr);
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["trust", "repo+owner@github.com", "owner.pub"],
-    );
-    assert!(out.status.success(), "trust failed: {:?}", out.stderr);
-
-    // No tracked files at all: tell must succeed with NO hint.
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["tell", "alice@example.com", "alice.pub"],
-    );
-    assert!(
-        out.status.success(),
-        "tell must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("✓ Added alice@example.com to keyring"),
-        "tell must still print its success line, got: {}",
-        stdout
-    );
-    assert!(
-        !stdout.contains("re-encrypt"),
-        "tell must not hint when there is nothing to re-encrypt, got: {}",
-        stdout
-    );
-
-    // Tracked but NOT yet hidden (plaintext still present, no ciphertext):
-    // the next hide will include everyone, so still no hint.
-    std::fs::write(repo_temp.path().join("secret.env"), "s3cret").unwrap();
-    let out = run(repo_temp.path(), home_temp.path(), &["add", "secret.env"]);
-    assert!(out.status.success(), "add failed: {:?}", out.stderr);
-
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["tell", "bob@example.com", "bob.pub"],
-    );
-    assert!(
-        out.status.success(),
-        "tell must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        !stdout.contains("re-encrypt"),
-        "tell must not hint when nothing has been hidden yet, got: {}",
-        stdout
-    );
-}
-
-#[test]
-fn cli_removekey_round_trip() {
-    // A departing user's flow: import two keys, export still works, removekey
-    // drops the departing key from the local store, export now errors while
-    // the retained key keeps working.
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-
-    let (alice_sec, _) = generate_test_key("alice@example.com");
-    let (bob_sec, bob_pub) = generate_test_key("bob@example.com");
-    let bob_fingerprint = git_veil::extract_key_fingerprint(&bob_pub);
-    for (name, key) in [("alice-priv.asc", &alice_sec), ("bob-priv.asc", &bob_sec)] {
-        std::fs::write(
-            repo_temp.path().join(name),
-            key.to_armored_string(Default::default()).unwrap(),
+impl TestRepo {
+    /// Creates a git repo, key store, generates owner keys, writes the signing
+    /// key file, runs init + trust.
+    fn new(label: &str) -> Self {
+        let repo = TempDir::new(label);
+        let key_store = TempDir::new(&format!("{}-keys", label));
+
+        init_git_repo(&repo.path);
+
+        let owner_identity = generate_identity();
+        let owner_recipient = recipient_from_identity(&owner_identity);
+
+        let (owner_signing_key, owner_verifying_key_hex) = generate_signing_keypair();
+
+        let identity_file = repo.join("owner.age");
+        fs::write(&identity_file, format!("{}\n", owner_identity.to_string().expose_secret()))
+            .expect("write identity file");
+
+        let signing_key_file = repo.join("owner.signing");
+        fs::write(
+            &signing_key_file,
+            format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
         )
-        .unwrap();
+        .expect("write signing key file");
+
+        fs::write(
+            key_store.join("signing-keys.txt"),
+            format!("{}\n", hex::encode(owner_signing_key.to_bytes())),
+        )
+        .expect("write signing-keys.txt");
+
+        cmd_init(&repo.path).expect("init");
+
+        cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path)
+            .expect("import owner identity");
+
+        cmd_trust(
+            &repo.path,
+            TEST_REPO_ID,
+            "owner.signing",
+            "origin",
+            &key_store.path,
+        )
+        .expect("trust");
+
+        Self {
+            repo,
+            key_store,
+            _owner_identity: owner_identity,
+            owner_recipient,
+            _owner_signing_key: owner_signing_key,
+            _owner_verifying_key_hex: owner_verifying_key_hex,
+        }
     }
 
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["import", "alice-priv.asc", "bob-priv.asc"],
-    );
-    assert!(
-        out.status.success(),
-        "import failed: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    /// Generates a collaborator identity, writes their recipient to a file,
+    /// and runs tell to add them to the keyring.
+    fn add_collaborator(&self, email: &str) -> (age::x25519::Identity, String) {
+        let collab_identity = generate_identity();
+        let collab_recipient = recipient_from_identity(&collab_identity);
 
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["export", "bob@example.com"],
-    );
-    assert!(
-        out.status.success(),
-        "export of the to-be-removed key must work before removekey: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+        let key_file = self.repo.join(&format!("{}.recipient", email));
+        fs::write(&key_file, &collab_recipient).expect("write collab recipient file");
 
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["removekey", &bob_fingerprint],
-    );
-    assert!(
-        out.status.success(),
-        "removekey by fingerprint failed: {:?} {:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+        cmd_tell(
+            &self.repo.path,
+            email,
+            &format!("{}.recipient", email),
+            "origin",
+            &self.key_store.path,
+            None,
+        )
+        .expect("tell");
 
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["export", "bob@example.com"],
-    );
-    assert!(
-        !out.status.success(),
-        "export must fail for a key removed from the store"
-    );
+        (collab_identity, collab_recipient)
+    }
 
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["export", "alice@example.com"],
-    );
-    assert!(
-        out.status.success(),
-        "export of the retained key must still work after removekey: {:?}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    /// Imports a collaborator identity into the key store (for reveal).
+    fn import_identity(&self, identity: &age::x25519::Identity, filename: &str) {
+        let path = self.repo.join(filename);
+        fs::write(&path, format!("{}\n", identity.to_string().expose_secret()))
+            .expect("write identity file");
+        cmd_import(&self.repo.path, &[filename.to_string()], &self.key_store.path)
+            .expect("import identity");
+    }
+
+    /// Creates a plaintext file and tracks it.
+    fn add_file(&self, name: &str, content: &[u8]) {
+        let path = self.repo.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dir");
+        }
+        fs::write(&path, content).expect("write plaintext file");
+        cmd_add(&self.repo.path, vec![name.to_string()]).expect("add file");
+    }
 }
 
-// ============================================================================
-// stdout contracts for the informational commands. println! output is only
-// capturable by spawning the binary, so these protective assertions live
-// here in cli.rs rather than in the in-process feature suite.
-// ============================================================================
+// ---------------------------------------------------------------------------
+// init
+// ---------------------------------------------------------------------------
 
 #[test]
-fn cli_show_repo_id_prints_repo_id() {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
-    );
+fn test_init_creates_state() {
+    let repo = TempDir::new("init");
+    init_git_repo(&repo.path);
 
-    let out = run(repo_temp.path(), home_temp.path(), &["show-repo-id"]);
+    cmd_init(&repo.path).expect("init");
 
-    assert!(
-        out.status.success(),
-        "show-repo-id must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("repo+owner@github.com"),
-        "show-repo-id must print the repo id derived from the origin push URL, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("Remote: origin"),
-        "show-repo-id must print the remote name, got: {}",
-        stdout
-    );
+    assert!(repo.join(".git-veil").is_dir());
+    assert!(repo.join(".git-veil/keyring").exists());
+    assert!(repo.join(".git-veil/trust.json").exists());
+    assert!(repo.join(".git-veil/tracked.json").exists());
+
+    let keyring_text = fs::read_to_string(repo.join(".git-veil/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
+    assert!(keyring.entries.is_empty());
 }
 
 #[test]
-fn cli_whoami_prints_email_and_key_store() {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["config", "user.email", "alice@example.com"],
-    );
-    std::fs::create_dir_all(home_temp.path().join(".git-veil")).unwrap();
+fn test_init_refuses_reinit_with_trust() {
+    let repo = TempDir::new("reinit");
+    init_git_repo(&repo.path);
 
-    let out = run(repo_temp.path(), home_temp.path(), &["whoami"]);
+    cmd_init(&repo.path).expect("first init");
 
-    assert!(
-        out.status.success(),
-        "whoami must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("alice@example.com"),
-        "whoami must print the git config user.email identity, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("Key store:"),
-        "whoami must print the key store location, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains(
-            &home_temp
-                .path()
-                .join(".git-veil")
-                .to_string_lossy()
-                .to_string()
-        ),
-        "whoami must print the resolved $HOME/.git-veil key store path, got: {}",
-        stdout
-    );
+    let mut trust = TrustStore::new();
+    trust.add_trust("test+user@github.com".to_string(), "abc123".to_string());
+    trust.save_to_file(&repo.join(".git-veil/trust.json")).unwrap();
+
+    let result = cmd_init(&repo.path);
+    assert!(result.is_err(), "re-init with trust should fail");
+    assert!(result.unwrap_err().to_string().contains("already initialized"));
 }
 
+// ---------------------------------------------------------------------------
+// trust
+// ---------------------------------------------------------------------------
+
 #[test]
-fn cli_list_keys_prints_entries_and_count() {
-    let (repo_temp, home_temp, _owner_pub, alice_pub) = setup_told_repo();
-    let alice_fingerprint = git_veil::extract_key_fingerprint(&alice_pub);
+fn test_trust_wrong_repo_id_fails() {
+    let repo = TempDir::new("trust-wrong-id");
+    let key_store = TempDir::new("trust-wrong-id-keys");
+    init_git_repo(&repo.path);
+    cmd_init(&repo.path).expect("init");
 
-    let out = run(repo_temp.path(), home_temp.path(), &["list-keys"]);
-
-    assert!(
-        out.status.success(),
-        "list-keys must exit 0 after a valid tell: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("Keyring signature verified"),
-        "list-keys must print the verification banner, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("alice@example.com"),
-        "list-keys must print the collaborator email, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains(&alice_fingerprint),
-        "list-keys must print the collaborator fingerprint, got: {}",
-        stdout
-    );
-
-    // The count line must agree with the keyring actually on disk.
-    let keyring = git_veil::Keyring::parse(
-        &std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap(),
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(repo.join("owner.signing"), format!("{}\n", verifying_hex)).unwrap();
+    fs::write(
+        key_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
     .unwrap();
-    assert!(
-        !keyring.entries.is_empty(),
-        "the told repo's keyring must contain entries"
+
+    let result = cmd_trust(
+        &repo.path,
+        "wrong+id@github.com",
+        "owner.signing",
+        "origin",
+        &key_store.path,
     );
-    assert!(
-        stdout.contains(&format!("Total: {} keys", keyring.entries.len())),
-        "list-keys must print the on-disk key count, got: {}",
-        stdout
-    );
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("mismatch"));
 }
 
 #[test]
-fn cli_verify_keyring_prints_repo_id_and_signer() {
-    let (repo_temp, home_temp, owner_pub, _alice_pub) = setup_told_repo();
-    let owner_fingerprint = git_veil::extract_key_fingerprint(&owner_pub);
+fn test_trust_writes_pin() {
+    let repo = TempDir::new("trust-pin");
+    let key_store = TempDir::new("trust-pin-keys");
+    init_git_repo(&repo.path);
+    cmd_init(&repo.path).expect("init");
 
-    let out = run(repo_temp.path(), home_temp.path(), &["verify-keyring"]);
-
-    assert!(
-        out.status.success(),
-        "verify-keyring must exit 0 after trust+tell: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("Keyring signature verified"),
-        "verify-keyring must print the verification banner, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("repo+owner@github.com"),
-        "verify-keyring must print the repository ID, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("Signed by fingerprint:") && stdout.contains(&owner_fingerprint),
-        "verify-keyring must name the trusted signer fingerprint {owner_fingerprint}, got: {}",
-        stdout
-    );
-    let keyring = git_veil::Keyring::parse(
-        &std::fs::read_to_string(repo_temp.path().join(".git-veil/keyring")).unwrap(),
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(repo.join("owner.signing"), format!("{}\n", verifying_hex)).unwrap();
+    fs::write(
+        key_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
     .unwrap();
-    assert!(
-        stdout.contains(&format!("Keys in keyring: {}", keyring.entries.len())),
-        "verify-keyring must print the on-disk key count, got: {}",
-        stdout
-    );
+
+    cmd_trust(&repo.path, TEST_REPO_ID, "owner.signing", "origin", &key_store.path)
+        .expect("trust");
+
+    let pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID).unwrap();
+    assert!(pin.is_some());
+
+    let trust = TrustStore::load_from_file(&repo.join(".git-veil/trust.json")).unwrap();
+    assert!(trust.get_trusted_fingerprint(TEST_REPO_ID).is_some());
 }
 
-// ============================================================================
-// trust re-pin notice: re-trusting with a DIFFERENT key silently rewrites the
-// machine's pinned record, so the change must be announced loudly first.
-// ============================================================================
+// ---------------------------------------------------------------------------
+// tell + verify-keyring
+// ---------------------------------------------------------------------------
 
 #[test]
-fn re_trust_with_different_key_prints_repin_notice() {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
+fn test_tell_adds_collaborator() {
+    let fixture = TestRepo::new("tell");
 
-    git(repo_temp.path(), &["init"]);
-    git(
-        repo_temp.path(),
-        &["remote", "add", "origin", "git@github.com:owner/repo.git"],
-    );
-    git(
-        repo_temp.path(),
-        &["config", "user.email", "owner@github.com"],
-    );
+    let (_, recipient) = fixture.add_collaborator("alice@example.com");
 
-    // Two DIFFERENT keys carrying the same owner identity: only the second
-    // trust run changes the machine's pinned record for the repo.
-    let (_a_sec, a_pub) = generate_test_key("owner@github.com");
-    let (_b_sec, b_pub) = generate_test_key("owner@github.com");
-    let a_fp = git_veil::extract_key_fingerprint(&a_pub);
-    let b_fp = git_veil::extract_key_fingerprint(&b_pub);
-    assert_ne!(
-        a_fp, b_fp,
-        "the two generated keys must have distinct fingerprints"
-    );
+    let keyring_text = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
+    assert_eq!(keyring.entries.len(), 1);
+    assert_eq!(keyring.entries[0].email, "alice@example.com");
+    assert_eq!(keyring.entries[0].recipient, recipient);
+    assert!(keyring.signature.is_some(), "keyring should be signed");
+}
 
-    write_public_key_file(&a_pub, &repo_temp.path().join("owner-a.pub"));
-    write_public_key_file(&b_pub, &repo_temp.path().join("owner-b.pub"));
+#[test]
+fn test_tell_canary_encrypts_before_signing() {
+    let fixture = TestRepo::new("tell-canary");
 
-    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
-    assert!(out.status.success(), "init failed: {:?}", out.stderr);
+    fs::write(fixture.repo.join("bad.recipient"), "not-a-valid-recipient\n").unwrap();
 
-    // First-ever trust: no pin exists yet, so there is nothing being
-    // replaced and the notice must stay quiet.
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["trust", "repo+owner@github.com", "owner-a.pub"],
+    let result = cmd_tell(
+        &fixture.repo.path,
+        "bob@example.com",
+        "bad.recipient",
+        "origin",
+        &fixture.key_store.path,
+        None,
     );
-    assert!(out.status.success(), "first trust failed: {:?}", out.stderr);
-    assert!(
-        !String::from_utf8_lossy(&out.stdout).contains("⚠ replacing"),
-        "first-ever trust must not print the re-pin notice, got: {}",
-        String::from_utf8_lossy(&out.stdout)
-    );
+    assert!(result.is_err(), "tell with bad key should fail");
+}
 
-    // Re-trust with a different key: the notice must name the repo and BOTH
-    // fingerprints, and the trust run must still succeed.
-    let out = run(
-        repo_temp.path(),
-        home_temp.path(),
-        &["trust", "repo+owner@github.com", "owner-b.pub"],
-    );
-    assert!(
-        out.status.success(),
-        "re-trust with a different key must still succeed: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("⚠ replacing the previously pinned fingerprint"),
-        "re-trust with a different key must print the re-pin notice, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains(&a_fp) && stdout.contains(&b_fp),
-        "the notice must name both the old ({a_fp}) and new ({b_fp}) fingerprints, got: {}",
-        stdout
-    );
-    assert!(
-        stdout.contains("repo+owner@github.com"),
-        "the notice must name the repository ID, got: {}",
-        stdout
-    );
+#[test]
+fn test_verify_keyring_succeeds_after_tell() {
+    let fixture = TestRepo::new("verify");
 
-    // The pin on disk must now name the NEW fingerprint.
-    let pin = git_veil::TrustPinStore::read_pin(
-        &home_temp.path().join(".git-veil"),
-        "repo+owner@github.com",
+    fixture.add_collaborator("alice@example.com");
+
+    cmd_verify_keyring(&fixture.repo.path, "origin", &fixture.key_store.path)
+        .expect("verify-keyring should succeed");
+}
+
+#[test]
+fn test_verify_keyring_fails_without_trust() {
+    let repo = TempDir::new("verify-no-trust");
+    let key_store = TempDir::new("verify-no-trust-keys");
+    init_git_repo(&repo.path);
+    cmd_init(&repo.path).expect("init");
+
+    let result = cmd_verify_keyring(&repo.path, "origin", &key_store.path);
+    assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// add + list + remove
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_add_and_list_files() {
+    let fixture = TestRepo::new("add-list");
+
+    fs::write(fixture.repo.join(".env"), "SECRET=hello\n").unwrap();
+    cmd_add(&fixture.repo.path, vec![".env".to_string()]).expect("add .env");
+
+    fs::write(fixture.repo.join("config.yml"), "key: value\n").unwrap();
+    cmd_add(&fixture.repo.path, vec!["config.yml".to_string()]).expect("add config.yml");
+
+    let tracked = TrackedFiles::load(&fixture.repo.join(".git-veil/tracked.json")).unwrap();
+    assert_eq!(tracked.files.len(), 2);
+    assert!(tracked.files.contains(&PathBuf::from(".env")));
+    assert!(tracked.files.contains(&PathBuf::from("config.yml")));
+}
+
+#[test]
+fn test_remove_untracks_file() {
+    let fixture = TestRepo::new("remove");
+
+    fs::write(fixture.repo.join(".env"), "SECRET=hello\n").unwrap();
+    cmd_add(&fixture.repo.path, vec![".env".to_string()]).expect("add");
+
+    cmd_remove(&fixture.repo.path, vec![".env".to_string()]).expect("remove");
+
+    let tracked = TrackedFiles::load(&fixture.repo.join(".git-veil/tracked.json")).unwrap();
+    assert!(tracked.files.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// hide + reveal
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_hide_reveal_roundtrip() {
+    let fixture = TestRepo::new("hide-reveal");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    let plaintext = b"SECRET=value\nAPI_KEY=abc123\n";
+    fixture.add_file(".env", plaintext);
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    assert!(!fixture.repo.join(".env").exists(), "plaintext should be deleted");
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should exist");
+
+    cmd_reveal(
+        &fixture.repo.path,
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
     )
-    .unwrap()
-    .expect("pin must exist after re-trust");
+    .expect("reveal");
+
+    let revealed = fs::read(fixture.repo.join(".env")).unwrap();
+    assert_eq!(revealed, plaintext);
+    assert!(!fixture.repo.join(".env.secret").exists(), "ciphertext should be deleted");
+}
+
+#[test]
+fn test_hide_creates_valid_age_ciphertext() {
+    let fixture = TestRepo::new("hide-format");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"test data\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    // age ciphertext starts with the age header bytes
+    let ciphertext = fs::read(fixture.repo.join(".env.secret")).unwrap();
+    assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
+    // age binary format starts with "age-encryption.org/v1"
+    assert!(ciphertext.starts_with(b"age-encryption.org"), "should be age format");
+}
+
+#[test]
+fn test_hide_no_tracked_files_is_ok() {
+    let fixture = TestRepo::new("hide-empty");
+    fixture.add_collaborator("alice@example.com");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path)
+        .expect("hide with no tracked files");
+}
+
+#[test]
+fn test_hide_no_keys_fails() {
+    let repo = TempDir::new("hide-no-keys");
+    let key_store = TempDir::new("hide-no-keys-keys");
+    init_git_repo(&repo.path);
+
+    let identity = generate_identity();
+    let recipient = recipient_from_identity(&identity);
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+
+    fs::write(repo.join("owner.age"), format!("{}\n", identity.to_string().expose_secret())).unwrap();
+    fs::write(repo.join("owner.signing"), format!("{}\n{}\n", verifying_hex, recipient)).unwrap();
+    fs::write(
+        key_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+
+    cmd_init(&repo.path).expect("init");
+    cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
+    cmd_trust(&repo.path, TEST_REPO_ID, "owner.signing", "origin", &key_store.path).expect("trust");
+
+    fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
+    cmd_add(&repo.path, vec![".env".to_string()]).expect("add");
+
+    let result = cmd_hide(&repo.path, "origin", &key_store.path);
+    assert!(result.is_err(), "hide with no keys should fail");
+}
+
+// ---------------------------------------------------------------------------
+// cat
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_cat_decrypts_to_stdout() {
+    let fixture = TestRepo::new("cat");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    let plaintext = b"cat me\n";
+    fixture.add_file(".env", plaintext);
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    let result = cmd_cat(
+        &fixture.repo.path,
+        ".env",
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("cat");
+
+    assert_eq!(result, plaintext);
+    assert!(!fixture.repo.join(".env").exists(), "cat should not restore plaintext");
+    assert!(fixture.repo.join(".env.secret").exists(), "cat should not delete ciphertext");
+}
+
+#[test]
+fn test_cat_untracked_file_fails() {
+    let fixture = TestRepo::new("cat-untracked");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"secret\n");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    fs::write(fixture.repo.join("other.txt"), b"other\n").unwrap();
+    let result = cmd_cat(
+        &fixture.repo.path,
+        "other.txt",
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    );
+    assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// unhide
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_unhide_single_file() {
+    let fixture = TestRepo::new("unhide");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"unhide me\n");
+    fixture.add_file("config.yml", b"keep hidden\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    cmd_unhide(
+        &fixture.repo.path,
+        ".env",
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("unhide");
+
+    assert!(fixture.repo.join(".env").exists());
+    assert!(!fixture.repo.join(".env.secret").exists());
+    assert!(!fixture.repo.join("config.yml").exists());
+    assert!(fixture.repo.join("config.yml.secret").exists());
+}
+
+// ---------------------------------------------------------------------------
+// changes
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_changes_detects_modification() {
+    let fixture = TestRepo::new("changes");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"ORIGINAL=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    fs::write(fixture.repo.join(".env"), b"MODIFIED=different\n").unwrap();
+
+    let changed = cmd_changes(
+        &fixture.repo.path,
+        vec![],
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("changes");
+
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0], PathBuf::from(".env"));
+}
+
+#[test]
+fn test_changes_no_modification() {
+    let fixture = TestRepo::new("changes-none");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SAME=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    fs::write(fixture.repo.join(".env"), b"SAME=value\n").unwrap();
+
+    let changed = cmd_changes(
+        &fixture.repo.path,
+        vec![],
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("changes");
+
+    assert!(changed.is_empty(), "no changes expected");
+}
+
+// ---------------------------------------------------------------------------
+// removeperson
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_removeperson_removes_from_keyring() {
+    let fixture = TestRepo::new("removeperson");
+
+    fixture.add_collaborator("alice@example.com");
+    fixture.add_collaborator("bob@example.com");
+
+    cmd_removeperson(
+        &fixture.repo.path,
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("removeperson");
+
+    let keyring_text = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
+    assert_eq!(keyring.entries.len(), 1);
+    assert_eq!(keyring.entries[0].email, "bob@example.com");
+    assert!(keyring.signature.is_some(), "keyring should be re-signed");
+}
+
+#[test]
+fn test_removeperson_not_in_keyring_fails() {
+    let fixture = TestRepo::new("removeperson-missing");
+
+    fixture.add_collaborator("alice@example.com");
+
+    let result = cmd_removeperson(
+        &fixture.repo.path,
+        "nobody@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_removeperson_re_signs_keyring() {
+    let fixture = TestRepo::new("removeperson-resign");
+
+    fixture.add_collaborator("alice@example.com");
+
+    let before = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+
+    cmd_removeperson(
+        &fixture.repo.path,
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("removeperson");
+
+    let after = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+    assert_ne!(before, after);
+
+    cmd_verify_keyring(&fixture.repo.path, "origin", &fixture.key_store.path)
+        .expect("verify after removeperson");
+}
+
+// ---------------------------------------------------------------------------
+// list-keys
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_list_keys_succeeds() {
+    let fixture = TestRepo::new("list-keys");
+
+    fixture.add_collaborator("alice@example.com");
+    fixture.add_collaborator("bob@example.com");
+
+    cmd_list_keys(&fixture.repo.path, "origin", &fixture.key_store.path)
+        .expect("list-keys");
+}
+
+// ---------------------------------------------------------------------------
+// show-repo-id
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_show_repo_id() {
+    let fixture = TestRepo::new("show-repo-id");
+
+    cmd_show_repo_id(&fixture.repo.path, "origin").expect("show-repo-id");
+}
+
+// ---------------------------------------------------------------------------
+// whoami
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_whoami() {
+    let fixture = TestRepo::new("whoami");
+
+    cmd_whoami(&fixture.repo.path, None, &fixture.key_store.path).expect("whoami");
+}
+
+// ---------------------------------------------------------------------------
+// export
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_export_by_recipient() {
+    let fixture = TestRepo::new("export");
+
+    let (_, recipient) = fixture.add_collaborator("alice@example.com");
+
+    // Import the collaborator's recipient to the key store so export can find it
+    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+
+    let exported = export_public_key(&fixture.key_store.path, &recipient).unwrap();
+    assert_eq!(exported.trim(), recipient);
+}
+
+#[test]
+fn test_export_by_fingerprint() {
+    let fixture = TestRepo::new("export-fp");
+
+    let (_, recipient) = fixture.add_collaborator("alice@example.com");
+    let fingerprint = fingerprint_for_recipient(&recipient);
+
+    // Import the collaborator's recipient to the key store so export can find it
+    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+
+    let exported = export_public_key(&fixture.key_store.path, &fingerprint).unwrap();
+    assert_eq!(exported.trim(), recipient);
+}
+
+#[test]
+fn test_export_not_found_fails() {
+    let fixture = TestRepo::new("export-missing");
+
+    let result = export_public_key(&fixture.key_store.path, "age1nonexistent");
+    assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// removekey
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_removekey_by_fingerprint() {
+    let fixture = TestRepo::new("removekey");
+
+    let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    let fingerprint = fingerprint_for_recipient(&recipient);
+
+    cmd_removekey(&fixture.key_store.path, &fingerprint, false).expect("removekey");
+
+    // The collaborator's identity should be gone; the owner's identity remains
+    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
+    let collab_recipient = recipient_from_identity(&collab_identity);
+    let found = identities.iter().any(|(_, r)| *r == collab_recipient);
+    assert!(!found, "collaborator identity should be removed");
+}
+
+#[test]
+fn test_removekey_only_identity_refuses_without_yes() {
+    let fixture = TestRepo::new("removekey-only");
+
+    let fingerprint = fingerprint_for_recipient(&fixture.owner_recipient);
+
+    let result = cmd_removekey(&fixture.key_store.path, &fingerprint, false);
+    assert!(result.is_err(), "should refuse to remove only identity");
+    assert!(result.unwrap_err().to_string().contains("only identity"));
+}
+
+#[test]
+fn test_removekey_only_identity_with_yes() {
+    let fixture = TestRepo::new("removekey-only-yes");
+
+    let fingerprint = fingerprint_for_recipient(&fixture.owner_recipient);
+
+    cmd_removekey(&fixture.key_store.path, &fingerprint, true).expect("removekey with --yes");
+
+    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
+    assert!(identities.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// clean
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_clean_refuses_without_yes() {
+    let fixture = TestRepo::new("clean-refuse");
+
+    fixture.add_collaborator("alice@example.com");
+    fixture.add_file(".env", b"secret\n");
+
+    let result = cmd_clean(&fixture.repo.path, false);
+    assert!(result.is_err(), "clean should refuse without --yes");
+}
+
+#[test]
+fn test_clean_with_yes() {
+    let fixture = TestRepo::new("clean-yes");
+
+    fixture.add_collaborator("alice@example.com");
+    fixture.add_file(".env", b"secret\n");
+
+    cmd_clean(&fixture.repo.path, true).expect("clean");
+
+    assert!(!fixture.repo.join(".git-veil").exists());
+}
+
+#[test]
+fn test_clean_empty_repo_no_yes_ok() {
+    let fixture = TestRepo::new("clean-empty");
+
+    cmd_clean(&fixture.repo.path, false).expect("clean empty repo");
+    assert!(!fixture.repo.join(".git-veil").exists());
+}
+
+// ---------------------------------------------------------------------------
+// Multi-recipient encryption
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_multi_recipient_hide_reveal() {
+    let fixture = TestRepo::new("multi-recipient");
+
+    let (alice_identity, _) = fixture.add_collaborator("alice@example.com");
+    let (bob_identity, _) = fixture.add_collaborator("bob@example.com");
+
+    fixture.import_identity(&alice_identity, "alice.age");
+    fixture.import_identity(&bob_identity, "bob.age");
+
+    let plaintext = b"shared secret\n";
+    fixture.add_file(".env", plaintext);
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    cmd_reveal(
+        &fixture.repo.path,
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("alice reveal");
+
+    let revealed = fs::read(fixture.repo.join(".env")).unwrap();
+    assert_eq!(revealed, plaintext);
+
+    // Re-hide for bob (reveal restored the plaintext and deleted the ciphertext)
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("re-hide");
+
+    cmd_reveal(
+        &fixture.repo.path,
+        "bob@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("bob reveal");
+
+    let revealed = fs::read(fixture.repo.join(".env")).unwrap();
+    assert_eq!(revealed, plaintext);
+}
+
+// ---------------------------------------------------------------------------
+// Keyring tamper detection
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_tampered_keyring_fails_verify() {
+    let fixture = TestRepo::new("tamper");
+
+    fixture.add_collaborator("alice@example.com");
+
+    let keyring_path = fixture.repo.join(".git-veil/keyring");
+    let original = fs::read_to_string(&keyring_path).unwrap();
+    let tampered = original.replace("alice@example.com", "mallory@example.com");
+    fs::write(&keyring_path, &tampered).unwrap();
+
+    let result = cmd_verify_keyring(&fixture.repo.path, "origin", &fixture.key_store.path);
+    assert!(result.is_err(), "tampered keyring should fail verification");
+}
+
+// ---------------------------------------------------------------------------
+// Full lifecycle
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_full_lifecycle() {
+    let fixture = TestRepo::new("lifecycle");
+
+    let (alice_identity, _) = fixture.add_collaborator("alice@example.com");
+    let (bob_identity, _) = fixture.add_collaborator("bob@example.com");
+
+    fixture.import_identity(&alice_identity, "alice.age");
+    fixture.import_identity(&bob_identity, "bob.age");
+
+    fixture.add_file(".env", b"ENV=production\n");
+    fixture.add_file("config/secrets.yml", b"api_key: abc123\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+
+    assert!(!fixture.repo.join(".env").exists());
+    assert!(fixture.repo.join(".env.secret").exists());
+    assert!(!fixture.repo.join("config/secrets.yml").exists());
+    assert!(fixture.repo.join("config/secrets.yml.secret").exists());
+
+    cmd_reveal(
+        &fixture.repo.path,
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("reveal");
+
+    assert_eq!(fs::read(fixture.repo.join(".env")).unwrap(), b"ENV=production\n");
     assert_eq!(
-        pin, b_fp,
-        "the pin must record the newly trusted fingerprint"
-    );
-}
-
-#[test]
-fn cli_init_and_clean_output_shapes() {
-    let repo_temp = tempfile::tempdir().unwrap();
-    let home_temp = tempfile::tempdir().unwrap();
-    git(repo_temp.path(), &["init"]);
-
-    let out = run(repo_temp.path(), home_temp.path(), &["init"]);
-    assert!(
-        out.status.success(),
-        "init must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("✓ git-veil initialized"),
-        "init must print its success line, got: {}",
-        stdout
+        fs::read(fixture.repo.join("config/secrets.yml")).unwrap(),
+        b"api_key: abc123\n"
     );
 
-    // Nothing tracked, no ciphertext: clean --yes must proceed and print
-    // its confirmation line.
-    let out = run(repo_temp.path(), home_temp.path(), &["clean", "--yes"]);
-    assert!(
-        out.status.success(),
-        "clean --yes on an empty repo must exit 0: stdout={:?} stderr={:?}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("✓ Cleaned"),
-        "clean --yes must print its confirmation line, got: {}",
-        stdout
-    );
-    assert!(
-        !repo_temp.path().join(".git-veil").exists(),
-        "clean --yes must remove .git-veil"
-    );
+    cmd_removeperson(
+        &fixture.repo.path,
+        "bob@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("removeperson");
+
+    cmd_verify_keyring(&fixture.repo.path, "origin", &fixture.key_store.path)
+        .expect("verify after removeperson");
+
+    cmd_clean(&fixture.repo.path, true).expect("clean");
+    assert!(!fixture.repo.join(".git-veil").exists());
 }

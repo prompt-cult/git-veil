@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use crate::commands::hide::encrypted_path_for;
 use crate::fs_atomic::write_atomic;
 use crate::{
-    base64_encode_public_key, check_email_in_identities, derive_repo_id, encrypt_to_public_key,
-    extract_content_to_verify_from_keyring, extract_key_fingerprint,
-    find_private_key_by_fingerprint, get_remote_push_url, parse_armored_public_key,
-    sign_keyring_content, validate_public_key_for_use, verify_keyring_against_trust, KeyUse,
+    create_signature_block, derive_repo_id, encrypt_to_recipient,
+    extract_content_to_verify_from_keyring, fingerprint_for_recipient,
+    get_remote_push_url, parse_recipient,
+    parse_signing_key,
+    verify_keyring_against_trust,
     Keyring, TrackedFiles, TrustStore,
 };
 
@@ -24,7 +25,7 @@ pub fn cmd_tell(
     collaborator_key_path: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    passphrase: Option<&str>,
+    _passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
@@ -32,7 +33,7 @@ pub fn cmd_tell(
 
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
+    let _trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
         anyhow::anyhow!(
             "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,
@@ -49,6 +50,7 @@ pub fn cmd_tell(
     verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
+    // The key file contains the age recipient string on the first line.
     let key_content =
         fs::read_to_string(repo_root.join(collaborator_key_path)).with_context(|| {
             format!(
@@ -56,34 +58,18 @@ pub fn cmd_tell(
                 collaborator_key_path
             )
         })?;
-    let collaborator_key = parse_armored_public_key(&key_content)?;
-
-    // Verify email is in key identities
-    if !check_email_in_identities(&collaborator_key, email) {
-        anyhow::bail!(
-            "collaborator key does not contain email: {}; pass a key file whose user ID carries that address",
-            email
-        );
-    }
+    let recipient_str = key_content.lines().next().unwrap_or("").trim();
+    let collaborator_recipient = parse_recipient(recipient_str)?;
 
     // Test-encrypt a canary to the collaborator key to verify it can actually
     // encrypt, BEFORE any keyring mutation: a malformed-but-parseable key
-    // without a usable encryption subkey must never be signed into the
-    // committed keyring. The canary is in-memory only and never persisted.
-    if let Err(cause) = encrypt_to_public_key(TELL_CANARY, &collaborator_key) {
+    // must never be signed into the committed keyring. The canary is in-memory only.
+    if let Err(cause) = encrypt_to_recipient(TELL_CANARY, &collaborator_recipient) {
         anyhow::bail!("collaborator key cannot encrypt for {}: {}", email, cause);
     }
 
-    // Key-validity policy: an expired, revoked or unsigned collaborator key
-    // must never be signed into the committed keyring. Fail-closed BEFORE any
-    // keyring mutation.
-    if let Err(cause) = validate_public_key_for_use(&collaborator_key, KeyUse::Encrypt) {
-        anyhow::bail!("Refusing to tell collaborator key for {}: {}", email, cause);
-    }
-
-    // Extract fingerprint and base64 encode
-    let fingerprint = extract_key_fingerprint(&collaborator_key);
-    let base64_key = base64_encode_public_key(&collaborator_key)?;
+    // Extract fingerprint from the recipient string
+    let fingerprint = fingerprint_for_recipient(recipient_str);
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -92,23 +78,28 @@ pub fn cmd_tell(
     let mut keyring = Keyring::parse(&keyring_content)?;
 
     // Add entry (this clears signature)
-    keyring.add_entry(email.to_string(), base64_key, fingerprint)?;
+    keyring.add_entry(email.to_string(), recipient_str.to_string(), fingerprint)?;
 
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();
 
-    // Find signing private key: tell is run by the repo owner curating the
+    // Find signing key: tell is run by the repo owner curating the
     // keyring, so it must sign with the TRUSTED key (the one verify_keyring
     // checks against), never with the collaborator's key.
-    let signing_key = find_private_key_by_fingerprint(key_store, trusted_fingerprint)?;
+    // Load the Ed25519 signing key from the key store.
+    let signing_keys_path = key_store.join("signing-keys.txt");
+    let signing_key_content = fs::read_to_string(&signing_keys_path)
+        .context("Failed to read signing-keys.txt")?;
+    let signing_key_hex = signing_key_content.lines().next().unwrap_or("").trim();
+    let signing_key = parse_signing_key(signing_key_hex)?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract (everything up to and including the END marker, excluding the
     // trailing newline), using the same canonicalization function so the two
     // sides of the sign/verify contract cannot drift apart.
     let content_to_sign = extract_content_to_verify_from_keyring(&keyring_without_sig)?;
-    let signature = sign_keyring_content(&content_to_sign, &signing_key, passphrase)?;
-    keyring.signature = Some(signature);
+    let sig_block = create_signature_block(&content_to_sign, &signing_key)?;
+    keyring.signature = Some(sig_block);
 
     // Save keyring
     write_atomic(&keyring_path, keyring.serialize().as_bytes())

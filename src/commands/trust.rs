@@ -3,12 +3,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    check_email_in_identities, derive_repo_id, extract_key_fingerprint, get_remote_push_url,
-    import_key_to_store, parse_armored_public_key, validate_public_key_for_use, KeyUse,
+    derive_repo_id, fingerprint_for_verifying_key, get_remote_push_url,
+    import_recipient_to_store, parse_verifying_key,
     TrustPinStore, TrustStore,
 };
 
 /// Establishes trust for a repository by verifying the owner's signing key.
+///
+/// The `signing_key_path` file contains the owner's Ed25519 verifying key
+/// (hex-encoded public key) on the first line, and optionally the owner's age
+/// recipient string on the second line.
 pub fn cmd_trust(
     repo_root: &Path,
     repo_id: &str,
@@ -29,42 +33,47 @@ pub fn cmd_trust(
         );
     }
 
-    // Read and parse signing key (relative paths resolve against repo_root)
+    // Read signing key file (relative paths resolve against repo_root)
     let key_content = fs::read_to_string(repo_root.join(signing_key_path))
         .context("Failed to read signing key file")?;
-    let public_key = parse_armored_public_key(&key_content)?;
 
-    // Extract fingerprint
-    let fingerprint = extract_key_fingerprint(&public_key);
+    // First line is the Ed25519 verifying key (hex)
+    let mut lines = key_content.lines();
+    let verifying_key_hex = lines.next().context("Signing key file is empty")?.trim();
+    let verifying_key = parse_verifying_key(verifying_key_hex)?;
+    let fingerprint = fingerprint_for_verifying_key(&verifying_key);
 
-    // Verify repo-id email is in key identities
-    let repo_email = repo_id.splitn(2, '+').nth(1).unwrap_or("");
-    if !check_email_in_identities(&public_key, repo_email) {
-        anyhow::bail!(
-            "Signing key does not contain email from repo ID: {}",
-            repo_email
-        );
+    // Second line (optional) is the owner's age recipient string
+    if let Some(recipient_line) = lines.next() {
+        let recipient_str = recipient_line.trim();
+        if !recipient_str.is_empty() && recipient_str.starts_with("age1") {
+            import_recipient_to_store(key_store, recipient_str)?;
+        }
     }
 
-    // Key-validity policy: the anchor of trust must not be expired, revoked
-    // or unsigned key material. Fail-closed before anything is blessed,
-    // imported or pinned.
-    if let Err(cause) = validate_public_key_for_use(&public_key, KeyUse::Certify) {
-        anyhow::bail!("Refusing to trust key: {}", cause);
+    // Import the verifying key to the key store
+    let verifying_keys_path = key_store.join("verifying-keys.txt");
+    fs::create_dir_all(key_store).context("Failed to create key store directory")?;
+    let mut existing = if verifying_keys_path.exists() {
+        fs::read_to_string(&verifying_keys_path)?
+    } else {
+        String::new()
+    };
+    if !existing.is_empty() && !existing.ends_with('\n') {
+        existing.push('\n');
     }
-
-    // Import key to the key store
-    import_key_to_store(key_store, &key_content)?;
+    existing.push_str(verifying_key_hex);
+    existing.push('\n');
+    crate::fs_atomic::write_atomic(&verifying_keys_path, existing.as_bytes())
+        .context("Failed to write verifying-keys.txt")?;
 
     // Re-trust visibility: if a pin already exists for this repo and names a
     // DIFFERENT fingerprint, this machine's record of the repository's trust
-    // anchor is about to CHANGE — say so loudly before rewriting it. Trust is
-    // the explicit re-pin action, so we proceed; the notice is the point. An
-    // identical re-pin is idempotent and stays quiet.
+    // anchor is about to CHANGE — say so loudly before rewriting it.
     if let Some(previous) = TrustPinStore::read_pin(key_store, repo_id)? {
         if !previous.eq_ignore_ascii_case(&fingerprint) {
             println!(
-                "⚠ replacing the previously pinned fingerprint {} for {} with {}",
+                "replacing the previously pinned fingerprint {} for {} with {}",
                 previous, repo_id, fingerprint
             );
         }
@@ -88,9 +97,9 @@ pub fn cmd_trust(
         .context("Failed to write local trust pin")?;
 
     println!(
-        "✓ Trusted key for {} (fingerprint: {})",
+        "Trusted key for {} (fingerprint: {})",
         repo_id, fingerprint
     );
-    println!("✓ Pinned {} for {} on this machine", fingerprint, repo_id);
+    println!("Pinned {} for {} on this machine", fingerprint, repo_id);
     Ok(())
 }

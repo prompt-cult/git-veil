@@ -1,11 +1,23 @@
 # git-veil
 
 git-veil is a git-secret work-alike: a tool for storing encrypted secrets in a
-git repository, written in Rust. It is inspired by git-secret (which is written
-in bash) yet compiles against the pure-Rust [`pgp` crate][pgp] rather than
-scripting or forking the `gpg` CLI — all OpenPGP operations happen in-process.
+git repository, written in Rust. It uses [age] encryption (via the pure-Rust
+[`age` crate][age-crate]) for secrecy and [Ed25519][ed25519] signing (via
+[`ed25519-dalek`][dalek]) for keyring integrity — no PGP, no GPG, no external
+crypto process. All cryptographic operations happen in-process.
 
-[pgp]: https://crates.io/crates/pgp
+[age]: https://age-encryption.org
+[age-crate]: https://crates.io/crates/age
+[ed25519]: https://en.wikipedia.org/wiki/EdDSA#Ed25519
+[dalek]: https://crates.io/crates/ed25519-dalek
+
+The age format is a modern, RFC-track encryption format designed by Filippo
+Valsorda. git-veil's ciphertexts are standard age files: any compliant age
+implementation can decrypt them, including the reference [`age`][age-cli] CLI
+and the Rust [`rage`][rage] CLI.
+
+[age-cli]: https://github.com/FiloSottile/age
+[rage]: https://github.com/str4d/rage
 
 ## Trust model
 
@@ -47,19 +59,58 @@ git-veil completions zsh > "${fpath[1]}/_git-veil"   # bash, zsh or fish, to std
 cp docs/man/*.1 /usr/local/share/man/man1/
 ```
 
+## Key setup
+
+git-veil uses [age] X25519 keys for encryption and a separate Ed25519 key for
+keyring signing. You need both.
+
+### Generate an age identity (for encryption/decryption)
+
+Use any age key generator — `age-keygen` (from the [age CLI][age-cli]),
+`rage-keygen` (from [rage]), or git-veil's own `import` command which can
+generate one for you:
+
+```sh
+# Option A: age-keygen (reference CLI)
+age-keygen -o my-age-identity.txt
+# Output includes:
+#   # public key: age1...    (your recipient string — share this)
+#   AGE-SECRET-KEY-1...       (your identity — keep this secret)
+
+# Option B: rage-keygen (Rust CLI)
+rage-keygen -o my-age-identity.txt
+
+# Option C: generate inline and import directly
+# (git-veil import accepts any file containing an AGE-SECRET-KEY-1... line)
+```
+
+The **recipient string** (`age1...`) is your public key — safe to share with
+collaborators. The **identity string** (`AGE-SECRET-KEY-1...`) is your private
+key — never commit it.
+
+### Generate an Ed25519 signing key (for keyring signing)
+
+The repository owner also needs an Ed25519 keypair for signing the keyring.
+git-veil manages this internally; the owner writes the verifying key (hex)
+to a file and passes it to `trust`:
+
+```sh
+# The signing key file format is:
+#   line 1: hex-encoded Ed25519 verifying key (32 bytes = 64 hex chars)
+#   line 2: your age recipient string (optional, for convenience)
+```
+
 ## Quick start (solo)
 
-Prerequisite: an OpenPGP key pair from any tool (e.g. `gpg --quick-generate-key`).
-Note that `trust` requires the signing key to carry the email identity matching
-the repository ID — with the remote above, that is `example@github.com`.
+Prerequisite: an age identity (see [Key setup](#key-setup) above) and an
+Ed25519 signing keypair.
 
 ```sh
 git-veil init                                   # create .git-veil/ state
-git-veil import my-private-key.asc              # armoured PRIVATE key into the local key store
+git-veil import my-age-identity.txt              # import your age identity into the local key store
 git-veil show-repo-id                           # print the repository ID
-gpg --armor --export example@github.com > me.pub
-git-veil trust demo+example@github.com me.pub   # verify and pin the signing key
-git-veil tell example@github.com me.pub         # add yourself to the signed keyring
+git-veil trust demo+example@github.com owner.signing   # pin the signing key
+git-veil tell example@github.com my-recipient.txt      # add yourself to the signed keyring
 echo .env >> .gitignore                        # ignore the plaintext name
 git-veil add .env                               # track the file
 git-veil hide                                   # encrypt: .env -> .env.secret, plaintext deleted
@@ -68,17 +119,24 @@ git commit -m "Add encrypted secrets"
 git-veil reveal                                 # decrypt back when you need the plaintext
 ```
 
-The `.secret` ciphertext files sit beside where the plaintext was and are
-meant to be committed, so a fresh clone stays decryptable by every keyring
-member.
+The `.secret` ciphertext files are standard age-encrypted blobs. You can
+verify interoperability with any age-compatible tool:
+
+```sh
+# git-veil encrypted, age CLI decrypts:
+age -d -i my-age-identity.txt .env.secret
+
+# age CLI encrypted, git-veil decrypts (via reveal/cat):
+echo "test" | age -r age1... -o .env.secret && git-veil cat .env
+```
 
 ## Commands
 
 | Command          | Purpose                                                                 |
 |------------------|-------------------------------------------------------------------------|
 | `init`           | Initialize git-veil state (`.git-veil/`) in the current repository        |
-| `import`         | Import your private key(s) into the git-veil key store                   |
-| `export`         | Export an armoured public key from the local key store                  |
+| `import`         | Import your age identity file(s) into the git-veil key store             |
+| `export`         | Export an age recipient string from the local key store                 |
 | `removekey`      | Remove a key from the local key store (destructive, local-only)         |
 | `trust`          | Verify and pin the repository owner's signing key (per machine)         |
 | `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
@@ -118,6 +176,20 @@ Step-by-step guides are in `docs/`:
 The specification of the underlying mechanisms (repository identity, trust
 anchoring, key validity, crash safety, path safety) is in
 [docs/design.md](docs/design.md).
+
+## Compatibility with age and rage
+
+git-veil's `.secret` ciphertext files are standard age-encrypted blobs
+(age-encryption.org/v1). They are fully interoperable with the reference
+[`age`][age-cli] CLI and the Rust [`rage`][rage] CLI:
+
+- A file encrypted by git-veil can be decrypted by `age -d -i identity.txt file.secret`
+- A file encrypted by `age -r recipient file` can be decrypted by `git-veil reveal`
+- Keys generated by `age-keygen` or `rage-keygen` can be imported with `git-veil import`
+- Keys generated by git-veil can be used by `age` and `rage` directly
+
+The cross-implementation test suite (`tests/interop.rs`) exercises every
+permutation of encrypt/decrypt/keygen between git-veil, `age`, and `rage`.
 
 ## Compatibility with git-secret
 

@@ -1,45 +1,32 @@
 use anyhow::{Context, Result};
-use pgp::composed::{ArmorOptions, SignedPublicKey};
-use pgp::types::KeyDetails;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
-use crate::openpgp::load_public_keys_from_store;
-use crate::pubkey::extract_email_from_user_id;
+use crate::age_crypto::{load_recipients_from_store, fingerprint_for_recipient};
 
-/// Resolves `identifier` (an email address or a key fingerprint, matched
-/// case-insensitively) against every public key in the local key store and
-/// returns it as an armoured PUBLIC key block.
+/// Resolves `identifier` (an age recipient string or a fingerprint, matched
+/// case-insensitively) against every recipient in the local key store and
+/// returns it as a recipient string.
 ///
-/// Matching is exact equality: the identifier equals a fingerprint, or it
-/// equals the address extracted from one of the key's user-IDs — never
-/// substring matching (the same semantics as find_private_key_by_email).
-/// The store may hold the key only as a private half (imported via
-/// `git-veil import`); the output is always re-armoured from the PUBLIC
-/// half, so private key material can never leak through export.
-///
-/// Errors: no matching key (naming the store paths) or an ambiguous match —
-/// several distinct keys share the requested email — listing every matching
-/// fingerprint so the caller can disambiguate by fingerprint.
+/// Matching is exact equality: the identifier equals a recipient string, or
+/// equals the fingerprint derived from one. The store may hold recipients
+/// imported via `trust` or derived from imported identities.
 pub fn export_public_key(key_store: &PathBuf, identifier: &str) -> Result<String> {
-    let keys = load_public_keys_from_store(key_store)?;
-    let wanted_email = identifier.trim().to_lowercase();
-    let wanted_fingerprint = identifier.trim().to_uppercase();
+    let recipients = load_recipients_from_store(key_store)?;
+    let wanted_fingerprint = identifier.trim().to_lowercase();
 
-    let matched: Vec<&SignedPublicKey> = keys
+    let matched: Vec<&String> = recipients
         .iter()
-        .filter(|key| {
-            key.fingerprint().to_string().to_uppercase() == wanted_fingerprint
-                || key.details.users.iter().any(|u| {
-                    extract_email_from_user_id(&String::from_utf8_lossy(u.id.id()))
-                        .is_some_and(|addr| addr == wanted_email)
-                })
+        .map(|(_, recipient_str)| recipient_str)
+        .filter(|recipient_str| {
+            *recipient_str == identifier.trim()
+                || fingerprint_for_recipient(recipient_str) == wanted_fingerprint
         })
         .collect();
 
     if matched.is_empty() {
         anyhow::bail!(
-            "No key matching '{}' found in the key store {} (public-keys.pgp, secret-keys.pgp); export only finds keys this machine knows — collaborators must run export on their own machine",
+            "No key matching '{}' found in the key store {}; export only finds keys this machine knows",
             identifier,
             key_store.display()
         );
@@ -47,32 +34,25 @@ pub fn export_public_key(key_store: &PathBuf, identifier: &str) -> Result<String
     if matched.len() > 1 {
         let fingerprints: Vec<String> = matched
             .iter()
-            .map(|key| key.fingerprint().to_string())
+            .map(|r| fingerprint_for_recipient(r))
             .collect();
         anyhow::bail!(
-            "Multiple keys match '{}' in the key store {}; pass a fingerprint instead of an email. Matching fingerprints:\n  {}",
+            "Multiple keys match '{}' in the key store {}; pass a fingerprint instead. Matching fingerprints:\n  {}",
             identifier,
             key_store.display(),
             fingerprints.join("\n  ")
         );
     }
 
-    let mut armored = matched[0]
-        .to_armored_string(ArmorOptions::default())
-        .context("Failed to armor public key")?;
-    if !armored.ends_with('\n') {
-        armored.push('\n');
+    let mut result = matched[0].clone();
+    if !result.ends_with('\n') {
+        result.push('\n');
     }
-    Ok(armored)
+    Ok(result)
 }
 
-/// Exports the armoured PUBLIC key for `identifier` from the local key
+/// Exports the age recipient string for `identifier` from the local key
 /// store: to stdout, or atomically to `output` when given.
-///
-/// This is the external-tool-free key handoff: each collaborator runs
-/// export on
-/// their OWN machine and hands the .pub file to the owner, who adds it to
-/// the keyring with tell. export does not touch the repository.
 pub fn cmd_export(key_store: &PathBuf, identifier: &str, output: Option<&Path>) -> Result<()> {
     let armored = export_public_key(key_store, identifier)?;
     match output {

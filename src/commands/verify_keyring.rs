@@ -1,38 +1,40 @@
 use anyhow::{Context, Result};
-use pgp::composed::SignedPublicKey;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::armour::SIG_BEGIN;
-use crate::openpgp::split_armored_public_key_blocks;
 use crate::{
-    derive_repo_id, extract_content_to_verify_from_keyring, extract_key_fingerprint,
-    extract_signature_from_keyring, get_remote_push_url, parse_armored_public_key,
+    derive_repo_id, extract_content_to_verify_from_keyring,
+    extract_signature_from_keyring, fingerprint_for_verifying_key,
+    get_remote_push_url, parse_verifying_key,
     verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
 };
 
-/// Loads the public key matching `fingerprint` from the key store
-/// (public-keys.pgp).
-fn load_public_key_by_fingerprint(
+/// Loads the Ed25519 verifying key matching `fingerprint` from the key store.
+fn load_verifying_key_by_fingerprint(
     key_store: &PathBuf,
     fingerprint: &str,
-) -> Result<SignedPublicKey> {
-    let public_keys_path = key_store.join("public-keys.pgp");
+) -> Result<ed25519_dalek::VerifyingKey> {
+    let verifying_keys_path = key_store.join("verifying-keys.txt");
     let content =
-        fs::read_to_string(&public_keys_path).context("Failed to read public-keys.pgp")?;
+        fs::read_to_string(&verifying_keys_path).context("Failed to read verifying-keys.txt")?;
 
-    let wanted = fingerprint.to_uppercase();
-    for block in split_armored_public_key_blocks(&content, &public_keys_path)? {
-        let key = parse_armored_public_key(&block)?;
-        if extract_key_fingerprint(&key).to_uppercase() == wanted {
-            return Ok(key);
+    let wanted = fingerprint.trim().to_lowercase();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Ok(key) = parse_verifying_key(line) {
+            if fingerprint_for_verifying_key(&key) == wanted {
+                return Ok(key);
+            }
         }
     }
 
     anyhow::bail!(
         "Trusted key with fingerprint {} not found in {}",
         wanted,
-        public_keys_path.display()
+        verifying_keys_path.display()
     )
 }
 
@@ -88,21 +90,22 @@ pub fn verify_keyring_against_trust(
         ),
     }
 
-    // Load signing public key
-    let public_key = load_public_key_by_fingerprint(key_store, trusted_fingerprint)?;
+    // Load signing (verifying) public key
+    let verifying_key = load_verifying_key_by_fingerprint(key_store, trusted_fingerprint)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let keyring = Keyring::parse(&keyring_text)?;
 
-    if keyring_text.contains(SIG_BEGIN) {
+    let sig_begin = "-----BEGIN GIT-VEIL SIGNATURE-----";
+    if keyring_text.contains(sig_begin) {
         // Extract content and signature
         let content_to_verify = extract_content_to_verify_from_keyring(&keyring_text)?;
-        let signature = extract_signature_from_keyring(&keyring_text)?;
+        let signature_b64 = extract_signature_from_keyring(&keyring_text)?;
 
         // Verify signature
-        verify_keyring_signature(&content_to_verify, &signature, &public_key)?;
+        verify_keyring_signature(&content_to_verify, &signature_b64, &verifying_key)?;
     } else if !keyring.entries.is_empty() {
         anyhow::bail!(
             "Keyring contains {} entries but has no signature; refusing to trust unverified keyring",

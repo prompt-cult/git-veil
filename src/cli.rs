@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "git-veil")]
-#[command(about = "Git secret management using pure Rust OpenPGP")]
+#[command(about = "Git secret management using age encryption")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]

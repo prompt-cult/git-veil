@@ -7,12 +7,15 @@ description = "A Rust-based Git secret management tool inspired by Git Secret"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/prompt-cult/git-veil"
 readme = "README.md"
-keywords = ["git", "openpgp", "encryption", "secrets", "git-veil"]
+keywords = ["git", "age", "encryption", "secrets", "git-veil"]
 categories = ["command-line-utilities", "cryptography"]
 
 [dependencies]
-# Pure Rust OpenPGP implementation (RFC 4880, compatible with RFC 9580)
-pgp = "0.19"
+# age encryption (age-encryption.org/v1 spec)
+age = { version = "0.12", features = ["armor"] }
+
+# Ed25519 signing (RFC 8032)
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 
 # CLI ("string" feature lets the manpages generator pass runtime-computed
 # subcommand names to Command::name)
@@ -34,8 +37,11 @@ serde_json = "1.0"
 # Random number generation
 rand = "0.8"
 
-# Base64 encoding
+# Base64 encoding (for signatures)
 base64 = "0.21"
+
+# Hex encoding (for Ed25519 keys)
+hex = "0.4"
 
 # URL parsing
 regex = "1.10"

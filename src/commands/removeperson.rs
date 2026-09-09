@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
 use crate::{
-    derive_repo_id, extract_content_to_verify_from_keyring, find_private_key_by_fingerprint,
-    get_remote_push_url, sign_keyring_content, verify_keyring_against_trust, Keyring, TrustStore,
+    create_signature_block, derive_repo_id, extract_content_to_verify_from_keyring,
+    get_remote_push_url, parse_signing_key,
+    verify_keyring_against_trust, Keyring, TrustStore,
 };
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
@@ -14,7 +15,7 @@ pub fn cmd_removeperson(
     email_to_remove: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    passphrase: Option<&str>,
+    _passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify trust is established
     let push_url = get_remote_push_url(repo_root, remote_name)?;
@@ -22,7 +23,7 @@ pub fn cmd_removeperson(
 
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
+    let _trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
         anyhow::anyhow!(
             "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
             repo_id,
@@ -61,7 +62,12 @@ pub fn cmd_removeperson(
     // Re-sign with the TRUSTED key: removeperson curates the keyring exactly
     // like tell does, so it must sign with the key verify_keyring checks
     // against, never with any collaborator's key.
-    let signing_key = find_private_key_by_fingerprint(key_store, trusted_fingerprint)?;
+    // Load the Ed25519 signing key from the key store.
+    let signing_keys_path = key_store.join("signing-keys.txt");
+    let signing_key_content = fs::read_to_string(&signing_keys_path)
+        .context("Failed to read signing-keys.txt")?;
+    let signing_key_hex = signing_key_content.lines().next().unwrap_or("").trim();
+    let signing_key = parse_signing_key(signing_key_hex)?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of
@@ -69,8 +75,8 @@ pub fn cmd_removeperson(
     // legitimate result (revoking the last collaborator); verify_keyring
     // accepts a signed keyring regardless of entry count.
     let content_to_sign = extract_content_to_verify_from_keyring(&keyring_without_sig)?;
-    let signature = sign_keyring_content(&content_to_sign, &signing_key, passphrase)?;
-    keyring.signature = Some(signature);
+    let sig_block = create_signature_block(&content_to_sign, &signing_key)?;
+    keyring.signature = Some(sig_block);
 
     // Save keyring
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
