@@ -4,19 +4,23 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::fs_atomic::write_atomic;
+use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
 use crate::{
-    decrypt_with_identity, find_identity_by_recipient, verify_keyring_against_trust, TrackedFiles,
+    decrypt_with_identity, verify_keyring_against_trust, TrackedFiles,
 };
+use crate::exit_codes::{coded, ExitCode};
 
 /// Unhides a single tracked file: decrypts its in-place `<name>.secret`
-/// ciphertext back to the tracked plaintext path and deletes the ciphertext.
+/// ciphertext back to the tracked plaintext path, leaving the ciphertext
+/// in place.
 ///
 /// This is the inverse of hide for ONE file (matching cat's single-file
-/// scope): hide deleted the plaintext and left the ciphertext beside it;
-/// unhide restores the plaintext and removes the ciphertext. The keyring
-/// signature is verified against the pinned trust before any decryption,
-/// exactly as reveal and cat do.
+/// scope): hide encrypts the plaintext and leaves the ciphertext beside it;
+/// unhide restores the plaintext and also leaves the ciphertext in place —
+/// neither copy is deleted, so hide can re-encrypt and reveal can re-restore
+/// without touching git. The keyring signature is verified against the
+/// pinned trust before any decryption, exactly as reveal and cat do.
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
 /// cmd_cat resolves paths. Unlike cat, the plaintext may not exist (it is
@@ -30,18 +34,24 @@ pub fn cmd_unhide(
     email: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    _passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
-    let entry = keyring
-        .find_by_email(email)
-        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
+    let entry = keyring.find_by_email(email).ok_or_else(|| {
+        coded(
+            ExitCode::IdentityNotInKeyring,
+            format!(
+                "user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell",
+                email
+            ),
+        )
+    })?;
 
-    // Find user's age identity by recipient string
-    let identity = find_identity_by_recipient(key_store, &entry.recipient)?;
+    // Find user's age identity by recipient string (exit code 21 with the
+    // create-and-back-up recipe when absent)
+    let identity = discover_identity(key_store, &entry.recipient)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");

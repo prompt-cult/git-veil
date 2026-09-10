@@ -3,11 +3,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::fs_atomic::write_atomic;
+use crate::commands::add::is_gitignored;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{
     cmd_verify_keyring, encrypt_to_recipients, parse_recipient,
     Keyring, TrackedFiles,
 };
+use crate::exit_codes::{coded, ExitCode};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -83,6 +85,41 @@ pub fn cmd_hide(
     if tracked.files.is_empty() {
         println!("No files tracked");
         return Ok(());
+    }
+
+    // Ciphertext-ignored gate: a `.secret` swallowed by a broad ignore rule
+    // (e.g. a parent directory like `.tmp/`) would silently never reach the
+    // repository — add succeeded, but the ciphertext is untrackable. Refuse
+    // outright BEFORE encrypting anything (exit code 40).
+    let mut ignored_secrets: Vec<String> = Vec::new();
+    for file in &tracked.files {
+        let secret_relative = format!("{}.secret", file.to_string_lossy());
+        if is_gitignored(repo_root, &secret_relative)? {
+            ignored_secrets.push(secret_relative);
+        }
+    }
+    if !ignored_secrets.is_empty() {
+        return Err(coded(
+            ExitCode::CiphertextIgnored,
+            format!(
+                "refusing to hide: the ciphertext path(s) below are git-ignored, so they would never reach the repository; fix .gitignore first (error code 40):\n  {}",
+                ignored_secrets.join("\n  ")
+            ),
+        ));
+    }
+
+    // Plaintext-leak warning: the plaintext's only protection is its
+    // .gitignore entry, and add only guarantees it at add time — a rename
+    // or .gitignore edit can drift it. A blind `git add -A` would then
+    // commit the plaintext. Warning only (error code 41); hide proceeds.
+    for file in &tracked.files {
+        let relative_str = file.to_string_lossy();
+        if repo_root.join(file).exists() && !is_gitignored(repo_root, &relative_str)? {
+            println!(
+                "warning: tracked plaintext '{}' is not git-ignored; a blind `git add -A` would commit it (error code 41)",
+                relative_str
+            );
+        }
     }
 
     // Two-phase, all-or-nothing hide (compute-then-commit). PHASE 1 reads and

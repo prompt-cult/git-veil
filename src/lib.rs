@@ -5,8 +5,11 @@
 mod age_crypto;
 pub mod cli;
 mod commands;
+mod exit_codes;
 mod fs_atomic;
+mod key_discovery;
 mod keyring;
+mod permissions;
 mod signing;
 mod repo_identity;
 mod tracked_files;
@@ -32,8 +35,14 @@ pub use commands::trust::cmd_trust;
 pub use commands::unhide::cmd_unhide;
 pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
-pub use fs_atomic::write_atomic;
+pub use exit_codes::{exit_code_of, coded, CodedError, ExitCode};
+pub use fs_atomic::{write_atomic, write_atomic_mode};
+pub use key_discovery::{discover_identity, discover_signing_key, load_signing_keys};
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};
+pub use permissions::{
+    check_key_store_permissions, cmd_trust_permissions, find_unsafe_permissions,
+    permissions_check_bypassed_from_env,
+};
 pub use age_crypto::{
     decrypt_with_identity, default_key_store, encrypt_to_recipient, encrypt_to_recipients,
     find_identity_by_fingerprint, find_identity_by_recipient,

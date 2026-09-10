@@ -3,8 +3,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::fs_atomic::write_atomic;
-use crate::age_crypto::{parse_identity, recipient_from_identity, fingerprint_for_recipient};
+use crate::fs_atomic::write_atomic_mode;
+use crate::age_crypto::{
+    fingerprint_for_recipient, for_each_store_line, parse_identity, recipient_from_identity,
+};
 
 /// Imports age identity strings from one or more files into the
 /// tool-owned key store (<key_store>/identities.txt).
@@ -26,17 +28,17 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Re
         String::new()
     };
 
-    // Fingerprints already present in the identity store
+    // Fingerprints already present in the identity store. A corrupt store
+    // line refuses the import outright (code 62, naming the line) — never
+    // append to a store we could not fully parse.
     let mut known: HashSet<String> = HashSet::new();
-    for line in identities_content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Ok(identity) = parse_identity(line) {
+    if identities_path.exists() {
+        for_each_store_line(&identities_path, &identities_content, |_, line| {
+            let identity = parse_identity(line)?;
             let recipient = recipient_from_identity(&identity);
             known.insert(fingerprint_for_recipient(&recipient));
-        }
+            Ok(())
+        })?;
     }
 
     let mut imported = 0usize;
@@ -56,7 +58,10 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Re
             let identity = match parse_identity(line) {
                 Ok(identity) => identity,
                 Err(err) => {
-                    println!("! skipped unparseable line in {}: {}", file, err);
+                    // Source file, not the store: junk lines in an imported
+                    // file are skipped, but never silently — the note (and
+                    // the parse error) goes to stderr.
+                    eprintln!("! skipped unparseable line in {}: {}", file, err);
                     continue;
                 }
             };
@@ -89,7 +94,8 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Re
     }
 
     fs::create_dir_all(key_store).context("Failed to create key store directory")?;
-    write_atomic(&identities_path, identities_content.as_bytes())
+    // Private key material: created 0600 regardless of the process umask.
+    write_atomic_mode(&identities_path, identities_content.as_bytes(), 0o600)
         .context("Failed to write identities.txt")?;
 
     println!("Summary: {} imported, {} skipped", imported, skipped);

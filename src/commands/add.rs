@@ -28,6 +28,18 @@ pub fn cmd_add(repo_root: &Path, files: Vec<String>) -> Result<()> {
 
         ensure_gitignored(repo_root, &relative_str)?;
 
+        // A .secret swallowed by a broad ignore rule (e.g. a parent
+        // directory like .tmp/) would silently never reach the repository:
+        // add succeeds, but the ciphertext beside the plaintext is
+        // untrackable. Warn now; hide refuses outright before encrypting.
+        let secret_relative = format!("{}.secret", relative_str);
+        if is_gitignored(repo_root, &secret_relative)? {
+            println!(
+                "warning: the ciphertext path '{}' is git-ignored (error code 40); it will never reach the repository — fix .gitignore before hiding",
+                secret_relative
+            );
+        }
+
         tracked.add(relative);
         count += 1;
     }
@@ -37,17 +49,22 @@ pub fn cmd_add(repo_root: &Path, files: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-/// Checks if a file is gitignored. If not, appends it to .gitignore.
-fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
-    let is_ignored = Command::new("git")
+/// Runs `git check-ignore` for one repo-relative path: true when git
+/// ignores it. Shared by the add-time warning and hide's fail-closed
+/// ciphertext gate so the two sides cannot drift apart.
+pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<bool> {
+    Ok(Command::new("git")
         .current_dir(repo_root)
         .args(["check-ignore", relative_path])
         .output()
         .context("Failed to run git check-ignore")?
         .status
-        .success();
+        .success())
+}
 
-    if !is_ignored {
+/// Checks if a file is gitignored. If not, appends it to .gitignore.
+fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
+    if !is_gitignored(repo_root, relative_path)? {
         let gitignore_path = repo_root.join(".gitignore");
         let mut content = std::fs::read_to_string(&gitignore_path)
             .unwrap_or_default();

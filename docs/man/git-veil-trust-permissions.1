@@ -1,0 +1,34 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-trust-permissions 1  "git-veil-trust-permissions " 
+.SH NAME
+git\-veil\-trust\-permissions \- Acknowledge the key store\*(Aqs current permissions as trusted
+.SH SYNOPSIS
+\fBgit\-veil trust\-permissions\fR [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Acknowledge the key store\*(Aqs current permissions as trusted
+.SH OPTIONS
+.TP
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Records the key store\*(Aqs current permission state — for the store
+directory itself and for identities.txt / signing\-keys.txt when they
+carry group or world bits — as explicitly trusted, exactly the way git\*(Aqs
+dubious\-ownership acknowledgment works. The acknowledgment pins the exact
+(path, mode) pairs in <key store>/permissions\-ack.json (mode 0600); the
+permission check passes only while the observed modes still match those
+pairs, so any later change fails again until you re\-acknowledge.
+
+git\-veil NEVER changes permissions on key material it did not create —
+either chmod the paths right (the error message lists the exact commands)
+or acknowledge the current state deliberately here. The check can also be
+bypassed per invocation with \-\-dangerously\-skip\-permissions\-check or
+GIT_VEIL_SKIP_PERMISSIONS=1.
+
+EXAMPLES
+  $ git\-veil trust\-permissions
+  $ git\-veil trust\-permissions \-\-key\-store /path/to/store

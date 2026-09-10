@@ -14,6 +14,10 @@ use std::path::PathBuf;
 #[command(about = "Git secret management using age encryption")]
 #[command(version)]
 pub struct Cli {
+    /// Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)
+    #[arg(long, global = true)]
+    pub dangerously_skip_permissions_check: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -36,23 +40,27 @@ EXAMPLES
 ")]
     Init,
 
-    /// Import your private key(s) into the git-veil key store
+    /// Import your age identity (private key) into the git-veil key store
     #[command(after_long_help = "\
-Imports armoured PRIVATE key blocks into your per-machine key store
-($GIT_VEIL_HOME or $HOME/.git-veil). This is where reveal/cat/unhide/changes
-find the private key matching your email, and where tell/removeperson find
-the owner's signing key. The key store is local to this machine and is
-never committed; each collaborator imports their own key.
+Imports age identity strings (AGE-SECRET-KEY-1... lines) into your
+per-machine key store ($GIT_VEIL_HOME or $HOME/.git-veil). This is where
+reveal/cat/unhide/changes find the identity matching your email. The key
+store is local to this machine and is never committed; each collaborator
+imports their own identity. The store is written mode 0600 regardless of
+umask. git-veil never generates keys — create yours with age-keygen (or
+rage-keygen) and back the AGE-SECRET-KEY-1... line up; without it,
+ciphertexts encrypted to you are unrecoverable.
 
-Keys whose fingerprint is already present in the key store are not
+Identities whose recipient is already present in the key store are not
 duplicated.
 
 EXAMPLES
-  $ git-veil import my-key.asc
-  $ git-veil import key1.asc key2.asc --key-store /path/to/store
+  $ age-keygen -o my-age-identity.txt      # create + print the recipe
+  $ git-veil import my-age-identity.txt
+  $ git-veil import a.txt b.txt --key-store /path/to/store
 ")]
     Import {
-        /// File(s) containing armoured private key blocks
+        /// File(s) containing AGE-SECRET-KEY-1... lines (age-keygen output works as-is)
         #[arg(required = true)]
         files: Vec<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
@@ -60,35 +68,34 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Export an armoured public key from the local key store
+    /// Export a public key (recipient string) from the local key store
     #[command(after_long_help = "\
-Prints — or with --output writes — the armoured PUBLIC key for the given
-email or fingerprint, read from the local key store on this machine
-($GIT_VEIL_HOME or $HOME/.git-veil). This is the key handoff between collaborators without
-any external OpenPGP tool: the local store only holds keys THIS machine
-knows about
-(your imported private key and any key trust has pinned), so each
-collaborator runs export on their OWN machine and sends the .pub file to
-the owner, who adds it to the keyring with tell. It cannot export a
-collaborator's key for them.
+Prints — or with --output writes — the public key (age recipient string,
+age1...) for the given recipient or fingerprint, read from the local key
+store on this machine ($GIT_VEIL_HOME or $HOME/.git-veil). This is the key
+handoff between collaborators without any external tool: the local store
+only holds keys THIS machine knows about (your imported identity and any
+recipient trust has pinned), so each collaborator runs export on their OWN
+machine and sends the recipient string to the owner, who adds it to the
+keyring with tell. It cannot export a collaborator's key for them.
 
 The output never contains private key material — even when the match is
-your imported private key, export always re-armours the public half.
+your imported identity, export always emits the public recipient half.
 
-Matching is exact: the identifier equals the key's fingerprint, or the
-address in one of its user-IDs. If several keys share the requested
-email, the fingerprints are listed so you can retry with one of them.
+Matching is exact: the identifier equals the key's fingerprint, or its
+recipient string. If several keys share the requested recipient, the
+fingerprints are listed so you can retry with one of them.
 export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
-  $ git-veil export alice@example.com                     # armour to stdout
-  $ git-veil export alice@example.com --output alice.pub  # hand-off file
-  $ git-veil export 9A1F... --output alice.pub            # by fingerprint
+  $ git-veil export age1axmf...                     # to stdout
+  $ git-veil export age1axmf... --output alice.pub  # hand-off file
+  $ git-veil export 9A1F... --output alice.pub      # by fingerprint
 ")]
     Export {
-        /// Email or fingerprint of the key to export
+        /// Recipient string (age1...) or fingerprint of the key to export
         identifier: String,
-        /// Write the armoured public key to this file instead of stdout
+        /// Write the recipient string to this file instead of stdout
         #[arg(long)]
         output: Option<PathBuf>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
@@ -96,40 +103,41 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Remove a key from the local key store (destructive, local-only)
+    /// Remove an age identity from the local key store (destructive, local-only)
     #[command(name = "removekey")]
     #[command(after_long_help = "\
-Drops key material from the LOCAL key store: every armoured block in
-$GIT_VEIL_HOME (or $HOME/.git-veil) secret-keys.pgp and public-keys.pgp whose key's
-fingerprint matches the identifier, or whose exact case-insensitive email
-matches, is removed from both stores. Prefer the FINGERPRINT when it is
-not unambiguous which key you mean — a shared email that matches several
-keys is refused unless --yes confirms removing ALL of them.
+Drops key material from the LOCAL key store: every identity in
+$GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt whose recipient
+matches the identifier, or whose exact case-insensitive fingerprint
+matches, is removed. Prefer the FINGERPRINT when it is not unambiguous
+which key you mean — a shared recipient that matches several identities
+is refused unless --yes confirms removing ALL of them.
 
 This is destructive and LOCAL-ONLY: it does not touch any repository,
-keyring or trust state, and it does NOT revoke anything. Removing a key
-from the store does not stop old ciphertext that was encrypted to it from
-being decryptable by whoever holds the key. Revoking a departing
+keyring or trust state, and it does NOT revoke anything. Removing an
+identity from the store does not stop old ciphertext that was encrypted
+to it from being decryptable by whoever holds it. Revoking a departing
 collaborator is removeperson + re-hide (docs/departing.md); removekey is
 the departing user's housekeeping step for their own machine's store.
 
-Danger guard: if the target key is the only private key in
-secret-keys.pgp, removekey refuses without --yes — this is your only
-private key, and without it you cannot decrypt anything.
+Danger guard: if the target identity is the only one in identities.txt,
+removekey refuses without --yes — this is your only identity, and without
+it you cannot decrypt anything.
 
-The store rewrite is atomic and lossless for the retained blocks. A
-corrupt (e.g. truncated) store is refused untouched — repair it by hand;
-removekey never deletes a corrupt store. On success a per-store summary
-prints the fingerprints removed.
+The store rewrite is atomic and lossless for the retained lines. A
+corrupt (e.g. truncated) store is refused untouched — the error names the
+file, the line number, and the corrupt line so you can delete exactly it;
+removekey never rewrites a store it could not fully parse. On success a
+per-store summary prints the fingerprints removed.
 
 EXAMPLES
   $ git-veil removekey 9A1F...                     # by fingerprint (preferred)
-  $ git-veil removekey bob@example.com             # exact case-insensitive email
-  $ git-veil removekey bob@example.com --yes       # confirm only-private-key removal
-  $ git-veil removekey bob@example.com --key-store /path/to/store
+  $ git-veil removekey age1axmf...                 # exact recipient string
+  $ git-veil removekey age1axmf... --yes           # confirm only-identity removal
+  $ git-veil removekey age1axmf... --key-store /path/to/store
 ")]
     RemoveKey {
-        /// Fingerprint or exact case-insensitive email of the key(s) to remove
+        /// Fingerprint or exact recipient string of the identity to remove
         identifier: String,
         /// Confirm destructive removals: required when the target is the only
         /// private key in the store, and to remove ALL keys when the email
@@ -141,19 +149,21 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Verify and pin the repository owner's signing key (per machine)
+    /// Verify and pin the repository owner's Ed25519 verifying key (per machine)
     #[command(after_long_help = "\
-Verifies the repository owner's public signing key and pins it in your
-local key store, keyed by the repository ID derived from the git remote
-push URL. The pin is per machine: it lives in $GIT_VEIL_HOME (or $HOME/.git-veil), is never
-committed, and every collaborator must run trust themselves after a fresh
-clone. The pinned key is the anchor against which every subsequent keyring
-signature is verified — tell, hide, reveal, cat, unhide, changes,
-removeperson, verify-keyring and list-keys all fail closed without it.
+Verifies the repository owner's Ed25519 verifying key and pins its
+fingerprint in your local key store, keyed by the repository ID derived
+from the git remote push URL. The pin is per machine: it lives in
+$GIT_VEIL_HOME (or $HOME/.git-veil), is never committed, and every
+collaborator must run trust themselves after a fresh clone. The pinned
+key is the anchor against which every subsequent keyring signature is
+verified — tell, hide, reveal, cat, unhide, changes, removeperson,
+verify-keyring and list-keys all fail closed without it.
 
 The provided repo_id must match the one computed from the remote push URL
-(see show-repo-id), the key file must carry the repository's email
-identity, and the key must not be expired, revoked or unsigned.
+(see show-repo-id), and the key file must contain a valid Ed25519
+verifying key as 64 hex characters (docs/solo.md step 1 has the openssl
+recipe that produces one from the owner's signing key).
 
 Trust domain: the key store named by --key-store holds this machine's pins
 for EVERY repository that uses that store, so the store and its pins are
@@ -163,15 +173,15 @@ repositories is not advised; use a separate --key-store per trust domain.
 Requires init first. Typical next step: tell.
 
 EXAMPLES
-  $ git-veil show-repo-id                          # get the repo id to pass here
-  $ git-veil trust fara+simbo1905@github.com owner.pub
-  $ git-veil trust fara+simbo1905@github.com owner.pub --remote upstream
+  $ git-veil show-repo-id                                   # get the repo id to pass here
+  $ git-veil trust fara+simbo1905@github.com owner.verifying
+  $ git-veil trust fara+simbo1905@github.com owner.verifying --remote upstream
 ")]
     Trust {
         /// Repository ID (e.g., fara+simbo1905@github.com)
         repo_id: String,
-        /// Path to owner's public key file
-        signing_key: String,
+        /// Path to the owner's Ed25519 verifying key file (64 hex chars)
+        verifying_key: String,
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
@@ -181,56 +191,67 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Add a collaborator's public key to the keyring and re-sign it
+    /// Add a collaborator's age recipient key to the keyring and re-sign it
     #[command(after_long_help = "\
-Adds a collaborator's public key to the repository keyring and re-signs
-the keyring with the owner's private key. The existing keyring signature
-is verified against the pinned trusted key before any modification, and a
-canary is test-encrypted to the new key so a key that cannot encrypt is
-never signed into the ring.
+Adds a collaborator's age recipient key to the repository keyring and
+re-signs the keyring with the owner's Ed25519 signing key. The existing
+keyring signature is verified against the pinned trusted key before any
+modification, and a canary is test-encrypted to the new key so a key that
+cannot encrypt is never signed into the ring.
+
+The keyring is signed with the TRUSTED key — the one whose verifying-key
+fingerprint is pinned for this repository. signing-keys.txt must contain
+that seed; git-veil never generates it (docs/solo.md step 1 has the
+recipe). With several signing keys present, --signing-key selects one by
+1-based index or full 64-hex-character seed; otherwise the key matching
+the pin is used. A missing signing key exits with code 20 and the
+create-and-back-up recipe.
 
 Requires init, an established trust pin (trust) for this repository on
-this machine, and the owner's private key in the local key store
-(import). Next steps: add files, then hide.
+this machine, and the signing key in the local key store. Next steps:
+add files, then hide.
 
 EXAMPLES
   $ git-veil tell alice@example.com alice.pub
-  $ git-veil tell alice@example.com alice.pub --passphrase-stdin < pass.txt
+  $ git-veil tell alice@example.com alice.pub --signing-key 2
 ")]
     Tell {
         /// Collaborator's email
         email: String,
-        /// Path to collaborator's public key file
+        /// Path to file containing the collaborator's age recipient string (age1...)
         public_key: String,
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
+        /// Which signing key to use: 1-based index into signing-keys.txt, or a 64-hex-character seed (default: the key matching the pinned fingerprint)
+        #[arg(long, value_name = "SELECTION")]
+        signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Read the passphrase for a passphrase-protected private key from
-        /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
-        /// environment variable; never pass a passphrase as a CLI argument.
-        #[arg(long)]
-        passphrase_stdin: bool,
     },
 
     /// Remove a collaborator from the keyring and re-sign it
     #[command(name = "removeperson")]
     #[command(after_long_help = "\
 Removes a collaborator's entry from the keyring and re-signs it with the
-owner's private key. The existing keyring signature is verified against
-the pinned trusted key before any modification. After removal the
+owner's Ed25519 signing key. The existing keyring signature is verified
+against the pinned trusted key before any modification. After removal the
 ex-collaborator can no longer decrypt newly hidden files — but files
 hidden while they were a member were encrypted to their key, so rotate
 the underlying secrets if that matters.
 
-Requires init, an established trust pin (trust), and the owner's private
-key in the local key store (import).
+The keyring is signed with the TRUSTED key — the one whose verifying-key
+fingerprint is pinned for this repository; --signing-key selects among
+several seeds in signing-keys.txt by 1-based index or full seed. A
+missing signing key exits with code 20 and the create-and-back-up recipe.
+
+Requires init, an established trust pin (trust), and the signing key in
+the local key store.
 
 EXAMPLES
   $ git-veil removeperson alice@example.com
-  $ git-veil removeperson alice@example.com --passphrase-stdin < pass.txt
+  $ git-veil removeperson alice@example.com --signing-key 2
 ")]
     RemovePerson {
         /// Email of the collaborator to remove
@@ -238,14 +259,12 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
+        /// Which signing key to use: 1-based index into signing-keys.txt, or a 64-hex-character seed (default: the key matching the pinned fingerprint)
+        #[arg(long, value_name = "SELECTION")]
+        signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Read the passphrase for a passphrase-protected private key from
-        /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
-        /// environment variable; never pass a passphrase as a CLI argument.
-        #[arg(long)]
-        passphrase_stdin: bool,
     },
 
     /// Track files for encryption
@@ -316,6 +335,14 @@ in the keyring (git-veil tell), and files are tracked (git-veil add).
 Before encrypting anything, the keyring signature is verified against the
 pinned trusted key. unhide, reveal and cat invert hide.
 
+hide REFUSES (exit code 40) when a <name>.secret ciphertext path is
+itself git-ignored — e.g. swallowed by a parent-directory rule like
+.tmp/ — because that ciphertext would silently never reach the
+repository. It WARNS (error code 41) when a tracked plaintext exists on
+disk but is not git-ignored, since a blind `git add -A` would then commit
+it. The plaintext is KEPT by default; --dangerously-delete-plaintext
+removes each plaintext only after its ciphertext is durably written.
+
 EXAMPLES
   $ git-veil hide    # encrypt all tracked files (plaintext kept)
   $ git-veil hide --remote upstream
@@ -339,11 +366,11 @@ your private key, which is not an assumption any coding agent should make.
 
     /// Decrypt all tracked files back to plaintext
     #[command(after_long_help = "\
-Decrypts every tracked file back to its plaintext path, using your private
-key from the local key store. The keyring signature is verified against
-the pinned trusted key before any decryption. Your identity comes from
-git config user.email or --email; passphrase-protected keys take the
-passphrase from GITVEIL_PASSPHRASE or --passphrase-stdin.
+Decrypts every tracked file back to its plaintext path, using your age
+identity from the local key store. The keyring signature is verified
+against the pinned trusted key before any decryption. Your identity comes
+from git config user.email or --email; a missing identity exits with code
+21 and the create-and-back-up recipe.
 
 reveal is the inverse of hide for all files; unhide does one file;
 cat prints one file without touching disk state.
@@ -357,7 +384,6 @@ decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
 EXAMPLES
   $ git-veil reveal
   $ git-veil reveal --email alice@example.com
-  $ git-veil reveal --passphrase-stdin < pass.txt
 ")]
     Reveal {
         /// Your email address
@@ -369,11 +395,6 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Read the passphrase for a passphrase-protected private key from
-        /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
-        /// environment variable; never pass a passphrase as a CLI argument.
-        #[arg(long)]
-        passphrase_stdin: bool,
     },
 
     /// Decrypt a single tracked file to stdout
@@ -386,7 +407,6 @@ must be tracked with its ciphertext present beside it.
 EXAMPLES
   $ git-veil cat .env
   $ git-veil cat .env --email alice@example.com
-  $ git-veil cat .env --passphrase-stdin < pass.txt
 ")]
     Cat {
         /// File to decrypt
@@ -400,11 +420,6 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Read the passphrase for a passphrase-protected private key from
-        /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
-        /// environment variable; never pass a passphrase as a CLI argument.
-        #[arg(long)]
-        passphrase_stdin: bool,
     },
 
     /// Decrypt one tracked file back to plaintext
@@ -418,7 +433,6 @@ then hide to re-encrypt.
 EXAMPLES
   $ git-veil unhide .env
   $ git-veil unhide .env --email alice@example.com
-  $ git-veil unhide .env --passphrase-stdin < pass.txt
 ")]
     Unhide {
         /// File to unhide
@@ -432,11 +446,6 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Read the passphrase for a passphrase-protected private key from
-        /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
-        /// environment variable; never pass a passphrase as a CLI argument.
-        #[arg(long)]
-        passphrase_stdin: bool,
     },
 
     /// Report where plaintext differs from the last hidden version
@@ -450,7 +459,6 @@ counted as changed.
 EXAMPLES
   $ git-veil changes                # check every tracked file
   $ git-veil changes .env           # check one file
-  $ git-veil changes --passphrase-stdin < pass.txt
 ")]
     Changes {
         /// File(s) to check (default: all tracked files)
@@ -464,11 +472,6 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Read the passphrase for a passphrase-protected private key from
-        /// stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE
-        /// environment variable; never pass a passphrase as a CLI argument.
-        #[arg(long)]
-        passphrase_stdin: bool,
     },
 
     /// Show the repository ID derived from the git remote push URL
@@ -554,6 +557,47 @@ EXAMPLES
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
+
+    /// Acknowledge the key store's current permissions as trusted
+    #[command(name = "trust-permissions")]
+    #[command(after_long_help = "\
+Records the key store's current permission state — for the store
+directory itself and for identities.txt / signing-keys.txt when they
+carry group or world bits — as explicitly trusted, exactly the way git's
+dubious-ownership acknowledgment works. The acknowledgment pins the exact
+(path, mode) pairs in <key store>/permissions-ack.json (mode 0600); the
+permission check passes only while the observed modes still match those
+pairs, so any later change fails again until you re-acknowledge.
+
+git-veil NEVER changes permissions on key material it did not create —
+either chmod the paths right (the error message lists the exact commands)
+or acknowledge the current state deliberately here. The check can also be
+bypassed per invocation with --dangerously-skip-permissions-check or
+GIT_VEIL_SKIP_PERMISSIONS=1.
+
+EXAMPLES
+  $ git-veil trust-permissions
+  $ git-veil trust-permissions --key-store /path/to/store
+")]
+    TrustPermissions {
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
+        #[arg(long)]
+        key_store: Option<PathBuf>,
+    },
+
+    /// List every documented exit code with its name and meaning
+    #[command(after_long_help = "\
+Prints the table of documented exit codes — number, enum name, and
+meaning — that every deliberate failure exits with. Failures without a
+more specific code exit 1, and command-line usage errors exit 2. The
+codes are public API: they are never renumbered, only appended, and the
+specification lives in docs/design.md.
+
+EXAMPLES
+  $ git-veil error-codes
+  $ git-veil hide; echo $?    # a refusal exits with its documented code
+")]
+    ErrorCodes,
 
     /// Remove the .git-veil state directory (--yes required when data would be lost)
     #[command(after_long_help = "\

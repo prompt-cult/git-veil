@@ -1,6 +1,6 @@
 [package]
 name = "git-veil"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["git-veil contributors"]
 description = "A Rust-based Git secret management tool inspired by Git Secret" 

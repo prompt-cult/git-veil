@@ -7,6 +7,7 @@ use crate::{
     import_recipient_to_store, parse_verifying_key,
     TrustPinStore, TrustStore,
 };
+use crate::exit_codes::{coded, ExitCode};
 
 /// Establishes trust for a repository by verifying the owner's signing key.
 ///
@@ -26,11 +27,13 @@ pub fn cmd_trust(
 
     // Verify provided repo_id matches computed
     if repo_id != computed_repo_id {
-        anyhow::bail!(
-            "Repository ID mismatch: provided '{}' does not match computed '{}'",
-            repo_id,
-            computed_repo_id
-        );
+        return Err(coded(
+            ExitCode::TrustRepoIdMismatch,
+            format!(
+                "Repository ID mismatch: provided '{}' does not match computed '{}'",
+                repo_id, computed_repo_id
+            ),
+        ));
     }
 
     // Read signing key file (relative paths resolve against repo_root)

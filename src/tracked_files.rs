@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -23,29 +24,38 @@ pub struct TrackedFiles {
 /// read or write outside the repository.
 pub fn validate_tracked_path(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty() {
-        anyhow::bail!("Tracked path is empty");
+        return Err(coded(ExitCode::UnsafePath, "Tracked path is empty"));
     }
     if path.is_absolute() {
-        anyhow::bail!(
-            "Tracked path must be relative, got absolute path: {}",
-            path.display()
-        );
+        return Err(coded(
+            ExitCode::UnsafePath,
+            format!(
+                "Tracked path must be relative, got absolute path: {}",
+                path.display()
+            ),
+        ));
     }
     for component in path.components() {
         match component {
             Component::Normal(_) => {}
-            other => anyhow::bail!(
-                "Tracked path contains forbidden {:?} component: {}",
-                other,
-                path.display()
-            ),
+            other => return Err(coded(
+                ExitCode::UnsafePath,
+                format!(
+                    "Tracked path contains forbidden {:?} component: {}",
+                    other,
+                    path.display()
+                ),
+            )),
         }
     }
     if !stays_inside_repo_root(path) {
-        anyhow::bail!(
-            "Tracked path escapes the repository root: {}",
-            path.display()
-        );
+        return Err(coded(
+            ExitCode::UnsafePath,
+            format!(
+                "Tracked path escapes the repository root: {}",
+                path.display()
+            ),
+        ));
     }
     Ok(())
 }
@@ -74,13 +84,19 @@ pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
         }
     };
     if metadata.file_type().is_symlink() {
-        anyhow::bail!(
-            "tracked path is a symlink; refusing to read — remove the link and re-add the real file: {}",
-            file.display()
-        );
+        return Err(coded(
+            ExitCode::UnsafePath,
+            format!(
+                "tracked path is a symlink; refusing to read — remove the link and re-add the real file: {}",
+                file.display()
+            ),
+        ));
     }
     if !metadata.is_file() {
-        anyhow::bail!("tracked path is not a regular file: {}", file.display());
+        return Err(coded(
+            ExitCode::UnsafePath,
+            format!("tracked path is not a regular file: {}", file.display()),
+        ));
     }
     Ok(())
 }
@@ -172,20 +188,22 @@ pub(crate) fn resolve_repo_relative_input(
                 .with_context(|| format!("File not found: {}", user_path))?;
             let relative = canonical
                 .strip_prefix(&canonical_root)
-                .with_context(|| {
-                    format!(
-                        "File is outside the repository: {} (resolves to {})",
-                        user_path,
-                        canonical.display()
+                .map_err(|_| {
+                    coded(
+                        ExitCode::UnsafePath,
+                        format!(
+                            "File is outside the repository: {} (resolves to {})",
+                            user_path,
+                            canonical.display()
+                        ),
                     )
                 })?
                 .to_path_buf();
             if relative.as_os_str().is_empty() {
-                anyhow::bail!(
-                    "Cannot {} the repository root itself: {}",
-                    root_verb,
-                    user_path
-                );
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                ));
             }
             validate_tracked_path(&relative)
                 .with_context(|| format!("Invalid path for tracked file: {}", user_path))?;
@@ -194,17 +212,21 @@ pub(crate) fn resolve_repo_relative_input(
         PathResolveMode::LexicalStripValidateResolved => {
             let relative: PathBuf = if path.is_absolute() {
                 path.strip_prefix(&canonical_root)
-                    .with_context(|| format!("File is outside the repository: {}", user_path))?
+                    .map_err(|_| {
+                        coded(
+                            ExitCode::UnsafePath,
+                            format!("File is outside the repository: {}", user_path),
+                        )
+                    })?
                     .to_path_buf()
             } else {
                 path
             };
             if relative.as_os_str().is_empty() {
-                anyhow::bail!(
-                    "Cannot {} the repository root itself: {}",
-                    root_verb,
-                    user_path
-                );
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                ));
             }
             validate_tracked_path(&relative)
                 .with_context(|| format!("Invalid path for tracked file: {}", user_path))?;
@@ -216,11 +238,14 @@ pub(crate) fn resolve_repo_relative_input(
                     .with_context(|| format!("File not found: {}", user_path))?;
                 canonical
                     .strip_prefix(&canonical_root)
-                    .with_context(|| {
-                        format!(
-                            "File is outside the repository: {} (resolves to {})",
-                            user_path,
-                            canonical.display()
+                    .map_err(|_| {
+                        coded(
+                            ExitCode::UnsafePath,
+                            format!(
+                                "File is outside the repository: {} (resolves to {})",
+                                user_path,
+                                canonical.display()
+                            ),
                         )
                     })?
                     .to_path_buf()
@@ -230,18 +255,22 @@ pub(crate) fn resolve_repo_relative_input(
                 path
             };
             if relative.as_os_str().is_empty() {
-                anyhow::bail!(
-                    "Cannot {} the repository root itself: {}",
-                    root_verb,
-                    user_path
-                );
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                ));
             }
             Ok(relative)
         }
         PathResolveMode::LexicalStripValidateRelative => {
             let relative: PathBuf = if path.is_absolute() {
                 path.strip_prefix(&canonical_root)
-                    .with_context(|| format!("File is outside the repository: {}", user_path))?
+                    .map_err(|_| {
+                        coded(
+                            ExitCode::UnsafePath,
+                            format!("File is outside the repository: {}", user_path),
+                        )
+                    })?
                     .to_path_buf()
             } else {
                 validate_tracked_path(&path)
@@ -249,11 +278,10 @@ pub(crate) fn resolve_repo_relative_input(
                 path
             };
             if relative.as_os_str().is_empty() {
-                anyhow::bail!(
-                    "Cannot {} the repository root itself: {}",
-                    root_verb,
-                    user_path
-                );
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                ));
             }
             Ok(relative)
         }

@@ -4,7 +4,7 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal,
-    cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring, exit_code_of,
     generate_identity, generate_signing_keypair,
     recipient_from_identity,
     Keyring,
@@ -161,8 +161,7 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
         &f.repo.path,
         "alice@example.com",
         "origin",
-        &f.key_store.path,
-        None,
+        &f.key_store.path
     );
     assert!(result.is_err(), "reveal should abort when a ciphertext is missing");
 
@@ -192,12 +191,12 @@ fn test_multi_recipient_both_can_decrypt() {
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
 
     // Alice reveals
-    cmd_reveal(&f.repo.path, "alice@example.com", "origin", &f.key_store.path, None).expect("alice reveal");
+    cmd_reveal(&f.repo.path, "alice@example.com", "origin", &f.key_store.path).expect("alice reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
     // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("re-hide");
-    cmd_reveal(&f.repo.path, "bob@example.com", "origin", &f.key_store.path, None).expect("bob reveal");
+    cmd_reveal(&f.repo.path, "bob@example.com", "origin", &f.key_store.path).expect("bob reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 }
 
@@ -242,7 +241,7 @@ fn test_subdirectory_hide_reveal() {
     assert!(f.repo.join("config/secrets.yml").exists());
     assert!(f.repo.join("config/secrets.yml.secret").exists());
 
-    cmd_reveal(&f.repo.path, "alice@example.com", "origin", &f.key_store.path, None).expect("reveal");
+    cmd_reveal(&f.repo.path, "alice@example.com", "origin", &f.key_store.path).expect("reveal");
 
     assert_eq!(fs::read(f.repo.join("config/secrets.yml")).unwrap(), plaintext);
     // git-secret does NOT delete ciphertext on reveal -- both exist
@@ -268,8 +267,7 @@ fn test_cat_preserves_disk_state() {
         ".env",
         "alice@example.com",
         "origin",
-        &f.key_store.path,
-        None,
+        &f.key_store.path
     )
     .expect("cat");
 
@@ -294,7 +292,7 @@ fn test_unhide_isolates_single_file() {
 
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
 
-    cmd_unhide(&f.repo.path, ".env", "alice@example.com", "origin", &f.key_store.path, None)
+    cmd_unhide(&f.repo.path, ".env", "alice@example.com", "origin", &f.key_store.path)
         .expect("unhide .env");
 
     // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
@@ -329,8 +327,7 @@ fn test_changes_binary_file() {
         vec![],
         "alice@example.com",
         "origin",
-        &f.key_store.path,
-        None,
+        &f.key_store.path
     )
     .expect("changes");
 
@@ -375,7 +372,7 @@ fn test_remove_last_person_signs_empty_keyring() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
-        None,
+        None
     )
     .expect("removeperson");
 
@@ -386,4 +383,82 @@ fn test_remove_last_person_signs_empty_keyring() {
 
     cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify empty signed keyring");
+}
+
+// ---------------------------------------------------------------------------
+// Ignore safety: hide refuses when a .secret ciphertext is git-ignored
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_hide_refuses_when_ciphertext_path_is_ignored() {
+    let f = Fixture::new("hide-ignored-secret");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    // A broad parent-directory rule that would swallow the ciphertext
+    fs::write(f.repo.join(".gitignore"), ".tmp/\n").unwrap();
+    fs::create_dir_all(f.repo.join(".tmp")).unwrap();
+    fs::write(f.repo.join(".tmp/x.txt"), b"secret-ish\n").unwrap();
+
+    // add succeeds (it gitignores the plaintext), but warns that the
+    // ciphertext path is swallowed by the .tmp/ rule
+    cmd_add(&f.repo.path, vec![".tmp/x.txt".to_string()]).expect("add");
+
+    // hide FAILS CLOSED before encrypting anything: exit code 40
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).unwrap_err();
+    let message = format!("{:#}", err);
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::CiphertextIgnored as i32,
+        "hide must refuse with code 40"
+    );
+    assert!(message.contains(".tmp/x.txt.secret"), "names the path: {message}");
+    assert!(!f.repo.join(".tmp/x.txt.secret").exists(), "nothing written before the gate");
+
+    // Removing the broad rule makes hide succeed (the appended plaintext
+    // ignore line .tmp/x.txt keeps protecting the plaintext)
+    fs::write(f.repo.join(".gitignore"), ".tmp/x.txt\n").unwrap();
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide after fixing .gitignore");
+    assert!(f.repo.join(".tmp/x.txt.secret").exists());
+}
+
+#[test]
+fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
+    let f = Fixture::new("hide-plaintext-leak");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+
+    // Simulate .gitignore drift: the tracked plaintext is no longer ignored
+    fs::write(f.repo.join(".gitignore"), "").unwrap();
+
+    // A warning (error code 41), not a refusal: hide proceeds
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide still succeeds");
+    assert!(f.repo.join(".env.secret").exists());
+}
+
+#[test]
+fn test_tell_fails_with_code_20_when_signing_key_missing() {
+    let f = Fixture::new("tell-nosigning");
+    // The fixture wrote signing-keys.txt; simulate the fresh-machine case
+    fs::remove_file(f.key_store.join("signing-keys.txt")).unwrap();
+
+    let id = git_veil::generate_identity();
+    let r = git_veil::recipient_from_identity(&id);
+    fs::write(f.repo.join("bob.recipient"), &r).unwrap();
+
+    let err = cmd_tell(&f.repo.path, "bob@example.com", "bob.recipient", "origin", &f.key_store.path, None).unwrap_err();
+    let message = format!("{:#}", err);
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::NoSigningKey as i32,
+        "missing signing key exits 20"
+    );
+    assert!(message.contains("openssl genpkey"), "recipe printed: {message}");
+    let keyring = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    assert!(!keyring.contains("bob@example.com"), "keyring unchanged on failure");
 }

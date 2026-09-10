@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::fs_atomic::write_atomic;
 use crate::{Keyring, TrackedFiles, TrustStore};
+use crate::exit_codes::{coded, ExitCode};
 
 /// Initialises a new git-veil repository structure under `repo_root`.
 ///
@@ -25,10 +26,11 @@ pub fn cmd_init(repo_root: &Path) -> Result<()> {
         let existing_trust = TrustStore::load_from_file(&trust_path)
             .context("Failed to read existing trust.json")?;
         if !existing_trust.trusted_keys.is_empty() {
-            anyhow::bail!(
+            return Err(coded(
+                ExitCode::Refused,
                 "git-veil is already initialized here; refusing to reset existing trust state \
-                 — remove .git-veil/ explicitly if you really want a fresh start"
-            );
+                 — remove .git-veil/ explicitly if you really want a fresh start",
+            ));
         }
     }
 

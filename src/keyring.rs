@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 
+use crate::exit_codes::{coded, ExitCode};
+
 
 pub const BEGIN_MARKER: &str = "-----BEGIN GIT-VEIL KEYRING-----";
 pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
@@ -39,9 +41,10 @@ impl Keyring {
         // content and therefore attacker-writable, so this is rejected as a
         // parse error — never a slicing panic.
         if end_idx < begin_idx + BEGIN_MARKER.len() {
-            anyhow::bail!(
-                "Malformed keyring: END GIT-VEIL KEYRING marker precedes or overlaps the BEGIN marker"
-            );
+            return Err(coded(
+                ExitCode::KeyParseFailure,
+                "Malformed keyring: END GIT-VEIL KEYRING marker precedes or overlaps the BEGIN marker",
+            ));
         }
 
         let keyring_section = &content[begin_idx + BEGIN_MARKER.len()..end_idx];
@@ -51,7 +54,10 @@ impl Keyring {
             .map(|line| {
                 let parts: Vec<&str> = line.split(':').collect();
                 if parts.len() != 3 {
-                    anyhow::bail!("Malformed keyring entry: {}", line);
+                    return Err(coded(
+                        ExitCode::KeyParseFailure,
+                        format!("Malformed keyring entry: {}", line),
+                    ));
                 }
                 Ok(KeyringEntry {
                     email: parts[0].to_string(),

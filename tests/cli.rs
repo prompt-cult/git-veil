@@ -12,7 +12,6 @@ use git_veil::{
     cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
     cmd_whoami,
     export_public_key, generate_identity, generate_signing_keypair,
-    import_recipient_to_store,
     recipient_from_identity, fingerprint_for_recipient,
     Keyring, TrustPinStore, TrustStore, TrackedFiles,
 };
@@ -397,7 +396,6 @@ fn test_hide_reveal_roundtrip() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("reveal");
 
@@ -485,7 +483,6 @@ fn test_cat_decrypts_to_stdout() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("cat");
 
@@ -512,7 +509,6 @@ fn test_cat_untracked_file_fails() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     );
     assert!(result.is_err());
 }
@@ -539,7 +535,6 @@ fn test_unhide_single_file() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("unhide");
 
@@ -574,7 +569,6 @@ fn test_changes_detects_modification() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("changes");
 
@@ -601,7 +595,6 @@ fn test_changes_no_modification() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("changes");
 
@@ -774,6 +767,75 @@ fn test_removekey_by_fingerprint() {
 }
 
 #[test]
+fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
+    let fixture = TestRepo::new("removekey-corrupt");
+
+    let (_collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&_collab_identity, "alice.age");
+    let fingerprint = fingerprint_for_recipient(&recipient);
+
+    // Corrupt the store: a truncated identity line the tool cannot parse
+    let identities_path = fixture.key_store.path.join("identities.txt");
+    let corrupt = fs::read_to_string(&identities_path).unwrap()
+        + "AGE-SECRET-KEY-1TRUNCATEDGARBAGE\n";
+    fs::write(&identities_path, &corrupt).unwrap();
+
+    // Removing any key must refuse, exit 62, and name the corrupt line
+    let err = cmd_removekey(&fixture.key_store.path, &fingerprint, false)
+        .expect_err("removekey must refuse a corrupt store");
+    let message = format!("{:#}", err);
+    assert_eq!(
+        git_veil::exit_code_of(&err),
+        git_veil::ExitCode::KeyParseFailure as i32,
+        "corrupt store line exits 62: {message}"
+    );
+    assert!(
+        message.contains("AGE-SECRET-KEY-1TRUNCATEDGARBAGE"),
+        "error names the corrupt line: {message}"
+    );
+    assert!(
+        message.contains("identities.txt"),
+        "error names the store file: {message}"
+    );
+
+    // The store is untouched: removekey never rewrites what it cannot parse
+    let after = fs::read_to_string(&identities_path).unwrap();
+    assert_eq!(after, corrupt, "store unchanged by the refused run");
+}
+
+#[test]
+fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
+    let fixture = TestRepo::new("removekey-corrupt-recipients");
+
+    let (_identity, recipient) = fixture.add_collaborator("alice@example.com");
+    let fingerprint = fingerprint_for_recipient(&recipient);
+    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+
+    // Corrupt the recipients store with a line that is not a parseable
+    // age1... recipient
+    let recipients_path = fixture.key_store.path.join("recipients.txt");
+    let corrupt = fs::read_to_string(&recipients_path).unwrap() + "not-a-recipient\n";
+    fs::write(&recipients_path, &corrupt).unwrap();
+
+    let err = cmd_removekey(&fixture.key_store.path, &fingerprint, false)
+        .expect_err("removekey must refuse a corrupt recipients store");
+    let message = format!("{:#}", err);
+    assert_eq!(
+        git_veil::exit_code_of(&err),
+        git_veil::ExitCode::KeyParseFailure as i32,
+        "corrupt recipients.txt line exits 62: {message}"
+    );
+    assert!(
+        message.contains("not-a-recipient"),
+        "error names the corrupt line: {message}"
+    );
+
+    // The store is untouched: removekey never rewrites what it cannot parse
+    let after = fs::read_to_string(&recipients_path).unwrap();
+    assert_eq!(after, corrupt, "store unchanged by the refused run");
+}
+
+#[test]
 fn test_removekey_only_identity_refuses_without_yes() {
     let fixture = TestRepo::new("removekey-only");
 
@@ -855,7 +917,6 @@ fn test_multi_recipient_hide_reveal() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("alice reveal");
 
@@ -870,7 +931,6 @@ fn test_multi_recipient_hide_reveal() {
         "bob@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("bob reveal");
 
@@ -927,7 +987,6 @@ fn test_full_lifecycle() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("reveal");
 
@@ -1004,7 +1063,6 @@ fn test_reveal_does_not_delete_ciphertext() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("reveal");
 
@@ -1029,7 +1087,6 @@ fn test_unhide_does_not_delete_ciphertext() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("unhide");
 
@@ -1079,7 +1136,6 @@ fn test_cat_does_not_touch_disk() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        None,
     )
     .expect("cat");
 

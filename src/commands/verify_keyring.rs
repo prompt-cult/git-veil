@@ -8,8 +8,14 @@ use crate::{
     get_remote_push_url, parse_verifying_key,
     verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
 };
+use crate::age_crypto::for_each_store_line;
+use crate::exit_codes::{coded, ExitCode};
 
 /// Loads the Ed25519 verifying key matching `fingerprint` from the key store.
+///
+/// Like every key store read, a non-comment line that does not parse is a
+/// hard refusal (code 62) naming the corrupt line — never a silent skip
+/// that would misreport the pin as missing.
 fn load_verifying_key_by_fingerprint(
     key_store: &PathBuf,
     fingerprint: &str,
@@ -19,23 +25,25 @@ fn load_verifying_key_by_fingerprint(
         fs::read_to_string(&verifying_keys_path).context("Failed to read verifying-keys.txt")?;
 
     let wanted = fingerprint.trim().to_lowercase();
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
+    let mut found = None;
+    for_each_store_line(&verifying_keys_path, &content, |_, line| {
+        let key = parse_verifying_key(line)?;
+        if fingerprint_for_verifying_key(&key) == wanted {
+            found = Some(key);
         }
-        if let Ok(key) = parse_verifying_key(line) {
-            if fingerprint_for_verifying_key(&key) == wanted {
-                return Ok(key);
-            }
-        }
-    }
+        Ok(())
+    })?;
 
-    anyhow::bail!(
-        "Trusted key with fingerprint {} not found in {}",
-        wanted,
-        verifying_keys_path.display()
-    )
+    found.ok_or_else(|| {
+        coded(
+            ExitCode::NoTrustPin,
+            format!(
+                "Trusted key with fingerprint {} not found in {}; re-run git-veil trust <repo_id> <keyfile> on this machine",
+                wanted,
+                verifying_keys_path.display()
+            ),
+        )
+    })
 }
 
 /// Verifies the keyring signature against the trusted signing key, without printing.
@@ -61,12 +69,13 @@ pub fn verify_keyring_against_trust(
     // repo_id and the remote that produced it, plus the remedy.
     let trusted_fingerprint = match trust_store.get_trusted_fingerprint(&repo_id) {
         Some(fingerprint) => fingerprint,
-        None => anyhow::bail!(
-            "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
-            repo_id,
-            remote_name,
-            repo_id
-        ),
+        None => return Err(coded(
+            ExitCode::NoTrustRecord,
+            format!(
+                "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
+                repo_id, remote_name, repo_id
+            ),
+        )),
     };
 
     // trust.json is committed to the repo and therefore attacker-writable;
@@ -74,20 +83,20 @@ pub fn verify_keyring_against_trust(
     // pin written by cmd_trust, and fail closed on any disagreement.
     match TrustPinStore::read_pin(key_store, &repo_id)? {
         Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
-        Some(pinned) => anyhow::bail!(
-            "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git-veil trust {} <keyfile>",
-            repo_id,
-            remote_name,
-            pinned,
-            trusted_fingerprint,
-            repo_id
-        ),
-        None => anyhow::bail!(
-            "no local pin for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
-            repo_id,
-            remote_name,
-            repo_id
-        ),
+        Some(pinned) => return Err(coded(
+            ExitCode::TrustMismatch,
+            format!(
+                "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git-veil trust {} <keyfile>",
+                repo_id, remote_name, pinned, trusted_fingerprint, repo_id
+            ),
+        )),
+        None => return Err(coded(
+            ExitCode::NoTrustPin,
+            format!(
+                "no local pin for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
+                repo_id, remote_name, repo_id
+            ),
+        )),
     }
 
     // Load signing (verifying) public key
@@ -105,12 +114,24 @@ pub fn verify_keyring_against_trust(
         let signature_b64 = extract_signature_from_keyring(&keyring_text)?;
 
         // Verify signature
-        verify_keyring_signature(&content_to_verify, &signature_b64, &verifying_key)?;
+        verify_keyring_signature(&content_to_verify, &signature_b64, &verifying_key)
+            .map_err(|_| {
+                coded(
+                    ExitCode::SignatureVerificationFailed,
+                    format!(
+                        "keyring signature verification failed for {}; the keyring or its signature does not match the pinned trusted key",
+                        repo_id
+                    ),
+                )
+            })?;
     } else if !keyring.entries.is_empty() {
-        anyhow::bail!(
-            "Keyring contains {} entries but has no signature; refusing to trust unverified keyring",
-            keyring.entries.len()
-        );
+        return Err(coded(
+            ExitCode::SignatureVerificationFailed,
+            format!(
+                "Keyring contains {} entries but has no signature; refusing to trust unverified keyring",
+                keyring.entries.len()
+            ),
+        ));
     }
 
     Ok((repo_id, trusted_fingerprint.to_string(), keyring))

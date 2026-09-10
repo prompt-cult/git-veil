@@ -4,14 +4,15 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::hide::encrypted_path_for;
 use crate::fs_atomic::write_atomic;
+use crate::key_discovery::discover_signing_key;
 use crate::{
-    create_signature_block, derive_repo_id, encrypt_to_recipient,
+    create_signature_block, encrypt_to_recipient,
     extract_content_to_verify_from_keyring, fingerprint_for_recipient,
-    get_remote_push_url, parse_recipient,
-    parse_signing_key,
+    parse_recipient,
     verify_keyring_against_trust,
-    Keyring, TrackedFiles, TrustStore,
+    Keyring, TrackedFiles,
 };
+use crate::exit_codes::{coded, ExitCode};
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
 /// signed into the keyring. It is discarded immediately and never written to
@@ -25,29 +26,16 @@ pub fn cmd_tell(
     collaborator_key_path: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    _passphrase: Option<&str>,
+    signing_key_selection: Option<&str>,
 ) -> Result<()> {
-    // Verify trust is established
-    let push_url = get_remote_push_url(repo_root, remote_name)?;
-    let repo_id = derive_repo_id(&push_url)?;
-
-    let trust_path = repo_root.join(".git-veil/trust.json");
-    let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let _trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
-        anyhow::anyhow!(
-            "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
-            repo_id,
-            remote_name,
-            repo_id
-        )
-    })?;
-
-    // Verify the existing keyring signature against the trusted key BEFORE any
-    // mutation. An unsigned keyring is only acceptable when it has zero entries
-    // (the fresh-init state); a keyring containing entries must already carry a
-    // valid signature from the trusted key, otherwise tell would launder trust
-    // by re-signing attacker-supplied content.
-    verify_keyring_against_trust(repo_root, remote_name, key_store)?;
+    // Verify trust is established AND the existing keyring signature
+    // against the trusted key BEFORE any mutation. An unsigned keyring is
+    // only acceptable when it has zero entries (the fresh-init state); a
+    // keyring containing entries must already carry a valid signature
+    // from the trusted key, otherwise tell would launder trust by
+    // re-signing attacker-supplied content.
+    let (_, trusted_fingerprint, _) =
+        verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
     // The key file contains the age recipient string on the first line.
@@ -65,7 +53,10 @@ pub fn cmd_tell(
     // encrypt, BEFORE any keyring mutation: a malformed-but-parseable key
     // must never be signed into the committed keyring. The canary is in-memory only.
     if let Err(cause) = encrypt_to_recipient(TELL_CANARY, &collaborator_recipient) {
-        anyhow::bail!("collaborator key cannot encrypt for {}: {}", email, cause);
+        return Err(coded(
+            ExitCode::EncryptionFailed,
+            format!("collaborator key cannot encrypt for {}: {}", email, cause),
+        ));
     }
 
     // Extract fingerprint from the recipient string
@@ -85,13 +76,10 @@ pub fn cmd_tell(
 
     // Find signing key: tell is run by the repo owner curating the
     // keyring, so it must sign with the TRUSTED key (the one verify_keyring
-    // checks against), never with the collaborator's key.
-    // Load the Ed25519 signing key from the key store.
-    let signing_keys_path = key_store.join("signing-keys.txt");
-    let signing_key_content = fs::read_to_string(&signing_keys_path)
-        .context("Failed to read signing-keys.txt")?;
-    let signing_key_hex = signing_key_content.lines().next().unwrap_or("").trim();
-    let signing_key = parse_signing_key(signing_key_hex)?;
+    // checks against), never with the collaborator's key. Discovery selects
+    // the signing key whose verifying key matches the pinned fingerprint;
+    // git-veil never generates one — a missing key fails with the recipe.
+    let signing_key = discover_signing_key(key_store, signing_key_selection, Some(&trusted_fingerprint))?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract (everything up to and including the END marker, excluding the

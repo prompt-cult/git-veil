@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-removeperson \- Remove a collaborator from the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil removeperson\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
+\fBgit\-veil removeperson\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
 .SH DESCRIPTION
 Remove a collaborator from the keyring and re\-sign it
 .SH OPTIONS
@@ -12,11 +12,11 @@ Remove a collaborator from the keyring and re\-sign it
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
+\fB\-\-signing\-key\fR \fI<SELECTION>\fR
+Which signing key to use: 1\-based index into signing\-keys.txt, or a 64\-hex\-character seed (default: the key matching the pinned fingerprint)
 .TP
-\fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -25,15 +25,20 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 Email of the collaborator to remove
 .SH EXTRA
 Removes a collaborator\*(Aqs entry from the keyring and re\-signs it with the
-owner\*(Aqs private key. The existing keyring signature is verified against
-the pinned trusted key before any modification. After removal the
+owner\*(Aqs Ed25519 signing key. The existing keyring signature is verified
+against the pinned trusted key before any modification. After removal the
 ex\-collaborator can no longer decrypt newly hidden files — but files
 hidden while they were a member were encrypted to their key, so rotate
 the underlying secrets if that matters.
 
-Requires init, an established trust pin (trust), and the owner\*(Aqs private
-key in the local key store (import).
+The keyring is signed with the TRUSTED key — the one whose verifying\-key
+fingerprint is pinned for this repository; \-\-signing\-key selects among
+several seeds in signing\-keys.txt by 1\-based index or full seed. A
+missing signing key exits with code 20 and the create\-and\-back\-up recipe.
+
+Requires init, an established trust pin (trust), and the signing key in
+the local key store.
 
 EXAMPLES
   $ git\-veil removeperson alice@example.com
-  $ git\-veil removeperson alice@example.com \-\-passphrase\-stdin < pass.txt
+  $ git\-veil removeperson alice@example.com \-\-signing\-key 2
