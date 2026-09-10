@@ -386,9 +386,10 @@ fn test_hide_reveal_roundtrip() {
     let plaintext = b"SECRET=value\nAPI_KEY=abc123\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
-    assert!(!fixture.repo.join(".env").exists(), "plaintext should be deleted");
+    // git-secret does NOT delete plaintext by default -- both exist
+    assert!(fixture.repo.join(".env").exists(), "plaintext should still exist");
     assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should exist");
 
     cmd_reveal(
@@ -402,7 +403,8 @@ fn test_hide_reveal_roundtrip() {
 
     let revealed = fs::read(fixture.repo.join(".env")).unwrap();
     assert_eq!(revealed, plaintext);
-    assert!(!fixture.repo.join(".env.secret").exists(), "ciphertext should be deleted");
+    // git-secret does NOT delete ciphertext on reveal -- both exist
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should still exist");
 }
 
 #[test]
@@ -414,7 +416,7 @@ fn test_hide_creates_valid_age_ciphertext() {
 
     fixture.add_file(".env", b"test data\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     // age ciphertext starts with the age header bytes
     let ciphertext = fs::read(fixture.repo.join(".env.secret")).unwrap();
@@ -428,7 +430,7 @@ fn test_hide_no_tracked_files_is_ok() {
     let fixture = TestRepo::new("hide-empty");
     fixture.add_collaborator("alice@example.com");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path)
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
         .expect("hide with no tracked files");
 }
 
@@ -457,7 +459,7 @@ fn test_hide_no_keys_fails() {
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add(&repo.path, vec![".env".to_string()]).expect("add");
 
-    let result = cmd_hide(&repo.path, "origin", &key_store.path);
+    let result = cmd_hide(&repo.path, "origin", &key_store.path, false);
     assert!(result.is_err(), "hide with no keys should fail");
 }
 
@@ -475,7 +477,7 @@ fn test_cat_decrypts_to_stdout() {
     let plaintext = b"cat me\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     let result = cmd_cat(
         &fixture.repo.path,
@@ -488,7 +490,8 @@ fn test_cat_decrypts_to_stdout() {
     .expect("cat");
 
     assert_eq!(result, plaintext);
-    assert!(!fixture.repo.join(".env").exists(), "cat should not restore plaintext");
+    // cat should not touch disk -- both plaintext and ciphertext exist
+    assert!(fixture.repo.join(".env").exists(), "cat should not delete plaintext");
     assert!(fixture.repo.join(".env.secret").exists(), "cat should not delete ciphertext");
 }
 
@@ -500,7 +503,7 @@ fn test_cat_untracked_file_fails() {
     fixture.import_identity(&collab_identity, "alice.age");
 
     fixture.add_file(".env", b"secret\n");
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     fs::write(fixture.repo.join("other.txt"), b"other\n").unwrap();
     let result = cmd_cat(
@@ -528,7 +531,7 @@ fn test_unhide_single_file() {
     fixture.add_file(".env", b"unhide me\n");
     fixture.add_file("config.yml", b"keep hidden\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     cmd_unhide(
         &fixture.repo.path,
@@ -540,9 +543,11 @@ fn test_unhide_single_file() {
     )
     .expect("unhide");
 
+    // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
     assert!(fixture.repo.join(".env").exists());
-    assert!(!fixture.repo.join(".env.secret").exists());
-    assert!(!fixture.repo.join("config.yml").exists());
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should still exist");
+    // other file still has both plaintext and ciphertext
+    assert!(fixture.repo.join("config.yml").exists());
     assert!(fixture.repo.join("config.yml.secret").exists());
 }
 
@@ -559,7 +564,7 @@ fn test_changes_detects_modification() {
 
     fixture.add_file(".env", b"ORIGINAL=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     fs::write(fixture.repo.join(".env"), b"MODIFIED=different\n").unwrap();
 
@@ -586,7 +591,7 @@ fn test_changes_no_modification() {
 
     fixture.add_file(".env", b"SAME=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     fs::write(fixture.repo.join(".env"), b"SAME=value\n").unwrap();
 
@@ -843,7 +848,7 @@ fn test_multi_recipient_hide_reveal() {
     let plaintext = b"shared secret\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     cmd_reveal(
         &fixture.repo.path,
@@ -857,8 +862,8 @@ fn test_multi_recipient_hide_reveal() {
     let revealed = fs::read(fixture.repo.join(".env")).unwrap();
     assert_eq!(revealed, plaintext);
 
-    // Re-hide for bob (reveal restored the plaintext and deleted the ciphertext)
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("re-hide");
+    // Re-hide for bob (plaintext still exists, hide does not delete it)
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("re-hide");
 
     cmd_reveal(
         &fixture.repo.path,
@@ -909,11 +914,12 @@ fn test_full_lifecycle() {
     fixture.add_file(".env", b"ENV=production\n");
     fixture.add_file("config/secrets.yml", b"api_key: abc123\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
-    assert!(!fixture.repo.join(".env").exists());
+    // git-secret does NOT delete plaintext by default -- both exist
+    assert!(fixture.repo.join(".env").exists());
     assert!(fixture.repo.join(".env.secret").exists());
-    assert!(!fixture.repo.join("config/secrets.yml").exists());
+    assert!(fixture.repo.join("config/secrets.yml").exists());
     assert!(fixture.repo.join("config/secrets.yml.secret").exists());
 
     cmd_reveal(
@@ -945,4 +951,138 @@ fn test_full_lifecycle() {
 
     cmd_clean(&fixture.repo.path, true).expect("clean");
     assert!(!fixture.repo.join(".git-veil").exists());
+}
+
+// ---------------------------------------------------------------------------
+// git-secret behavioural alignment tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_hide_does_not_delete_plaintext() {
+    let fixture = TestRepo::new("hide-keeps-plaintext");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SECRET=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+
+    assert!(fixture.repo.join(".env").exists(), "plaintext must NOT be deleted by hide");
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must exist");
+}
+
+#[test]
+fn test_hide_dangerously_delete_plaintext() {
+    let fixture = TestRepo::new("hide-dangerously-delete");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SECRET=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true)
+        .expect("hide with --dangerously-delete-plaintext");
+
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must exist");
+    assert!(!fixture.repo.join(".env").exists(), "plaintext must be deleted by --dangerously-delete-plaintext");
+}
+
+#[test]
+fn test_reveal_does_not_delete_ciphertext() {
+    let fixture = TestRepo::new("reveal-keeps-ciphertext");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SECRET=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+
+    cmd_reveal(
+        &fixture.repo.path,
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("reveal");
+
+    assert!(fixture.repo.join(".env").exists(), "plaintext must exist after reveal");
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must NOT be deleted by reveal");
+}
+
+#[test]
+fn test_unhide_does_not_delete_ciphertext() {
+    let fixture = TestRepo::new("unhide-keeps-ciphertext");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SECRET=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+
+    cmd_unhide(
+        &fixture.repo.path,
+        ".env",
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("unhide");
+
+    assert!(fixture.repo.join(".env").exists(), "plaintext must exist after unhide");
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must NOT be deleted by unhide");
+}
+
+#[test]
+fn test_add_auto_gitignores_file() {
+    let fixture = TestRepo::new("add-gitignore");
+
+    fs::write(fixture.repo.join("newsecret.txt"), b"secret\n").unwrap();
+
+    // .gitignore does NOT contain newsecret.txt yet
+    let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
+    assert!(!gitignore.contains("newsecret.txt"));
+
+    cmd_add(&fixture.repo.path, vec!["newsecret.txt".to_string()]).expect("add");
+
+    // git-secret auto-adds the file to .gitignore -- git-veil must match
+    let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
+    assert!(gitignore.contains("newsecret.txt"), "add must auto-add file to .gitignore");
+
+    // git check-ignore must confirm
+    let output = std::process::Command::new("git")
+        .current_dir(&fixture.repo.path)
+        .args(["check-ignore", "newsecret.txt"])
+        .output()
+        .expect("git check-ignore");
+    assert!(output.status.success(), "git check-ignore must confirm the file is ignored");
+}
+
+#[test]
+fn test_cat_does_not_touch_disk() {
+    let fixture = TestRepo::new("cat-no-disk");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SECRET=value\n");
+
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+
+    let _ = cmd_cat(
+        &fixture.repo.path,
+        ".env",
+        "alice@example.com",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("cat");
+
+    assert!(fixture.repo.join(".env").exists(), "plaintext must not be touched by cat");
+    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must not be touched by cat");
 }

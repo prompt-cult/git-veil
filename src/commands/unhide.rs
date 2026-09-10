@@ -94,25 +94,13 @@ pub fn cmd_unhide(
     // Decrypt
     let plaintext = decrypt_with_identity(&ciphertext, &identity)?;
 
-    // Write plaintext back to the tracked path
     if let Some(parent) = relative.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(repo_root.join(parent))?;
         }
     }
-    // Write plaintext back atomically to the tracked path BEFORE deleting
-    // the ciphertext: a crash mid-unhide leaves at worst both copies
-    // (zero loss), never neither.
     write_atomic(&repo_root.join(&relative), &plaintext)
         .with_context(|| format!("Failed to write decrypted file: {}", relative.display()))?;
-
-    // Delete the ciphertext
-    fs::remove_file(&encrypted_path).with_context(|| {
-        format!(
-            "Failed to delete encrypted file: {}",
-            encrypted_path.display()
-        )
-    })?;
 
     println!("Decrypted: {}", relative.display());
     println!("✓ File unhidden");

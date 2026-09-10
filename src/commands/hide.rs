@@ -51,7 +51,12 @@ pub(crate) fn ensure_ciphertext_beside_plaintext(
 /// Tracked paths are repo-relative (relative to `repo_root`) and are
 /// validated before any use, so a malicious committed tracked.json cannot
 /// make hide read or write outside the repository.
-pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<()> {
+pub fn cmd_hide(
+    repo_root: &Path,
+    remote_name: &str,
+    key_store: &PathBuf,
+    dangerously_delete_plaintext: bool,
+) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, key_store)?;
 
@@ -116,17 +121,10 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
         prepared.push((file.clone(), encrypted_path, ciphertext));
     }
 
-    // PHASE 2 (only reached after every encryption succeeded): write each
-    // .secret atomically, then delete each plaintext. A plaintext is deleted
-    // only AFTER its own ciphertext is durably on disk, so at worst both
-    // copies exist (zero loss), never neither. If a write fails part-way,
-    // the remaining ciphertexts are still written and only plaintexts whose
-    // ciphertext was successfully written are deleted; the summary of what
-    // was done and what was left is reported and hide exits with an error.
     let mut written: Vec<&(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     let mut first_error: Option<anyhow::Error> = None;
     for item in &prepared {
-        let (_file, encrypted_path, ciphertext) = item;
+        let (file, encrypted_path, ciphertext) = item;
         if let Some(parent) = encrypted_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -136,7 +134,10 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
                 encrypted_path.display()
             )
         }) {
-            Ok(()) => written.push(item),
+            Ok(()) => {
+                written.push(item);
+                println!("Encrypted: {}", file.display());
+            }
             Err(err) => {
                 if first_error.is_none() {
                     first_error = Some(err);
@@ -145,39 +146,25 @@ pub fn cmd_hide(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Res
         }
     }
 
-    let mut deleted: Vec<&PathBuf> = Vec::new();
-    let mut delete_error: Option<anyhow::Error> = None;
-    for (file, _encrypted_path, _ciphertext) in &written {
-        match fs::remove_file(repo_root.join(file))
-            .with_context(|| format!("Failed to delete original file: {}", file.display()))
-        {
-            Ok(()) => {
-                deleted.push(file);
-                println!("Encrypted: {}", file.display());
-            }
-            Err(err) => {
-                if delete_error.is_none() {
-                    delete_error = Some(err);
-                }
-            }
-        }
+    if let Some(err) = first_error {
+        return Err(err.context(format!(
+            "hide failed: {} of {} ciphertext(s) written",
+            written.len(),
+            prepared.len()
+        )));
     }
 
-    if let Some(err) = first_error.or(delete_error) {
-        let plaintext_left: Vec<String> = prepared
-            .iter()
-            .filter(|(file, _, _)| !deleted.contains(&file))
-            .map(|(file, _, _)| file.display().to_string())
-            .collect();
-        return Err(err.context(format!(
-            "hide failed part-way through the commit phase: {} of {} ciphertext(s) written, \
-             {} plaintext(s) deleted; plaintext(s) left as-is: {}. \
-             Re-run 'git-veil hide' once the cause is fixed.",
-            written.len(),
-            prepared.len(),
-            deleted.len(),
-            plaintext_left.join(", ")
-        )));
+    if dangerously_delete_plaintext {
+        for (file, _, _) in &prepared {
+            let plaintext_path = repo_root.join(file);
+            fs::remove_file(&plaintext_path).with_context(|| {
+                format!(
+                    "Failed to delete plaintext: {}",
+                    plaintext_path.display()
+                )
+            })?;
+            println!("Deleted plaintext: {}", file.display());
+        }
     }
 
     println!("✓ Files hidden");
