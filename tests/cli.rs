@@ -7,13 +7,11 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import,
-    cmd_init, cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson,
-    cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
-    cmd_whoami,
-    export_public_key, generate_identity, generate_signing_keypair,
-    recipient_from_identity, fingerprint_for_recipient,
-    Keyring, TrustPinStore, TrustStore, TrackedFiles,
+    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
+    cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
+    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, fingerprint_for_recipient,
+    generate_identity, generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles,
+    TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -108,8 +106,11 @@ impl TestRepo {
         let (owner_signing_key, owner_verifying_key_hex) = generate_signing_keypair();
 
         let identity_file = repo.join("owner.age");
-        fs::write(&identity_file, format!("{}\n", owner_identity.to_string().expose_secret()))
-            .expect("write identity file");
+        fs::write(
+            &identity_file,
+            format!("{}\n", owner_identity.to_string().expose_secret()),
+        )
+        .expect("write identity file");
 
         let signing_key_file = repo.join("owner.signing");
         fs::write(
@@ -175,8 +176,12 @@ impl TestRepo {
         let path = self.repo.join(filename);
         fs::write(&path, format!("{}\n", identity.to_string().expose_secret()))
             .expect("write identity file");
-        cmd_import(&self.repo.path, &[filename.to_string()], &self.key_store.path)
-            .expect("import identity");
+        cmd_import(
+            &self.repo.path,
+            &[filename.to_string()],
+            &self.key_store.path,
+        )
+        .expect("import identity");
     }
 
     /// Creates a plaintext file and tracks it.
@@ -220,11 +225,16 @@ fn test_init_refuses_reinit_with_trust() {
 
     let mut trust = TrustStore::new();
     trust.add_trust("test+user@github.com".to_string(), "abc123".to_string());
-    trust.save_to_file(&repo.join(".git-veil/trust.json")).unwrap();
+    trust
+        .save_to_file(&repo.join(".git-veil/trust.json"))
+        .unwrap();
 
     let result = cmd_init(&repo.path);
     assert!(result.is_err(), "re-init with trust should fail");
-    assert!(result.unwrap_err().to_string().contains("already initialized"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("already initialized"));
 }
 
 // ---------------------------------------------------------------------------
@@ -272,8 +282,14 @@ fn test_trust_writes_pin() {
     )
     .unwrap();
 
-    cmd_trust(&repo.path, TEST_REPO_ID, "owner.signing", "origin", &key_store.path)
-        .expect("trust");
+    cmd_trust(
+        &repo.path,
+        TEST_REPO_ID,
+        "owner.signing",
+        "origin",
+        &key_store.path,
+    )
+    .expect("trust");
 
     let pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID).unwrap();
     assert!(pin.is_some());
@@ -304,7 +320,11 @@ fn test_tell_adds_collaborator() {
 fn test_tell_canary_encrypts_before_signing() {
     let fixture = TestRepo::new("tell-canary");
 
-    fs::write(fixture.repo.join("bad.recipient"), "not-a-valid-recipient\n").unwrap();
+    fs::write(
+        fixture.repo.join("bad.recipient"),
+        "not-a-valid-recipient\n",
+    )
+    .unwrap();
 
     let result = cmd_tell(
         &fixture.repo.path,
@@ -388,8 +408,14 @@ fn test_hide_reveal_roundtrip() {
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
     // git-secret does NOT delete plaintext by default -- both exist
-    assert!(fixture.repo.join(".env").exists(), "plaintext should still exist");
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should exist");
+    assert!(
+        fixture.repo.join(".env").exists(),
+        "plaintext should still exist"
+    );
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext should exist"
+    );
 
     cmd_reveal(
         &fixture.repo.path,
@@ -402,7 +428,10 @@ fn test_hide_reveal_roundtrip() {
     let revealed = fs::read(fixture.repo.join(".env")).unwrap();
     assert_eq!(revealed, plaintext);
     // git-secret does NOT delete ciphertext on reveal -- both exist
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should still exist");
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext should still exist"
+    );
 }
 
 #[test]
@@ -420,7 +449,10 @@ fn test_hide_creates_valid_age_ciphertext() {
     let ciphertext = fs::read(fixture.repo.join(".env.secret")).unwrap();
     assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
     // age binary format starts with "age-encryption.org/v1"
-    assert!(ciphertext.starts_with(b"age-encryption.org"), "should be age format");
+    assert!(
+        ciphertext.starts_with(b"age-encryption.org"),
+        "should be age format"
+    );
 }
 
 #[test]
@@ -442,8 +474,16 @@ fn test_hide_no_keys_fails() {
     let recipient = recipient_from_identity(&identity);
     let (signing_key, verifying_hex) = generate_signing_keypair();
 
-    fs::write(repo.join("owner.age"), format!("{}\n", identity.to_string().expose_secret())).unwrap();
-    fs::write(repo.join("owner.signing"), format!("{}\n{}\n", verifying_hex, recipient)).unwrap();
+    fs::write(
+        repo.join("owner.age"),
+        format!("{}\n", identity.to_string().expose_secret()),
+    )
+    .unwrap();
+    fs::write(
+        repo.join("owner.signing"),
+        format!("{}\n{}\n", verifying_hex, recipient),
+    )
+    .unwrap();
     fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
@@ -452,7 +492,14 @@ fn test_hide_no_keys_fails() {
 
     cmd_init(&repo.path).expect("init");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-    cmd_trust(&repo.path, TEST_REPO_ID, "owner.signing", "origin", &key_store.path).expect("trust");
+    cmd_trust(
+        &repo.path,
+        TEST_REPO_ID,
+        "owner.signing",
+        "origin",
+        &key_store.path,
+    )
+    .expect("trust");
 
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add(&repo.path, vec![".env".to_string()]).expect("add");
@@ -488,8 +535,14 @@ fn test_cat_decrypts_to_stdout() {
 
     assert_eq!(result, plaintext);
     // cat should not touch disk -- both plaintext and ciphertext exist
-    assert!(fixture.repo.join(".env").exists(), "cat should not delete plaintext");
-    assert!(fixture.repo.join(".env.secret").exists(), "cat should not delete ciphertext");
+    assert!(
+        fixture.repo.join(".env").exists(),
+        "cat should not delete plaintext"
+    );
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "cat should not delete ciphertext"
+    );
 }
 
 #[test]
@@ -540,7 +593,10 @@ fn test_unhide_single_file() {
 
     // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
     assert!(fixture.repo.join(".env").exists());
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext should still exist");
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext should still exist"
+    );
     // other file still has both plaintext and ciphertext
     assert!(fixture.repo.join("config.yml").exists());
     assert!(fixture.repo.join("config.yml.secret").exists());
@@ -679,8 +735,7 @@ fn test_list_keys_succeeds() {
     fixture.add_collaborator("alice@example.com");
     fixture.add_collaborator("bob@example.com");
 
-    cmd_list_keys(&fixture.repo.path, "origin", &fixture.key_store.path)
-        .expect("list-keys");
+    cmd_list_keys(&fixture.repo.path, "origin", &fixture.key_store.path).expect("list-keys");
 }
 
 // ---------------------------------------------------------------------------
@@ -776,8 +831,8 @@ fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
 
     // Corrupt the store: a truncated identity line the tool cannot parse
     let identities_path = fixture.key_store.path.join("identities.txt");
-    let corrupt = fs::read_to_string(&identities_path).unwrap()
-        + "AGE-SECRET-KEY-1TRUNCATEDGARBAGE\n";
+    let corrupt =
+        fs::read_to_string(&identities_path).unwrap() + "AGE-SECRET-KEY-1TRUNCATEDGARBAGE\n";
     fs::write(&identities_path, &corrupt).unwrap();
 
     // Removing any key must refuse, exit 62, and name the corrupt line
@@ -990,7 +1045,10 @@ fn test_full_lifecycle() {
     )
     .expect("reveal");
 
-    assert_eq!(fs::read(fixture.repo.join(".env")).unwrap(), b"ENV=production\n");
+    assert_eq!(
+        fs::read(fixture.repo.join(".env")).unwrap(),
+        b"ENV=production\n"
+    );
     assert_eq!(
         fs::read(fixture.repo.join("config/secrets.yml")).unwrap(),
         b"api_key: abc123\n"
@@ -1027,8 +1085,14 @@ fn test_hide_does_not_delete_plaintext() {
 
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
 
-    assert!(fixture.repo.join(".env").exists(), "plaintext must NOT be deleted by hide");
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must exist");
+    assert!(
+        fixture.repo.join(".env").exists(),
+        "plaintext must NOT be deleted by hide"
+    );
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext must exist"
+    );
 }
 
 #[test]
@@ -1043,8 +1107,14 @@ fn test_hide_dangerously_delete_plaintext() {
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true)
         .expect("hide with --dangerously-delete-plaintext");
 
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must exist");
-    assert!(!fixture.repo.join(".env").exists(), "plaintext must be deleted by --dangerously-delete-plaintext");
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext must exist"
+    );
+    assert!(
+        !fixture.repo.join(".env").exists(),
+        "plaintext must be deleted by --dangerously-delete-plaintext"
+    );
 }
 
 #[test]
@@ -1066,8 +1136,14 @@ fn test_reveal_does_not_delete_ciphertext() {
     )
     .expect("reveal");
 
-    assert!(fixture.repo.join(".env").exists(), "plaintext must exist after reveal");
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must NOT be deleted by reveal");
+    assert!(
+        fixture.repo.join(".env").exists(),
+        "plaintext must exist after reveal"
+    );
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext must NOT be deleted by reveal"
+    );
 }
 
 #[test]
@@ -1090,8 +1166,14 @@ fn test_unhide_does_not_delete_ciphertext() {
     )
     .expect("unhide");
 
-    assert!(fixture.repo.join(".env").exists(), "plaintext must exist after unhide");
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must NOT be deleted by unhide");
+    assert!(
+        fixture.repo.join(".env").exists(),
+        "plaintext must exist after unhide"
+    );
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext must NOT be deleted by unhide"
+    );
 }
 
 #[test]
@@ -1108,7 +1190,10 @@ fn test_add_auto_gitignores_file() {
 
     // git-secret auto-adds the file to .gitignore -- git-veil must match
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
-    assert!(gitignore.contains("newsecret.txt"), "add must auto-add file to .gitignore");
+    assert!(
+        gitignore.contains("newsecret.txt"),
+        "add must auto-add file to .gitignore"
+    );
 
     // git check-ignore must confirm
     let output = std::process::Command::new("git")
@@ -1116,7 +1201,10 @@ fn test_add_auto_gitignores_file() {
         .args(["check-ignore", "newsecret.txt"])
         .output()
         .expect("git check-ignore");
-    assert!(output.status.success(), "git check-ignore must confirm the file is ignored");
+    assert!(
+        output.status.success(),
+        "git check-ignore must confirm the file is ignored"
+    );
 }
 
 #[test]
@@ -1139,6 +1227,12 @@ fn test_cat_does_not_touch_disk() {
     )
     .expect("cat");
 
-    assert!(fixture.repo.join(".env").exists(), "plaintext must not be touched by cat");
-    assert!(fixture.repo.join(".env.secret").exists(), "ciphertext must not be touched by cat");
+    assert!(
+        fixture.repo.join(".env").exists(),
+        "plaintext must not be touched by cat"
+    );
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext must not be touched by cat"
+    );
 }

@@ -3,10 +3,8 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_hide, cmd_import, cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring,
-    generate_identity, generate_signing_keypair,
-    recipient_from_identity,
-    TrustPinStore, TrustStore,
+    cmd_hide, cmd_import, cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring, generate_identity,
+    generate_signing_keypair, recipient_from_identity, TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::Path;
@@ -19,7 +17,8 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let pid = std::process::id();
         let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("git-veil-trust-{}-{}-{}", label, pid, counter));
+        let dir =
+            std::env::temp_dir().join(format!("git-veil-trust-{}-{}-{}", label, pid, counter));
         fs::create_dir_all(&dir).expect("create temp dir");
         Self { path: dir }
     }
@@ -60,8 +59,16 @@ fn setup_trust(repo: &TempDir, key_store: &TempDir) -> (ed25519_dalek::SigningKe
     let recipient = recipient_from_identity(&identity);
     let (signing_key, verifying_hex) = generate_signing_keypair();
 
-    fs::write(repo.join("owner.age"), format!("{}\n", identity.to_string().expose_secret())).unwrap();
-    fs::write(repo.join("owner.signing"), format!("{}\n{}\n", verifying_hex, recipient)).unwrap();
+    fs::write(
+        repo.join("owner.age"),
+        format!("{}\n", identity.to_string().expose_secret()),
+    )
+    .unwrap();
+    fs::write(
+        repo.join("owner.signing"),
+        format!("{}\n{}\n", verifying_hex, recipient),
+    )
+    .unwrap();
     fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
@@ -70,7 +77,14 @@ fn setup_trust(repo: &TempDir, key_store: &TempDir) -> (ed25519_dalek::SigningKe
 
     cmd_init(&repo.path).expect("init");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-    cmd_trust(&repo.path, TEST_REPO_ID, "owner.signing", "origin", &key_store.path).expect("trust");
+    cmd_trust(
+        &repo.path,
+        TEST_REPO_ID,
+        "owner.signing",
+        "origin",
+        &key_store.path,
+    )
+    .expect("trust");
 
     (signing_key, verifying_hex)
 }
@@ -89,7 +103,9 @@ fn test_no_pin_fails_closed() {
     // Write trust.json with an entry but no local pin
     let mut trust = TrustStore::new();
     trust.add_trust(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
-    trust.save_to_file(&repo.join(".git-veil/trust.json")).unwrap();
+    trust
+        .save_to_file(&repo.join(".git-veil/trust.json"))
+        .unwrap();
 
     let result = cmd_verify_keyring(&repo.path, "origin", &key_store.path);
     assert!(result.is_err(), "should fail without local pin");
@@ -143,24 +159,38 @@ fn test_retrust_replaces_pin() {
 
     setup_trust(&repo, &key_store);
 
-    let old_pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID).unwrap().unwrap();
+    let old_pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .unwrap();
 
     // Generate a new signing key and re-trust
     let identity = generate_identity();
     let recipient = recipient_from_identity(&identity);
     let (new_signing_key, new_verifying_hex) = generate_signing_keypair();
 
-    fs::write(repo.join("owner2.signing"), format!("{}\n{}\n", new_verifying_hex, recipient)).unwrap();
+    fs::write(
+        repo.join("owner2.signing"),
+        format!("{}\n{}\n", new_verifying_hex, recipient),
+    )
+    .unwrap();
     fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(new_signing_key.to_bytes())),
     )
     .unwrap();
 
-    cmd_trust(&repo.path, TEST_REPO_ID, "owner2.signing", "origin", &key_store.path)
-        .expect("re-trust");
+    cmd_trust(
+        &repo.path,
+        TEST_REPO_ID,
+        "owner2.signing",
+        "origin",
+        &key_store.path,
+    )
+    .expect("re-trust");
 
-    let new_pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID).unwrap().unwrap();
+    let new_pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .unwrap();
     assert_ne!(old_pin, new_pin, "pin should be replaced");
 
     cmd_verify_keyring(&repo.path, "origin", &key_store.path).expect("should succeed with new pin");
@@ -241,6 +271,5 @@ fn test_empty_keyring_no_signature_ok() {
     setup_trust(&repo, &key_store);
 
     // Fresh keyring has no entries and no signature - should verify OK
-    cmd_verify_keyring(&repo.path, "origin", &key_store.path)
-        .expect("empty keyring should verify");
+    cmd_verify_keyring(&repo.path, "origin", &key_store.path).expect("empty keyring should verify");
 }

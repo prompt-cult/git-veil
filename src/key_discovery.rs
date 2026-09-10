@@ -51,8 +51,8 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
     let mut keys = Vec::new();
     for_each_store_line(&path, &content, |_, line| {
         keys.push(parse_signing_key(line)?);
@@ -91,10 +91,13 @@ pub fn discover_signing_key(
         if index == 0 {
             anyhow::bail!("--signing-key index is 1-based; got 0");
         }
-        return keys
-            .get(index - 1)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("signing-keys.txt holds {} key(s); no key at index {}", keys.len(), index));
+        return keys.get(index - 1).cloned().ok_or_else(|| {
+            anyhow::anyhow!(
+                "signing-keys.txt holds {} key(s); no key at index {}",
+                keys.len(),
+                index
+            )
+        });
     }
 
     if keys.is_empty() {
@@ -142,10 +145,7 @@ pub fn discover_signing_key(
 /// A corrupt identities.txt is NOT reported as a missing identity: the
 /// store loader's coded refusal (code 62, naming the corrupt line) passes
 /// through unchanged.
-pub fn discover_identity(
-    key_store: &Path,
-    recipient_str: &str,
-) -> Result<age::x25519::Identity> {
+pub fn discover_identity(key_store: &Path, recipient_str: &str) -> Result<age::x25519::Identity> {
     let key_store = key_store.to_path_buf();
     find_identity_by_recipient(&key_store, recipient_str).map_err(|err| {
         if exit_code_of(&err) != ExitCode::GeneralError as i32 {

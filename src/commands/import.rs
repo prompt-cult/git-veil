@@ -3,10 +3,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::fs_atomic::write_atomic_mode;
 use crate::age_crypto::{
     fingerprint_for_recipient, for_each_store_line, parse_identity, recipient_from_identity,
 };
+use crate::fs_atomic::write_atomic_mode;
 
 /// Imports age identity strings from one or more files into the
 /// tool-owned key store (<key_store>/identities.txt).

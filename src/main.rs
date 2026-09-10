@@ -4,12 +4,13 @@ use std::path::PathBuf;
 use std::process::ExitCode as StdExitCode;
 
 use git_veil::{
+    check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_hide, cmd_import, cmd_init,
-    cmd_list, cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal,
-    cmd_show_repo_id, cmd_tell, cmd_trust, cmd_trust_permissions, cmd_unhide,
-    cmd_verify_keyring, cmd_whoami, check_key_store_permissions, default_key_store,
-    exit_code_of, get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
+    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_list,
+    cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id,
+    cmd_tell, cmd_trust, cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami,
+    default_key_store, exit_code_of, get_git_config_email, permissions_check_bypassed_from_env,
+    ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -33,10 +34,7 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 /// material is read (gpg checks ~/.gnupg the same way). Bypassed by the
 /// global --dangerously-skip-permissions-check flag or a truthy
 /// GIT_VEIL_SKIP_PERMISSIONS.
-fn resolve_key_store(
-    key_store: Option<PathBuf>,
-    skip_permissions_check: bool,
-) -> Result<PathBuf> {
+fn resolve_key_store(key_store: Option<PathBuf>, skip_permissions_check: bool) -> Result<PathBuf> {
     let store = key_store.map(Ok).unwrap_or_else(default_key_store)?;
     check_key_store_permissions(&store, skip_permissions_check)?;
     Ok(store)
@@ -85,8 +83,8 @@ fn run() -> Result<()> {
     }
 
     let cli = Cli::parse();
-    let skip_permissions_check = cli.dangerously_skip_permissions_check
-        || permissions_check_bypassed_from_env();
+    let skip_permissions_check =
+        cli.dangerously_skip_permissions_check || permissions_check_bypassed_from_env();
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
@@ -95,21 +93,33 @@ fn run() -> Result<()> {
             files,
             key_store: opt,
         } => {
-            cmd_import(&repo_root, &files, &resolve_key_store(opt, skip_permissions_check)?)?;
+            cmd_import(
+                &repo_root,
+                &files,
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::Export {
             identifier,
             output,
             key_store: opt,
         } => {
-            cmd_export(&resolve_key_store(opt, skip_permissions_check)?, &identifier, output.as_deref())?;
+            cmd_export(
+                &resolve_key_store(opt, skip_permissions_check)?,
+                &identifier,
+                output.as_deref(),
+            )?;
         }
         Commands::RemoveKey {
             identifier,
             yes,
             key_store: opt,
         } => {
-            cmd_removekey(&resolve_key_store(opt, skip_permissions_check)?, &identifier, yes)?;
+            cmd_removekey(
+                &resolve_key_store(opt, skip_permissions_check)?,
+                &identifier,
+                yes,
+            )?;
         }
         Commands::Trust {
             repo_id,
@@ -163,7 +173,12 @@ fn run() -> Result<()> {
             key_store: opt,
             dangerously_delete_plaintext,
         } => {
-            cmd_hide(&repo_root, &remote, &resolve_key_store(opt, skip_permissions_check)?, dangerously_delete_plaintext)?;
+            cmd_hide(
+                &repo_root,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+                dangerously_delete_plaintext,
+            )?;
         }
         Commands::Reveal {
             email,
@@ -228,19 +243,31 @@ fn run() -> Result<()> {
             email,
             key_store: opt,
         } => {
-            cmd_whoami(&repo_root, email.as_deref(), &resolve_key_store(opt, skip_permissions_check)?)?;
+            cmd_whoami(
+                &repo_root,
+                email.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::VerifyKeyring {
             remote,
             key_store: opt,
         } => {
-            cmd_verify_keyring(&repo_root, &remote, &resolve_key_store(opt, skip_permissions_check)?)?;
+            cmd_verify_keyring(
+                &repo_root,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::ListKeys {
             remote,
             key_store: opt,
         } => {
-            cmd_list_keys(&repo_root, &remote, &resolve_key_store(opt, skip_permissions_check)?)?;
+            cmd_list_keys(
+                &repo_root,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::TrustPermissions { key_store: opt } => {
             // Deliberately resolved WITHOUT the permission gate: this is the

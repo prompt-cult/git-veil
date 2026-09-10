@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::{Keyring, TrackedFiles, TrustStore};
-use crate::exit_codes::{coded, ExitCode};
 
 /// Initialises a new git-veil repository structure under `repo_root`.
 ///

@@ -2,12 +2,11 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{
-    derive_repo_id, fingerprint_for_verifying_key, get_remote_push_url,
-    import_recipient_to_store, parse_verifying_key,
-    TrustPinStore, TrustStore,
-};
 use crate::exit_codes::{coded, ExitCode};
+use crate::{
+    derive_repo_id, fingerprint_for_verifying_key, get_remote_push_url, import_recipient_to_store,
+    parse_verifying_key, TrustPinStore, TrustStore,
+};
 
 /// Establishes trust for a repository by verifying the owner's signing key.
 ///
@@ -99,10 +98,7 @@ pub fn cmd_trust(
     TrustPinStore::write_pin(key_store, repo_id, &fingerprint)
         .context("Failed to write local trust pin")?;
 
-    println!(
-        "Trusted key for {} (fingerprint: {})",
-        repo_id, fingerprint
-    );
+    println!("Trusted key for {} (fingerprint: {})", repo_id, fingerprint);
     println!("Pinned {} for {} on this machine", fingerprint, repo_id);
     Ok(())
 }

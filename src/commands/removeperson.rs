@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::discover_signing_key;
 use crate::{
-    create_signature_block, extract_content_to_verify_from_keyring,
-    verify_keyring_against_trust, Keyring,
+    create_signature_block, extract_content_to_verify_from_keyring, verify_keyring_against_trust,
+    Keyring,
 };
-use crate::exit_codes::{coded, ExitCode};
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
 pub fn cmd_removeperson(
@@ -54,7 +54,8 @@ pub fn cmd_removeperson(
     // like tell does, so it must sign with the key verify_keyring checks
     // against, never with any collaborator's key. Discovery selects the
     // signing key whose verifying key matches the pinned fingerprint.
-    let signing_key = discover_signing_key(key_store, signing_key_selection, Some(&trusted_fingerprint))?;
+    let signing_key =
+        discover_signing_key(key_store, signing_key_selection, Some(&trusted_fingerprint))?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of

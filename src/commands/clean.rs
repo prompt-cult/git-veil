@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::commands::hide::encrypted_path_for;
-use crate::{TrackedFiles, ExitCode, coded};
+use crate::{coded, ExitCode, TrackedFiles};
 
 /// Removes the .git-veil internal state directory.
 ///

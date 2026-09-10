@@ -22,10 +22,7 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let pid = std::process::id();
         let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "git-veil-perm-{}-{}-{}",
-            label, pid, counter
-        ));
+        let dir = std::env::temp_dir().join(format!("git-veil-perm-{}-{}-{}", label, pid, counter));
         fs::create_dir_all(&dir).expect("create temp dir");
         Self { path: dir }
     }
@@ -101,11 +98,7 @@ fn test_world_readable_identity_fails_with_code_30() {
     };
     ks.set_mode(0o700);
     fs::write(ks.join("identities.txt"), "AGE-SECRET-KEY-1TEST\n").unwrap();
-    fs::set_permissions(
-        ks.join("identities.txt"),
-        fs::Permissions::from_mode(0o644),
-    )
-    .unwrap();
+    fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o644)).unwrap();
     let code = code_of(check_key_store_permissions(&ks.path, false).unwrap_err());
     assert_eq!(code, ExitCode::UnsafeKeyStorePermissions as i32);
 }
@@ -119,8 +112,7 @@ fn test_acknowledgment_unblocks_then_mode_change_refails() {
     };
     ks.set_mode(0o700);
     fs::write(ks.join("identities.txt"), "AGE-SECRET-KEY-1TEST\n").unwrap();
-    fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o644))
-        .unwrap();
+    fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o644)).unwrap();
 
     // Refuses before acknowledgment
     let code = code_of(check_key_store_permissions(&ks.path, false).unwrap_err());
@@ -140,20 +132,12 @@ fn test_acknowledgment_unblocks_then_mode_change_refails() {
 
     // A LATER change to anything else fails again — the ack pins the exact
     // (path, mode) pair.
-    fs::set_permissions(
-        ks.join("identities.txt"),
-        fs::Permissions::from_mode(0o640),
-    )
-    .unwrap();
+    fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o640)).unwrap();
     let code = code_of(check_key_store_permissions(&ks.path, false).unwrap_err());
     assert_eq!(code, ExitCode::UnsafeKeyStorePermissions as i32);
 
     // Restoring the acknowledged mode passes again
-    fs::set_permissions(
-        ks.join("identities.txt"),
-        fs::Permissions::from_mode(0o644),
-    )
-    .unwrap();
+    fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o644)).unwrap();
     check_key_store_permissions(&ks.path, false).expect("restored acknowledged mode passes");
 }
 

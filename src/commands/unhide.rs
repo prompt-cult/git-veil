@@ -3,13 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
-use crate::{
-    decrypt_with_identity, verify_keyring_against_trust, TrackedFiles,
-};
-use crate::exit_codes::{coded, ExitCode};
+use crate::{decrypt_with_identity, verify_keyring_against_trust, TrackedFiles};
 
 /// Unhides a single tracked file: decrypts its in-place `<name>.secret`
 /// ciphertext back to the tracked plaintext path, leaving the ciphertext

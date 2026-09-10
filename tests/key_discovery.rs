@@ -18,10 +18,7 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let pid = std::process::id();
         let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "git-veil-disc-{}-{}-{}",
-            label, pid, counter
-        ));
+        let dir = std::env::temp_dir().join(format!("git-veil-disc-{}-{}-{}", label, pid, counter));
         fs::create_dir_all(&dir).expect("create temp dir");
         Self { path: dir }
     }
@@ -45,10 +42,7 @@ fn code_of(err: anyhow::Error) -> i32 {
 fn write_signing_keys(store: &TempDir, seeds: &[String]) {
     fs::write(
         store.join("signing-keys.txt"),
-        seeds
-            .iter()
-            .map(|s| format!("{}\n", s))
-            .collect::<String>(),
+        seeds.iter().map(|s| format!("{}\n", s)).collect::<String>(),
     )
     .unwrap();
 }
@@ -59,8 +53,14 @@ fn test_missing_signing_key_fails_with_code_20_and_recipe() {
     let err = discover_signing_key(&store.path, None, None).unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), 20);
-    assert!(message.contains("openssl genpkey"), "recipe printed: {message}");
-    assert!(message.contains("signing-keys.txt"), "store path in message: {message}");
+    assert!(
+        message.contains("openssl genpkey"),
+        "recipe printed: {message}"
+    );
+    assert!(
+        message.contains("signing-keys.txt"),
+        "store path in message: {message}"
+    );
     assert!(
         message.to_lowercase().contains("back it up"),
         "backup instruction: {message}"
@@ -107,13 +107,11 @@ fn test_pinned_fingerprint_selects_the_trusted_key() {
     );
 
     let pinned = fingerprint_for_verifying_key(&second.verifying_key());
-    let selected =
-        discover_signing_key(&store.path, None, Some(&pinned)).unwrap();
+    let selected = discover_signing_key(&store.path, None, Some(&pinned)).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 
     // A pin no stored key matches: code 20, never a wrong-key signature
-    let err = discover_signing_key(&store.path, None, Some(&"0".repeat(64)))
-        .unwrap_err();
+    let err = discover_signing_key(&store.path, None, Some(&"0".repeat(64))).unwrap_err();
     assert_eq!(code_of(err), 20);
 }
 
@@ -131,8 +129,8 @@ fn test_explicit_signing_key_selection_by_index_and_seed() {
     assert_eq!(by_index.to_bytes(), second.to_bytes());
 
     // Full seed (case-insensitive hex)
-    let by_seed = discover_signing_key(&store.path, Some(&second_hex.to_uppercase()), None)
-        .unwrap();
+    let by_seed =
+        discover_signing_key(&store.path, Some(&second_hex.to_uppercase()), None).unwrap();
     assert_eq!(by_seed.to_bytes(), second.to_bytes());
 
     // Out-of-range index fails without falling back to a default
@@ -165,10 +163,7 @@ fn test_missing_identity_fails_with_code_21_and_recipe() {
         Err(err) => err,
     };
     let message = format!("{:#}", err);
-    assert_eq!(
-        code_of(err),
-        ExitCode::NoAgeIdentity as i32
-    );
+    assert_eq!(code_of(err), ExitCode::NoAgeIdentity as i32);
     assert!(message.contains("age-keygen"), "recipe printed: {message}");
     assert!(message.contains("import"), "import step printed: {message}");
     assert!(

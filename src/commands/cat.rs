@@ -4,12 +4,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::exit_codes::{coded, ExitCode};
 use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
-use crate::{
-    decrypt_with_identity, verify_keyring_against_trust, TrackedFiles,
-};
-use crate::exit_codes::{coded, ExitCode};
+use crate::{decrypt_with_identity, verify_keyring_against_trust, TrackedFiles};
 
 /// Decrypts a single tracked file to stdout without touching disk state.
 ///

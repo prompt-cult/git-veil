@@ -66,8 +66,7 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
 fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
     if !is_gitignored(repo_root, relative_path)? {
         let gitignore_path = repo_root.join(".gitignore");
-        let mut content = std::fs::read_to_string(&gitignore_path)
-            .unwrap_or_default();
+        let mut content = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
         if !content.ends_with('\n') && !content.is_empty() {
             content.push('\n');
         }

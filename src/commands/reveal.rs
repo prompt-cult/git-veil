@@ -3,13 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{
-    cmd_verify_keyring, decrypt_with_identity, Keyring, TrackedFiles,
-};
-use crate::exit_codes::{coded, ExitCode};
+use crate::{cmd_verify_keyring, decrypt_with_identity, Keyring, TrackedFiles};
 
 /// Decrypts all tracked files using the user's private key.
 ///

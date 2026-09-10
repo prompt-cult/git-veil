@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
-use age::{Decryptor, Encryptor};
 use age::x25519::{Identity, Recipient};
+use age::{Decryptor, Encryptor};
+use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Read, Write};
@@ -73,23 +73,27 @@ pub fn default_key_store() -> Result<PathBuf> {
                 .filter(|s| !s.is_empty())
                 .map(|home| PathBuf::from(home).join(".git-veil"))
         })
-        .ok_or_else(|| anyhow::anyhow!(
-            "Neither GIT_VEIL_HOME nor HOME is set; pass --key-store"
-        ))
+        .ok_or_else(|| anyhow::anyhow!("Neither GIT_VEIL_HOME nor HOME is set; pass --key-store"))
 }
 
 /// Parses an age recipient string (`age1...`) into a Recipient.
 pub fn parse_recipient(s: &str) -> Result<Recipient> {
-    s.trim()
-        .parse::<Recipient>()
-        .map_err(|e| coded(ExitCode::KeyParseFailure, format!("Failed to parse age recipient: {}", e)))
+    s.trim().parse::<Recipient>().map_err(|e| {
+        coded(
+            ExitCode::KeyParseFailure,
+            format!("Failed to parse age recipient: {}", e),
+        )
+    })
 }
 
 /// Parses an age identity string (`AGE-SECRET-KEY-1...`) into an Identity.
 pub fn parse_identity(s: &str) -> Result<Identity> {
-    s.trim()
-        .parse::<Identity>()
-        .map_err(|e| coded(ExitCode::KeyParseFailure, format!("Failed to parse age identity: {}", e)))
+    s.trim().parse::<Identity>().map_err(|e| {
+        coded(
+            ExitCode::KeyParseFailure,
+            format!("Failed to parse age identity: {}", e),
+        )
+    })
 }
 
 /// Returns the recipient string for a given identity (public key).
@@ -124,11 +128,14 @@ pub fn encrypt_to_recipients(plaintext: &[u8], recipients: &[Recipient]) -> Resu
         .context("Failed to create age encryptor (no recipients?)")?;
 
     let mut encrypted = Vec::new();
-    let mut writer = encryptor.wrap_output(&mut encrypted)
+    let mut writer = encryptor
+        .wrap_output(&mut encrypted)
         .context("Failed to create age encryptor")?;
-    writer.write_all(plaintext)
+    writer
+        .write_all(plaintext)
         .context("Failed to write plaintext to age encryptor")?;
-    writer.finish()
+    writer
+        .finish()
         .context("Failed to finalize age encryption")?;
 
     Ok(encrypted)
@@ -141,8 +148,7 @@ pub fn encrypt_to_recipient(plaintext: &[u8], recipient: &Recipient) -> Result<V
 
 /// Decrypts age ciphertext using an identity.
 pub fn decrypt_with_identity(ciphertext: &[u8], identity: &Identity) -> Result<Vec<u8>> {
-    let decryptor = Decryptor::new(ciphertext)
-        .context("Failed to parse age ciphertext")?;
+    let decryptor = Decryptor::new(ciphertext).context("Failed to parse age ciphertext")?;
 
     let mut decrypted = Vec::new();
     let mut reader = decryptor.decrypt(std::iter::once(identity as &dyn age::Identity))
@@ -150,7 +156,8 @@ pub fn decrypt_with_identity(ciphertext: &[u8], identity: &Identity) -> Result<V
             ExitCode::DecryptionFailed,
             "decryption failed: this ciphertext was not encrypted to your key (it is not a listed recipient)"
         ))?;
-    reader.read_to_end(&mut decrypted)
+    reader
+        .read_to_end(&mut decrypted)
         .context("Failed to extract plaintext")?;
 
     Ok(decrypted)
@@ -213,8 +220,8 @@ pub fn load_identities_from_store(key_store: &Path) -> Result<Vec<(Identity, Str
     let mut result = Vec::new();
 
     if identities_path.exists() {
-        let content = fs::read_to_string(&identities_path)
-            .context("Failed to read identities.txt")?;
+        let content =
+            fs::read_to_string(&identities_path).context("Failed to read identities.txt")?;
         for_each_store_line(&identities_path, &content, |_, line| {
             let identity = parse_identity(line)?;
             let recipient = recipient_from_identity(&identity);
@@ -236,8 +243,8 @@ pub fn load_recipients_from_store(key_store: &Path) -> Result<Vec<(Recipient, St
     let mut seen = HashSet::new();
 
     if recipients_path.exists() {
-        let content = fs::read_to_string(&recipients_path)
-            .context("Failed to read recipients.txt")?;
+        let content =
+            fs::read_to_string(&recipients_path).context("Failed to read recipients.txt")?;
         for_each_store_line(&recipients_path, &content, |_, line| {
             let recipient = parse_recipient(line)?;
             if seen.insert(line.to_string()) {
@@ -250,8 +257,8 @@ pub fn load_recipients_from_store(key_store: &Path) -> Result<Vec<(Recipient, St
     // Also derive recipients from imported identities
     let identities_path = key_store.join("identities.txt");
     if identities_path.exists() {
-        let content = fs::read_to_string(&identities_path)
-            .context("Failed to read identities.txt")?;
+        let content =
+            fs::read_to_string(&identities_path).context("Failed to read identities.txt")?;
         for_each_store_line(&identities_path, &content, |_, line| {
             let identity = parse_identity(line)?;
             let recipient_str = recipient_from_identity(&identity);

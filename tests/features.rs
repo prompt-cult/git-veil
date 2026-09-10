@@ -3,11 +3,9 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal,
-    cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring, exit_code_of,
-    generate_identity, generate_signing_keypair,
-    recipient_from_identity,
-    Keyring,
+    cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
+    cmd_unhide, cmd_verify_keyring, exit_code_of, generate_identity, generate_signing_keypair,
+    recipient_from_identity, Keyring,
 };
 use std::fs;
 use std::path::Path;
@@ -74,8 +72,16 @@ impl Fixture {
         let recipient = recipient_from_identity(&identity);
         let (signing_key, verifying_hex) = generate_signing_keypair();
 
-        fs::write(repo.join("owner.age"), format!("{}\n", identity.to_string().expose_secret())).unwrap();
-        fs::write(repo.join("owner.signing"), format!("{}\n{}\n", verifying_hex, recipient)).unwrap();
+        fs::write(
+            repo.join("owner.age"),
+            format!("{}\n", identity.to_string().expose_secret()),
+        )
+        .unwrap();
+        fs::write(
+            repo.join("owner.signing"),
+            format!("{}\n{}\n", verifying_hex, recipient),
+        )
+        .unwrap();
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
@@ -84,7 +90,14 @@ impl Fixture {
 
         cmd_init(&repo.path).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "owner.signing", "origin", &key_store.path).expect("trust");
+        cmd_trust(
+            &repo.path,
+            TEST_REPO_ID,
+            "owner.signing",
+            "origin",
+            &key_store.path,
+        )
+        .expect("trust");
 
         Self { repo, key_store }
     }
@@ -94,12 +107,24 @@ impl Fixture {
         let r = recipient_from_identity(&id);
         let fname = format!("{}.recipient", email);
         fs::write(self.repo.join(&fname), &r).unwrap();
-        cmd_tell(&self.repo.path, email, &fname, "origin", &self.key_store.path, None).expect("tell");
+        cmd_tell(
+            &self.repo.path,
+            email,
+            &fname,
+            "origin",
+            &self.key_store.path,
+            None,
+        )
+        .expect("tell");
         id
     }
 
     fn import_id(&self, id: &age::x25519::Identity, fname: &str) {
-        fs::write(self.repo.join(fname), format!("{}\n", id.to_string().expose_secret())).unwrap();
+        fs::write(
+            self.repo.join(fname),
+            format!("{}\n", id.to_string().expose_secret()),
+        )
+        .unwrap();
         cmd_import(&self.repo.path, &[fname.to_string()], &self.key_store.path).expect("import");
     }
 
@@ -131,11 +156,20 @@ fn test_hide_all_or_nothing_missing_plaintext() {
     fs::remove_file(f.repo.join(".env")).unwrap();
 
     let result = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false);
-    assert!(result.is_err(), "hide should abort when a plaintext is missing");
+    assert!(
+        result.is_err(),
+        "hide should abort when a plaintext is missing"
+    );
 
     // The other file should NOT be encrypted (all-or-nothing)
-    assert!(f.repo.join("config.yml").exists(), "config.yml should still be plaintext");
-    assert!(!f.repo.join("config.yml.secret").exists(), "config.yml should not be encrypted");
+    assert!(
+        f.repo.join("config.yml").exists(),
+        "config.yml should still be plaintext"
+    );
+    assert!(
+        !f.repo.join("config.yml.secret").exists(),
+        "config.yml should not be encrypted"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -161,14 +195,23 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
         &f.repo.path,
         "alice@example.com",
         "origin",
-        &f.key_store.path
+        &f.key_store.path,
     );
-    assert!(result.is_err(), "reveal should abort when a ciphertext is missing");
+    assert!(
+        result.is_err(),
+        "reveal should abort when a ciphertext is missing"
+    );
 
     // The other file should NOT be revealed (all-or-nothing)
     // config.yml still exists because hide does NOT delete plaintext
-    assert!(f.repo.join("config.yml.secret").exists(), "config.yml.secret should still exist");
-    assert!(f.repo.join("config.yml").exists(), "config.yml should still exist (hide does not delete plaintext)");
+    assert!(
+        f.repo.join("config.yml.secret").exists(),
+        "config.yml.secret should still exist"
+    );
+    assert!(
+        f.repo.join("config.yml").exists(),
+        "config.yml should still exist (hide does not delete plaintext)"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +234,13 @@ fn test_multi_recipient_both_can_decrypt() {
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
 
     // Alice reveals
-    cmd_reveal(&f.repo.path, "alice@example.com", "origin", &f.key_store.path).expect("alice reveal");
+    cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("alice reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
     // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
@@ -241,9 +290,18 @@ fn test_subdirectory_hide_reveal() {
     assert!(f.repo.join("config/secrets.yml").exists());
     assert!(f.repo.join("config/secrets.yml.secret").exists());
 
-    cmd_reveal(&f.repo.path, "alice@example.com", "origin", &f.key_store.path).expect("reveal");
+    cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("reveal");
 
-    assert_eq!(fs::read(f.repo.join("config/secrets.yml")).unwrap(), plaintext);
+    assert_eq!(
+        fs::read(f.repo.join("config/secrets.yml")).unwrap(),
+        plaintext
+    );
     // git-secret does NOT delete ciphertext on reveal -- both exist
     assert!(f.repo.join("config/secrets.yml.secret").exists());
 }
@@ -267,13 +325,19 @@ fn test_cat_preserves_disk_state() {
         ".env",
         "alice@example.com",
         "origin",
-        &f.key_store.path
+        &f.key_store.path,
     )
     .expect("cat");
 
     // cat should not touch disk -- both plaintext and ciphertext exist
-    assert!(f.repo.join(".env").exists(), "plaintext should still exist (hide does not delete)");
-    assert!(f.repo.join(".env.secret").exists(), "ciphertext should not be deleted");
+    assert!(
+        f.repo.join(".env").exists(),
+        "plaintext should still exist (hide does not delete)"
+    );
+    assert!(
+        f.repo.join(".env.secret").exists(),
+        "ciphertext should not be deleted"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -292,12 +356,21 @@ fn test_unhide_isolates_single_file() {
 
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
 
-    cmd_unhide(&f.repo.path, ".env", "alice@example.com", "origin", &f.key_store.path)
-        .expect("unhide .env");
+    cmd_unhide(
+        &f.repo.path,
+        ".env",
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("unhide .env");
 
     // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
     assert!(f.repo.join(".env").exists());
-    assert!(f.repo.join(".env.secret").exists(), "ciphertext should still exist");
+    assert!(
+        f.repo.join(".env.secret").exists(),
+        "ciphertext should still exist"
+    );
     // other file still has both (hide does not delete plaintext)
     assert!(f.repo.join("config.yml").exists());
     assert!(f.repo.join("config.yml.secret").exists());
@@ -327,7 +400,7 @@ fn test_changes_binary_file() {
         vec![],
         "alice@example.com",
         "origin",
-        &f.key_store.path
+        &f.key_store.path,
     )
     .expect("changes");
 
@@ -348,13 +421,23 @@ fn test_tell_updates_existing_email() {
     let id2 = generate_identity();
     let r2 = recipient_from_identity(&id2);
     fs::write(f.repo.join("alice2.recipient"), &r2).unwrap();
-    cmd_tell(&f.repo.path, "alice@example.com", "alice2.recipient", "origin", &f.key_store.path, None)
-        .expect("tell update");
+    cmd_tell(
+        &f.repo.path,
+        "alice@example.com",
+        "alice2.recipient",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .expect("tell update");
 
     let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).expect("parse");
     assert_eq!(keyring.entries.len(), 1, "should still have one entry");
-    assert_eq!(keyring.entries[0].recipient, r2, "recipient should be updated");
+    assert_eq!(
+        keyring.entries[0].recipient, r2,
+        "recipient should be updated"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -372,14 +455,17 @@ fn test_remove_last_person_signs_empty_keyring() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
-        None
+        None,
     )
     .expect("removeperson");
 
     let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).expect("parse");
     assert!(keyring.entries.is_empty());
-    assert!(keyring.signature.is_some(), "empty keyring should still be signed");
+    assert!(
+        keyring.signature.is_some(),
+        "empty keyring should still be signed"
+    );
 
     cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify empty signed keyring");
@@ -413,13 +499,20 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
         git_veil::ExitCode::CiphertextIgnored as i32,
         "hide must refuse with code 40"
     );
-    assert!(message.contains(".tmp/x.txt.secret"), "names the path: {message}");
-    assert!(!f.repo.join(".tmp/x.txt.secret").exists(), "nothing written before the gate");
+    assert!(
+        message.contains(".tmp/x.txt.secret"),
+        "names the path: {message}"
+    );
+    assert!(
+        !f.repo.join(".tmp/x.txt.secret").exists(),
+        "nothing written before the gate"
+    );
 
     // Removing the broad rule makes hide succeed (the appended plaintext
     // ignore line .tmp/x.txt keeps protecting the plaintext)
     fs::write(f.repo.join(".gitignore"), ".tmp/x.txt\n").unwrap();
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide after fixing .gitignore");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect("hide after fixing .gitignore");
     assert!(f.repo.join(".tmp/x.txt.secret").exists());
 }
 
@@ -451,14 +544,28 @@ fn test_tell_fails_with_code_20_when_signing_key_missing() {
     let r = git_veil::recipient_from_identity(&id);
     fs::write(f.repo.join("bob.recipient"), &r).unwrap();
 
-    let err = cmd_tell(&f.repo.path, "bob@example.com", "bob.recipient", "origin", &f.key_store.path, None).unwrap_err();
+    let err = cmd_tell(
+        &f.repo.path,
+        "bob@example.com",
+        "bob.recipient",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(
         exit_code_of(&err),
         git_veil::ExitCode::NoSigningKey as i32,
         "missing signing key exits 20"
     );
-    assert!(message.contains("openssl genpkey"), "recipe printed: {message}");
+    assert!(
+        message.contains("openssl genpkey"),
+        "recipe printed: {message}"
+    );
     let keyring = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
-    assert!(!keyring.contains("bob@example.com"), "keyring unchanged on failure");
+    assert!(
+        !keyring.contains("bob@example.com"),
+        "keyring unchanged on failure"
+    );
 }

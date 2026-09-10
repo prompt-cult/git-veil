@@ -93,10 +93,9 @@ fn load_acknowledgments(key_store: &Path) -> Result<Vec<AckEntry>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
-    serde_json::from_str(&content)
-        .with_context(|| format!("Failed to parse {}", path.display()))
+    let content =
+        fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+    serde_json::from_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 /// Checks the key store permissions; `Err` carries exit code 30.
@@ -127,8 +126,7 @@ pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
         return Ok(());
     }
 
-    let mut message =
-        String::from("unsafe permissions on git-veil key store material:\n\n");
+    let mut message = String::from("unsafe permissions on git-veil key store material:\n\n");
     for finding in &unacked {
         message.push_str(&format!(
             "  {} (mode {:04o})\n",
@@ -192,10 +190,7 @@ pub fn cmd_trust_permissions(key_store: &Path) -> Result<()> {
 /// "true" or "yes", case-insensitive).
 pub fn permissions_check_bypassed_from_env() -> bool {
     match std::env::var("GIT_VEIL_SKIP_PERMISSIONS") {
-        Ok(value) => matches!(
-            value.trim().to_lowercase().as_str(),
-            "1" | "true" | "yes"
-        ),
+        Ok(value) => matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes"),
         Err(_) => false,
     }
 }

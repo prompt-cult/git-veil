@@ -38,14 +38,16 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
     for component in path.components() {
         match component {
             Component::Normal(_) => {}
-            other => return Err(coded(
-                ExitCode::UnsafePath,
-                format!(
-                    "Tracked path contains forbidden {:?} component: {}",
-                    other,
-                    path.display()
-                ),
-            )),
+            other => {
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!(
+                        "Tracked path contains forbidden {:?} component: {}",
+                        other,
+                        path.display()
+                    ),
+                ))
+            }
         }
     }
     if !stays_inside_repo_root(path) {
@@ -202,7 +204,10 @@ pub(crate) fn resolve_repo_relative_input(
             if relative.as_os_str().is_empty() {
                 return Err(coded(
                     ExitCode::UnsafePath,
-                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                    format!(
+                        "Cannot {} the repository root itself: {}",
+                        root_verb, user_path
+                    ),
                 ));
             }
             validate_tracked_path(&relative)
@@ -225,7 +230,10 @@ pub(crate) fn resolve_repo_relative_input(
             if relative.as_os_str().is_empty() {
                 return Err(coded(
                     ExitCode::UnsafePath,
-                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                    format!(
+                        "Cannot {} the repository root itself: {}",
+                        root_verb, user_path
+                    ),
                 ));
             }
             validate_tracked_path(&relative)
@@ -257,7 +265,10 @@ pub(crate) fn resolve_repo_relative_input(
             if relative.as_os_str().is_empty() {
                 return Err(coded(
                     ExitCode::UnsafePath,
-                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                    format!(
+                        "Cannot {} the repository root itself: {}",
+                        root_verb, user_path
+                    ),
                 ));
             }
             Ok(relative)
@@ -280,7 +291,10 @@ pub(crate) fn resolve_repo_relative_input(
             if relative.as_os_str().is_empty() {
                 return Err(coded(
                     ExitCode::UnsafePath,
-                    format!("Cannot {} the repository root itself: {}", root_verb, user_path),
+                    format!(
+                        "Cannot {} the repository root itself: {}",
+                        root_verb, user_path
+                    ),
                 ));
             }
             Ok(relative)

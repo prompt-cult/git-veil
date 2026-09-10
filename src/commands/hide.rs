@@ -2,14 +2,11 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::fs_atomic::write_atomic;
 use crate::commands::add::is_gitignored;
-use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{
-    cmd_verify_keyring, encrypt_to_recipients, parse_recipient,
-    Keyring, TrackedFiles,
-};
 use crate::exit_codes::{coded, ExitCode};
+use crate::fs_atomic::write_atomic;
+use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
+use crate::{cmd_verify_keyring, encrypt_to_recipients, parse_recipient, Keyring, TrackedFiles};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -195,10 +192,7 @@ pub fn cmd_hide(
         for (file, _, _) in &prepared {
             let plaintext_path = repo_root.join(file);
             fs::remove_file(&plaintext_path).with_context(|| {
-                format!(
-                    "Failed to delete plaintext: {}",
-                    plaintext_path.display()
-                )
+                format!("Failed to delete plaintext: {}", plaintext_path.display())
             })?;
             println!("Deleted plaintext: {}", file.display());
         }

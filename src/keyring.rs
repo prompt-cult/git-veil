@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 
 use crate::exit_codes::{coded, ExitCode};
 
-
 pub const BEGIN_MARKER: &str = "-----BEGIN GIT-VEIL KEYRING-----";
 pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
 

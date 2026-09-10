@@ -2,14 +2,13 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{
-    derive_repo_id, extract_content_to_verify_from_keyring,
-    extract_signature_from_keyring, fingerprint_for_verifying_key,
-    get_remote_push_url, parse_verifying_key,
-    verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
-};
 use crate::age_crypto::for_each_store_line;
 use crate::exit_codes::{coded, ExitCode};
+use crate::{
+    derive_repo_id, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
+    fingerprint_for_verifying_key, get_remote_push_url, parse_verifying_key,
+    verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
+};
 
 /// Loads the Ed25519 verifying key matching `fingerprint` from the key store.
 ///
