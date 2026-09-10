@@ -1,0 +1,23 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-error-codes 1  "git-veil-error-codes " 
+.SH NAME
+git\-veil\-error\-codes \- List every documented exit code with its name and meaning
+.SH SYNOPSIS
+\fBgit\-veil error\-codes\fR [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+List every documented exit code with its name and meaning
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Prints the table of documented exit codes — number, enum name, and
+meaning — that every deliberate failure exits with. Failures without a
+more specific code exit 1, and command\-line usage errors exit 2. The
+codes are public API: they are never renumbered, only appended, and the
+specification lives in docs/design.md.
+
+EXAMPLES
+  $ git\-veil error\-codes
+  $ git\-veil hide; echo $?    # a refusal exits with its documented code

@@ -1,13 +1,16 @@
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use clap::{CommandFactory as _, Parser as _};
 use std::path::PathBuf;
+use std::process::ExitCode as StdExitCode;
 
 use git_veil::{
+    check_key_store_permissions,
     cli::{Cli, Commands},
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_list,
     cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id,
-    cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring, cmd_whoami, default_key_store,
-    get_git_config_email,
+    cmd_tell, cmd_trust, cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami,
+    default_key_store, exit_code_of, get_git_config_email, permissions_check_bypassed_from_env,
+    ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -23,40 +26,18 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 /// Resolves the key store location for commands that consume a key_store:
 /// an explicit `--key-store` wins; then `$GIT_VEIL_HOME`; then `$HOME/.git-veil`.
 /// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
-/// show-repo-id) never fail on an unset HOME. list-keys is no longer in this
-/// set: it verifies the keyring signature against the pinned key, so it
-/// consumes a key_store like every other gated command.
-fn resolve_key_store(key_store: Option<PathBuf>) -> Result<PathBuf> {
-    key_store.map(Ok).unwrap_or_else(default_key_store)
-}
-
-/// Resolves the passphrase for private-key use, mirroring resolve_email/
-/// resolve_key_store: `--passphrase-stdin` wins over the `GITVEIL_PASSPHRASE`
-/// environment variable; when both are absent, None is returned and the key
-/// is unlocked with an empty passphrase (back-compat with unprotected keys).
-/// Interactive tty prompting is deliberately deferred. The passphrase is
-/// never passed as a CLI argument (process-listing leak) and is never logged.
-fn resolve_passphrase(passphrase_stdin: bool) -> Result<Option<String>> {
-    if passphrase_stdin {
-        let mut line = String::new();
-        std::io::stdin()
-            .read_line(&mut line)
-            .context("Failed to read passphrase from stdin")?;
-        if line.ends_with("\r\n") {
-            line.truncate(line.len() - 2);
-        } else if line.ends_with('\n') {
-            line.truncate(line.len() - 1);
-        }
-        return Ok(Some(line));
-    }
-    match std::env::var("GITVEIL_PASSPHRASE") {
-        Ok(value) => Ok(Some(value)),
-        Err(std::env::VarError::NotPresent) => Ok(None),
-        Err(std::env::VarError::NotUnicode(_)) => {
-            // Never propagate the value into the error message.
-            anyhow::bail!("GITVEIL_PASSPHRASE is not valid UTF-8")
-        }
-    }
+/// show-repo-id/error-codes) never fail on an unset HOME. list-keys is no
+/// longer in this set: it verifies the keyring signature against the pinned
+/// key, so it consumes a key_store like every other gated command.
+///
+/// Every resolved key store passes the permission gate BEFORE any key
+/// material is read (gpg checks ~/.gnupg the same way). Bypassed by the
+/// global --dangerously-skip-permissions-check flag or a truthy
+/// GIT_VEIL_SKIP_PERMISSIONS.
+fn resolve_key_store(key_store: Option<PathBuf>, skip_permissions_check: bool) -> Result<PathBuf> {
+    let store = key_store.map(Ok).unwrap_or_else(default_key_store)?;
+    check_key_store_permissions(&store, skip_permissions_check)?;
+    Ok(store)
 }
 
 /// Intercepts `git-veil help [cmd]` so that per the UX spec the command's
@@ -84,13 +65,26 @@ fn handle_help_subcommand(rest: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() -> StdExitCode {
+    let code = match run() {
+        Ok(()) => 0,
+        Err(err) => {
+            eprintln!("error: {:#}", err);
+            exit_code_of(&err)
+        }
+    };
+    StdExitCode::from(code as u8)
+}
+
+fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 && args[1] == "help" {
         return handle_help_subcommand(&args[2..]);
     }
 
     let cli = Cli::parse();
+    let skip_permissions_check =
+        cli.dangerously_skip_permissions_check || permissions_check_bypassed_from_env();
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
@@ -99,66 +93,76 @@ fn main() -> Result<()> {
             files,
             key_store: opt,
         } => {
-            cmd_import(&repo_root, &files, &resolve_key_store(opt)?)?;
+            cmd_import(
+                &repo_root,
+                &files,
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::Export {
             identifier,
             output,
             key_store: opt,
         } => {
-            cmd_export(&resolve_key_store(opt)?, &identifier, output.as_deref())?;
+            cmd_export(
+                &resolve_key_store(opt, skip_permissions_check)?,
+                &identifier,
+                output.as_deref(),
+            )?;
         }
         Commands::RemoveKey {
             identifier,
             yes,
             key_store: opt,
         } => {
-            cmd_removekey(&resolve_key_store(opt)?, &identifier, yes)?;
+            cmd_removekey(
+                &resolve_key_store(opt, skip_permissions_check)?,
+                &identifier,
+                yes,
+            )?;
         }
         Commands::Trust {
             repo_id,
-            signing_key,
+            verifying_key,
             remote,
             key_store: opt,
         } => {
             cmd_trust(
                 &repo_root,
                 &repo_id,
-                &signing_key,
+                &verifying_key,
                 &remote,
-                &resolve_key_store(opt)?,
+                &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
         Commands::Tell {
             email,
             public_key,
             remote,
+            signing_key,
             key_store: opt,
-            passphrase_stdin,
         } => {
-            let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_tell(
                 &repo_root,
                 &email,
                 &public_key,
                 &remote,
-                &resolve_key_store(opt)?,
-                passphrase.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
+                signing_key.as_deref(),
             )?;
         }
         Commands::RemovePerson {
             email,
             remote,
+            signing_key,
             key_store: opt,
-            passphrase_stdin,
         } => {
-            let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_removeperson(
                 &repo_root,
                 &email,
                 &remote,
-                &resolve_key_store(opt)?,
-                passphrase.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
+                signing_key.as_deref(),
             )?;
         }
         Commands::Add { files } => cmd_add(&repo_root, files)?,
@@ -169,22 +173,24 @@ fn main() -> Result<()> {
             key_store: opt,
             dangerously_delete_plaintext,
         } => {
-            cmd_hide(&repo_root, &remote, &resolve_key_store(opt)?, dangerously_delete_plaintext)?;
+            cmd_hide(
+                &repo_root,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+                dangerously_delete_plaintext,
+            )?;
         }
         Commands::Reveal {
             email,
             remote,
             key_store: opt,
-            passphrase_stdin,
         } => {
             let email = resolve_email(&repo_root, email)?;
-            let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_reveal(
                 &repo_root,
                 &email,
                 &remote,
-                &resolve_key_store(opt)?,
-                passphrase.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
         Commands::Cat {
@@ -192,17 +198,14 @@ fn main() -> Result<()> {
             email,
             remote,
             key_store: opt,
-            passphrase_stdin,
         } => {
             let email = resolve_email(&repo_root, email)?;
-            let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_cat(
                 &repo_root,
                 &file,
                 &email,
                 &remote,
-                &resolve_key_store(opt)?,
-                passphrase.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
         Commands::Unhide {
@@ -210,17 +213,14 @@ fn main() -> Result<()> {
             email,
             remote,
             key_store: opt,
-            passphrase_stdin,
         } => {
             let email = resolve_email(&repo_root, email)?;
-            let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_unhide(
                 &repo_root,
                 &file,
                 &email,
                 &remote,
-                &resolve_key_store(opt)?,
-                passphrase.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
         Commands::Changes {
@@ -228,17 +228,14 @@ fn main() -> Result<()> {
             email,
             remote,
             key_store: opt,
-            passphrase_stdin,
         } => {
             let email = resolve_email(&repo_root, email)?;
-            let passphrase = resolve_passphrase(passphrase_stdin)?;
             cmd_changes(
                 &repo_root,
                 files,
                 &email,
                 &remote,
-                &resolve_key_store(opt)?,
-                passphrase.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
         Commands::ShowRepoId { remote } => cmd_show_repo_id(&repo_root, &remote)?,
@@ -246,19 +243,48 @@ fn main() -> Result<()> {
             email,
             key_store: opt,
         } => {
-            cmd_whoami(&repo_root, email.as_deref(), &resolve_key_store(opt)?)?;
+            cmd_whoami(
+                &repo_root,
+                email.as_deref(),
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::VerifyKeyring {
             remote,
             key_store: opt,
         } => {
-            cmd_verify_keyring(&repo_root, &remote, &resolve_key_store(opt)?)?;
+            cmd_verify_keyring(
+                &repo_root,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
         }
         Commands::ListKeys {
             remote,
             key_store: opt,
         } => {
-            cmd_list_keys(&repo_root, &remote, &resolve_key_store(opt)?)?;
+            cmd_list_keys(
+                &repo_root,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+            )?;
+        }
+        Commands::TrustPermissions { key_store: opt } => {
+            // Deliberately resolved WITHOUT the permission gate: this is the
+            // command that records the acknowledgment, so it cannot be
+            // blocked by the very findings it acknowledges.
+            let store = opt.map(Ok).unwrap_or_else(default_key_store)?;
+            cmd_trust_permissions(&store)?;
+        }
+        Commands::ErrorCodes => {
+            for code in ExitCode::ALL {
+                println!(
+                    "{:>3}  {:<30} {}",
+                    *code as u8,
+                    code.name(),
+                    code.description()
+                );
+            }
         }
         Commands::Clean { yes } => cmd_clean(&repo_root, yes)?,
         Commands::Completions { shell } => git_veil::cli::run_completions(shell),

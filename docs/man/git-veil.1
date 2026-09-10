@@ -1,13 +1,16 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil 1  "git-veil 0.1.0" 
+.TH git-veil 1  "git-veil 0.4.0" 
 .SH NAME
-git\-veil \- Git secret management using pure Rust OpenPGP
+git\-veil \- Git secret management using age encryption
 .SH SYNOPSIS
-\fBgit\-veil\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
+\fBgit\-veil\fR [\fB\-\-dangerously\-skip\-permissions\-check\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
-Git secret management using pure Rust OpenPGP
+Git secret management using age encryption
 .SH OPTIONS
+.TP
+\fB\-\-dangerously\-skip\-permissions\-check\fR
+Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
@@ -20,19 +23,19 @@ git\-veil\-init(1)
 Initialize git\-veil state (.git\-veil/) in the current repository
 .TP
 git\-veil\-import(1)
-Import your private key(s) into the git\-veil key store
+Import your age identity (private key) into the git\-veil key store
 .TP
 git\-veil\-export(1)
-Export an armoured public key from the local key store
+Export a public key (recipient string) from the local key store
 .TP
 git\-veil\-removekey(1)
-Remove a key from the local key store (destructive, local\-only)
+Remove an age identity from the local key store (destructive, local\-only)
 .TP
 git\-veil\-trust(1)
-Verify and pin the repository owner\*(Aqs signing key (per machine)
+Verify and pin the repository owner\*(Aqs Ed25519 verifying key (per machine)
 .TP
 git\-veil\-tell(1)
-Add a collaborator\*(Aqs public key to the keyring and re\-sign it
+Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
 .TP
 git\-veil\-removeperson(1)
 Remove a collaborator from the keyring and re\-sign it
@@ -47,7 +50,7 @@ git\-veil\-list(1)
 List all tracked files
 .TP
 git\-veil\-hide(1)
-Encrypt all tracked files to the keyring and delete the plaintexts
+Encrypt all tracked files to the keyring
 .TP
 git\-veil\-reveal(1)
 Decrypt all tracked files back to plaintext
@@ -56,7 +59,7 @@ git\-veil\-cat(1)
 Decrypt a single tracked file to stdout
 .TP
 git\-veil\-unhide(1)
-Decrypt one tracked file back to plaintext and delete its ciphertext
+Decrypt one tracked file back to plaintext
 .TP
 git\-veil\-changes(1)
 Report where plaintext differs from the last hidden version
@@ -73,6 +76,12 @@ Verify the keyring signature against the pinned trusted key
 git\-veil\-list\-keys(1)
 List keyring keys after verifying the keyring signature
 .TP
+git\-veil\-trust\-permissions(1)
+Acknowledge the key store\*(Aqs current permissions as trusted
+.TP
+git\-veil\-error\-codes(1)
+List every documented exit code with its name and meaning
+.TP
 git\-veil\-clean(1)
 Remove the .git\-veil state directory (\-\-yes required when data would be lost)
 .TP
@@ -85,4 +94,4 @@ Write roff man pages (git\-veil.1 plus one per subcommand) to a directory
 git\-veil\-help(1)
 Print this message or the help of the given subcommand(s)
 .SH VERSION
-v0.1.0
+v0.4.0

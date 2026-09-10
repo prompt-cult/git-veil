@@ -1,9 +1,12 @@
 use anyhow::{Context, Result};
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use crate::age_crypto::{
+    fingerprint_for_recipient, for_each_store_line, parse_identity, parse_recipient,
+    recipient_from_identity,
+};
 use crate::fs_atomic::write_atomic;
-use crate::age_crypto::{parse_identity, recipient_from_identity, fingerprint_for_recipient};
 
 /// One key line parsed out of a key store file.
 struct StoreLine {
@@ -21,63 +24,67 @@ struct StoreContents {
 }
 
 /// Loads and parses the identities store (identities.txt).
-fn load_identity_store(path: &PathBuf) -> Result<StoreContents> {
+///
+/// A non-comment line that is not a parseable identity is a hard error
+/// naming the corrupt line: the store is refused untouched. Silently
+/// skipping corrupt lines would let a successful removal rewrite the store
+/// without them — deleting key material removekey was never asked to touch
+/// (the same fail-closed rule every key store read applies).
+fn load_identity_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
-            path: path.clone(),
+            path: path.to_path_buf(),
             exists: false,
             lines: Vec::new(),
         });
     }
     let content = std::fs::read_to_string(path).context("Failed to read identities.txt")?;
     let mut lines = Vec::new();
-    for line in content.lines() {
-        let line_str = line.trim();
-        if line_str.is_empty() || line_str.starts_with('#') {
-            continue;
-        }
-        if let Ok(identity) = parse_identity(line_str) {
-            let recipient = recipient_from_identity(&identity);
-            let fingerprint = fingerprint_for_recipient(&recipient);
-            lines.push(StoreLine {
-                text: line_str.to_string(),
-                fingerprint,
-                recipient,
-            });
-        }
-    }
+    for_each_store_line(path, &content, |_, line_str| {
+        let identity = parse_identity(line_str)?;
+        let recipient = recipient_from_identity(&identity);
+        let fingerprint = fingerprint_for_recipient(&recipient);
+        lines.push(StoreLine {
+            text: line_str.to_string(),
+            fingerprint,
+            recipient,
+        });
+        Ok(())
+    })?;
     Ok(StoreContents {
-        path: path.clone(),
+        path: path.to_path_buf(),
         exists: true,
         lines,
     })
 }
 
 /// Loads and parses the recipients store (recipients.txt).
-fn load_recipient_store(path: &PathBuf) -> Result<StoreContents> {
+///
+/// The same fail-closed rule as every key store read: a non-comment line
+/// that is not a parseable recipient is a hard error naming the corrupt
+/// line — the store is refused untouched, never rewritten from a partial
+/// parse.
+fn load_recipient_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
-            path: path.clone(),
+            path: path.to_path_buf(),
             exists: false,
             lines: Vec::new(),
         });
     }
     let content = std::fs::read_to_string(path).context("Failed to read recipients.txt")?;
     let mut lines = Vec::new();
-    for line in content.lines() {
-        let line_str = line.trim();
-        if line_str.is_empty() || line_str.starts_with('#') {
-            continue;
-        }
-        let fingerprint = fingerprint_for_recipient(line_str);
+    for_each_store_line(path, &content, |_, line_str| {
+        parse_recipient(line_str)?;
         lines.push(StoreLine {
             text: line_str.to_string(),
-            fingerprint,
+            fingerprint: fingerprint_for_recipient(&line_str.to_string()),
             recipient: line_str.to_string(),
         });
-    }
+        Ok(())
+    })?;
     Ok(StoreContents {
-        path: path.clone(),
+        path: path.to_path_buf(),
         exists: true,
         lines,
     })

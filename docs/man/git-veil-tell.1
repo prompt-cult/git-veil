@@ -2,21 +2,21 @@
 .el .ds Aq '
 .TH git-veil-tell 1  "git-veil-tell " 
 .SH NAME
-git\-veil\-tell \- Add a collaborator\*(Aqs public key to the keyring and re\-sign it
+git\-veil\-tell \- Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
+\fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
 .SH DESCRIPTION
-Add a collaborator\*(Aqs public key to the keyring and re\-sign it
+Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
+\fB\-\-signing\-key\fR \fI<SELECTION>\fR
+Which signing key to use: 1\-based index into signing\-keys.txt, or a 64\-hex\-character seed (default: the key matching the pinned fingerprint)
 .TP
-\fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -25,18 +25,26 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 Collaborator\*(Aqs email
 .TP
 <\fIPUBLIC_KEY\fR>
-Path to collaborator\*(Aqs public key file
+Path to file containing the collaborator\*(Aqs age recipient string (age1...)
 .SH EXTRA
-Adds a collaborator\*(Aqs public key to the repository keyring and re\-signs
-the keyring with the owner\*(Aqs private key. The existing keyring signature
-is verified against the pinned trusted key before any modification, and a
-canary is test\-encrypted to the new key so a key that cannot encrypt is
-never signed into the ring.
+Adds a collaborator\*(Aqs age recipient key to the repository keyring and
+re\-signs the keyring with the owner\*(Aqs Ed25519 signing key. The existing
+keyring signature is verified against the pinned trusted key before any
+modification, and a canary is test\-encrypted to the new key so a key that
+cannot encrypt is never signed into the ring.
+
+The keyring is signed with the TRUSTED key — the one whose verifying\-key
+fingerprint is pinned for this repository. signing\-keys.txt must contain
+that seed; git\-veil never generates it (docs/solo.md step 1 has the
+recipe). With several signing keys present, \-\-signing\-key selects one by
+1\-based index or full 64\-hex\-character seed; otherwise the key matching
+the pin is used. A missing signing key exits with code 20 and the
+create\-and\-back\-up recipe.
 
 Requires init, an established trust pin (trust) for this repository on
-this machine, and the owner\*(Aqs private key in the local key store
-(import). Next steps: add files, then hide.
+this machine, and the signing key in the local key store. Next steps:
+add files, then hide.
 
 EXAMPLES
   $ git\-veil tell alice@example.com alice.pub
-  $ git\-veil tell alice@example.com alice.pub \-\-passphrase\-stdin < pass.txt
+  $ git\-veil tell alice@example.com alice.pub \-\-signing\-key 2

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey, Verifier, Signer};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::thread_rng;
 
 use crate::keyring::END_MARKER;
@@ -31,8 +31,8 @@ pub fn verify_keyring_signature(
     let sig_bytes = STANDARD
         .decode(signature_b64.trim())
         .context("Failed to decode base64 signature")?;
-    let signature = Signature::from_slice(&sig_bytes)
-        .context("Failed to parse Ed25519 signature")?;
+    let signature =
+        Signature::from_slice(&sig_bytes).context("Failed to parse Ed25519 signature")?;
     verifying_key
         .verify(keyring_content.as_bytes(), &signature)
         .context("Signature verification failed")?;
@@ -41,8 +41,7 @@ pub fn verify_keyring_signature(
 
 /// Parses a hex-encoded Ed25519 verifying key.
 pub fn parse_verifying_key(hex_str: &str) -> Result<VerifyingKey> {
-    let bytes = hex::decode(hex_str.trim())
-        .context("Failed to decode hex verifying key")?;
+    let bytes = hex::decode(hex_str.trim()).context("Failed to decode hex verifying key")?;
     let arr: [u8; 32] = bytes
         .as_slice()
         .try_into()
@@ -53,8 +52,7 @@ pub fn parse_verifying_key(hex_str: &str) -> Result<VerifyingKey> {
 
 /// Parses a hex-encoded Ed25519 signing key.
 pub fn parse_signing_key(hex_str: &str) -> Result<SigningKey> {
-    let bytes = hex::decode(hex_str.trim())
-        .context("Failed to decode hex signing key")?;
+    let bytes = hex::decode(hex_str.trim()).context("Failed to decode hex signing key")?;
     let arr: [u8; 32] = bytes
         .as_slice()
         .try_into()
@@ -74,7 +72,10 @@ pub fn fingerprint_for_verifying_key(verifying_key: &VerifyingKey) -> String {
 /// Signs keyring content and returns the signature block for the keyring file.
 pub fn create_signature_block(keyring_content: &str, signing_key: &SigningKey) -> Result<String> {
     let sig_b64 = sign_keyring_content(keyring_content, signing_key)?;
-    Ok(format!("-----BEGIN GIT-VEIL SIGNATURE-----\n{}\n-----END GIT-VEIL SIGNATURE-----\n", sig_b64))
+    Ok(format!(
+        "-----BEGIN GIT-VEIL SIGNATURE-----\n{}\n-----END GIT-VEIL SIGNATURE-----\n",
+        sig_b64
+    ))
 }
 
 /// Extracts the signature section from a keyring text.

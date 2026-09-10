@@ -4,15 +4,11 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    decrypt_with_identity, encrypt_to_recipient, encrypt_to_recipients,
-    export_public_key, generate_identity,
-    import_identity_to_store, import_recipient_to_store,
-    load_identities_from_store, load_recipients_from_store,
-    parse_identity, parse_recipient,
-    recipient_from_identity, fingerprint_for_recipient,
-    find_identity_by_recipient, find_identity_by_fingerprint,
-    find_recipient_by_fingerprint,
-    Keyring,
+    decrypt_with_identity, encrypt_to_recipient, encrypt_to_recipients, export_public_key,
+    find_identity_by_fingerprint, find_identity_by_recipient, find_recipient_by_fingerprint,
+    fingerprint_for_recipient, generate_identity, import_identity_to_store,
+    import_recipient_to_store, load_identities_from_store, load_recipients_from_store,
+    parse_identity, parse_recipient, recipient_from_identity, Keyring,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -26,7 +22,8 @@ impl TempDir {
     fn new(label: &str) -> Self {
         let pid = std::process::id();
         let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("git-veil-interop-{}-{}-{}", label, pid, counter));
+        let dir =
+            std::env::temp_dir().join(format!("git-veil-interop-{}-{}-{}", label, pid, counter));
         fs::create_dir_all(&dir).expect("create temp dir");
         Self { path: dir }
     }
@@ -85,7 +82,8 @@ fn test_encrypt_recipient_decrypt_identity() {
 #[test]
 fn test_multi_recipient_all_decrypt() {
     let ids: Vec<_> = (0..3).map(|_| generate_identity()).collect();
-    let recipients: Vec<_> = ids.iter()
+    let recipients: Vec<_> = ids
+        .iter()
         .map(|id| parse_recipient(&recipient_from_identity(id)).unwrap())
         .collect();
 
@@ -186,12 +184,13 @@ fn test_keyring_serialize_parse_roundtrip() {
     let fingerprint = fingerprint_for_recipient(&recipient_str);
 
     let mut keyring = Keyring::new();
-    keyring.add_entry(
-        "alice@example.com".to_string(),
-        recipient_str.clone(),
-        fingerprint.clone(),
-    )
-    .unwrap();
+    keyring
+        .add_entry(
+            "alice@example.com".to_string(),
+            recipient_str.clone(),
+            fingerprint.clone(),
+        )
+        .unwrap();
 
     let serialized = keyring.serialize();
     let parsed = Keyring::parse(&serialized).unwrap();
@@ -209,13 +208,13 @@ fn test_keyring_with_signature_roundtrip() {
     let fingerprint = fingerprint_for_recipient(&recipient_str);
 
     let mut keyring = Keyring::new();
-    keyring.add_entry(
-        "bob@example.com".to_string(),
-        recipient_str,
-        fingerprint,
-    )
-    .unwrap();
-    keyring.signature = Some("-----BEGIN GIT-VEIL SIGNATURE-----\ndGVzdA==\n-----END GIT-VEIL SIGNATURE-----\n".to_string());
+    keyring
+        .add_entry("bob@example.com".to_string(), recipient_str, fingerprint)
+        .unwrap();
+    keyring.signature = Some(
+        "-----BEGIN GIT-VEIL SIGNATURE-----\ndGVzdA==\n-----END GIT-VEIL SIGNATURE-----\n"
+            .to_string(),
+    );
 
     let serialized = keyring.serialize();
     let parsed = Keyring::parse(&serialized).unwrap();
@@ -238,19 +237,34 @@ fn test_keyring_rejects_colon_in_email() {
 #[test]
 fn test_keyring_remove_clears_signature() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("alice@example.com".to_string(), "age1xxx".to_string(), "deadbeef".to_string()).unwrap();
+    keyring
+        .add_entry(
+            "alice@example.com".to_string(),
+            "age1xxx".to_string(),
+            "deadbeef".to_string(),
+        )
+        .unwrap();
     keyring.signature = Some("sig".to_string());
 
     let removed = keyring.remove_entry("alice@example.com");
     assert!(removed);
-    assert!(keyring.signature.is_none(), "signature should be cleared on remove");
+    assert!(
+        keyring.signature.is_none(),
+        "signature should be cleared on remove"
+    );
     assert!(keyring.entries.is_empty());
 }
 
 #[test]
 fn test_keyring_find_case_insensitive() {
     let mut keyring = Keyring::new();
-    keyring.add_entry("Alice@Example.COM".to_string(), "age1xxx".to_string(), "deadbeef".to_string()).unwrap();
+    keyring
+        .add_entry(
+            "Alice@Example.COM".to_string(),
+            "age1xxx".to_string(),
+            "deadbeef".to_string(),
+        )
+        .unwrap();
 
     assert!(keyring.find_by_email("alice@example.com").is_some());
     assert!(keyring.find_by_email("ALICE@EXAMPLE.COM").is_some());
@@ -265,7 +279,10 @@ fn test_fingerprint_format() {
     let fingerprint = fingerprint_for_recipient(&recipient_str);
 
     assert_eq!(fingerprint.len(), 16, "fingerprint should be 16 hex chars");
-    assert!(fingerprint.chars().all(|c| c.is_ascii_hexdigit()), "fingerprint should be hex");
+    assert!(
+        fingerprint.chars().all(|c| c.is_ascii_hexdigit()),
+        "fingerprint should be hex"
+    );
 }
 
 #[test]
@@ -348,7 +365,10 @@ fn test_age_keygen_identity_works_with_git_veil() {
 
     // git-veil can derive the same recipient
     let derived = recipient_from_identity(&identity);
-    assert_eq!(derived, recipient_str, "git-veil recipient should match age-keygen recipient");
+    assert_eq!(
+        derived, recipient_str,
+        "git-veil recipient should match age-keygen recipient"
+    );
 
     // git-veil can parse the recipient
     let _recipient = parse_recipient(&recipient_str).expect("git-veil parse age-keygen recipient");
@@ -366,7 +386,10 @@ fn test_rage_keygen_identity_works_with_git_veil() {
 
     let identity = parse_identity(&identity_str).expect("git-veil parse rage-keygen identity");
     let derived = recipient_from_identity(&identity);
-    assert_eq!(derived, recipient_str, "git-veil recipient should match rage-keygen recipient");
+    assert_eq!(
+        derived, recipient_str,
+        "git-veil recipient should match rage-keygen recipient"
+    );
 
     let _recipient = parse_recipient(&recipient_str).expect("git-veil parse rage-keygen recipient");
 }
@@ -397,9 +420,21 @@ fn test_git_veil_identity_works_with_age_keygen_recipient() {
 // ===========================================================================
 
 /// Writes an age identity file in the format age/rage CLI expects.
-fn write_identity_file(dir: &TempDir, filename: &str, identity_str: &str, recipient_str: &str) -> PathBuf {
+fn write_identity_file(
+    dir: &TempDir,
+    filename: &str,
+    identity_str: &str,
+    recipient_str: &str,
+) -> PathBuf {
     let path = dir.join(filename);
-    fs::write(&path, format!("# created: 2026-01-01T00:00:00+00:00\n# public key: {}\n{}\n", recipient_str, identity_str)).unwrap();
+    fs::write(
+        &path,
+        format!(
+            "# created: 2026-01-01T00:00:00+00:00\n# public key: {}\n{}\n",
+            recipient_str, identity_str
+        ),
+    )
+    .unwrap();
     path
 }
 
@@ -435,7 +470,11 @@ fn test_git_veil_encrypts_age_cli_decrypts() {
         .arg(&ct_path)
         .output()
         .expect("age");
-    assert!(output.status.success(), "age decrypt failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "age decrypt failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, plaintext);
 }
 
@@ -467,7 +506,11 @@ fn test_git_veil_encrypts_rage_cli_decrypts() {
         .arg(&ct_path)
         .output()
         .expect("rage");
-    assert!(output.status.success(), "rage decrypt failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "rage decrypt failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, plaintext);
 }
 
@@ -657,7 +700,11 @@ fn test_git_veil_key_age_cli_encrypts_and_decrypts() {
         .arg(&ct_path)
         .output()
         .expect("age");
-    assert!(output.status.success(), "age decrypt failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "age decrypt failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, plaintext);
 
     // git-veil also decrypts the age-CLI-encrypted file
@@ -707,7 +754,11 @@ fn test_git_veil_key_rage_cli_encrypts_and_decrypts() {
         .arg(&ct_path)
         .output()
         .expect("rage");
-    assert!(output.status.success(), "rage decrypt failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "rage decrypt failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, plaintext);
 
     // git-veil also decrypts the rage-CLI-encrypted file
@@ -753,7 +804,11 @@ fn test_git_veil_multi_recipient_age_cli_decrypts() {
         .arg(&ct_path)
         .output()
         .expect("age");
-    assert!(output.status.success(), "age decrypt with id1 failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "age decrypt with id1 failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, plaintext);
 
     // age CLI decrypts with id2
@@ -765,7 +820,11 @@ fn test_git_veil_multi_recipient_age_cli_decrypts() {
         .arg(&ct_path)
         .output()
         .expect("age");
-    assert!(output.status.success(), "age decrypt with id2 failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "age decrypt with id2 failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(output.stdout, plaintext);
 }
 

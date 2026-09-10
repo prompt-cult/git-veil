@@ -2,11 +2,12 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
+use crate::key_discovery::discover_signing_key;
 use crate::{
-    create_signature_block, derive_repo_id, extract_content_to_verify_from_keyring,
-    get_remote_push_url, parse_signing_key,
-    verify_keyring_against_trust, Keyring, TrustStore,
+    create_signature_block, extract_content_to_verify_from_keyring, verify_keyring_against_trust,
+    Keyring,
 };
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
@@ -15,29 +16,16 @@ pub fn cmd_removeperson(
     email_to_remove: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    _passphrase: Option<&str>,
+    signing_key_selection: Option<&str>,
 ) -> Result<()> {
-    // Verify trust is established
-    let push_url = get_remote_push_url(repo_root, remote_name)?;
-    let repo_id = derive_repo_id(&push_url)?;
-
-    let trust_path = repo_root.join(".git-veil/trust.json");
-    let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let _trusted_fingerprint = trust_store.get_trusted_fingerprint(&repo_id).ok_or_else(|| {
-        anyhow::anyhow!(
-            "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
-            repo_id,
-            remote_name,
-            repo_id
-        )
-    })?;
-
-    // Verify the existing keyring signature against the trusted key BEFORE any
-    // mutation. An unsigned keyring is only acceptable when it has zero entries
-    // (the fresh-init state); a keyring containing entries must already carry a
-    // valid signature from the trusted key, otherwise removeperson would launder
-    // trust by re-signing attacker-supplied content.
-    verify_keyring_against_trust(repo_root, remote_name, key_store)?;
+    // Verify trust is established AND the existing keyring signature
+    // against the trusted key BEFORE any mutation. An unsigned keyring is
+    // only acceptable when it has zero entries (the fresh-init state); a
+    // keyring containing entries must already carry a valid signature
+    // from the trusted key, otherwise removeperson would launder trust
+    // by re-signing attacker-supplied content.
+    let (_, trusted_fingerprint, _) =
+        verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -47,10 +35,13 @@ pub fn cmd_removeperson(
 
     // Find the entry by exact email
     if keyring.find_by_email(email_to_remove).is_none() {
-        anyhow::bail!(
-            "'{}' not found in keyring; check the email against git-veil list-keys",
-            email_to_remove
-        );
+        return Err(coded(
+            ExitCode::IdentityNotInKeyring,
+            format!(
+                "'{}' not found in keyring; check the email against git-veil list-keys",
+                email_to_remove
+            ),
+        ));
     }
 
     // Remove entry (this clears signature)
@@ -61,13 +52,10 @@ pub fn cmd_removeperson(
 
     // Re-sign with the TRUSTED key: removeperson curates the keyring exactly
     // like tell does, so it must sign with the key verify_keyring checks
-    // against, never with any collaborator's key.
-    // Load the Ed25519 signing key from the key store.
-    let signing_keys_path = key_store.join("signing-keys.txt");
-    let signing_key_content = fs::read_to_string(&signing_keys_path)
-        .context("Failed to read signing-keys.txt")?;
-    let signing_key_hex = signing_key_content.lines().next().unwrap_or("").trim();
-    let signing_key = parse_signing_key(signing_key_hex)?;
+    // against, never with any collaborator's key. Discovery selects the
+    // signing key whose verifying key matches the pinned fingerprint.
+    let signing_key =
+        discover_signing_key(key_store, signing_key_selection, Some(&trusted_fingerprint))?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of

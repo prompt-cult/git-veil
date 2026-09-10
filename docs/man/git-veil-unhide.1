@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-veil-unhide 1  "git-veil-unhide " 
 .SH NAME
-git\-veil\-unhide \- Decrypt one tracked file back to plaintext and delete its ciphertext
+git\-veil\-unhide \- Decrypt one tracked file back to plaintext
 .SH SYNOPSIS
-\fBgit\-veil unhide\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil unhide\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
-Decrypt one tracked file back to plaintext and delete its ciphertext
+Decrypt one tracked file back to plaintext
 .SH OPTIONS
 .TP
 \fB\-\-email\fR \fI<EMAIL>\fR
@@ -16,10 +16,7 @@ Your email address
 Git remote name
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
-.TP
-\fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -28,12 +25,11 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 File to unhide
 .SH EXTRA
 Decrypts one tracked file\*(Aqs in\-place <name>.secret ciphertext back to
-the plaintext path and deletes the ciphertext — the inverse of hide for a
-single file. The keyring signature is verified against the pinned trusted
-key first; the file must be tracked and its ciphertext present. Typical
-round trip: unhide to edit, then hide to re\-encrypt.
+the plaintext path — the inverse of hide for a single file. The keyring
+signature is verified against the pinned trusted key first; the file must
+be tracked and its ciphertext present. Typical round trip: unhide to edit,
+then hide to re\-encrypt.
 
 EXAMPLES
   $ git\-veil unhide .env
   $ git\-veil unhide .env \-\-email alice@example.com
-  $ git\-veil unhide .env \-\-passphrase\-stdin < pass.txt
