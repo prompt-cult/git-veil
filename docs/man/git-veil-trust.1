@@ -2,18 +2,18 @@
 .el .ds Aq '
 .TH git-veil-trust 1  "git-veil-trust " 
 .SH NAME
-git\-veil\-trust \- Verify and pin the repository owner\*(Aqs signing key (per machine)
+git\-veil\-trust \- Verify and pin the repository owner\*(Aqs Ed25519 verifying key (per machine)
 .SH SYNOPSIS
-\fBgit\-veil trust\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> <\fISIGNING_KEY\fR> 
+\fBgit\-veil trust\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> <\fIVERIFYING_KEY\fR> 
 .SH DESCRIPTION
-Verify and pin the repository owner\*(Aqs signing key (per machine)
+Verify and pin the repository owner\*(Aqs Ed25519 verifying key (per machine)
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -21,20 +21,22 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 <\fIREPO_ID\fR>
 Repository ID (e.g., fara+simbo1905@github.com)
 .TP
-<\fISIGNING_KEY\fR>
-Path to owner\*(Aqs public key file
+<\fIVERIFYING_KEY\fR>
+Path to the owner\*(Aqs Ed25519 verifying key file (64 hex chars)
 .SH EXTRA
-Verifies the repository owner\*(Aqs public signing key and pins it in your
-local key store, keyed by the repository ID derived from the git remote
-push URL. The pin is per machine: it lives in $HOME/.git\-veil, is never
-committed, and every collaborator must run trust themselves after a fresh
-clone. The pinned key is the anchor against which every subsequent keyring
-signature is verified — tell, hide, reveal, cat, unhide, changes,
-removeperson, verify\-keyring and list\-keys all fail closed without it.
+Verifies the repository owner\*(Aqs Ed25519 verifying key and pins its
+fingerprint in your local key store, keyed by the repository ID derived
+from the git remote push URL. The pin is per machine: it lives in
+$GIT_VEIL_HOME (or $HOME/.git\-veil), is never committed, and every
+collaborator must run trust themselves after a fresh clone. The pinned
+key is the anchor against which every subsequent keyring signature is
+verified — tell, hide, reveal, cat, unhide, changes, removeperson,
+verify\-keyring and list\-keys all fail closed without it.
 
 The provided repo_id must match the one computed from the remote push URL
-(see show\-repo\-id), the key file must carry the repository\*(Aqs email
-identity, and the key must not be expired, revoked or unsigned.
+(see show\-repo\-id), and the key file must contain a valid Ed25519
+verifying key as 64 hex characters (docs/solo.md step 1 has the openssl
+recipe that produces one from the owner\*(Aqs signing key).
 
 Trust domain: the key store named by \-\-key\-store holds this machine\*(Aqs pins
 for EVERY repository that uses that store, so the store and its pins are
@@ -44,6 +46,6 @@ repositories is not advised; use a separate \-\-key\-store per trust domain.
 Requires init first. Typical next step: tell.
 
 EXAMPLES
-  $ git\-veil show\-repo\-id                          # get the repo id to pass here
-  $ git\-veil trust fara+simbo1905@github.com owner.pub
-  $ git\-veil trust fara+simbo1905@github.com owner.pub \-\-remote upstream
+  $ git\-veil show\-repo\-id                                   # get the repo id to pass here
+  $ git\-veil trust fara+simbo1905@github.com owner.verifying
+  $ git\-veil trust fara+simbo1905@github.com owner.verifying \-\-remote upstream

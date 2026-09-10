@@ -3,11 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
+use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{
-    cmd_verify_keyring, decrypt_with_identity, find_identity_by_recipient, Keyring, TrackedFiles,
-};
+use crate::{cmd_verify_keyring, decrypt_with_identity, Keyring, TrackedFiles};
 
 /// Decrypts all tracked files using the user's private key.
 ///
@@ -20,7 +20,6 @@ pub fn cmd_reveal(
     email: &str,
     remote_name: &str,
     key_store: &PathBuf,
-    _passphrase: Option<&str>,
 ) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, key_store)?;
@@ -31,11 +30,19 @@ pub fn cmd_reveal(
     let keyring = Keyring::parse(&keyring_text)?;
 
     // Find user's entry
-    let entry = keyring.find_by_email(email)
-        .with_context(|| format!("user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell", email))?;
+    let entry = keyring.find_by_email(email).ok_or_else(|| {
+        coded(
+            ExitCode::IdentityNotInKeyring,
+            format!(
+                "user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell",
+                email
+            ),
+        )
+    })?;
 
-    // Find user's age identity by recipient string
-    let identity = find_identity_by_recipient(key_store, &entry.recipient)?;
+    // Find user's age identity by recipient string (exit code 21 with the
+    // create-and-back-up recipe when absent)
+    let identity = discover_identity(key_store, &entry.recipient)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");

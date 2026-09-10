@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-changes \- Report where plaintext differs from the last hidden version
 .SH SYNOPSIS
-\fBgit\-veil changes\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBgit\-veil changes\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Report where plaintext differs from the last hidden version
 .SH OPTIONS
@@ -16,10 +16,7 @@ Your email address
 Git remote name
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
-.TP
-\fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -36,4 +33,3 @@ counted as changed.
 EXAMPLES
   $ git\-veil changes                # check every tracked file
   $ git\-veil changes .env           # check one file
-  $ git\-veil changes \-\-passphrase\-stdin < pass.txt

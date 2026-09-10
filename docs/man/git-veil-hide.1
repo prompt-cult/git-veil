@@ -2,39 +2,36 @@
 .el .ds Aq '
 .TH git-veil-hide 1  "git-veil-hide " 
 .SH NAME
-git\-veil\-hide \- Encrypt all tracked files to the keyring and delete the plaintexts
+git\-veil\-hide \- Encrypt all tracked files to the keyring
 .SH SYNOPSIS
-\fBgit\-veil hide\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil hide\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-dangerously\-delete\-plaintext\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Encrypt all tracked files to the keyring and delete the plaintexts
+Encrypt all tracked files to the keyring
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
+.TP
+\fB\-\-dangerously\-delete\-plaintext\fR
+Delete plaintext files after successful encryption
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Encrypts every tracked file to every key in the keyring, deletes the
-plaintext, and leaves <name>.secret beside where the plaintext was
-(notes \-> notes.secret). You gitignore the PLAINTEXT filenames and commit
-the .secret files: a fresh clone carrying only ciphertext stays
-decryptable by every keyring member via reveal.
+Encrypts every tracked file to every key in the keyring and leaves
+<name>.secret beside where the plaintext was (notes \-> notes.secret).
+You gitignore the PLAINTEXT filenames and commit the .secret files:
+a fresh clone carrying only ciphertext stays decryptable by every
+keyring member via reveal.
 
 hide is TWO\-PHASE and ALL\-OR\-NOTHING: phase 1 reads and validates every
 tracked plaintext and encrypts EVERY file to the full recipient set in
 memory — if any plaintext is missing, unreadable or cannot be encrypted,
 hide aborts having changed NOTHING on disk. Phase 2 (only after every
-encryption succeeded) writes each .secret atomically and then deletes each
-plaintext; a plaintext is deleted only after its own ciphertext is durably
-on disk, so a crash can never leave a secret neither plaintext nor
-encrypted. If a phase\-2 write fails part\-way, the remaining ciphertexts
-are still written, only plaintexts whose ciphertext landed are deleted,
-and hide reports exactly what was done and what was left before exiting
-with an error.
+encryption succeeded) writes each .secret atomically.
 
 hide only works after the repository is initialized (git\-veil init), the
 owner\*(Aqs key is trusted on this machine (git\-veil trust), collaborators are
@@ -42,7 +39,19 @@ in the keyring (git\-veil tell), and files are tracked (git\-veil add).
 Before encrypting anything, the keyring signature is verified against the
 pinned trusted key. unhide, reveal and cat invert hide.
 
+hide REFUSES (exit code 40) when a <name>.secret ciphertext path is
+itself git\-ignored — e.g. swallowed by a parent\-directory rule like
+\&.tmp/ — because that ciphertext would silently never reach the
+repository. It WARNS (error code 41) when a tracked plaintext exists on
+disk but is not git\-ignored, since a blind `git add \-A` would then commit
+it. The plaintext is KEPT by default; \-\-dangerously\-delete\-plaintext
+removes each plaintext only after its ciphertext is durably written.
+
 EXAMPLES
-  $ git\-veil hide    # encrypt all tracked files, delete the plaintexts
+  $ git\-veil hide    # encrypt all tracked files (plaintext kept)
   $ git\-veil hide \-\-remote upstream
+  $ git\-veil hide \-\-dangerously\-delete\-plaintext
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
+
+The option \-\-dangerously\-delete\-plaintext is only reversible if you have
+your private key, which is not an assumption any coding agent should make.

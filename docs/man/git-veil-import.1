@@ -2,31 +2,35 @@
 .el .ds Aq '
 .TH git-veil-import 1  "git-veil-import " 
 .SH NAME
-git\-veil\-import \- Import your private key(s) into the git\-veil key store
+git\-veil\-import \- Import your age identity (private key) into the git\-veil key store
 .SH SYNOPSIS
 \fBgit\-veil import\fR [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
-Import your private key(s) into the git\-veil key store
+Import your age identity (private key) into the git\-veil key store
 .SH OPTIONS
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIFILES\fR>
-File(s) containing armoured private key blocks
+File(s) containing AGE\-SECRET\-KEY\-1... lines (age\-keygen output works as\-is)
 .SH EXTRA
-Imports armoured PRIVATE key blocks into your per\-machine key store
-($HOME/.git\-veil/secret\-keys.pgp). This is where reveal/cat/unhide/changes
-find the private key matching your email, and where tell/removeperson find
-the owner\*(Aqs signing key. The key store is local to this machine and is
-never committed; each collaborator imports their own key.
+Imports age identity strings (AGE\-SECRET\-KEY\-1... lines) into your
+per\-machine key store ($GIT_VEIL_HOME or $HOME/.git\-veil). This is where
+reveal/cat/unhide/changes find the identity matching your email. The key
+store is local to this machine and is never committed; each collaborator
+imports their own identity. The store is written mode 0600 regardless of
+umask. git\-veil never generates keys — create yours with age\-keygen (or
+rage\-keygen) and back the AGE\-SECRET\-KEY\-1... line up; without it,
+ciphertexts encrypted to you are unrecoverable.
 
-Keys whose fingerprint is already present in the key store are not
+Identities whose recipient is already present in the key store are not
 duplicated.
 
 EXAMPLES
-  $ git\-veil import my\-key.asc
-  $ git\-veil import key1.asc key2.asc \-\-key\-store /path/to/store
+  $ age\-keygen \-o my\-age\-identity.txt      # create + print the recipe
+  $ git\-veil import my\-age\-identity.txt
+  $ git\-veil import a.txt b.txt \-\-key\-store /path/to/store

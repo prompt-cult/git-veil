@@ -9,8 +9,9 @@ a cheat-sheet for translating between the two tools afterwards.
 
 **No format compatibility.** git-crypt encrypts files in place — the
 committed blob at the original path is an AES-256-CTR stream produced by
-git's smudge/clean filter machinery. git-veil writes OpenPGP messages into
-sibling `<name>.secret` files beside where the plaintext was. Neither tool
+git's smudge/clean filter machinery. git-veil writes age-encrypted
+(age-encryption.org/v1) blobs into sibling `<name>.secret` files beside
+where the plaintext was. Neither tool
 can read the other's ciphertext — the same one-tool-per-repo rule stated in
 [README.md](../README.md#compatibility-with-git-secret) for git-secret
 applies to git-crypt. Migration therefore means, literally:
@@ -144,22 +145,23 @@ commit or stash first.
 
 Full walkthroughs live in [docs/solo.md](solo.md) (one person) and
 [docs/two-collaborators.md](two-collaborators.md) (owner + collaborators);
-this is the shape. You need an OpenPGP key pair per person from any tool —
-git-veil generates no keys.
+this is the shape. You need an age identity per person (created with
+`age-keygen` or `rage-keygen`) and, for the owner, an Ed25519 signing key
+(`openssl`) — git-veil generates no keys.
 
 On the owner's machine:
 
 ```sh
-git-veil init                       # create .git-veil/ state
-git-veil import key.asc             # owner's PRIVATE key into the local key store
-git-veil show-repo-id               # print the repository ID, e.g. demo+example@github.com
-git-veil trust demo+example@github.com owner.pub   # verify and pin the owner key
-git-veil tell example@github.com owner.pub        # the owner must be in the keyring too
-git-veil tell alice@example.com alice.pub         # once per collaborator
+git-veil init                                # create .git-veil/ state
+git-veil import my-age-identity.txt          # owner's age identity into the local key store
+git-veil show-repo-id                        # print the repository ID, e.g. demo+example@github.com
+git-veil trust demo+example@github.com owner.verifying   # verify and pin the owner key
+git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
+git-veil tell alice@example.com alice-age-identity.txt  # once per collaborator
 ```
 
 What just happened: `.git-veil/` now holds a signed keyring of
-collaborator public keys, the tracked-file list and trust state. `trust`
+collaborator recipient keys, the tracked-file list and trust state. `trust`
 is **per machine** — every collaborator re-runs it on their own clone
 after step 6's clone; the pin lives in `$HOME/.git-veil`, never in the
 repository. This replaces git-crypt's model of delegating trust to your
@@ -178,9 +180,10 @@ git push
 ```
 
 What just happened: `hide` encrypted each tracked file to **every** key in
-the signed keyring, wrote `<name>.secret` beside where the plaintext was,
-and deleted the plaintext (hide.rs:131–136 in the source tree). `hide`
-reads each tracked plaintext from disk and fails if one is missing — so
+the signed keyring and wrote `<name>.secret` beside where the plaintext
+was, **keeping the plaintext** (pass `--dangerously-delete-plaintext` to
+remove it). `hide` reads each tracked plaintext from disk and fails if one
+is missing — so keep the worktree unlocked until this step is done, and
 run `git-veil reveal` first whenever everything is currently hidden. The
 `.secret` files are meant to be committed; the plaintext names are
 gitignored (step 3 did that already). Never gitignore `*.secret` — that
@@ -194,9 +197,9 @@ hire will experience):
 ```sh
 git clone git@github.com:example/demo.git && cd demo
 git config user.email alice@example.com
-git-veil import alice-private-key.asc      # their OWN private key only
+git-veil import alice-age-identity.txt     # their OWN age identity only
 git-veil show-repo-id
-git-veil trust demo+example@github.com owner.pub   # owner.pub from the owner
+git-veil trust demo+example@github.com owner.verifying   # from the owner
 git-veil verify-keyring                    # exit 0 = signature matches the pin
 git-veil list-keys                         # who can decrypt, after verification
 git-veil reveal
@@ -207,7 +210,7 @@ git-veil changes                           # "unchanged" everywhere, nothing pen
 What just happened: the clone arrived with ciphertext and a signed keyring
 but no trust pin — the first gated command fails closed until `trust`
 pins the owner key on that machine. `reveal` then decrypted every tracked
-file and deleted the local `.secret` copies, and the checksum comparison
+file (the `.secret` files stay in place), and the checksum comparison
 proves byte-identical migration. Checklists done, delete
 `plaintext-before.sha256` and the file list — plaintext inventory does not
 belong in circulation.
@@ -224,7 +227,7 @@ belong in circulation.
 | `git-crypt lock [--force]` | `git-veil hide` | Semantics differ, see below. |
 | `git-crypt status` (`-e`) | `git-veil list` + `git-veil changes` | `list` shows the tracked set (no on-disk state check); `changes` reports where plaintext drifted from the last hidden version. |
 | `git-crypt export-key FILE` | deliberately no equivalent | git-crypt exports the repo-wide **symmetric** key for out-of-band sharing. git-veil has no shared symmetric key to export; `git-veil export` exports a collaborator's **public** key — different purpose entirely. |
-| `git-crypt unlock KEYFILE` (symmetric mode) | deliberately no equivalent | git-veil always decrypts with your OpenPGP private key from the local key store; there is no shared-key fast path. |
+| `git-crypt unlock KEYFILE` (symmetric mode) | deliberately no equivalent | git-veil always decrypts with your age identity from the local key store; there is no shared-key fast path. |
 | `git-crypt migrate-key` | deliberately no equivalent | Migrates a shared symmetric key; git-veil has no shared symmetric key. |
 | Key rotation / off-boarding | `git-veil removeperson` + re-`hide` | git-crypt explicitly supports neither ("no del-gpg-user command… no support for rotating the key" — [README](https://github.com/AGWA/git-crypt/blob/master/README.md)); git-veil's forward-looking procedure and its honest history limits are in [docs/departing.md](departing.md). |
 | `diff=git-crypt` transparent plaintext diffs | deliberately no equivalent; `git-veil changes` | No smudge/clean filter exists, so git and forges see `.secret` ciphertext, never plaintext diffs. `changes` diffs your on-disk plaintext against the last hidden version, locally. |
@@ -238,12 +241,12 @@ the key sits in `.git/git-crypt/`, filters decrypt on every checkout, and
 `lock` ends that state. git-veil has **no repository-wide state** —
 `git-veil reveal` is a one-shot bulk operation: it verifies the keyring
 signature, then decrypts **every** tracked file back to its plaintext path
-and **deletes each `.secret`** from the worktree (src/commands/reveal.rs:79–84).
-It fails outright if any tracked ciphertext is missing
-(reveal.rs:59–60). There is nothing to `lock`; the inverse one-shot is
-`git-veil hide`, which re-encrypts all tracked plaintexts to the whole
-keyring and deletes the plaintexts (src/commands/hide.rs:131–136), failing
-if a tracked plaintext is missing. For one file at a time use `unhide`,
+and leaves each `.secret` in the worktree. It fails outright if any
+tracked ciphertext is missing. There is nothing to `lock`; the inverse
+one-shot is `git-veil hide`, which re-encrypts all tracked plaintexts to
+the whole keyring and keeps the plaintexts (deleting them is opt-in via
+`--dangerously-delete-plaintext`), failing if a tracked plaintext is
+missing. For one file at a time use `unhide`,
 and `cat` prints a file to stdout without touching disk state.
 
 ## Two honest warnings
@@ -258,8 +261,10 @@ commit. git-crypt wins when secrets are edited constantly and nobody
 should ever have to think; git-veil wins when the collaborator roster
 changes, when you want committed state that is verifiably ciphertext (no
 mis-set attribute can silently commit plaintext through a filter that
-does not exist), and when you cannot or will not install gpg and OpenSSL
-on every machine and CI runner. If your team cannot live with the
+does not exist), and when you want cryptography that needs no gpg — age
+keys are plain text files and the only one-time tooling is `age-keygen`
+(or `rage-keygen`) plus `openssl` for the owner's signing key. If your
+team cannot live with the
 reveal/hide cycle, that is a reason to stay on git-crypt — say so now,
 not after migrating.
 

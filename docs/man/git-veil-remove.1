@@ -16,10 +16,10 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 File(s) to remove
 .SH EXTRA
 Untracks files (removes them from .git\-veil/tracked.json). The plaintext
-may already be gone — hide deletes it — so the file does not need to
-exist. Untracking is not decrypting: any <name>.secret ciphertext is left
-in place; restore the plaintext with unhide or reveal first if you want
-it gone too.
+may already be gone — hide \-\-dangerously\-delete\-plaintext removes it — so
+the file does not need to exist. Untracking is not decrypting: any
+<name>.secret ciphertext is left in place; restore the plaintext with
+unhide or reveal first if you want it gone too.
 
 EXAMPLES
   $ git\-veil remove .env

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::commands::hide::encrypted_path_for;
-use crate::TrackedFiles;
+use crate::{coded, ExitCode, TrackedFiles};
 
 /// Removes the .git-veil internal state directory.
 ///
@@ -53,7 +53,7 @@ pub fn cmd_clean(repo_root: &Path, yes: bool) -> Result<()> {
             }
         }
         message.push_str("Re-run with --yes to confirm you want to destroy this data.");
-        anyhow::bail!("{}", message);
+        return Err(coded(ExitCode::Refused, message));
     }
 
     if git_veil_dir.exists() {

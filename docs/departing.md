@@ -7,9 +7,9 @@ rely on them:
 - `removeperson` deletes bob's entry from the signed keyring and re-signs
   it. It is **forward-looking only**.
 - Ciphertexts that already exist were encrypted TO bob's key. He can still
-  decrypt every one of them he can obtain — with this tool, or with plain
-  `gpg`, forever. Removing him changes nothing about the bytes already on
-  disk or already in git history.
+  decrypt every one of them he can obtain — with this tool, or with the
+  reference `age` CLI, forever. Removing him changes nothing about the bytes
+  already on disk or already in git history.
 - Only a fresh `git-veil hide` of every file produces new ciphertext
   without bob as a recipient — and even then, **git history still contains
   every old ciphertext**. Old commits stay decryptable by bob indefinitely.
@@ -58,28 +58,22 @@ measure.
 rm -rf ~/work/demo                 # wipe his clone (ciphertext + .git-veil/)
 ```
 
-And his local key store, `$HOME/.git-veil`, holds his PRIVATE key. He
-removes it from that store with `removekey` — by fingerprint where known
-(preferred: an email that matches several keys is refused without
-confirmation), or by exact email. The key is usually the only private key
-in his store, so `--yes` confirms its removal:
+And his local key store, `$HOME/.git-veil`, holds his PRIVATE age
+identity. He removes it from that store with `removekey` — by fingerprint
+where known (preferred: a recipient string that matches several keys is
+refused without confirmation), or by exact recipient string. The identity
+is usually the only one in his store, so `--yes` confirms its removal:
 
 ```sh
-git-veil removekey bob@example.com --yes
+git-veil removekey age1... --yes
 ```
 
 This is destructive and local-only: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. If removekey
-refuses (a corrupt store is never deleted; an email matching several keys
-must be disambiguated), the fallback is the same as ever: edit the
-armoured blocks out of `secret-keys.pgp` and `public-keys.pgp` by hand,
-or delete the file if it holds nothing else he needs. His normal gpg
-keyring (gnupg) is separate: revoke or delete the key there if he wants
-it dead:
-
-```sh
-gpg --delete-secret-and-public-key bob@example.com
-```
+refuses (a corrupt store is never deleted; a recipient string matching
+several keys must be disambiguated), the fallback is the same as ever:
+edit the matching line out of `identities.txt` (and `recipients.txt`) by
+hand, or delete the file if it holds nothing else he needs.
 
 ## 3. Verify the rotation actually happened
 
@@ -109,13 +103,14 @@ member can still decrypt the fresh ciphertext.
 
 ## 4. Demonstrating (to yourself) why revocation is forward-looking
 
-This was verified against the real binary and gpg: a removed collaborator,
-holding only what he already had (his private key plus an old ciphertext
-copied out of git history), decrypts it with plain gpg:
+This was verified against the real binary and the reference age CLI: a
+removed collaborator, holding only what he already had (his age identity
+plus an old ciphertext copied out of git history), decrypts it with plain
+`age`:
 
 ```sh
 $ git show 5833055:.env.secret > old.env.secret   # any pre-removal commit
-$ gpg --decrypt old.env.secret
+$ age -d -i bob-age-identity.txt old.env.secret
 DB_PASSWORD=correct-horse
 ```
 
@@ -137,5 +132,5 @@ keyrings, but no software can un-ring old ciphertext in his possession.
 - [ ] Owner: `reveal` then `hide`, commit `.git-veil/keyring` + re-hidden `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
-- [ ] Departing user: wipe clone; `removekey` their key from the local key store; revoke/delete the key in their gpg keyring
+- [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up age identity
 - [ ] Optional: rewrite history (`git filter-repo`) and force-push if the ciphertext bytes themselves must vanish

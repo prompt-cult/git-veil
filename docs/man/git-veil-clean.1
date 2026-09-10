@@ -20,9 +20,9 @@ tracked.json). .gitignore is never rewritten, and the in\-place .secret
 ciphertext files are ordinary committable files that clean does not
 disown.
 
-Because hide deletes the plaintexts, the .secret ciphertexts beside them
-can be the ONLY remaining copy of a secret. A clean that would destroy
-tracked state or ciphertext therefore refuses unless \-\-yes confirms it.
+The .secret ciphertexts can be the ONLY remaining copy of a secret. A
+clean that would destroy tracked state or ciphertext therefore refuses
+unless \-\-yes confirms it.
 
 EXAMPLES
   $ git\-veil clean          # refuses while tracked files or ciphertext exist

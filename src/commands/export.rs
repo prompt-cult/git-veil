@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
+use crate::age_crypto::{fingerprint_for_recipient, load_recipients_from_store};
 use crate::fs_atomic::write_atomic;
-use crate::age_crypto::{load_recipients_from_store, fingerprint_for_recipient};
 
 /// Resolves `identifier` (an age recipient string or a fingerprint, matched
 /// case-insensitively) against every recipient in the local key store and

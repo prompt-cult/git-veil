@@ -37,19 +37,40 @@ is not advised. Set `GIT_VEIL_HOME` to isolate a project's keys from your
 default `$HOME/.git-veil` (e.g. `GIT_VEIL_HOME=~/keys/project-a`); `--key-store`
 overrides both for ad-hoc use.
 
+## Key store permissions
+
+The key store is checked the way gpg checks `~/.gnupg`: the store directory
+and the private files (`identities.txt`, `signing-keys.txt`) must not be
+group- or world-accessible. git-veil never changes permissions on files it
+did not create. On a violation it exits with code 30 and names the exact
+paths and modes; either `chmod` them right, or acknowledge the current
+state with `git-veil trust-permissions` (which pins the exact `(path,
+mode)` pairs — a later change fails again), or bypass with
+`--dangerously-skip-permissions-check` / `GIT_VEIL_SKIP_PERMISSIONS=1`.
+
+## Exit codes
+
+Failures exit with documented codes, not an anonymous 1: trust failures are
+10–13, missing keys 20–22, unsafe permissions 30, gitignore collisions 40–41,
+crypto failures 60–63, and policy/path refusals 70–71. `git-veil error-codes`
+prints the full table with names and meanings; the specification is in
+[docs/design.md](docs/design.md).
+
 ## Quick start (solo)
 
-Prerequisite: an age identity (see [Key setup](#key-setup) below) and an
-Ed25519 signing keypair.
+Prerequisite: your own keys (see [Key setup](#key-setup) below) — an age
+identity and an Ed25519 signing key. git-veil generates no keys: it only
+ever reads keys you created and own, and every command that needs a
+missing key tells you how to make one and back it up instead.
 
 ```sh
 git-veil init                                   # create .git-veil/ state
-git-veil import my-age-identity.txt              # import your age identity into the local key store
+git-veil import my-age-identity.txt             # import your age identity into the local key store
 git-veil show-repo-id                           # print the repository ID
-git-veil trust demo+example@github.com owner.signing   # pin the signing key
-git-veil tell example@github.com my-recipient.txt      # add yourself to the signed keyring
-echo .env >> .gitignore                        # ignore the plaintext name
-git-veil add .env                               # track the file
+git-veil trust demo+example@github.com owner.verifying   # pin the signing key
+git-veil tell example@github.com my-age-identity.txt    # add yourself to the signed keyring
+printf 'API_KEY=hunter2\n' > .env
+git-veil add .env                               # track the file (gitignores the plaintext name)
 git-veil hide                                   # encrypt: .env -> .env.secret (plaintext kept)
 git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Add encrypted secrets"
@@ -94,43 +115,55 @@ cp docs/man/*.1 /usr/local/share/man/man1/
 ## Key setup
 
 git-veil uses [age] X25519 keys for encryption and a separate Ed25519 key for
-keyring signing. You need both.
+keyring signing. You need both, and git-veil generates **neither**: keys the
+tool created would be keys you never backed up. Create them once with standard
+tools, then back the private halves up (a password-manager note is enough).
 
-### Generate an age identity (for encryption/decryption)
+### Create an age identity (for encryption/decryption)
 
-Use any age key generator — `age-keygen` (from the [age CLI][age-cli]),
-`rage-keygen` (from [rage]), or git-veil's own `import` command which can
-generate one for you:
+Use any age key generator — `age-keygen` (from the [age CLI][age-cli]) or
+`rage-keygen` (from [rage]):
 
 ```sh
-# Option A: age-keygen (reference CLI)
+umask 077
 age-keygen -o my-age-identity.txt
 # Output includes:
 #   # public key: age1...    (your recipient string — share this)
-#   AGE-SECRET-KEY-1...       (your identity — keep this secret)
-
-# Option B: rage-keygen (Rust CLI)
-rage-keygen -o my-age-identity.txt
-
-# Option C: generate inline and import directly
-# (git-veil import accepts any file containing an AGE-SECRET-KEY-1... line)
+#   AGE-SECRET-KEY-1...       (your identity — keep this secret, BACK IT UP)
 ```
 
 The **recipient string** (`age1...`) is your public key — safe to share with
 collaborators. The **identity string** (`AGE-SECRET-KEY-1...`) is your private
-key — never commit it.
+key — never commit it; without a backup of it, ciphertexts are unrecoverable.
+`git-veil import my-age-identity.txt` copies it into the local key store
+(accepts any file containing an `AGE-SECRET-KEY-1...` line; `#` comment lines
+like age-keygen's are skipped).
 
-### Generate an Ed25519 signing key (for keyring signing)
+### Create an Ed25519 signing key (for keyring signing)
 
 The repository owner also needs an Ed25519 keypair for signing the keyring.
-git-veil manages this internally; the owner writes the verifying key (hex)
-to a file and passes it to `trust`:
+git-veil never creates or manages it — you make it with `openssl` and you back
+it up:
 
 ```sh
-# The signing key file format is:
-#   line 1: hex-encoded Ed25519 verifying key (32 bytes = 64 hex chars)
-#   line 2: your age recipient string (optional, for convenience)
+umask 077
+openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
+
+# The seed (private — what tell/removeperson read), 64 hex characters:
+openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
+  | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
+
+# The verifying key (public — this file is what `git-veil trust` pins):
+openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
+  | tail -c 32 | xxd -p -c 32 > owner.verifying
 ```
+
+The signing-key file format is one 64-hex-character Ed25519 seed per line in
+`<key store>/signing-keys.txt`. tell/removeperson sign with the key whose
+verifying fingerprint is pinned for the repository; with several keys
+present, `--signing-key <index-or-seed>` picks explicitly. Commands that
+need a missing key exit with a documented code (`git-veil error-codes`)
+after printing how to create and back it up.
 
 ## Commands
 
@@ -148,10 +181,10 @@ ergonomics that differ — such as a smaller final binary size.
 | `trust`          | Verify and pin the repository owner's signing key (per machine)         |
 | `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
 | `removeperson`   | Remove a collaborator from the keyring and re-sign it                   |
-| `add`            | Track files for encryption                                              |
+| `add`            | Track files for encryption (auto-gitignores plaintext names)           |
 | `remove`         | Untrack files (leaves any ciphertext in place)                          |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt all tracked files to the keyring (plaintext kept; `--dangerously-delete-plaintext` to delete after) |
+| `hide`           | Encrypt all tracked files to the keyring (plaintext kept; `--dangerously-delete-plaintext` to delete after; refuses when a `.secret` path is git-ignored) |
 | `reveal`         | Decrypt all tracked files back to plaintext                             |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
@@ -161,6 +194,8 @@ ergonomics that differ — such as a smaller final binary size.
 | `verify-keyring` | Verify the keyring signature against the pinned trusted key             |
 | `list-keys`      | List keyring keys after verifying the keyring signature                 |
 | `clean`          | Remove the `.git-veil` state directory (`--yes` required when data would be lost) |
+| `trust-permissions` | Acknowledge the key store's current (path, mode) pairs as trusted     |
+| `error-codes`    | List every documented exit code with its name and meaning               |
 | `completions`    | Emit a shell completion script for the given shell to stdout            |
 | `manpages`       | Write roff man pages (`git-veil.1` plus one per subcommand) to a directory |
 

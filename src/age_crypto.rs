@@ -1,12 +1,59 @@
-use anyhow::{Context, Result};
-use age::{Decryptor, Encryptor};
 use age::x25519::{Identity, Recipient};
+use age::{Decryptor, Encryptor};
+use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::fs_atomic::write_atomic;
+use crate::exit_codes::{coded, ExitCode};
+use crate::fs_atomic::{write_atomic, write_atomic_mode};
+
+/// Builds the fail-closed error for a corrupt key store line.
+///
+/// git-veil is a security tool and never silently drops key material it
+/// cannot parse: the error names the file, the 1-based line number, and the
+/// offending line itself, so the user can delete exactly that line
+/// deliberately and re-run.
+pub(crate) fn corrupt_store_line_error(
+    path: &Path,
+    line_number: usize,
+    line: &str,
+    cause: anyhow::Error,
+) -> anyhow::Error {
+    coded(
+        ExitCode::KeyParseFailure,
+        format!(
+            "corrupt key store line {} in {}: \"{}\" ({}); delete or repair that line and re-run — git-veil never silently drops key material",
+            line_number,
+            path.display(),
+            line,
+            cause
+        ),
+    )
+}
+
+/// Yields the meaningful lines of a key store file with their 1-based line
+/// numbers: blank lines and `#` comments are skipped; everything else is
+/// handed to the caller's parser, whose failure is a hard refusal (never a
+/// silent skip) via `corrupt_store_line_error`.
+pub(crate) fn for_each_store_line(
+    path: &Path,
+    content: &str,
+    mut handle: impl FnMut(usize, &str) -> Result<()>,
+) -> Result<()> {
+    for (index, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line_number = index + 1;
+        if let Err(err) = handle(line_number, line) {
+            return Err(corrupt_store_line_error(path, line_number, line, err));
+        }
+    }
+    Ok(())
+}
 
 /// Returns the default key store directory.
 ///
@@ -26,23 +73,27 @@ pub fn default_key_store() -> Result<PathBuf> {
                 .filter(|s| !s.is_empty())
                 .map(|home| PathBuf::from(home).join(".git-veil"))
         })
-        .ok_or_else(|| anyhow::anyhow!(
-            "Neither GIT_VEIL_HOME nor HOME is set; pass --key-store"
-        ))
+        .ok_or_else(|| anyhow::anyhow!("Neither GIT_VEIL_HOME nor HOME is set; pass --key-store"))
 }
 
 /// Parses an age recipient string (`age1...`) into a Recipient.
 pub fn parse_recipient(s: &str) -> Result<Recipient> {
-    s.trim()
-        .parse::<Recipient>()
-        .map_err(|e| anyhow::anyhow!("Failed to parse age recipient: {}", e))
+    s.trim().parse::<Recipient>().map_err(|e| {
+        coded(
+            ExitCode::KeyParseFailure,
+            format!("Failed to parse age recipient: {}", e),
+        )
+    })
 }
 
 /// Parses an age identity string (`AGE-SECRET-KEY-1...`) into an Identity.
 pub fn parse_identity(s: &str) -> Result<Identity> {
-    s.trim()
-        .parse::<Identity>()
-        .map_err(|e| anyhow::anyhow!("Failed to parse age identity: {}", e))
+    s.trim().parse::<Identity>().map_err(|e| {
+        coded(
+            ExitCode::KeyParseFailure,
+            format!("Failed to parse age identity: {}", e),
+        )
+    })
 }
 
 /// Returns the recipient string for a given identity (public key).
@@ -77,11 +128,14 @@ pub fn encrypt_to_recipients(plaintext: &[u8], recipients: &[Recipient]) -> Resu
         .context("Failed to create age encryptor (no recipients?)")?;
 
     let mut encrypted = Vec::new();
-    let mut writer = encryptor.wrap_output(&mut encrypted)
+    let mut writer = encryptor
+        .wrap_output(&mut encrypted)
         .context("Failed to create age encryptor")?;
-    writer.write_all(plaintext)
+    writer
+        .write_all(plaintext)
         .context("Failed to write plaintext to age encryptor")?;
-    writer.finish()
+    writer
+        .finish()
         .context("Failed to finalize age encryption")?;
 
     Ok(encrypted)
@@ -94,21 +148,25 @@ pub fn encrypt_to_recipient(plaintext: &[u8], recipient: &Recipient) -> Result<V
 
 /// Decrypts age ciphertext using an identity.
 pub fn decrypt_with_identity(ciphertext: &[u8], identity: &Identity) -> Result<Vec<u8>> {
-    let decryptor = Decryptor::new(ciphertext)
-        .context("Failed to parse age ciphertext")?;
+    let decryptor = Decryptor::new(ciphertext).context("Failed to parse age ciphertext")?;
 
     let mut decrypted = Vec::new();
     let mut reader = decryptor.decrypt(std::iter::once(identity as &dyn age::Identity))
-        .map_err(|_| anyhow::anyhow!(
+        .map_err(|_| coded(
+            ExitCode::DecryptionFailed,
             "decryption failed: this ciphertext was not encrypted to your key (it is not a listed recipient)"
         ))?;
-    reader.read_to_end(&mut decrypted)
+    reader
+        .read_to_end(&mut decrypted)
         .context("Failed to extract plaintext")?;
 
     Ok(decrypted)
 }
 
 /// Imports an age identity string into the key store (identities.txt).
+///
+/// The store is private key material, so it is created mode 0600
+/// regardless of the process umask.
 pub fn import_identity_to_store(key_store: &PathBuf, identity_str: &str) -> Result<()> {
     fs::create_dir_all(key_store).context("Failed to create key store directory")?;
     let identities_path = key_store.join("identities.txt");
@@ -124,7 +182,7 @@ pub fn import_identity_to_store(key_store: &PathBuf, identity_str: &str) -> Resu
     }
     existing.push_str(identity_str.trim());
     existing.push('\n');
-    write_atomic(&identities_path, existing.as_bytes())
+    write_atomic_mode(&identities_path, existing.as_bytes(), 0o600)
         .context("Failed to write identities.txt")?;
     Ok(())
 }
@@ -154,70 +212,62 @@ pub fn import_recipient_to_store(key_store: &PathBuf, recipient_str: &str) -> Re
 ///
 /// Sources: `<key_store>/identities.txt` (one identity per line).
 /// Returns an empty Vec if the store is absent (fresh machine).
-pub fn load_identities_from_store(key_store: &PathBuf) -> Result<Vec<(Identity, String)>> {
+///
+/// A non-comment line that does not parse is a hard refusal (code 62)
+/// naming the corrupt line — key material is never silently skipped.
+pub fn load_identities_from_store(key_store: &Path) -> Result<Vec<(Identity, String)>> {
     let identities_path = key_store.join("identities.txt");
     let mut result = Vec::new();
 
     if identities_path.exists() {
-        let content = fs::read_to_string(&identities_path)
-            .context("Failed to read identities.txt")?;
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            if let Ok(identity) = parse_identity(line) {
-                let recipient = recipient_from_identity(&identity);
-                result.push((identity, recipient));
-            }
-        }
+        let content =
+            fs::read_to_string(&identities_path).context("Failed to read identities.txt")?;
+        for_each_store_line(&identities_path, &content, |_, line| {
+            let identity = parse_identity(line)?;
+            let recipient = recipient_from_identity(&identity);
+            result.push((identity, recipient));
+            Ok(())
+        })?;
     }
 
     Ok(result)
 }
 
 /// Loads all recipient strings from the key store.
-pub fn load_recipients_from_store(key_store: &PathBuf) -> Result<Vec<(Recipient, String)>> {
+///
+/// Like every key store read, a non-comment line that does not parse is a
+/// hard refusal (code 62) naming the corrupt line.
+pub fn load_recipients_from_store(key_store: &Path) -> Result<Vec<(Recipient, String)>> {
     let recipients_path = key_store.join("recipients.txt");
     let mut result = Vec::new();
     let mut seen = HashSet::new();
 
     if recipients_path.exists() {
-        let content = fs::read_to_string(&recipients_path)
-            .context("Failed to read recipients.txt")?;
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
+        let content =
+            fs::read_to_string(&recipients_path).context("Failed to read recipients.txt")?;
+        for_each_store_line(&recipients_path, &content, |_, line| {
+            let recipient = parse_recipient(line)?;
+            if seen.insert(line.to_string()) {
+                result.push((recipient, line.to_string()));
             }
-            if let Ok(recipient) = parse_recipient(line) {
-                let recipient_str = line.to_string();
-                if seen.insert(recipient_str.clone()) {
-                    result.push((recipient, recipient_str));
-                }
-            }
-        }
+            Ok(())
+        })?;
     }
 
     // Also derive recipients from imported identities
     let identities_path = key_store.join("identities.txt");
     if identities_path.exists() {
-        let content = fs::read_to_string(&identities_path)
-            .context("Failed to read identities.txt")?;
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
+        let content =
+            fs::read_to_string(&identities_path).context("Failed to read identities.txt")?;
+        for_each_store_line(&identities_path, &content, |_, line| {
+            let identity = parse_identity(line)?;
+            let recipient_str = recipient_from_identity(&identity);
+            if seen.insert(recipient_str.clone()) {
+                let recipient = parse_recipient(&recipient_str)?;
+                result.push((recipient, recipient_str));
             }
-            if let Ok(identity) = parse_identity(line) {
-                let recipient_str = recipient_from_identity(&identity);
-                if seen.insert(recipient_str.clone()) {
-                    if let Ok(recipient) = parse_recipient(&recipient_str) {
-                        result.push((recipient, recipient_str));
-                    }
-                }
-            }
-        }
+            Ok(())
+        })?;
     }
 
     Ok(result)

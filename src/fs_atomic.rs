@@ -1,22 +1,21 @@
 //! Crash-safe atomic file replacement for all git-veil state writes.
 //!
 //! Every durable state file this tool writes (keyring, trust.json,
-//! tracked.json, the secret-keys store, ciphertext `.secret` files,
+//! tracked.json, the key store, ciphertext `.secret` files,
 //! restored plaintext) goes through [`write_atomic`]. A plain
 //! `fs::write` truncates the target in place, so a crash mid-write
 //! leaves half-written state — for a secrets tool the worst case is a
-//! torn secret-keys store (bricks ALL private-key access, fail-closed)
+//! torn identity store (bricks ALL decryption access, fail-closed)
 //! or a torn plaintext/ciphertext pair (data loss). The write-temp-then-
 //! rename sequence below is atomic on POSIX and Windows same-volume, so
 //! the target is always either the old content or the new content,
 //! never a mix.
 //!
-//! The key stores are APPENDS (secret-keys.pgp, public-keys.pgp): their
+//! The key stores are APPENDS (identities.txt, recipients.txt): their
 //! atomic-append shape is read-existing + `write_atomic` of the whole
 //! accumulated content. The O(n) rewrite per append is the accepted
-//! trade — these stores hold a handful of armoured key blocks
-//! (kilobytes), and a torn store of private keys bricks all private-key
-//! access, so a partial write must never be possible.
+//! trade — a torn store of private keys bricks all decryption access,
+//! so a partial write must never be possible.
 
 use anyhow::{Context, Result};
 use std::fs::{self, File};
@@ -35,6 +34,26 @@ use std::path::Path;
 /// removed. Note the temp name is per-target (`<name>.tmp-<pid>`), so
 /// two different files never collide even within one process.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    write_atomic_impl(path, bytes, None)
+}
+
+/// [`write_atomic`] with an explicit creation mode (Unix only) for files
+/// git-veil creates that hold private key material — `identities.txt`,
+/// the permissions acknowledgment — so they land 0600 regardless of the
+/// process umask. Repo working-tree files keep [`write_atomic`].
+#[cfg(unix)]
+pub fn write_atomic_mode(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
+    write_atomic_impl(path, bytes, Some(mode))
+}
+
+/// Non-Unix fallback: Windows ACLs are a different permission model, so
+/// the mode is advisory only and the write is a plain atomic write.
+#[cfg(not(unix))]
+pub fn write_atomic_mode(path: &Path, bytes: &[u8], _mode: u32) -> Result<()> {
+    write_atomic_impl(path, bytes, None)
+}
+
+fn write_atomic_impl(path: &Path, bytes: &[u8], mode: Option<u32>) -> Result<()> {
     let file_name = path.file_name().with_context(|| {
         format!(
             "Cannot atomically write to a path with no file name: {}",
@@ -49,7 +68,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     ));
 
     let result = (|| -> Result<()> {
-        let mut tmp = File::create(&tmp_path)
+        let mut tmp = open_temp_file(&tmp_path, mode)
             .with_context(|| format!("Failed to create temp file {}", tmp_path.display()))?;
         tmp.write_all(bytes)
             .with_context(|| format!("Failed to write temp file {}", tmp_path.display()))?;
@@ -71,4 +90,22 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         let _ = fs::remove_file(&tmp_path);
     }
     result
+}
+
+#[cfg(unix)]
+fn open_temp_file(tmp_path: &Path, mode: Option<u32>) -> std::io::Result<File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    // No explicit mode = umask default (File::create semantics), so repo
+    // working-tree files are not permission-policed.
+    if let Some(mode) = mode {
+        options.mode(mode);
+    }
+    options.open(tmp_path)
+}
+
+#[cfg(not(unix))]
+fn open_temp_file(tmp_path: &Path, _mode: Option<u32>) -> std::io::Result<File> {
+    File::create(tmp_path)
 }

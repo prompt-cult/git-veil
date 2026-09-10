@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-cat \- Decrypt a single tracked file to stdout
 .SH SYNOPSIS
-\fBgit\-veil cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-passphrase\-stdin\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil cat\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Decrypt a single tracked file to stdout
 .SH OPTIONS
@@ -16,10 +16,7 @@ Your email address
 Git remote name
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
-Key store directory (default: $HOME/.git\-veil)
-.TP
-\fB\-\-passphrase\-stdin\fR
-Read the passphrase for a passphrase\-protected private key from stdin (exactly one line). Wins over the GITVEIL_PASSPHRASE environment variable; never pass a passphrase as a CLI argument
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -35,4 +32,3 @@ must be tracked with its ciphertext present beside it.
 EXAMPLES
   $ git\-veil cat .env
   $ git\-veil cat .env \-\-email alice@example.com
-  $ git\-veil cat .env \-\-passphrase\-stdin < pass.txt
