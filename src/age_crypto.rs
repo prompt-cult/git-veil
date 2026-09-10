@@ -8,18 +8,27 @@ use std::path::PathBuf;
 
 use crate::fs_atomic::write_atomic;
 
-/// Returns the default key store directory (`$HOME/.git-veil`).
+/// Returns the default key store directory.
 ///
-/// Errors when `HOME` is unset or empty instead of silently falling back to
-/// a world-writable location such as `/tmp`, where an attacker on a
-/// multi-user system could plant or tamper with key material.
+/// Resolution order: `$GIT_VEIL_HOME` wins, then `$HOME/.git-veil`.
+/// Errors when neither is set or both are empty, instead of silently
+/// falling back to a world-writable location such as `/tmp`, where an
+/// attacker on a multi-user system could plant or tamper with key
+/// material. An explicit `--key-store` on the CLI always overrides both.
 pub fn default_key_store() -> Result<PathBuf> {
-    match std::env::var("HOME") {
-        Ok(home) if !home.is_empty() => Ok(PathBuf::from(home).join(".git-veil")),
-        _ => anyhow::bail!(
-            "HOME is not set; cannot locate the key store ($HOME/.git-veil); pass --key-store"
-        ),
-    }
+    std::env::var("GIT_VEIL_HOME")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(|home| PathBuf::from(home).join(".git-veil"))
+        })
+        .ok_or_else(|| anyhow::anyhow!(
+            "Neither GIT_VEIL_HOME nor HOME is set; pass --key-store"
+        ))
 }
 
 /// Parses an age recipient string (`age1...`) into a Recipient.

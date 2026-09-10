@@ -21,7 +21,7 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 }
 
 /// Resolves the key store location for commands that consume a key_store:
-/// an explicit `--key-store` wins; otherwise fall back to `$HOME/.git-veil`.
+/// an explicit `--key-store` wins; then `$GIT_VEIL_HOME`; then `$HOME/.git-veil`.
 /// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
 /// show-repo-id) never fail on an unset HOME. list-keys is no longer in this
 /// set: it verifies the keyring signature against the pinned key, so it
@@ -167,8 +167,9 @@ fn main() -> Result<()> {
         Commands::Hide {
             remote,
             key_store: opt,
+            dangerously_delete_plaintext,
         } => {
-            cmd_hide(&repo_root, &remote, &resolve_key_store(opt)?)?;
+            cmd_hide(&repo_root, &remote, &resolve_key_store(opt)?, dangerously_delete_plaintext)?;
         }
         Commands::Reveal {
             email,

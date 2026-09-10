@@ -33,7 +33,9 @@ encryption, decryption or keyring mutation. Every gated command fails closed:
 without a pin, or with a signature that does not verify, nothing is touched.
 The key store and its pins are the trust boundary for every repository that
 uses that store, so sharing one store across mutually distrusting repositories
-is not advised.
+is not advised. Set `GIT_VEIL_HOME` to isolate a project's keys from your
+default `$HOME/.git-veil` (e.g. `GIT_VEIL_HOME=~/keys/project-a`); `--key-store`
+overrides both for ad-hoc use.
 
 ## Quick start (solo)
 
@@ -48,7 +50,7 @@ git-veil trust demo+example@github.com owner.signing   # pin the signing key
 git-veil tell example@github.com my-recipient.txt      # add yourself to the signed keyring
 echo .env >> .gitignore                        # ignore the plaintext name
 git-veil add .env                               # track the file
-git-veil hide                                   # encrypt: .env -> .env.secret, plaintext deleted
+git-veil hide                                   # encrypt: .env -> .env.secret (plaintext kept)
 git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Add encrypted secrets"
 git-veil reveal                                 # decrypt back when you need the plaintext
@@ -149,10 +151,10 @@ ergonomics that differ — such as a smaller final binary size.
 | `add`            | Track files for encryption                                              |
 | `remove`         | Untrack files (leaves any ciphertext in place)                          |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt all tracked files to the keyring and delete the plaintexts      |
+| `hide`           | Encrypt all tracked files to the keyring (plaintext kept; `--dangerously-delete-plaintext` to delete after) |
 | `reveal`         | Decrypt all tracked files back to plaintext                             |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
-| `unhide`         | Decrypt one tracked file back to plaintext and delete its ciphertext    |
+| `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
 | `changes`        | Report where plaintext differs from the last hidden version             |
 | `show-repo-id`   | Show the repository ID derived from the git remote push URL             |
 | `whoami`         | Show the identity and key store git-veil will use                        |

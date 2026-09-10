@@ -39,7 +39,7 @@ EXAMPLES
     /// Import your private key(s) into the git-veil key store
     #[command(after_long_help = "\
 Imports armoured PRIVATE key blocks into your per-machine key store
-($HOME/.git-veil/secret-keys.pgp). This is where reveal/cat/unhide/changes
+($GIT_VEIL_HOME or $HOME/.git-veil). This is where reveal/cat/unhide/changes
 find the private key matching your email, and where tell/removeperson find
 the owner's signing key. The key store is local to this machine and is
 never committed; each collaborator imports their own key.
@@ -55,7 +55,7 @@ EXAMPLES
         /// File(s) containing armoured private key blocks
         #[arg(required = true)]
         files: Vec<String>,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
@@ -64,7 +64,7 @@ EXAMPLES
     #[command(after_long_help = "\
 Prints — or with --output writes — the armoured PUBLIC key for the given
 email or fingerprint, read from the local key store on this machine
-($HOME/.git-veil). This is the key handoff between collaborators without
+($GIT_VEIL_HOME or $HOME/.git-veil). This is the key handoff between collaborators without
 any external OpenPGP tool: the local store only holds keys THIS machine
 knows about
 (your imported private key and any key trust has pinned), so each
@@ -91,7 +91,7 @@ EXAMPLES
         /// Write the armoured public key to this file instead of stdout
         #[arg(long)]
         output: Option<PathBuf>,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
@@ -100,7 +100,7 @@ EXAMPLES
     #[command(name = "removekey")]
     #[command(after_long_help = "\
 Drops key material from the LOCAL key store: every armoured block in
-$HOME/.git-veil/secret-keys.pgp and public-keys.pgp whose key's
+$GIT_VEIL_HOME (or $HOME/.git-veil) secret-keys.pgp and public-keys.pgp whose key's
 fingerprint matches the identifier, or whose exact case-insensitive email
 matches, is removed from both stores. Prefer the FINGERPRINT when it is
 not unambiguous which key you mean — a shared email that matches several
@@ -136,7 +136,7 @@ EXAMPLES
         /// matches several.
         #[arg(long)]
         yes: bool,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
@@ -145,7 +145,7 @@ EXAMPLES
     #[command(after_long_help = "\
 Verifies the repository owner's public signing key and pins it in your
 local key store, keyed by the repository ID derived from the git remote
-push URL. The pin is per machine: it lives in $HOME/.git-veil, is never
+push URL. The pin is per machine: it lives in $GIT_VEIL_HOME (or $HOME/.git-veil), is never
 committed, and every collaborator must run trust themselves after a fresh
 clone. The pinned key is the anchor against which every subsequent keyring
 signature is verified — tell, hide, reveal, cat, unhide, changes,
@@ -175,7 +175,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil). The store and its
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its
         /// pins are the trust boundary for every repository that uses it.
         #[arg(long)]
         key_store: Option<PathBuf>,
@@ -205,7 +205,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -238,7 +238,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -270,10 +270,10 @@ EXAMPLES
     /// Untrack files (leaves any ciphertext in place)
     #[command(after_long_help = "\
 Untracks files (removes them from .git-veil/tracked.json). The plaintext
-may already be gone — hide deletes it — so the file does not need to
-exist. Untracking is not decrypting: any <name>.secret ciphertext is left
-in place; restore the plaintext with unhide or reveal first if you want
-it gone too.
+may already be gone — hide --dangerously-delete-plaintext removes it — so
+the file does not need to exist. Untracking is not decrypting: any
+<name>.secret ciphertext is left in place; restore the plaintext with
+unhide or reveal first if you want it gone too.
 
 EXAMPLES
   $ git-veil remove .env
@@ -296,25 +296,19 @@ EXAMPLES
 ")]
     List,
 
-    /// Encrypt all tracked files to the keyring and delete the plaintexts
+    /// Encrypt all tracked files to the keyring
     #[command(after_long_help = "\
-Encrypts every tracked file to every key in the keyring, deletes the
-plaintext, and leaves <name>.secret beside where the plaintext was
-(notes -> notes.secret). You gitignore the PLAINTEXT filenames and commit
-the .secret files: a fresh clone carrying only ciphertext stays
-decryptable by every keyring member via reveal.
+Encrypts every tracked file to every key in the keyring and leaves
+<name>.secret beside where the plaintext was (notes -> notes.secret).
+You gitignore the PLAINTEXT filenames and commit the .secret files:
+a fresh clone carrying only ciphertext stays decryptable by every
+keyring member via reveal.
 
 hide is TWO-PHASE and ALL-OR-NOTHING: phase 1 reads and validates every
 tracked plaintext and encrypts EVERY file to the full recipient set in
 memory — if any plaintext is missing, unreadable or cannot be encrypted,
 hide aborts having changed NOTHING on disk. Phase 2 (only after every
-encryption succeeded) writes each .secret atomically and then deletes each
-plaintext; a plaintext is deleted only after its own ciphertext is durably
-on disk, so a crash can never leave a secret neither plaintext nor
-encrypted. If a phase-2 write fails part-way, the remaining ciphertexts
-are still written, only plaintexts whose ciphertext landed are deleted,
-and hide reports exactly what was done and what was left before exiting
-with an error.
+encryption succeeded) writes each .secret atomically.
 
 hide only works after the repository is initialized (git-veil init), the
 owner's key is trusted on this machine (git-veil trust), collaborators are
@@ -323,17 +317,24 @@ Before encrypting anything, the keyring signature is verified against the
 pinned trusted key. unhide, reveal and cat invert hide.
 
 EXAMPLES
-  $ git-veil hide    # encrypt all tracked files, delete the plaintexts
+  $ git-veil hide    # encrypt all tracked files (plaintext kept)
   $ git-veil hide --remote upstream
+  $ git-veil hide --dangerously-delete-plaintext
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
+
+The option --dangerously-delete-plaintext is only reversible if you have
+your private key, which is not an assumption any coding agent should make.
 ")]
     Hide {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
+        /// Delete plaintext files after successful encryption
+        #[arg(long)]
+        dangerously_delete_plaintext: bool,
     },
 
     /// Decrypt all tracked files back to plaintext
@@ -344,19 +345,14 @@ the pinned trusted key before any decryption. Your identity comes from
 git config user.email or --email; passphrase-protected keys take the
 passphrase from GITVEIL_PASSPHRASE or --passphrase-stdin.
 
-reveal is the inverse of hide for all files; unhide does one file and
-deletes its ciphertext; cat prints one file without touching disk state.
+reveal is the inverse of hide for all files; unhide does one file;
+cat prints one file without touching disk state.
 
 reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY tracked file must have its
 .secret ciphertext present and decrypt successfully. Phase 1 verifies and
 decrypts all files in memory — if any ciphertext is missing or cannot be
 decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
-(only after every decryption succeeded) writes each plaintext atomically
-and then deletes each ciphertext; a ciphertext is deleted only after its
-own plaintext is durably on disk. If a phase-2 write fails part-way, the
-remaining plaintexts are still written, only ciphertexts whose plaintext
-landed are deleted, and reveal reports exactly what was done and what was
-left before exiting with an error.
+(only after every decryption succeeded) writes each plaintext atomically.
 
 EXAMPLES
   $ git-veil reveal
@@ -370,7 +366,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -401,7 +397,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -411,13 +407,13 @@ EXAMPLES
         passphrase_stdin: bool,
     },
 
-    /// Decrypt one tracked file back to plaintext and delete its ciphertext
+    /// Decrypt one tracked file back to plaintext
     #[command(after_long_help = "\
 Decrypts one tracked file's in-place <name>.secret ciphertext back to
-the plaintext path and deletes the ciphertext — the inverse of hide for a
-single file. The keyring signature is verified against the pinned trusted
-key first; the file must be tracked and its ciphertext present. Typical
-round trip: unhide to edit, then hide to re-encrypt.
+the plaintext path — the inverse of hide for a single file. The keyring
+signature is verified against the pinned trusted key first; the file must
+be tracked and its ciphertext present. Typical round trip: unhide to edit,
+then hide to re-encrypt.
 
 EXAMPLES
   $ git-veil unhide .env
@@ -433,7 +429,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -465,7 +461,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
         /// Read the passphrase for a passphrase-protected private key from
@@ -508,7 +504,7 @@ EXAMPLES
         /// Email override
         #[arg(long)]
         email: Option<String>,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
@@ -531,7 +527,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
@@ -554,7 +550,7 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Key store directory (default: $HOME/.git-veil)
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },
@@ -566,9 +562,9 @@ tracked.json). .gitignore is never rewritten, and the in-place .secret
 ciphertext files are ordinary committable files that clean does not
 disown.
 
-Because hide deletes the plaintexts, the .secret ciphertexts beside them
-can be the ONLY remaining copy of a secret. A clean that would destroy
-tracked state or ciphertext therefore refuses unless --yes confirms it.
+The .secret ciphertexts can be the ONLY remaining copy of a secret. A
+clean that would destroy tracked state or ciphertext therefore refuses
+unless --yes confirms it.
 
 EXAMPLES
   $ git-veil clean          # refuses while tracked files or ciphertext exist

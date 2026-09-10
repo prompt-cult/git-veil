@@ -92,13 +92,6 @@ pub fn cmd_reveal(
         prepared.push((file.clone(), encrypted_path, plaintext));
     }
 
-    // PHASE 2 (only reached after every decryption succeeded): write each
-    // plaintext atomically, then delete each ciphertext. A ciphertext is
-    // deleted only AFTER its plaintext is durably on disk, so at worst both
-    // copies exist (zero loss), never neither. If a write fails part-way,
-    // the remaining plaintexts are still written and only ciphertexts whose
-    // plaintext was successfully written are deleted; the summary of what
-    // was done and what was left is reported and reveal exits with an error.
     let mut written: Vec<&(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     let mut first_error: Option<anyhow::Error> = None;
     for item in &prepared {
@@ -111,7 +104,10 @@ pub fn cmd_reveal(
         match write_atomic(&repo_root.join(file), plaintext)
             .with_context(|| format!("Failed to write decrypted file: {}", file.display()))
         {
-            Ok(()) => written.push(item),
+            Ok(()) => {
+                written.push(item);
+                println!("Decrypted: {}", file.display());
+            }
             Err(err) => {
                 if first_error.is_none() {
                     first_error = Some(err);
@@ -120,41 +116,11 @@ pub fn cmd_reveal(
         }
     }
 
-    let mut deleted: Vec<&PathBuf> = Vec::new();
-    let mut delete_error: Option<anyhow::Error> = None;
-    for (file, encrypted_path, _plaintext) in &written {
-        match fs::remove_file(encrypted_path).with_context(|| {
-            format!(
-                "Failed to delete encrypted file: {}",
-                encrypted_path.display()
-            )
-        }) {
-            Ok(()) => {
-                deleted.push(file);
-                println!("Decrypted: {}", file.display());
-            }
-            Err(err) => {
-                if delete_error.is_none() {
-                    delete_error = Some(err);
-                }
-            }
-        }
-    }
-
-    if let Some(err) = first_error.or(delete_error) {
-        let ciphertext_left: Vec<String> = prepared
-            .iter()
-            .filter(|(file, _, _)| !deleted.contains(&file))
-            .map(|(_, encrypted_path, _)| encrypted_path.display().to_string())
-            .collect();
+    if let Some(err) = first_error {
         return Err(err.context(format!(
-            "reveal failed part-way through the commit phase: {} of {} plaintext(s) written, \
-             {} ciphertext(s) deleted; ciphertext(s) left as-is: {}. \
-             Re-run 'git-veil reveal' once the cause is fixed.",
+            "reveal failed: {} of {} plaintext(s) written",
             written.len(),
-            prepared.len(),
-            deleted.len(),
-            ciphertext_left.join(", ")
+            prepared.len()
         )));
     }
 
