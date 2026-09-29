@@ -55,8 +55,8 @@ pub use permissions::{
 pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};
 pub use signing::{
     create_signature_block, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
-    fingerprint_for_verifying_key, generate_signing_keypair, parse_signing_key,
-    parse_verifying_key, sign_keyring_content, verify_keyring_signature,
+    fingerprint_for_verifying_key, generate_signing_keypair, keyring_content_digest,
+    parse_signing_key, parse_verifying_key, sign_keyring_content, verify_keyring_signature,
 };
 pub use tracked_files::{get_git_config_email, validate_tracked_path, TrackedFiles};
 pub use trust_store::{TrustPinStore, TrustStore};

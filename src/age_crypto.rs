@@ -167,7 +167,7 @@ pub fn decrypt_with_identity(ciphertext: &[u8], identity: &Identity) -> Result<V
 ///
 /// The store is private key material, so it is created mode 0600
 /// regardless of the process umask.
-pub fn import_identity_to_store(key_store: &PathBuf, identity_str: &str) -> Result<()> {
+pub fn import_identity_to_store(key_store: &Path, identity_str: &str) -> Result<()> {
     fs::create_dir_all(key_store).context("Failed to create key store directory")?;
     let identities_path = key_store.join("identities.txt");
 
@@ -188,7 +188,7 @@ pub fn import_identity_to_store(key_store: &PathBuf, identity_str: &str) -> Resu
 }
 
 /// Imports a recipient string into the key store (recipients.txt).
-pub fn import_recipient_to_store(key_store: &PathBuf, recipient_str: &str) -> Result<()> {
+pub fn import_recipient_to_store(key_store: &Path, recipient_str: &str) -> Result<()> {
     fs::create_dir_all(key_store).context("Failed to create key store directory")?;
     let recipients_path = key_store.join("recipients.txt");
 
@@ -274,7 +274,7 @@ pub fn load_recipients_from_store(key_store: &Path) -> Result<Vec<(Recipient, St
 }
 
 /// Finds an age identity by recipient string (matched exactly).
-pub fn find_identity_by_recipient(key_store: &PathBuf, recipient_str: &str) -> Result<Identity> {
+pub fn find_identity_by_recipient(key_store: &Path, recipient_str: &str) -> Result<Identity> {
     let identities = load_identities_from_store(key_store)?;
     let wanted = recipient_str.trim();
     identities
@@ -285,7 +285,7 @@ pub fn find_identity_by_recipient(key_store: &PathBuf, recipient_str: &str) -> R
 }
 
 /// Finds an age identity by fingerprint (derived from recipient string).
-pub fn find_identity_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Result<Identity> {
+pub fn find_identity_by_fingerprint(key_store: &Path, fingerprint: &str) -> Result<Identity> {
     let identities = load_identities_from_store(key_store)?;
     let wanted = fingerprint.trim().to_lowercase();
     identities
@@ -296,7 +296,7 @@ pub fn find_identity_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> R
 }
 
 /// Finds a recipient string by fingerprint in the key store.
-pub fn find_recipient_by_fingerprint(key_store: &PathBuf, fingerprint: &str) -> Result<String> {
+pub fn find_recipient_by_fingerprint(key_store: &Path, fingerprint: &str) -> Result<String> {
     let recipients = load_recipients_from_store(key_store)?;
     let wanted = fingerprint.trim().to_lowercase();
     recipients

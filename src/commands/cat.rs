@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
@@ -21,7 +21,7 @@ pub fn cmd_cat(
     file: &str,
     email: &str,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
 ) -> Result<Vec<u8>> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;

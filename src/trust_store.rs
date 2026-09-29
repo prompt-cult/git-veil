@@ -36,13 +36,13 @@ impl TrustStore {
         Ok(store)
     }
 
-    pub fn save_to_file(&self, path: &PathBuf) -> Result<()> {
+    pub fn save_to_file(&self, path: &Path) -> Result<()> {
         let content = self.serialize()?;
         write_atomic(path, content.as_bytes())?;
         Ok(())
     }
 
-    pub fn load_from_file(path: &PathBuf) -> Result<Self> {
+    pub fn load_from_file(path: &Path) -> Result<Self> {
         if !path.exists() {
             return Ok(Self::new());
         }
@@ -115,38 +115,60 @@ impl TrustPinStore {
         Ok(Some(content.trim().to_string()))
     }
 
-    /// The path of the per-machine keyring-freshness baseline for `repo_id`:
-    /// the highest keyring version this machine has ever accepted. Lives
-    /// beside the pin, OUTSIDE the repository — a committed baseline would
-    /// be attacker-writable and the rollback refusal would be void. See
-    /// "Keyring format and freshness" in docs/design.md.
+    /// The path of the per-machine keyring baseline for `repo_id`:
+    /// the highest keyring version this machine has ever accepted, plus —
+    /// since the fork fix (issue #20) — the SHA-256 digest of the accepted
+    /// signed content at that version. Lives beside the pin, OUTSIDE the
+    /// repository — a committed baseline would be attacker-writable and the
+    /// rollback refusal would be void. See "Keyring format and freshness" in
+    /// docs/design.md.
+    ///
+    /// File format: line 1 is the version digits; line 2 (optional) is the
+    /// hex digest. Pre-fork-fix baselines carried only the version; they are
+    /// read as (version, None) and upgraded on the next accepted signed ring.
     fn ring_version_path(key_store: &Path, repo_id: &str) -> PathBuf {
         key_store
             .join(Self::PIN_DIR)
             .join(format!("{}.ring-version", Self::sanitize_repo_id(repo_id)))
     }
 
-    /// Reads the freshness baseline; `Ok(None)` when this machine has never
-    /// accepted a versioned keyring for this repo (fresh-clone state).
-    pub fn read_ring_version(key_store: &Path, repo_id: &str) -> Result<Option<u64>> {
+    /// Reads the freshness baseline; `Ok((None, None))` when this machine has
+    /// never accepted a versioned keyring for this repo (fresh-clone state).
+    pub fn read_ring_baseline(
+        key_store: &Path,
+        repo_id: &str,
+    ) -> Result<(Option<u64>, Option<String>)> {
         let path = Self::ring_version_path(key_store, repo_id);
         if !path.exists() {
-            return Ok(None);
+            return Ok((None, None));
         }
         let content = fs::read_to_string(&path)?;
-        content
-            .trim()
-            .parse::<u64>()
-            .map(Some)
-            .map_err(|_| anyhow::anyhow!("corrupt keyring freshness baseline: {}", path.display()))
+        let mut lines = content.lines();
+        let version = match lines.next().map(str::trim) {
+            None | Some("") => None,
+            Some(v) => Some(v.parse::<u64>().map_err(|_| {
+                anyhow::anyhow!("corrupt keyring freshness baseline: {}", path.display())
+            })?),
+        };
+        let digest = lines
+            .next()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+        Ok((version, digest))
     }
 
-    /// Records the freshness baseline for `repo_id` (the highest keyring
-    /// version accepted on this machine).
-    pub fn write_ring_version(key_store: &Path, repo_id: &str, version: u64) -> Result<()> {
+    /// Records the freshness baseline for `repo_id`: the highest version
+    /// accepted on this machine and the digest of the accepted signed content.
+    pub fn write_ring_baseline(
+        key_store: &Path,
+        repo_id: &str,
+        version: u64,
+        digest: &str,
+    ) -> Result<()> {
         let path = Self::ring_version_path(key_store, repo_id);
         fs::create_dir_all(path.parent().expect("baseline path always has a parent"))?;
-        write_atomic(&path, version.to_string().as_bytes())?;
+        write_atomic(&path, format!("{}\n{}\n", version, digest).as_bytes())?;
         Ok(())
     }
 

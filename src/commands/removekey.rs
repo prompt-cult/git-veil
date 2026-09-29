@@ -78,7 +78,7 @@ fn load_recipient_store(path: &Path) -> Result<StoreContents> {
         parse_recipient(line_str)?;
         lines.push(StoreLine {
             text: line_str.to_string(),
-            fingerprint: fingerprint_for_recipient(&line_str.to_string()),
+            fingerprint: fingerprint_for_recipient(line_str),
             recipient: line_str.to_string(),
         });
         Ok(())
@@ -99,7 +99,7 @@ fn line_matches(line: &StoreLine, wanted_fingerprint: &str, wanted_recipient: &s
 /// Removes key material from the LOCAL key store: every line in
 /// `<key_store>/identities.txt` and `<key_store>/recipients.txt` whose
 /// fingerprint matches `identifier`, or whose recipient string matches, is dropped.
-pub fn cmd_removekey(key_store: &PathBuf, identifier: &str, yes: bool) -> Result<()> {
+pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
     let identities_path = key_store.join("identities.txt");
     let recipients_path = key_store.join("recipients.txt");
 

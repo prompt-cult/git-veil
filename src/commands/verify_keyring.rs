@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::age_crypto::for_each_store_line;
 use crate::exit_codes::{coded, ExitCode};
 use crate::{
     derive_repo_id, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
-    fingerprint_for_verifying_key, get_remote_push_url, parse_verifying_key,
-    verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
+    fingerprint_for_verifying_key, get_remote_push_url, keyring_content_digest,
+    parse_verifying_key, verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
 };
 
 /// Loads the Ed25519 verifying key matching `fingerprint` from the key store.
@@ -16,7 +16,7 @@ use crate::{
 /// hard refusal (code 62) naming the corrupt line — never a silent skip
 /// that would misreport the pin as missing.
 fn load_verifying_key_by_fingerprint(
-    key_store: &PathBuf,
+    key_store: &Path,
     fingerprint: &str,
 ) -> Result<ed25519_dalek::VerifyingKey> {
     let verifying_keys_path = key_store.join("verifying-keys.txt");
@@ -55,7 +55,7 @@ fn load_verifying_key_by_fingerprint(
 pub fn verify_keyring_against_trust(
     repo_root: &Path,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
 ) -> Result<(String, String, Keyring)> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -107,9 +107,11 @@ pub fn verify_keyring_against_trust(
     let keyring = Keyring::parse(&keyring_text)?;
 
     let sig_begin = "-----BEGIN GIT-VEIL SIGNATURE-----";
-    if keyring_text.contains(sig_begin) {
+    let signed = keyring_text.contains(sig_begin);
+    let mut content_to_verify = String::new();
+    if signed {
         // Extract content and signature
-        let content_to_verify = extract_content_to_verify_from_keyring(&keyring_text)?;
+        content_to_verify = extract_content_to_verify_from_keyring(&keyring_text)?;
         let signature_b64 = extract_signature_from_keyring(&keyring_text)?;
 
         // Verify signature
@@ -147,38 +149,62 @@ pub fn verify_keyring_against_trust(
     // baseline — otherwise an attacker's junk ring (e.g. version:u64::MAX,
     // issue #22) poisons the baseline and bricks every machine past a revert
     // of the attacker's commit.
+    //
+    // Fork detection (issue #20): the baseline also records the SHA-256
+    // digest of the accepted signed content. An equal-version keyring with
+    // DIFFERENT content (two machines curating without pulling, or an
+    // attacker substituting a same-version ring) is refused as the same
+    // trust violation class as a rollback — re-trust is the recovery.
     let unsigned_empty = keyring.entries.is_empty() && keyring.signature.is_none();
     let observed = if unsigned_empty {
         0
     } else {
         keyring.version.unwrap_or(0)
     };
-    match TrustPinStore::read_ring_version(key_store, &repo_id)? {
-        Some(baseline) if baseline > observed => {
+    let current_digest = if signed {
+        Some(keyring_content_digest(&content_to_verify))
+    } else {
+        None
+    };
+    let (baseline_version, baseline_digest) =
+        TrustPinStore::read_ring_baseline(key_store, &repo_id)?;
+    if let Some(bv) = baseline_version {
+        if bv > observed {
             return Err(coded(
                 ExitCode::KeyringRollback,
                 format!(
                     "keyring rollback refused for {}: version {} is below this machine's freshness baseline {}; if this rollback is intended, re-run git-veil trust {} <keyfile> to reset it (exit code 14)",
-                    repo_id, observed, baseline, repo_id
+                    repo_id, observed, bv, repo_id
                 ),
             ));
         }
-        _ if keyring.signature.is_some() => {
-            // Only an owner-signed ring may advance the baseline. A
-            // versionless ring records 0 — see the migration note below.
-            let baseline_now = TrustPinStore::read_ring_version(key_store, &repo_id)?;
-            if baseline_now != Some(observed) {
-                TrustPinStore::write_ring_version(key_store, &repo_id, observed)?;
+        if bv == observed {
+            if let (Some(bd), Some(cd)) = (&baseline_digest, &current_digest) {
+                if bd != cd {
+                    return Err(coded(
+                        ExitCode::KeyringRollback,
+                        format!(
+                            "keyring fork refused for {}: the version-{} keyring accepted on this machine has different content than the one presented (equal-version substitution); if this is intended, re-run git-veil trust {} <keyfile> to reset the baseline (exit code 14)",
+                            repo_id, observed, repo_id
+                        ),
+                    ));
+                }
             }
         }
-        _ => {}
+    }
+    if let Some(cd) = current_digest {
+        // Only an owner-signed ring may advance the baseline. A versionless
+        // ring records 0 (the pre-freshness migration state).
+        if baseline_version != Some(observed) || baseline_digest.as_deref() != Some(cd.as_str()) {
+            TrustPinStore::write_ring_baseline(key_store, &repo_id, observed, &cd)?;
+        }
     }
 
     Ok((repo_id, trusted_fingerprint.to_string(), keyring))
 }
 
 /// Verifies the keyring signature against the trusted signing key.
-pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, key_store: &PathBuf) -> Result<()> {
+pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, key_store: &Path) -> Result<()> {
     let (repo_id, fingerprint, keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 

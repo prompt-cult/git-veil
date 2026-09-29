@@ -24,7 +24,7 @@ pub fn cmd_add(
     repo_root: &Path,
     files: Vec<String>,
     remote_name: &str,
-    key_store: &std::path::PathBuf,
+    key_store: &std::path::Path,
 ) -> Result<()> {
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
@@ -128,7 +128,7 @@ fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
         content.push_str(relative_path);
         content.push('\n');
         std::fs::write(&gitignore_path, content)
-            .with_context(|| format!("Failed to write .gitignore"))?;
+            .with_context(|| "Failed to write .gitignore".to_string())?;
         println!("file not in .gitignore, adding: {}", relative_path);
     }
 

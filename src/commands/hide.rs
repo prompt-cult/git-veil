@@ -56,7 +56,7 @@ pub(crate) fn ensure_ciphertext_beside_plaintext(
 pub fn cmd_hide(
     repo_root: &Path,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
     keep_plaintext: bool,
 ) -> Result<()> {
     // Verify keyring signature first; the same call yields the repo id the

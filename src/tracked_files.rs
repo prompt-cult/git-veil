@@ -303,7 +303,7 @@ pub(crate) fn resolve_repo_relative_input(
 }
 
 impl TrackedFiles {
-    pub fn load(path: &PathBuf) -> Result<Self> {
+    pub fn load(path: &Path) -> Result<Self> {
         if !path.exists() {
             return Ok(Self::default());
         }
@@ -317,7 +317,7 @@ impl TrackedFiles {
         Ok(tracked)
     }
 
-    pub fn save(&self, path: &PathBuf) -> Result<()> {
+    pub fn save(&self, path: &Path) -> Result<()> {
         let content =
             serde_json::to_string_pretty(self).context("Failed to serialize tracked files")?;
         write_atomic(path, content.as_bytes()).context("Failed to write tracked files")?;
@@ -330,7 +330,7 @@ impl TrackedFiles {
         }
     }
 
-    pub fn remove(&mut self, file: &PathBuf) {
+    pub fn remove(&mut self, file: &Path) {
         self.files.retain(|f| f != file);
     }
 }
