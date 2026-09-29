@@ -5,6 +5,12 @@ use crate::exit_codes::{coded, ExitCode};
 pub const BEGIN_MARKER: &str = "-----BEGIN GIT-VEIL KEYRING-----";
 pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
 
+/// The `version:` line prefix inside the keyring block. The line is part of
+/// the signed payload, so the monotonic counter it carries cannot be forged
+/// without the owner key. See "Keyring format and freshness" in
+/// docs/design.md.
+const VERSION_PREFIX: &str = "version:";
+
 #[derive(Debug, Clone)]
 pub struct KeyringEntry {
     pub email: String,
@@ -16,6 +22,10 @@ pub struct KeyringEntry {
 pub struct Keyring {
     pub entries: Vec<KeyringEntry>,
     pub signature: Option<String>,
+    /// Monotonic counter inside the signed payload, bumped by tell and
+    /// removeperson. `None` for keyrings written before freshness existed;
+    /// such keyrings count as version 0 for rollback comparisons.
+    pub version: Option<u64>,
 }
 
 impl Keyring {
@@ -23,6 +33,7 @@ impl Keyring {
         Self {
             entries: Vec::new(),
             signature: None,
+            version: None,
         }
     }
 
@@ -47,24 +58,46 @@ impl Keyring {
         }
 
         let keyring_section = &content[begin_idx + BEGIN_MARKER.len()..end_idx];
-        let entries: Vec<KeyringEntry> = keyring_section
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| {
-                let parts: Vec<&str> = line.split(':').collect();
-                if parts.len() != 3 {
+        let mut version: Option<u64> = None;
+        let mut entries: Vec<KeyringEntry> = Vec::new();
+        for line in keyring_section.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            // The freshness counter is part of the signed payload and is
+            // parsed strictly: it is attacker-writable repo content, so a
+            // malformed version line is a refusal (code 62), never a silent
+            // skip that would let a rollback slip through as an "entry"
+            // parse error later.
+            if let Some(stem) = line.strip_prefix(VERSION_PREFIX) {
+                if version.is_some() {
                     return Err(coded(
                         ExitCode::KeyParseFailure,
-                        format!("Malformed keyring entry: {}", line),
+                        "Malformed keyring: duplicate version line",
                     ));
                 }
-                Ok(KeyringEntry {
-                    email: parts[0].to_string(),
-                    recipient: parts[1].to_string(),
-                    fingerprint: parts[2].to_string(),
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+                let n = stem.trim().parse::<u64>().map_err(|_| {
+                    coded(
+                        ExitCode::KeyParseFailure,
+                        format!("Malformed keyring version line: {}", line),
+                    )
+                })?;
+                version = Some(n);
+                continue;
+            }
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() != 3 {
+                return Err(coded(
+                    ExitCode::KeyParseFailure,
+                    format!("Malformed keyring entry: {}", line),
+                ));
+            }
+            entries.push(KeyringEntry {
+                email: parts[0].to_string(),
+                recipient: parts[1].to_string(),
+                fingerprint: parts[2].to_string(),
+            });
+        }
 
         let after_end = &content[end_idx + END_MARKER.len()..];
         let sig_begin = "-----BEGIN GIT-VEIL SIGNATURE-----";
@@ -78,13 +111,20 @@ impl Keyring {
             None
         };
 
-        Ok(Self { entries, signature })
+        Ok(Self {
+            entries,
+            signature,
+            version,
+        })
     }
 
     pub fn serialize(&self) -> String {
         let mut result = String::new();
         result.push_str(BEGIN_MARKER);
         result.push('\n');
+        if let Some(n) = self.version {
+            result.push_str(&format!("{}{}\n", VERSION_PREFIX, n));
+        }
         for entry in &self.entries {
             result.push_str(&format!(
                 "{}:{}:{}\n",
@@ -142,6 +182,14 @@ impl Keyring {
         }
         self.signature = None;
         Ok(())
+    }
+
+    /// Bumps the monotonic freshness counter for a re-sign: the new version
+    /// is current + 1 (a versionless keyring counts as 0). Called by tell
+    /// and removeperson before signing, so the bump is covered by the new
+    /// signature.
+    pub fn bump_version(&mut self) {
+        self.version = Some(self.version.unwrap_or(0) + 1);
     }
 
     /// Finds the entry whose email matches the given email

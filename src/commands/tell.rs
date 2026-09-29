@@ -69,6 +69,12 @@ pub fn cmd_tell(
     // Add entry (this clears signature)
     keyring.add_entry(email.to_string(), recipient_str.to_string(), fingerprint)?;
 
+    // Bump the monotonic freshness counter BEFORE signing, so the counter is
+    // covered by the new signature (see docs/design.md "Keyring format and
+    // freshness"): the counter lives in the signed payload and needs no
+    // state outside the keyring, so no clock and no cross-machine bookkeeping.
+    keyring.bump_version();
+
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();
 

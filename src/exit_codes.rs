@@ -25,6 +25,8 @@ pub enum ExitCode {
     TrustMismatch = 12,
     /// repo_id argument does not match the one derived from the remote.
     TrustRepoIdMismatch = 13,
+    /// Keyring version is below this machine's freshness baseline (rollback).
+    KeyringRollback = 14,
     /// No Ed25519 signing key in the key store.
     NoSigningKey = 20,
     /// No age identity in the key store matching your keyring entry.
@@ -61,6 +63,7 @@ impl ExitCode {
         ExitCode::NoTrustPin,
         ExitCode::TrustMismatch,
         ExitCode::TrustRepoIdMismatch,
+        ExitCode::KeyringRollback,
         ExitCode::NoSigningKey,
         ExitCode::NoAgeIdentity,
         ExitCode::IdentityNotInKeyring,
@@ -84,6 +87,7 @@ impl ExitCode {
             ExitCode::NoTrustPin => "NoTrustPin",
             ExitCode::TrustMismatch => "TrustMismatch",
             ExitCode::TrustRepoIdMismatch => "TrustRepoIdMismatch",
+            ExitCode::KeyringRollback => "KeyringRollback",
             ExitCode::NoSigningKey => "NoSigningKey",
             ExitCode::NoAgeIdentity => "NoAgeIdentity",
             ExitCode::IdentityNotInKeyring => "IdentityNotInKeyring",
@@ -115,6 +119,9 @@ impl ExitCode {
             }
             ExitCode::TrustRepoIdMismatch => {
                 "repo_id argument does not match the one derived from the remote"
+            }
+            ExitCode::KeyringRollback => {
+                "Keyring version is below this machine's freshness baseline; re-run git-veil trust if the rollback is intended"
             }
             ExitCode::NoSigningKey => {
                 "No Ed25519 signing key in the key store; create one and back it up"
