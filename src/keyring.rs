@@ -28,6 +28,12 @@ pub struct Keyring {
     pub version: Option<u64>,
 }
 
+impl Default for Keyring {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Keyring {
     pub fn new() -> Self {
         Self {

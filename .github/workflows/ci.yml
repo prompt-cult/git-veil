@@ -83,13 +83,11 @@ jobs:
         run: cargo fmt --all -- --check
 
   clippy:
-    name: Clippy (non-blocking)
+    name: Clippy
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    # NON-BLOCKING: the tree carries ~90 pre-existing clippy warnings. This
-    # job surfaces them on every PR but cannot fail the build. Flip it to
-    # blocking (`-D warnings`, drop continue-on-error) once the debt is
-    # cleared.
-    continue-on-error: true
+    # BLOCKING since the 0.5.x tidy-up: the warning debt is cleared, and a
+    # secrets tool whose CI tolerates warnings is a bad look at release time.
+    # Keep it this way: any warning is a failure.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -124,8 +122,7 @@ jobs:
             ${{ runner.os }}-cargo-build-clippy-
 
       - name: Run clippy
-        # Intentionally plain: no -D warnings until the existing debt is gone.
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
 
   security-audit:
     name: Security Audit

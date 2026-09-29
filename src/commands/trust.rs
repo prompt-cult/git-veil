@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::exit_codes::{coded, ExitCode};
 use crate::{
@@ -18,7 +18,7 @@ pub fn cmd_trust(
     repo_id: &str,
     signing_key_path: &str,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
 ) -> Result<()> {
     // Get push URL and derive repo ID
     let push_url = get_remote_push_url(repo_root, remote_name)?;

@@ -29,7 +29,8 @@ Preferred, not a straitjacket: common sense and context-specific good practice s
 
 - Format is blocking: `cargo fmt --all -- --check`
 - Tests are blocking: `cargo test --locked` (both debug and release in CI)
-- Clippy and `cargo audit` are **non-blocking** in CI (`continue-on-error`) — the tree carries ~90 pre-existing clippy warnings and known advisories on the locked tree. Do not "fix" this by adding `-D warnings`; see `.github/workflows/ci.yml`.
+- Clippy is **blocking** (`-D warnings`) — the pre-existing debt was cleared in the 0.5.x tidy-up; keep it that way.
+- `cargo audit` is **non-blocking** in CI (`continue-on-error`) — known advisories on the locked tree. Do not "fix" this by adding `-D warnings` to audit; see `.github/workflows/ci.yml`.
 - Single integration suite: `cargo test --test <name>` (e.g. `--test interop`, `--test trust_model`). Suite files live in `tests/`.
 - `mise` is the tool manager (`.mise.toml`); it provides the Rust toolchain and a gpg binary used only by interop tests.
 

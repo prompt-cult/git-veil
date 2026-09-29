@@ -140,6 +140,17 @@ already has a baseline, the unsigned ring is refused outright (a rollback to
 "no collaborators" fails closed); on a baseline-less machine it is accepted
 as the fresh-init state it is.
 
+**Fork detection.** The baseline file also records the SHA-256 digest of the
+accepted SIGNED keyring content (`keyring_content_digest`, src/signing.rs).
+An equal-version keyring whose content differs from the accepted one is
+refused with exit 14: two curating machines that do not pull in between would
+otherwise produce two differently-populated version-N keyrings, and the
+second would silently replace the first. The refusal names the fork and the
+recovery ceremony (re-`trust`); a legitimate bump to a higher version is
+accepted and advances both version and digest. Baselines written before this
+rule existed carry no digest and are upgraded in place on the next accepted
+signed ring.
+
 A fresh clone has no baseline: the first gated command records the current
 SIGNED keyring's version as the baseline (a versionless keyring records 0) —
 the same trust-on-first-use posture as the pin itself. The baseline is
@@ -462,6 +473,7 @@ codes are never renumbered, only appended.
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
 | 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `hide` refuses (see "Orphaned ciphertext") |
+| 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`/`unhide`; see "Ignore safety" gate 4) |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local identity |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |

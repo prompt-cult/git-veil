@@ -22,6 +22,16 @@ pub fn sign_keyring_content(keyring_content: &str, signing_key: &SigningKey) -> 
     Ok(STANDARD.encode(signature.to_bytes()))
 }
 
+/// SHA-256 hex digest of the canonical signed keyring content. Recorded in
+/// the per-machine baseline beside the freshness counter so that an
+/// equal-version keyring with DIFFERENT content (a curation fork — two
+/// machines both curating without pulling — issue #20) is refused rather
+/// than silently replacing the accepted collaborator set.
+pub fn keyring_content_digest(keyring_content: &str) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(keyring_content.as_bytes()))
+}
+
 /// Verifies a keyring signature against the content using an Ed25519 verifying key.
 pub fn verify_keyring_signature(
     keyring_content: &str,

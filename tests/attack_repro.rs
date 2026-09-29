@@ -280,7 +280,7 @@ fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
     let f2 = Fixture::new("migration-fresh");
     let _carol2 = f2.add_collab("carol@example.com");
     let versionless2 = resigned(
-        &fs::read_to_string(&f2.repo.join(".git-veil/keyring")).unwrap(),
+        &fs::read_to_string(f2.repo.join(".git-veil/keyring")).unwrap(),
         None,
         &f2,
     );
@@ -551,7 +551,7 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
 
 // ---------------------------------------------------------------------------
 // Regression — reveal/unhide refuse a tracked-in-git plaintext
-// (issue #8, FIXED — reveal-clobber hardening)
+// (issue #15, FIXED — reveal-clobber hardening)
 //
 // Previously: a repo writer nominated a tracked-in-git source file in
 // tracked.json and committed a payload ciphertext encrypted to the ring's
@@ -859,4 +859,44 @@ fn fix_orphan_gate_survives_quoting_and_dot_secret() {
         f.repo.join(unicode_name).exists(),
         "--keep-plaintext path: the unicode plaintext is intact"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Regression — equal-version fork refused via baseline digest
+// (issue #20, FIXED)
+//
+// The freshness baseline now records the SHA-256 digest of the accepted
+// signed content alongside the version: an equal-version keyring with
+// different content (a curation fork, or a same-version substitution) is
+// refused with exit 14 instead of silently replacing the collaborator set.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fix_equal_version_fork_refused_by_baseline_digest() {
+    let f = Fixture::new("fork-digest");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("secrets.env", b"TOKEN=x\n");
+    f.hide();
+    f.stage_all();
+    let keyring_path = f.repo.join(".git-veil/keyring");
+
+    // Fork: a different keyring at the SAME version (carol swapped for dave),
+    // signed by the owner key — what two unsynchronised curating machines
+    // would produce.
+    let base = fs::read_to_string(&keyring_path).unwrap();
+    let fork = resigned(
+        &base.replace("carol@example.com", "dave@example.com"),
+        Some(1),
+        &f,
+    );
+    fs::write(&keyring_path, &fork).unwrap();
+    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("equal-version fork must be refused");
+    assert_eq!(exit_code_of(&err), 14);
+
+    // The legitimate bump (same content, next version) is accepted.
+    let next = resigned(&fs::read_to_string(&keyring_path).unwrap(), Some(2), &f);
+    fs::write(&keyring_path, &next).unwrap();
+    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect("the legitimate version bump advances the baseline");
 }

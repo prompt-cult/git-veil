@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::age_crypto::{fingerprint_for_recipient, load_recipients_from_store};
 use crate::fs_atomic::write_atomic;
@@ -11,7 +11,7 @@ use crate::fs_atomic::write_atomic;
 /// Matching is exact equality: the identifier equals a recipient string, or
 /// equals the fingerprint derived from one. The store may hold recipients
 /// imported via `trust` or derived from imported identities.
-pub fn export_public_key(key_store: &PathBuf, identifier: &str) -> Result<String> {
+pub fn export_public_key(key_store: &Path, identifier: &str) -> Result<String> {
     let recipients = load_recipients_from_store(key_store)?;
     let wanted_fingerprint = identifier.trim().to_lowercase();
 
@@ -53,7 +53,7 @@ pub fn export_public_key(key_store: &PathBuf, identifier: &str) -> Result<String
 
 /// Exports the age recipient string for `identifier` from the local key
 /// store: to stdout, or atomically to `output` when given.
-pub fn cmd_export(key_store: &PathBuf, identifier: &str, output: Option<&Path>) -> Result<()> {
+pub fn cmd_export(key_store: &Path, identifier: &str, output: Option<&Path>) -> Result<()> {
     let armored = export_public_key(key_store, identifier)?;
     match output {
         Some(path) => write_atomic(path, armored.as_bytes())

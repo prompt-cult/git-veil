@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::age_crypto::{
     fingerprint_for_recipient, for_each_store_line, parse_identity, recipient_from_identity,
@@ -16,7 +16,7 @@ use crate::fs_atomic::write_atomic_mode;
 /// it. Identities whose fingerprint is already present in the store are
 /// skipped rather than duplicated. On success the store is written as
 /// newline-separated identity strings.
-pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &PathBuf) -> Result<()> {
+pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Result<()> {
     if files.is_empty() {
         anyhow::bail!("no key files given; pass one or more age identity files, e.g. git-veil import alice.age");
     }

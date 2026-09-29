@@ -812,7 +812,7 @@ fn test_git_veil_multi_recipient_age_cli_decrypts() {
     assert_eq!(output.stdout, plaintext);
 
     // age CLI decrypts with id2
-    let id2_path = write_identity_file(&dir, "id2.txt", &id2.to_string().expose_secret(), &r2_str);
+    let id2_path = write_identity_file(&dir, "id2.txt", id2.to_string().expose_secret(), &r2_str);
     let output = Command::new("age")
         .arg("-d")
         .arg("-i")

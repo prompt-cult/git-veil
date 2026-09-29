@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
@@ -15,7 +15,7 @@ pub fn cmd_removeperson(
     repo_root: &Path,
     email_to_remove: &str,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
     signing_key_selection: Option<&str>,
 ) -> Result<()> {
     // Verify trust is established AND the existing keyring signature

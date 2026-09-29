@@ -297,8 +297,8 @@ EXAMPLES
     /// Untrack files (deletes the sibling .secret unless --keep-ciphertext)
     #[command(after_long_help = "\
 Untracks files (removes them from .git-veil/tracked.json). The plaintext
-may already be gone — hide --dangerously-delete-plaintext removes it — so
-the file does not need to exist.
+may already be gone — hide deletes plaintexts by default — so the file
+does not need to exist.
 
 By default the sibling <name>.secret ciphertext is deleted too: a
 de-tracked but committed ciphertext would otherwise be silently skipped

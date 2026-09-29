@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::commands::add::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
@@ -50,7 +50,7 @@ pub fn cmd_unhide(
     file: &str,
     email: &str,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
 ) -> Result<()> {
     // Verify keyring signature first: never decrypt against an unverified keyring
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
@@ -96,7 +96,7 @@ pub fn cmd_unhide(
     ensure_regular_file(repo_root, &relative)?;
 
     // Tracked-plaintext gate (exit 43): same refusal as reveal — see
-    // docs/design.md "Ignore safety" gate 4 and issue #8.
+    // docs/design.md "Ignore safety" gate 4 and issue #15.
     ensure_not_tracked_in_git(repo_root, &relative)?;
 
     // Compute encrypted path

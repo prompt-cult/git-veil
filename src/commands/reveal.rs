@@ -11,7 +11,7 @@ use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{cmd_verify_keyring, decrypt_with_identity, Keyring, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
-/// index — see docs/design.md "Ignore safety" gate 4 and issue #8.
+/// index — see docs/design.md "Ignore safety" gate 4 and issue #15.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
@@ -38,7 +38,7 @@ pub fn cmd_reveal(
     repo_root: &Path,
     email: &str,
     remote_name: &str,
-    key_store: &PathBuf,
+    key_store: &Path,
 ) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, key_store)?;
