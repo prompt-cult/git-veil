@@ -11,6 +11,8 @@ documentation = "https://docs.rs/git-veil"
 readme = "README.md"
 keywords = ["git", "age", "encryption", "secrets", "git-veil"]
 categories = ["command-line-utilities", "cryptography"]
+# Never ship the scratch-directory marker to crates.io.
+exclude = [".tmp/*", ".idea/*"]
 
 [dependencies]
 # age encryption (age-encryption.org/v1 spec)
