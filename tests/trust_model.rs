@@ -207,7 +207,7 @@ fn test_hide_fails_without_trust() {
     init_git_repo(&repo.path);
     cmd_init(&repo.path).expect("init");
 
-    let result = cmd_hide(&repo.path, "origin", &key_store.path, false);
+    let result = cmd_hide(&repo.path, "origin", &key_store.path, true);
     assert!(result.is_err(), "hide should fail without trust");
 }
 

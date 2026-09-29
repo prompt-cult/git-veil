@@ -162,4 +162,4 @@ meet as a newcomer:
 Identical to any other member — see [docs/solo.md](solo.md) section 6 for
 the edit → `changes` → `hide` → commit → `reveal` cycle. Check with the
 owner before re-hiding a shared repo: `hide` encrypts to the whole current
-keyring (and deletes plaintexts only with `--dangerously-delete-plaintext`).
+keyring (and deletes plaintexts by default; `--keep-plaintext` keeps them).

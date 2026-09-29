@@ -161,20 +161,22 @@ fn test_hide_all_or_nothing_missing_plaintext() {
     // Delete one plaintext before hide
     fs::remove_file(f.repo.join(".env")).unwrap();
 
-    let result = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false);
-    assert!(
-        result.is_err(),
-        "hide should abort when a plaintext is missing"
-    );
+    // Issue #13 semantics: a missing plaintext is a skip-and-report, not an
+    // error — the file with a plaintext IS encrypted, and (default) its
+    // plaintext is deleted after the ciphertext is durable.
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide succeeds with skip");
 
-    // The other file should NOT be encrypted (all-or-nothing)
     assert!(
-        f.repo.join("config.yml").exists(),
-        "config.yml should still be plaintext"
+        !f.repo.join(".env").exists() && !f.repo.join(".env.secret").exists(),
+        "missing-plaintext file: skipped, neither copy created"
     );
     assert!(
-        !f.repo.join("config.yml.secret").exists(),
-        "config.yml should not be encrypted"
+        !f.repo.join("config.yml").exists(),
+        "config.yml plaintext deleted by default after successful hide"
+    );
+    assert!(
+        f.repo.join("config.yml.secret").exists(),
+        "config.yml encrypted normally"
     );
 }
 
@@ -192,7 +194,7 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
     f.add_file(".env", b"secret\n");
     f.add_file("config.yml", b"config\n");
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     // Delete one ciphertext before reveal
     fs::remove_file(f.repo.join(".env.secret")).unwrap();
@@ -237,7 +239,7 @@ fn test_multi_recipient_both_can_decrypt() {
     let plaintext = b"shared\n";
     f.add_file(".env", plaintext);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     // Alice reveals
     cmd_reveal(
@@ -250,7 +252,7 @@ fn test_multi_recipient_both_can_decrypt() {
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
     // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("re-hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("re-hide");
     cmd_reveal(&f.repo.path, "bob@example.com", "origin", &f.key_store.path).expect("bob reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 }
@@ -290,7 +292,7 @@ fn test_subdirectory_hide_reveal() {
     let plaintext = b"nested secret\n";
     f.add_file("config/secrets.yml", plaintext);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     // git-secret does NOT delete plaintext by default -- both exist
     assert!(f.repo.join("config/secrets.yml").exists());
@@ -324,7 +326,7 @@ fn test_cat_preserves_disk_state() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"cat test\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     let _ = cmd_cat(
         &f.repo.path,
@@ -360,7 +362,7 @@ fn test_unhide_isolates_single_file() {
     f.add_file(".env", b"first\n");
     f.add_file("config.yml", b"second\n");
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     cmd_unhide(
         &f.repo.path,
@@ -396,7 +398,7 @@ fn test_changes_binary_file() {
     let binary = vec![0u8, 1, 2, 3, 0, 255, 254];
     f.add_file("data.bin", &binary);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     // Write different binary
     fs::write(f.repo.join("data.bin"), vec![0u8, 1, 2, 3, 0, 255, 253]).unwrap();
@@ -504,7 +506,7 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     .expect("add");
 
     // hide FAILS CLOSED before encrypting anything: exit code 40
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).unwrap_err();
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(
         exit_code_of(&err),
@@ -523,7 +525,7 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     // Removing the broad rule makes hide succeed (the appended plaintext
     // ignore line .tmp/x.txt keeps protecting the plaintext)
     fs::write(f.repo.join(".gitignore"), ".tmp/x.txt\n").unwrap();
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect("hide after fixing .gitignore");
     assert!(f.repo.join(".tmp/x.txt.secret").exists());
 }
@@ -536,13 +538,13 @@ fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"API_KEY=1\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
     // Simulate .gitignore drift: the tracked plaintext is no longer ignored
     fs::write(f.repo.join(".gitignore"), "").unwrap();
 
     // A warning (error code 41), not a refusal: hide proceeds
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide still succeeds");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide still succeeds");
     assert!(f.repo.join(".env.secret").exists());
 }
 

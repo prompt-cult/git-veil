@@ -89,7 +89,7 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand list" -l dangerously-s
 complete -c git-veil -n "__fish_git_veil_using_subcommand list" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
-complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l dangerously-delete-plaintext -d 'Delete plaintext files after successful encryption'
+complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l keep-plaintext -d 'Leave plaintext files beside their ciphertexts instead of deleting them'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l email -d 'Your email address' -r

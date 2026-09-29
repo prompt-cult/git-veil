@@ -57,7 +57,7 @@ pub fn cmd_hide(
     repo_root: &Path,
     remote_name: &str,
     key_store: &PathBuf,
-    dangerously_delete_plaintext: bool,
+    keep_plaintext: bool,
 ) -> Result<()> {
     // Verify keyring signature first; the same call yields the repo id the
     // intent gate needs and the keyring hide encrypts with.
@@ -154,7 +154,14 @@ pub fn cmd_hide(
     // otherwise be silent.
     let mut unintended: Vec<String> = Vec::new();
     for file in &tracked.files {
-        if !established.contains(file) && !LocalAdds::has_intent(key_store, &repo_id, file) {
+        // Only paths that HAVE a plaintext can be first-encrypted — a path
+        // with no plaintext has nothing to exfiltrate and is handled by the
+        // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
+        // lifecycle").
+        if !established.contains(file)
+            && repo_root.join(file).exists()
+            && !LocalAdds::has_intent(key_store, &repo_id, file)
+        {
             unintended.push(file.to_string_lossy().to_string());
         }
     }
@@ -220,6 +227,7 @@ pub fn cmd_hide(
     // small config-scale files, so holding every ciphertext in memory is
     // acceptable; hide is not a bulk-archival path.
     let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
@@ -228,6 +236,23 @@ pub fn cmd_hide(
         // pointing outside the repo; reading through it would exfiltrate the
         // link target into the ciphertext written back to the repo.
         ensure_regular_file(repo_root, file)?;
+
+        // Skip-and-report (docs/design.md "Plaintext lifecycle"): a tracked
+        // path with no plaintext is the STEADY STATE of the delete-by-default
+        // lifecycle, never an error. With a ciphertext present (disk or
+        // committed) the file is already hidden; with neither, it was never
+        // hidden and has nothing to hide. Either way there is nothing to
+        // encrypt — and nothing to exfiltrate — so the path is skipped.
+        if !repo_root.join(file).exists() {
+            let state =
+                if encrypted_path_for(repo_root, file).exists() || established.contains(file) {
+                    "already hidden (plaintext absent)"
+                } else {
+                    "never hidden (no plaintext, no ciphertext)"
+                };
+            skipped.push(format!("{}: {}", file.display(), state));
+            continue;
+        }
 
         // Read plaintext
         let plaintext = fs::read(repo_root.join(file))
@@ -281,7 +306,17 @@ pub fn cmd_hide(
         )));
     }
 
-    if dangerously_delete_plaintext {
+    for line in &skipped {
+        println!("Skipped: {line}");
+    }
+
+    // Plaintext deletion is the DEFAULT (docs/design.md "Plaintext
+    // lifecycle"): the plaintext's only worktree protection is a
+    // .gitignore line, so it is deleted once every ciphertext is durably
+    // on disk. --keep-plaintext opts out. The delete happens only after
+    // the full all-or-nothing write phase above succeeded — at worst both
+    // copies exist, never neither.
+    if !keep_plaintext {
         for (file, _, _) in &prepared {
             let plaintext_path = repo_root.join(file);
             fs::remove_file(&plaintext_path).with_context(|| {

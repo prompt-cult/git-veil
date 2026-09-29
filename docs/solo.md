@@ -129,7 +129,7 @@ $ ls .env .env.secret
 What just happened: `add` gitignored the plaintext name for you
 (git-secret behaviour) and `hide` encrypted `.env` to your key as
 `.env.secret`, **keeping the plaintext** — deletion is opt-in with
-`--dangerously-delete-plaintext`, and is only reversible with your age
+`--keep-plaintext`, and manual deletion is only reversible with your age
 identity. Two guards watch the working tree: if a tracked plaintext is on
 disk but not gitignored, `hide` prints a warning (error code 41) because a
 blind `git add -A` would commit it; if a `.secret` path is itself
@@ -173,7 +173,7 @@ anything, `git-veil cat .env` writes the plaintext to stdout only —
 neither the plaintext nor the ciphertext on disk is touched.
 
 For the tightest solo posture — no plaintext lingering on disk — run
-`git-veil hide --dangerously-delete-plaintext` in the cycle above and
+`git-veil hide --keep-plaintext` in the cycle above and
 treat `reveal` as the working state you re-hide from.
 
 Because the plaintext's only protection is the `.gitignore` entry, a

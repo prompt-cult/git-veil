@@ -181,7 +181,7 @@ git push
 
 What just happened: `hide` encrypted each tracked file to **every** key in
 the signed keyring and wrote `<name>.secret` beside where the plaintext
-was, **keeping the plaintext** (pass `--dangerously-delete-plaintext` to
+was, **deleting the plaintext** (pass `--keep-plaintext` to
 remove it). `hide` reads each tracked plaintext from disk and fails if one
 is missing — so keep the worktree unlocked until this step is done, and
 run `git-veil reveal` first whenever everything is currently hidden. The
@@ -245,7 +245,7 @@ and leaves each `.secret` in the worktree. It fails outright if any
 tracked ciphertext is missing. There is nothing to `lock`; the inverse
 one-shot is `git-veil hide`, which re-encrypts all tracked plaintexts to
 the whole keyring and keeps the plaintexts (deleting them is opt-in via
-`--dangerously-delete-plaintext`), failing if a tracked plaintext is
+`--keep-plaintext`), failing if a tracked plaintext is
 missing. For one file at a time use `unhide`,
 and `cat` prints a file to stdout without touching disk state.
 

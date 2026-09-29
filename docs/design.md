@@ -236,21 +236,41 @@ validates every tracked plaintext and encrypts all of them to the full
 recipient set in memory; any failure aborts with nothing changed on disk
 (`cmd_hide`, src/commands/hide.rs). Phase 2 writes each `.secret` atomically;
 a part-way write failure is reported with written/total counts and exits
-non-zero. The plaintext is **kept** by default; with
-`--dangerously-delete-plaintext` each plaintext is deleted only after its own
-ciphertext is durably on disk. `reveal` mirrors this exactly: decrypt all into
-memory, then write each plaintext atomically; the `.secret` ciphertext files
-are left in place. `unhide` applies the same ordering to a single file. The
-invariant in all three: **at worst both copies exist, never neither.**
+non-zero. **The plaintext is deleted by default** once every ciphertext is
+durably on disk; `--keep-plaintext` opts out and leaves the plaintext beside
+its ciphertext. `reveal` mirrors this exactly: decrypt all into memory, then
+write each plaintext atomically; the `.secret` ciphertext files are left in
+place. `unhide` applies the same ordering to a single file. The invariant in
+all three: **at worst both copies exist, never neither.**
+
+**Plaintext lifecycle.** Deleting by default is a deliberate posture: the
+plaintext's only protection in the worktree is a `.gitignore` line, so the
+normal loop is `reveal` → edit → `hide`, with the plaintext existing only
+while it is being edited. Consequences, stated honestly:
+
+- **Skip-and-report, not error.** A tracked path whose plaintext is absent
+  and whose ciphertext exists (on disk or committed) is skipped and reported
+  as "already hidden" — re-running `hide` on a hidden repo does nothing and
+  succeeds. A tracked path with neither plaintext nor ciphertext is skipped
+  and reported as never-hidden. Neither state is an error: absence of
+  plaintext is the steady state of this lifecycle.
+- **Rotation requires the plaintext.** `removeperson` + `hide` alone cannot
+  re-encrypt ciphertexts whose plaintexts are gone — the correct rotation is
+  `reveal` (restores plaintexts), `removeperson`, `hide` (re-encrypts to the
+  new ring, deletes plaintexts again). Documented here because it is the one
+  workflow that changed shape with this default.
+- The intent gate (exit 72) and the code-41 plaintext-leak warning only
+  apply to paths that HAVE a plaintext to encrypt; a path with no plaintext
+  has nothing to exfiltrate and nothing to warn about.
 
 **Crash windows that remain.** Death between a phase-2 write and its paired
-delete (only in the `--dangerously-delete-plaintext` case) leaves both copies
-on disk. This is stated honestly: it is a redundancy window, not a data-loss
-window, and the plaintext is gitignored. The next command resolves it:
-re-running `hide` re-encrypts the still-present plaintexts to the current
-keyring and atomically overwrites the ciphertexts. Death during `trust` between
-the trust.json write and the pin write fails closed on the next gated command
-(see the ordering invariant above).
+delete (the default path) leaves both copies on disk. This is stated
+honestly: it is a redundancy window, not a data-loss window, and the
+plaintext is gitignored. The next command resolves it: re-running `hide`
+re-encrypts the still-present plaintexts to the current keyring and atomically
+overwrites the ciphertexts. Death during `trust` between the trust.json write
+and the pin write fails closed on the next gated command (see the ordering
+invariant above).
 
 ## Ignore safety
 
@@ -364,7 +384,7 @@ layers guard them:
    symlink whose target resolves outside the repo therefore fails with
    `File is outside the repository`. *Threat countered:* tracking a link to
    e.g. `/home/victim/.ssh/id_rsa`, which hide would otherwise read and
-   (with `--dangerously-delete-plaintext`) delete. Exit code 71.
+   (deleted by default; the read gate applies whether or not the plaintext exists) delete. Exit code 71.
 3. **Read-time regular-file gate** — `ensure_regular_file`
    (src/tracked_files.rs) uses `symlink_metadata` (lstat; does not follow
    links): a symlink is refused, a non-regular file is refused, and a
