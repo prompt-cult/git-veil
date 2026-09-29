@@ -94,6 +94,57 @@ fail-closed: a death between the two writes leaves a mismatch, never a silently
 accepted changed anchor. Re-pinning over a different existing fingerprint prints
 a loud `replacing the previously pinned fingerprint …` notice.
 
+## Keyring format and freshness (rollback refusal)
+
+The keyring file is an armored block:
+
+```
+-----BEGIN GIT-VEIL KEYRING-----
+version:<n>
+<email>:<age-recipient>:<fingerprint>
+...
+-----END GIT-VEIL KEYRING-----
+-----BEGIN GIT-VEIL SIGNATURE-----
+<base64 Ed25519 signature over everything above, markers included>
+-----END GIT-VEIL SIGNATURE-----
+```
+
+The `version:` line (Keyring, src/keyring.rs) is a **monotonic counter
+carried inside the signed payload**: the signature covers it, so a version
+number cannot be forged without the owner key. `tell` and `removeperson`
+write `current + 1` (current = the keyring's own version, 0 when absent) —
+the counter needs no state outside the keyring it is serialised into, and no
+clock, so there is no drift to reason about.
+
+**Rollback refusal.** The signature alone proves "the owner signed this at
+some point", not "this is current": a plain `git revert` of a removeperson
+commit restores an old, still-validly-signed keyring, silently returning a
+revoked collaborator to the recipient set. The defence is a per-machine
+**freshness baseline**: the highest keyring version this machine has ever
+accepted for this repo id, stored OUTSIDE the repository next to the pin
+(`<key store>/trust-pins/<sanitized repo id>.ring-version`,
+TrustPinStore, src/trust_store.rs). After the signature verifies,
+`verify_keyring_against_trust` (src/commands/verify_keyring.rs) compares:
+
+- keyring version **below the baseline** (a versionless pre-freshness
+  keyring counts as 0) → refusal, exit code 14 (KeyringRollback);
+- otherwise the baseline is advanced to the keyring's version and the
+  command proceeds.
+
+A fresh clone has no baseline: the first gated command records the current
+keyring's version as the baseline (a versionless keyring records 0) — the
+same trust-on-first-use posture as the pin itself. The baseline is
+machine-local state in the key store, which is exactly where it must live:
+anything committed to the repo would be attacker-writable and the refusal
+would be void.
+
+**Recovery.** A legitimate rollback (the owner really does want an older
+keyring state) is the same ceremony as a legitimate anchor change: re-run
+`git-veil trust`, which clears the freshness baseline along with re-pinning
+the key. Old keyrings written before freshness existed are accepted until
+the next `tell`/`removeperson` gives them a version; from then on their
+rollback is refused.
+
 ## Key discovery and selection
 
 git-veil **never generates key material**. A key the tool created is a key the
@@ -313,6 +364,7 @@ codes are never renumbered, only appended.
 | 11   | NoTrustPin                   | No local trust pin on this machine; run `git-veil trust` |
 | 12   | TrustMismatch                | Committed trust.json disagrees with this machine's pin; re-pin if intended |
 | 13   | TrustRepoIdMismatch          | repo_id argument does not match the one derived from the remote |
+| 14   | KeyringRollback              | Keyring version is below this machine's freshness baseline; re-`trust` if the rollback is intended |
 | 20   | NoSigningKey                 | No Ed25519 signing key in the key store; create one and back it up |
 | 21   | NoAgeIdentity                | No age identity in the key store matching your keyring entry; create and import one |
 | 22   | IdentityNotInKeyring         | Your email is not in the signed keyring; ask the owner to `tell` you |

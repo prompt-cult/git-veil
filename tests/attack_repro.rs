@@ -1,15 +1,14 @@
 //! ATTACK REPRODUCTION TESTS and FIX REGRESSIONS.
 //!
-//! Attacks 1 and 2 below reproduce vulnerabilities confirmed by code review
-//! (the "attack audit"); their assertions assert the BAD outcome: the attack
+//! Attacks 2 below reproduces a vulnerability confirmed by code review
+//! (the "attack audit"); its assertions assert the BAD outcome: the attack
 //! succeeding against current code. When a fix lands, the matching test is
 //! INVERTED to assert refusal instead of success — it is never deleted.
 //!
 //! Attacks (from the audit):
-//!   1. Keyring rollback resurrects a removed collaborator: an old,
-//!      validly-signed keyring (restored via a plain `git revert` by any
-//!      repo writer) passes verify-keyring after a removeperson, and hide
-//!      re-encrypts secrets to the revoked key. [STILL OPEN — issue #5]
+//!   1. Keyring rollback resurrects a removed collaborator. [FIXED —
+//!      issue #5; the inverted regression test is
+//!      fix_keyring_rollback_refused_by_freshness_baseline]
 //!   2. tracked.json insider nomination: a repo writer adds a path to
 //!      .git-veil/tracked.json directly; the victim's next hide encrypts a
 //!      file that was never `git-veil add`ed, to every keyring member —
@@ -167,17 +166,21 @@ impl Fixture {
 }
 
 // ---------------------------------------------------------------------------
-// Attack 1 — keyring rollback resurrects a removed collaborator
+// Regression — keyring rollback is refused by the freshness baseline
+// (issue #5, FIXED)
 //
-// removeperson produces keyring v2 (signed, entry removed). A repo writer
-// then restores v1 — a plain `git revert` of the committed keyring file.
-// v1 is still validly signed by the same pinned owner key, so there is no
-// rollback detection: verify-keyring PASSES and hide re-encrypts to the
-// revoked key. The assertions below assert that BAD outcome.
+// Previously: removeperson produced keyring v2 (signed, entry removed); a
+// repo writer restored v1 — a plain `git revert` — and it still verified,
+// because the signature proves "the owner signed this at some point", not
+// "this is current".
+//
+// Now: tell/removeperson bump a monotonic counter inside the signed payload,
+// and every machine records the highest version it has accepted (beside the
+// pin, outside the repo). Any regression is refused with exit 14.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn attack_keyring_rollback_after_removeperson_passes_verification() {
+fn fix_keyring_rollback_refused_by_freshness_baseline() {
     let f = Fixture::new("keyring-rollback");
 
     let carol = f.add_collab("carol@example.com");
@@ -207,24 +210,124 @@ fn attack_keyring_rollback_after_removeperson_passes_verification() {
     // (equivalent to `git revert` of the removeperson commit).
     fs::write(&keyring_path, &keyring_v1).unwrap();
 
-    // BAD OUTCOME 1: verification PASSES on the rolled-back keyring — there
-    // is no monotonicity/freshness check, the old signature is still valid.
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
-        .expect("ATTACK SUCCEEDS: rolled-back v1 keyring passes verify-keyring");
-
-    // BAD OUTCOME 2: the victim's next hide re-encrypts the secret to the
-    // revoked collaborator, and carol's identity still decrypts it.
-    let new_plaintext = b"TOKEN=rotated-after-revocation\n";
-    fs::write(f.repo.join("secrets.env"), new_plaintext).unwrap();
-    f.hide();
-
-    let ciphertext = fs::read(f.repo.join("secrets.env.secret")).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &carol)
-        .expect("ATTACK SUCCEEDS: revoked carol decrypts the re-hidden secret");
+    // FIXED: verification REFUSES the rolled-back keyring (exit 14) — the
+    // signature is valid but the version regressed below the baseline.
+    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("rolled-back keyring must be refused");
     assert_eq!(
-        decrypted, new_plaintext,
-        "removed collaborator recovered the post-revocation plaintext"
+        exit_code_of(&err),
+        14,
+        "keyring rollback must exit with the documented code 14"
     );
+
+    // And hide (like every gated command) refuses on the same check.
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("hide must refuse on the rolled-back keyring");
+    assert_eq!(exit_code_of(&err), 14);
+
+    // The stale v1 ciphertext on disk is untouched: carol still decrypts
+    // what she always could, but no NEW secret can flow to her — hide
+    // refused. That refusal is the fix.
+
+    // RECOVERY: a genuinely intended rollback is re-anchored with trust,
+    // which resets the freshness baseline along with the pin.
+    cmd_trust(
+        &f.repo.path,
+        TEST_REPO_ID,
+        "owner.signing",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("re-trust");
+    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect("verify succeeds after the re-trust reset the baseline");
+    let _ = carol;
+}
+
+// ---------------------------------------------------------------------------
+// Regression — keyring version migration semantics (issue #5)
+// ---------------------------------------------------------------------------
+
+/// Re-signs `keyring_text`'s keyring block with the fixture's owner key,
+/// returning a full keyring file (block + fresh signature).
+fn resigned(keyring_text: &str, version: Option<u64>, f: &Fixture) -> String {
+    let mut kr = git_veil::Keyring::parse(keyring_text).unwrap();
+    kr.version = version;
+    kr.signature = None;
+    let content = git_veil::extract_content_to_verify_from_keyring(&kr.serialize()).unwrap();
+    let seed = fs::read_to_string(f.key_store.join("signing-keys.txt")).unwrap();
+    let signing_key = git_veil::parse_signing_key(seed.trim()).unwrap();
+    format!(
+        "{}{}",
+        kr.serialize(),
+        git_veil::create_signature_block(&content, &signing_key).unwrap()
+    )
+}
+
+#[test]
+fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
+    let f = Fixture::new("migration-forward");
+    // tell writes version 1 and hide's verify records baseline 1.
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("secrets.env", b"TOKEN=x\n");
+    f.hide();
+    let keyring_path = f.repo.join(".git-veil/keyring");
+
+    // A versionless keyring (pre-freshness format) counts as version 0, so
+    // once a versioned baseline exists it is a rollback: refused.
+    let versionless = resigned(&fs::read_to_string(&keyring_path).unwrap(), None, &f);
+    fs::write(&keyring_path, &versionless).unwrap();
+    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("versionless keyring must be refused once a versioned baseline exists");
+    assert_eq!(exit_code_of(&err), 14);
+
+    // But on a machine with NO baseline (the real migration case), a
+    // versionless signed keyring is accepted and establishes baseline 0.
+    let f2 = Fixture::new("migration-fresh");
+    let _carol2 = f2.add_collab("carol@example.com");
+    let versionless2 = resigned(
+        &fs::read_to_string(&f2.repo.join(".git-veil/keyring")).unwrap(),
+        None,
+        &f2,
+    );
+    // Rebuild the scenario: baseline is already established by tell's
+    // verify? No — tell's verify saw the EMPTY unsigned keyring (observed 0,
+    // baseline 0), and no gated command ran since the v1 write, so the
+    // baseline is still 0 and a versionless keyring is NOT a regression.
+    fs::write(f2.repo.join(".git-veil/keyring"), &versionless2).unwrap();
+    cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+        .expect("versionless keyring accepted while the baseline is still 0");
+
+    // The next versioned keyring (v1) is then free to establish baseline 1,
+    // after which the versionless state is refused as a rollback.
+    let versioned = resigned(&versionless2, Some(1), &f2);
+    fs::write(f2.repo.join(".git-veil/keyring"), &versioned).unwrap();
+    cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+        .expect("versioned keyring accepted, baseline advances to 1");
+    fs::write(f2.repo.join(".git-veil/keyring"), &versionless2).unwrap();
+    let err = cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+        .expect_err("versionless keyring refused now that the baseline is 1");
+    assert_eq!(exit_code_of(&err), 14);
+}
+
+#[test]
+fn fix_malformed_version_lines_are_parse_failures() {
+    use git_veil::{Keyring, BEGIN_MARKER, END_MARKER};
+
+    for bad in ["version:abc", "version:", "version:-1", "version:1.0"] {
+        let text = format!("{}\n{}\n{}\n", BEGIN_MARKER, bad, END_MARKER);
+        let err = Keyring::parse(&text).expect_err(bad);
+        assert_eq!(
+            exit_code_of(&err),
+            62,
+            "malformed version line must be a parse failure"
+        );
+    }
+
+    // A duplicate version line is refused, never silently accepted.
+    let dup = format!("{}\nversion:1\nversion:2\n{}\n", BEGIN_MARKER, END_MARKER);
+    let err = Keyring::parse(&dup).expect_err("duplicate version");
+    assert_eq!(exit_code_of(&err), 62);
 }
 
 // ---------------------------------------------------------------------------

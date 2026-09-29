@@ -47,6 +47,12 @@ pub fn cmd_removeperson(
     // Remove entry (this clears signature)
     keyring.remove_entry(email_to_remove);
 
+    // Bump the monotonic freshness counter BEFORE signing: the bump is part
+    // of the signed payload, so a later `git revert` of this commit restores
+    // an old VERSION too and the per-machine baseline refuses it (docs/design.md
+    // "Keyring format and freshness").
+    keyring.bump_version();
+
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();
 
