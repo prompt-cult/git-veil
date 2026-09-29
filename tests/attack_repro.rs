@@ -1,30 +1,28 @@
-//! ATTACK REPRODUCTION TESTS — these tests DOCUMENT vulnerabilities.
+//! ATTACK REPRODUCTION TESTS and FIX REGRESSIONS.
 //!
-//! Each test below reproduces a vulnerability confirmed by code review
-//! (the "attack audit"). The assertions assert the BAD outcome: the attack
-//! succeeding against current code. If a future fix lands, the matching
-//! test should be INVERTED to assert refusal instead of success — do not
-//! delete it.
+//! Attacks 1 and 2 below reproduce vulnerabilities confirmed by code review
+//! (the "attack audit"); their assertions assert the BAD outcome: the attack
+//! succeeding against current code. When a fix lands, the matching test is
+//! INVERTED to assert refusal instead of success — it is never deleted.
 //!
 //! Attacks (from the audit):
 //!   1. Keyring rollback resurrects a removed collaborator: an old,
 //!      validly-signed keyring (restored via a plain `git revert` by any
 //!      repo writer) passes verify-keyring after a removeperson, and hide
-//!      re-encrypts secrets to the revoked key.
+//!      re-encrypts secrets to the revoked key. [STILL OPEN — issue #5]
 //!   2. tracked.json insider nomination: a repo writer adds a path to
 //!      .git-veil/tracked.json directly; the victim's next hide encrypts a
 //!      file that was never `git-veil add`ed, to every keyring member —
 //!      silently, because the plaintext is gitignored so not even the
-//!      code-41 warning fires.
-//!   3. De-tracking defeats rotation: removing a path from tracked.json
-//!      before a removeperson + re-hide leaves the stale ciphertext on
-//!      disk, still decryptable by the removed collaborator.
+//!      code-41 warning fires. [STILL OPEN — issue #6]
+//!   3. De-tracking defeats rotation. [FIXED — issue #7; the inverted
+//!      regression test is fix_detracking_orphan_ciphertext_refuses_hide]
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_hide, cmd_import, cmd_init, cmd_removeperson, cmd_tell, cmd_trust,
-    cmd_verify_keyring, decrypt_with_identity, generate_identity, generate_signing_keypair,
-    recipient_from_identity,
+    cmd_add, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson, cmd_tell, cmd_trust,
+    cmd_verify_keyring, decrypt_with_identity, exit_code_of, generate_identity,
+    generate_signing_keypair, recipient_from_identity, TrackedFiles,
 };
 use std::fs;
 use std::path::Path;
@@ -153,6 +151,19 @@ impl Fixture {
     fn hide(&self) {
         cmd_hide(&self.repo.path, "origin", &self.key_store.path, false).expect("hide");
     }
+
+    /// Stages everything the way the owner's commit would, so the git index
+    /// (which the orphan gate and later the intent gate read) reflects the
+    /// committed state. The plaintext is gitignored, so this stages only
+    /// ciphertext and .git-veil state.
+    fn stage_all(&self) {
+        let s = std::process::Command::new("git")
+            .current_dir(&self.repo.path)
+            .args(["add", "-A"])
+            .status()
+            .expect("git add");
+        assert!(s.success());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -274,18 +285,21 @@ fn attack_tracked_json_nomination_encrypts_untracked_secret() {
 }
 
 // ---------------------------------------------------------------------------
-// Attack 3 — de-tracking defeats rotation
+// Regression — de-tracking no longer defeats rotation (issue #7, FIXED)
 //
-// A repo writer removes a path from tracked.json. The owner then
-// removepersons a collaborator and re-hides to rotate — but the de-tracked
-// file is not in the manifest, so its stale ciphertext is never
-// re-encrypted and no error is raised. The removed collaborator can still
-// decrypt the stale ciphertext left on disk (and committed). The
-// assertions assert that BAD outcome.
+// Previously: a repo writer removed a path from tracked.json; the owner's
+// removeperson + re-hide silently skipped the stale ciphertext, which the
+// removed collaborator could still decrypt.
+//
+// Now: hide's orphaned-ciphertext gate (exit 42, see "Orphaned ciphertext"
+// in docs/design.md) refuses to run while a committed .secret exists for an
+// untracked path, so the de-tracking-then-rotate attack fails loudly. The
+// owner-side remedy — `git-veil remove` now deletes the sibling ciphertext
+// by default — is covered by the remove tests below.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn attack_detracking_leaves_stale_ciphertext_after_rotation() {
+fn fix_detracking_orphan_ciphertext_refuses_hide() {
     let f = Fixture::new("detrack-rotation");
 
     let carol = f.add_collab("carol@example.com");
@@ -293,6 +307,9 @@ fn attack_detracking_leaves_stale_ciphertext_after_rotation() {
     f.add_file("api.key", plaintext);
     f.hide();
     assert!(f.repo.join("api.key.secret").exists());
+    // The orphan gate reads the git INDEX (what gets pushed), so stage the
+    // ciphertext the way the owner's commit would.
+    f.stage_all();
 
     // ATTACK: a repo writer de-tracks the file before the rotation
     // (tracked.json is committed and unsigned).
@@ -312,22 +329,77 @@ fn attack_detracking_leaves_stale_ciphertext_after_rotation() {
     )
     .expect("removeperson");
     let _dave = f.add_collab("dave@example.com");
-    // hide reports "No files tracked" and exits Ok — the stale ciphertext
-    // is silently left in place, never re-encrypted to the new ring.
+
+    // FIXED: hide refuses outright (exit 42) while the stale ciphertext is
+    // committed but untracked — rotation can no longer skip it silently.
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("hide must refuse orphaned committed ciphertext");
+    assert_eq!(
+        exit_code_of(&err),
+        42,
+        "orphaned ciphertext must exit with the documented code 42"
+    );
+
+    // REMEDY (de-tracking was intentional): delete the stale ciphertext…
+    fs::remove_file(f.repo.join("api.key.secret")).unwrap();
+    // …re-track the file (the manifest was emptied by the attack), stage,
+    // and hide to the new ring.
+    f.add_file("api.key", plaintext);
+    f.stage_all();
     f.hide();
 
-    // BAD OUTCOME: the stale ciphertext survives the rotation untouched and
-    // the REVOKED collaborator still decrypts it. No error was raised
-    // anywhere in the rotation flow.
+    // The revoked collaborator can no longer decrypt the live ciphertext.
+    let ciphertext = fs::read(f.repo.join("api.key.secret")).unwrap();
+    assert!(
+        decrypt_with_identity(&ciphertext, &carol).is_err(),
+        "revoked carol must not decrypt the post-rotation ciphertext"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Regression — `remove` deletes the sibling ciphertext by default
+// (issue #7). The honest way to keep an untracked ciphertext is now the
+// explicit --keep-ciphertext flag, after which hide refuses the orphan.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fix_remove_deletes_ciphertext_by_default() {
+    let f = Fixture::new("remove-default");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("api.key", b"API_KEY=x\n");
+    f.hide();
+    assert!(f.repo.join("api.key.secret").exists());
+
+    cmd_remove(&f.repo.path, vec!["api.key".to_string()], false).expect("remove");
+    assert!(
+        !f.repo.join("api.key.secret").exists(),
+        "remove must delete the sibling ciphertext by default"
+    );
+    assert!(
+        !TrackedFiles::load(&f.repo.join(".git-veil/tracked.json"))
+            .unwrap()
+            .files
+            .contains(&"api.key".into()),
+        "remove must untrack the file"
+    );
+}
+
+#[test]
+fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
+    let f = Fixture::new("remove-keep");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("api.key", b"API_KEY=x\n");
+    f.hide();
+    f.stage_all();
+
+    cmd_remove(&f.repo.path, vec!["api.key".to_string()], true).expect("remove");
     assert!(
         f.repo.join("api.key.secret").exists(),
-        "stale ciphertext left behind after rotation"
+        "--keep-ciphertext leaves the ciphertext in place"
     );
-    let stale = fs::read(f.repo.join("api.key.secret")).unwrap();
-    let decrypted = decrypt_with_identity(&stale, &carol)
-        .expect("ATTACK SUCCEEDS: revoked carol still decrypts the stale ciphertext");
-    assert_eq!(
-        decrypted, plaintext,
-        "de-tracking defeated the removeperson rotation"
-    );
+
+    // hide now refuses the orphan with exit 42 until it is resolved.
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("hide must refuse the kept-back orphaned ciphertext");
+    assert_eq!(exit_code_of(&err), 42);
 }

@@ -222,6 +222,39 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    risk, not a tool failure. The tutorials show an optional pre-commit hook
    that turns it into a hard stop.
 
+## Orphaned ciphertext (a committed `.secret` that is not tracked)
+
+`hide` re-encrypts only tracked paths. That makes the tracked manifest the
+de-facto revocation boundary: if a path is removed from `tracked.json`, the
+old ciphertext is never re-encrypted, so after a `removeperson` rotation the
+stale `.secret` stays decryptable by the removed collaborator — silently,
+with `hide` reporting success. Since `tracked.json` is committed and unsigned
+repo content, any repo writer can cause this by deleting manifest entries.
+
+Two mitigations close the hole:
+
+1. **`remove` deletes the sibling ciphertext by default.** Untracking a file
+   deletes `<name>.secret` from the working tree in the same step
+   (`--keep-ciphertext` preserves the old leave-in-place behaviour). The
+   ciphertext is committed content, so deletion is recoverable from git
+   history; the honest way to keep an untracked ciphertext around is now an
+   explicit flag, not a default.
+2. **`hide` refuses orphaned ciphertext (exit 42).** Before encrypting,
+   `hide` enumerates ciphertext paths committed to the git index
+   (`git ls-files -- '*.secret'`) and refuses with exit code 42 when any of
+   them does not correspond to a tracked path, naming each one. The remedies
+   are `git-veil add <path>` (the de-tracking was wrong) or deleting the
+   stale ciphertext (the de-tracking was right). The gate runs even when
+   `tracked.json` is empty — that is exactly the de-tracking-then-rotate
+   attack shape.
+
+Scope, stated honestly: the gate reads the git **index**, so it catches
+committed (staged) ciphertexts — the exfiltration channel. An uncommitted
+on-disk `.secret` left behind by `remove --keep-ciphertext` is not detected
+until staged; a blind `git add -A` could sweep it into a commit. This is the
+same risk class as the code-41 plaintext-leak warning and is documented as
+such, not hidden.
+
 ## Path safety
 
 Tracked paths are repo-relative strings in `.git-veil/tracked.json`. Four
@@ -286,6 +319,7 @@ codes are never renumbered, only appended.
 | 30   | UnsafeKeyStorePermissions    | Key store directory or private key file is group/world accessible |
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
+| 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `hide` refuses (see "Orphaned ciphertext") |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local identity |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
