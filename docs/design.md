@@ -272,6 +272,21 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    prints a warning citing exit code 41 and proceeds — the condition is a
    risk, not a tool failure. The tutorials show an optional pre-commit hook
    that turns it into a hard stop.
+4. **Reveal-side tracked-plaintext refusal**: the inverse case is not a
+   warning but a hard refusal in the decryption-write commands. A plaintext
+   that is TRACKED IN GIT is ordinary repository content, not a secret
+   (git-veil plaintexts are gitignored by construction; a tracked plaintext
+   is exactly the state the code-41 warning flags). If `reveal` or `unhide`
+   refused nothing there, a repo writer could nominate a source file — say
+   `ci/deploy.sh` — in the unsigned `tracked.json` and commit a payload
+   ciphertext encrypted to the ring's public recipient keys (no signing key
+   needed, the keyring is untouched); the victim's `reveal` would overwrite
+   the source file and the CI would execute it. `reveal` and `unhide`
+   therefore refuse with exit code 43 (PlaintextTracked) when the target
+   plaintext path is tracked in the git index, naming the path and the
+   `git rm --cached` remedy. `cat` is not gated: it never writes. The gate
+   is `ensure_not_tracked_in_git` (src/tracked_files.rs), enforced in
+   `cmd_reveal` and `cmd_unhide`.
 
 ## Orphaned ciphertext (a committed `.secret` that is not tracked)
 
@@ -408,6 +423,7 @@ codes are never renumbered, only appended.
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
 | 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `hide` refuses (see "Orphaned ciphertext") |
+| 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`/`unhide`; see "Ignore safety") |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local identity |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
