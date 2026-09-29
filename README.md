@@ -71,7 +71,7 @@ git-veil trust demo+example@github.com owner.verifying   # pin the signing key
 git-veil tell example@github.com my-age-identity.txt    # add yourself to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add .env                               # track the file (gitignores the plaintext name)
-git-veil hide                                   # encrypt: .env -> .env.secret (plaintext kept)
+git-veil hide                                   # encrypt: .env -> .env.secret (plaintext deleted)
 git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Add encrypted secrets"
 git-veil reveal                                 # decrypt back when you need the plaintext
@@ -184,7 +184,7 @@ ergonomics that differ — such as a smaller final binary size.
 | `add`            | Track files for encryption (auto-gitignores plaintext names)           |
 | `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt all tracked files to the keyring (plaintext kept; `--dangerously-delete-plaintext` to delete after; refuses when a `.secret` path is git-ignored) |
+| `hide`           | Encrypt all tracked files to the keyring and DELETE the plaintexts (the default; `--keep-plaintext` keeps them; refuses when a `.secret` path is git-ignored) |
 | `reveal`         | Decrypt all tracked files back to plaintext                             |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |

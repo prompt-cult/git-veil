@@ -142,7 +142,7 @@ impl Fixture {
     }
 
     fn hide(&self) {
-        cmd_hide(&self.repo.path, "origin", &self.key_store.path, false).expect("hide");
+        cmd_hide(&self.repo.path, "origin", &self.key_store.path, true).expect("hide");
     }
 
     /// Stages everything the way the owner's commit would, so the git index
@@ -215,7 +215,7 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     );
 
     // And hide (like every gated command) refuses on the same check.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse on the rolled-back keyring");
     assert_eq!(exit_code_of(&err), 14);
 
@@ -360,7 +360,7 @@ fn fix_nominated_path_refused_at_hide() {
 
     // FIXED: hide refuses (exit 72) — no ciphertext is created, nothing is
     // exfiltrated.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse a nominated path with no intent and no ciphertext");
     assert_eq!(
         exit_code_of(&err),
@@ -381,7 +381,7 @@ fn fix_nominated_path_refused_at_hide() {
         &f.key_store.path,
     )
     .expect("victim re-adds deliberately");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide after intent");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide after intent");
 }
 
 #[test]
@@ -425,7 +425,7 @@ fn fix_established_ciphertext_needs_no_intent() {
 
     // No intent was ever recorded in fresh_store, but secrets.env.secret is
     // committed, so hide proceeds.
-    cmd_hide(&f.repo.path, "origin", &fresh_store.path, false)
+    cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
         .expect("committed ciphertext re-encrypts without local intent");
 }
 
@@ -477,7 +477,7 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
 
     // FIXED: hide refuses outright (exit 42) while the stale ciphertext is
     // committed but untracked — rotation can no longer skip it silently.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse orphaned committed ciphertext");
     assert_eq!(
         exit_code_of(&err),
@@ -544,7 +544,7 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
     );
 
     // hide now refuses the orphan with exit 42 until it is resolved.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse the kept-back orphaned ciphertext");
     assert_eq!(exit_code_of(&err), 42);
 }

@@ -685,7 +685,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__hide)
-            opts="-h --remote --key-store --dangerously-delete-plaintext --dangerously-skip-permissions-check --help"
+            opts="-h --remote --key-store --keep-plaintext --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

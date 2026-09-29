@@ -429,7 +429,7 @@ fn test_hide_reveal_roundtrip() {
     let plaintext = b"SECRET=value\nAPI_KEY=abc123\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     // git-secret does NOT delete plaintext by default -- both exist
     assert!(
@@ -467,7 +467,7 @@ fn test_hide_creates_valid_age_ciphertext() {
 
     fixture.add_file(".env", b"test data\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     // age ciphertext starts with the age header bytes
     let ciphertext = fs::read(fixture.repo.join(".env.secret")).unwrap();
@@ -484,7 +484,7 @@ fn test_hide_no_tracked_files_is_ok() {
     let fixture = TestRepo::new("hide-empty");
     fixture.add_collaborator("alice@example.com");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true)
         .expect("hide with no tracked files");
 }
 
@@ -534,7 +534,7 @@ fn test_hide_no_keys_fails() {
     )
     .expect("add");
 
-    let result = cmd_hide(&repo.path, "origin", &key_store.path, false);
+    let result = cmd_hide(&repo.path, "origin", &key_store.path, true);
     assert!(result.is_err(), "hide with no keys should fail");
 }
 
@@ -552,7 +552,7 @@ fn test_cat_decrypts_to_stdout() {
     let plaintext = b"cat me\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     let result = cmd_cat(
         &fixture.repo.path,
@@ -583,7 +583,7 @@ fn test_cat_untracked_file_fails() {
     fixture.import_identity(&collab_identity, "alice.age");
 
     fixture.add_file(".env", b"secret\n");
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     fs::write(fixture.repo.join("other.txt"), b"other\n").unwrap();
     let result = cmd_cat(
@@ -610,7 +610,7 @@ fn test_unhide_single_file() {
     fixture.add_file(".env", b"unhide me\n");
     fixture.add_file("config.yml", b"keep hidden\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     cmd_unhide(
         &fixture.repo.path,
@@ -645,7 +645,7 @@ fn test_changes_detects_modification() {
 
     fixture.add_file(".env", b"ORIGINAL=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     fs::write(fixture.repo.join(".env"), b"MODIFIED=different\n").unwrap();
 
@@ -671,7 +671,7 @@ fn test_changes_no_modification() {
 
     fixture.add_file(".env", b"SAME=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     fs::write(fixture.repo.join(".env"), b"SAME=value\n").unwrap();
 
@@ -995,7 +995,7 @@ fn test_multi_recipient_hide_reveal() {
     let plaintext = b"shared secret\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     cmd_reveal(
         &fixture.repo.path,
@@ -1009,7 +1009,7 @@ fn test_multi_recipient_hide_reveal() {
     assert_eq!(revealed, plaintext);
 
     // Re-hide for bob (plaintext still exists, hide does not delete it)
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("re-hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("re-hide");
 
     cmd_reveal(
         &fixture.repo.path,
@@ -1059,7 +1059,7 @@ fn test_full_lifecycle() {
     fixture.add_file(".env", b"ENV=production\n");
     fixture.add_file("config/secrets.yml", b"api_key: abc123\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     // git-secret does NOT delete plaintext by default -- both exist
     assert!(fixture.repo.join(".env").exists());
@@ -1104,8 +1104,17 @@ fn test_full_lifecycle() {
 // git-secret behavioural alignment tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Plaintext lifecycle tests
+//
+// DIVERGENCE from git-secret (deliberate, issue #13): hide now DELETES the
+// plaintext by default; --keep-plaintext preserves the git-secret-aligned
+// leave-in-place behaviour. The old "both copies exist" pin lives on as the
+// keep-plaintext test; the delete path is the new default test.
+// ---------------------------------------------------------------------------
+
 #[test]
-fn test_hide_does_not_delete_plaintext() {
+fn test_hide_keep_plaintext_leaves_both_copies() {
     let fixture = TestRepo::new("hide-keeps-plaintext");
 
     let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
@@ -1113,11 +1122,11 @@ fn test_hide_does_not_delete_plaintext() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     assert!(
         fixture.repo.join(".env").exists(),
-        "plaintext must NOT be deleted by hide"
+        "plaintext must NOT be deleted by hide --keep-plaintext"
     );
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -1126,16 +1135,16 @@ fn test_hide_does_not_delete_plaintext() {
 }
 
 #[test]
-fn test_hide_dangerously_delete_plaintext() {
-    let fixture = TestRepo::new("hide-dangerously-delete");
+fn test_hide_deletes_plaintext_by_default() {
+    let fixture = TestRepo::new("hide-deletes-plaintext");
 
     let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&collab_identity, "alice.age");
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true)
-        .expect("hide with --dangerously-delete-plaintext");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
+        .expect("hide (default deletes plaintext)");
 
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -1143,7 +1152,28 @@ fn test_hide_dangerously_delete_plaintext() {
     );
     assert!(
         !fixture.repo.join(".env").exists(),
-        "plaintext must be deleted by --dangerously-delete-plaintext"
+        "plaintext must be deleted by hide by default"
+    );
+}
+
+#[test]
+fn test_hide_skips_missing_plaintext_instead_of_erroring() {
+    let fixture = TestRepo::new("hide-skip-missing");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"SECRET=value\n");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    assert!(!fixture.repo.join(".env").exists());
+
+    // Steady state of the delete-by-default lifecycle: plaintext absent,
+    // ciphertext committed — re-hiding is a skip-and-report, not an error.
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
+        .expect("re-hide with absent plaintext must succeed (skip-and-report)");
+    assert!(
+        fixture.repo.join(".env.secret").exists(),
+        "ciphertext untouched by the skip"
     );
 }
 
@@ -1156,7 +1186,7 @@ fn test_reveal_does_not_delete_ciphertext() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     cmd_reveal(
         &fixture.repo.path,
@@ -1185,7 +1215,7 @@ fn test_unhide_does_not_delete_ciphertext() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     cmd_unhide(
         &fixture.repo.path,
@@ -1252,7 +1282,7 @@ fn test_cat_does_not_touch_disk() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
     let _ = cmd_cat(
         &fixture.repo.path,

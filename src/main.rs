@@ -181,13 +181,13 @@ fn run() -> Result<()> {
         Commands::Hide {
             remote,
             key_store: opt,
-            dangerously_delete_plaintext,
+            keep_plaintext,
         } => {
             cmd_hide(
                 &repo_root,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
-                dangerously_delete_plaintext,
+                keep_plaintext,
             )?;
         }
         Commands::Reveal {

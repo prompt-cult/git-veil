@@ -357,17 +357,16 @@ itself git-ignored — e.g. swallowed by a parent-directory rule like
 .tmp/ — because that ciphertext would silently never reach the
 repository. It WARNS (error code 41) when a tracked plaintext exists on
 disk but is not git-ignored, since a blind `git add -A` would then commit
-it. The plaintext is KEPT by default; --dangerously-delete-plaintext
-removes each plaintext only after its ciphertext is durably written.
+it. The plaintext is DELETED by default once every ciphertext is durably
+written — the normal loop is reveal (restore plaintexts) -> edit -> hide.
+--keep-plaintext leaves the plaintexts beside their ciphertexts. Tracked
+paths whose plaintext is absent are skipped and reported, never an error.
 
 EXAMPLES
-  $ git-veil hide    # encrypt all tracked files (plaintext kept)
+  $ git-veil hide    # encrypt and delete plaintexts (the default)
+  $ git-veil hide --keep-plaintext
   $ git-veil hide --remote upstream
-  $ git-veil hide --dangerously-delete-plaintext
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
-
-The option --dangerously-delete-plaintext is only reversible if you have
-your private key, which is not an assumption any coding agent should make.
 ")]
     Hide {
         /// Git remote name
@@ -376,9 +375,9 @@ your private key, which is not an assumption any coding agent should make.
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Delete plaintext files after successful encryption
+        /// Leave plaintext files beside their ciphertexts instead of deleting them
         #[arg(long)]
-        dangerously_delete_plaintext: bool,
+        keep_plaintext: bool,
     },
 
     /// Decrypt all tracked files back to plaintext
