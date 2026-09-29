@@ -90,6 +90,19 @@ echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 
 ## Installation
 
+Prebuilt binaries are attached to every [GitHub release](https://github.com/prompt-cult/git-veil/releases):
+
+```sh
+# Linux x86_64 example; macOS binaries (x86_64 / Apple Silicon) sit beside it
+curl -sLO https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64
+echo "$(curl -sL https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64.sha256)  git-veil-linux-x86_64" | sha256sum -c -
+chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
+```
+
+`cargo binstall git-veil` resolves the same release assets (manifest wired
+into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned —
+see issue #10 for the live status of each channel.
+
 Build from source with cargo:
 
 ```sh
