@@ -385,7 +385,7 @@ fn test_remove_untracks_file() {
     fs::write(fixture.repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add(&fixture.repo.path, vec![".env".to_string()]).expect("add");
 
-    cmd_remove(&fixture.repo.path, vec![".env".to_string()]).expect("remove");
+    cmd_remove(&fixture.repo.path, vec![".env".to_string()], false).expect("remove");
 
     let tracked = TrackedFiles::load(&fixture.repo.join(".git-veil/tracked.json")).unwrap();
     assert!(tracked.files.is_empty());

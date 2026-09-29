@@ -166,7 +166,10 @@ fn run() -> Result<()> {
             )?;
         }
         Commands::Add { files } => cmd_add(&repo_root, files)?,
-        Commands::Remove { files } => cmd_remove(&repo_root, files)?,
+        Commands::Remove {
+            files,
+            keep_ciphertext,
+        } => cmd_remove(&repo_root, files, keep_ciphertext)?,
         Commands::List => cmd_list(&repo_root)?,
         Commands::Hide {
             remote,

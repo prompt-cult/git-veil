@@ -182,7 +182,7 @@ ergonomics that differ — such as a smaller final binary size.
 | `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
 | `removeperson`   | Remove a collaborator from the keyring and re-sign it                   |
 | `add`            | Track files for encryption (auto-gitignores plaintext names)           |
-| `remove`         | Untrack files (leaves any ciphertext in place)                          |
+| `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
 | `hide`           | Encrypt all tracked files to the keyring (plaintext kept; `--dangerously-delete-plaintext` to delete after; refuses when a `.secret` path is git-ignored) |
 | `reveal`         | Decrypt all tracked files back to plaintext                             |

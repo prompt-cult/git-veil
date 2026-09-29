@@ -37,6 +37,8 @@ pub enum ExitCode {
     CiphertextIgnored = 40,
     /// Tracked plaintext on disk is not git-ignored (warning; exit stays 0).
     PlaintextNotIgnored = 41,
+    /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
+    OrphanedCiphertext = 42,
     /// Ciphertext could not be decrypted with the local identity.
     DecryptionFailed = 60,
     /// Encryption failed.
@@ -65,6 +67,7 @@ impl ExitCode {
         ExitCode::UnsafeKeyStorePermissions,
         ExitCode::CiphertextIgnored,
         ExitCode::PlaintextNotIgnored,
+        ExitCode::OrphanedCiphertext,
         ExitCode::DecryptionFailed,
         ExitCode::EncryptionFailed,
         ExitCode::KeyParseFailure,
@@ -87,6 +90,7 @@ impl ExitCode {
             ExitCode::UnsafeKeyStorePermissions => "UnsafeKeyStorePermissions",
             ExitCode::CiphertextIgnored => "CiphertextIgnored",
             ExitCode::PlaintextNotIgnored => "PlaintextNotIgnored",
+            ExitCode::OrphanedCiphertext => "OrphanedCiphertext",
             ExitCode::DecryptionFailed => "DecryptionFailed",
             ExitCode::EncryptionFailed => "EncryptionFailed",
             ExitCode::KeyParseFailure => "KeyParseFailure",
@@ -129,6 +133,9 @@ impl ExitCode {
             }
             ExitCode::PlaintextNotIgnored => {
                 "Tracked plaintext on disk is not git-ignored (warning; exit stays 0)"
+            }
+            ExitCode::OrphanedCiphertext => {
+                "A committed .secret ciphertext path is not tracked; hide refuses"
             }
             ExitCode::DecryptionFailed => {
                 "Ciphertext could not be decrypted with the local identity"

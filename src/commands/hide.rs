@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
@@ -78,6 +80,64 @@ pub fn cmd_hide(
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
+
+    // Orphaned-ciphertext gate (exit 42, runs before the empty-manifest
+    // early return — an emptied tracked.json is exactly the de-tracking
+    // attack shape). A committed `.secret` whose plaintext path is no
+    // longer tracked would be silently skipped by rotation: removeperson +
+    // hide never re-encrypts it, leaving a ciphertext a revoked
+    // collaborator can still decrypt. The gate reads the git index, not
+    // the manifest, as the source of what is established, because both are
+    // attacker-writable but the index is what gets pushed.
+    let tracked_set: HashSet<&PathBuf> = tracked.files.iter().collect();
+    let ls = Command::new("git")
+        .current_dir(repo_root)
+        .args(["ls-files", "--", "*.secret"])
+        .output()
+        .context("Failed to run git ls-files")?;
+    if !ls.status.success() {
+        anyhow::bail!(
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&ls.stderr).trim()
+        );
+    }
+    let mut orphans: Vec<String> = Vec::new();
+    for line in String::from_utf8_lossy(&ls.stdout).lines() {
+        // Reverse of the ciphertext naming rule: `<name>.secret` guards
+        // plaintext `<name>`. A file literally named `.secret` has no
+        // plaintext path and is always an orphan.
+        let ciphertext = PathBuf::from(line);
+        let plaintext = ciphertext
+            .file_name()
+            .and_then(|name| {
+                name.to_string_lossy()
+                    .strip_suffix(".secret")
+                    .map(String::from)
+            })
+            .filter(|stem| !stem.is_empty())
+            .map(|stem| {
+                ciphertext
+                    .parent()
+                    .expect("file_name is Some, so a parent exists")
+                    .join(stem)
+            })
+            .unwrap_or_default();
+        if !tracked_set.contains(&plaintext) {
+            orphans.push(line.to_string());
+        }
+    }
+    if !orphans.is_empty() {
+        return Err(coded(
+            ExitCode::OrphanedCiphertext,
+            format!(
+                "refusing to hide: the committed ciphertext path(s) below are not tracked, so \
+                 rotation would silently leave them decryptable by removed collaborators; \
+                 re-track with `git-veil add <path>` or delete the stale ciphertext with \
+                 `git rm` (error code 42):\n  {}",
+                orphans.join("\n  ")
+            ),
+        ));
+    }
 
     if tracked.files.is_empty() {
         println!("No files tracked");
