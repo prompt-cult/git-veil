@@ -90,9 +90,22 @@ pub fn cmd_hide(
     // the manifest, as the source of what is established, because both are
     // attacker-writable but the index is what gets pushed.
     let tracked_set: HashSet<&PathBuf> = tracked.files.iter().collect();
+    // core.quotePath=false + -z: the index listing arrives verbatim (no
+    // octal-UTF8 quoting, NUL-separated) so the plaintext-path reversal
+    // below sees the real names — with the default quoting, a committed
+    // unicode/space ciphertext name never matches any tracked entry and
+    // false-positives the orphan gate into a permanent exit-42 bricking
+    // (issue #23).
     let ls = Command::new("git")
         .current_dir(repo_root)
-        .args(["ls-files", "--", "*.secret"])
+        .args([
+            "-c",
+            "core.quotePath=false",
+            "ls-files",
+            "-z",
+            "--",
+            "*.secret",
+        ])
         .output()
         .context("Failed to run git ls-files")?;
     if !ls.status.success() {
@@ -105,28 +118,32 @@ pub fn cmd_hide(
     // Plaintext paths whose ciphertext is already committed (established —
     // no intent needed to re-encrypt them).
     let mut established: HashSet<PathBuf> = HashSet::new();
-    for line in String::from_utf8_lossy(&ls.stdout).lines() {
+    for raw in ls.stdout.split(|b| *b == 0) {
+        if raw.is_empty() {
+            continue;
+        }
+        let line = String::from_utf8_lossy(raw).to_string();
         // Reverse of the ciphertext naming rule: `<name>.secret` guards
-        // plaintext `<name>`. A file literally named `.secret` has no
-        // plaintext path and is always an orphan.
-        let ciphertext = PathBuf::from(line);
+        // plaintext `<name>`. A committed file named exactly `.secret` has
+        // no plaintext path — it cannot correspond to ANY tracked path, so
+        // refusing on it would let one attacker-committed junk file brick
+        // hide repo-wide (issue #23). Ignore it with a warning instead.
+        let ciphertext = PathBuf::from(&line);
+        let stem = ciphertext.file_name().and_then(|name| {
+            name.to_string_lossy()
+                .strip_suffix(".secret")
+                .map(String::from)
+        });
+        let Some(stem) = stem.filter(|s| !s.is_empty()) else {
+            eprintln!("warning: ignoring committed file with no plaintext path: {line}");
+            continue;
+        };
         let plaintext = ciphertext
-            .file_name()
-            .and_then(|name| {
-                name.to_string_lossy()
-                    .strip_suffix(".secret")
-                    .map(String::from)
-            })
-            .filter(|stem| !stem.is_empty())
-            .map(|stem| {
-                ciphertext
-                    .parent()
-                    .expect("file_name is Some, so a parent exists")
-                    .join(stem)
-            })
-            .unwrap_or_default();
+            .parent()
+            .expect("file_name is Some, so a parent exists")
+            .join(stem);
         if !tracked_set.contains(&plaintext) {
-            orphans.push(line.to_string());
+            orphans.push(line);
         } else {
             established.insert(plaintext);
         }

@@ -51,7 +51,7 @@ pub fn cmd_removeperson(
     // of the signed payload, so a later `git revert` of this commit restores
     // an old VERSION too and the per-machine baseline refuses it (docs/design.md
     // "Keyring format and freshness").
-    keyring.bump_version();
+    keyring.bump_version()?;
 
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();
