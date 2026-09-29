@@ -79,6 +79,21 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
         .success())
 }
 
+/// True when the repo-relative path is tracked in the git index (staged or
+/// committed). Shared by reveal and unhide's tracked-plaintext refusal
+/// (exit 43, docs/design.md "Ignore safety" gate 4): a git-tracked plaintext
+/// is ordinary repository content, not a secret, and overwriting it from
+/// attacker-committed ciphertext is the F-1 clobber channel.
+pub(crate) fn is_tracked_in_git(repo_root: &Path, relative_path: &Path) -> bool {
+    Command::new("git")
+        .current_dir(repo_root)
+        .args(["ls-files", "--error-unmatch", "--"])
+        .arg(relative_path)
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
+
 /// Checks if a file is gitignored. If not, appends it to .gitignore.
 fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
     if !is_gitignored(repo_root, relative_path)? {
