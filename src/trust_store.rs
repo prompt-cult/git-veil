@@ -114,4 +114,51 @@ impl TrustPinStore {
         let content = fs::read_to_string(&path)?;
         Ok(Some(content.trim().to_string()))
     }
+
+    /// The path of the per-machine keyring-freshness baseline for `repo_id`:
+    /// the highest keyring version this machine has ever accepted. Lives
+    /// beside the pin, OUTSIDE the repository — a committed baseline would
+    /// be attacker-writable and the rollback refusal would be void. See
+    /// "Keyring format and freshness" in docs/design.md.
+    fn ring_version_path(key_store: &Path, repo_id: &str) -> PathBuf {
+        key_store
+            .join(Self::PIN_DIR)
+            .join(format!("{}.ring-version", Self::sanitize_repo_id(repo_id)))
+    }
+
+    /// Reads the freshness baseline; `Ok(None)` when this machine has never
+    /// accepted a versioned keyring for this repo (fresh-clone state).
+    pub fn read_ring_version(key_store: &Path, repo_id: &str) -> Result<Option<u64>> {
+        let path = Self::ring_version_path(key_store, repo_id);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let content = fs::read_to_string(&path)?;
+        content
+            .trim()
+            .parse::<u64>()
+            .map(Some)
+            .map_err(|_| anyhow::anyhow!("corrupt keyring freshness baseline: {}", path.display()))
+    }
+
+    /// Records the freshness baseline for `repo_id` (the highest keyring
+    /// version accepted on this machine).
+    pub fn write_ring_version(key_store: &Path, repo_id: &str, version: u64) -> Result<()> {
+        let path = Self::ring_version_path(key_store, repo_id);
+        fs::create_dir_all(path.parent().expect("baseline path always has a parent"))?;
+        write_atomic(&path, version.to_string().as_bytes())?;
+        Ok(())
+    }
+
+    /// Clears the freshness baseline for `repo_id`. Run by `git-veil trust`:
+    /// re-pinning is the documented recovery for an intended keyring
+    /// rollback, so the baseline must reset with the pin or the next gated
+    /// command would refuse the very keyring the user just re-anchored.
+    pub fn clear_ring_version(key_store: &Path, repo_id: &str) -> Result<()> {
+        let path = Self::ring_version_path(key_store, repo_id);
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        Ok(())
+    }
 }

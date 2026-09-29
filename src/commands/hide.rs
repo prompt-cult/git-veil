@@ -1,12 +1,15 @@
 use anyhow::{Context, Result};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
+use crate::intent::LocalAdds;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{cmd_verify_keyring, encrypt_to_recipients, parse_recipient, Keyring, TrackedFiles};
+use crate::{encrypt_to_recipients, parse_recipient, verify_keyring_against_trust, TrackedFiles};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -56,13 +59,12 @@ pub fn cmd_hide(
     key_store: &PathBuf,
     dangerously_delete_plaintext: bool,
 ) -> Result<()> {
-    // Verify keyring signature first
-    cmd_verify_keyring(repo_root, remote_name, key_store)?;
+    // Verify keyring signature first; the same call yields the repo id the
+    // intent gate needs and the keyring hide encrypts with.
+    let (repo_id, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Load keyring
-    let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
-    let keyring = Keyring::parse(&keyring_text)?;
+    let _ = &keyring;
 
     if keyring.entries.is_empty() {
         anyhow::bail!("No keys in keyring. Add collaborators with 'git-veil tell' first.");
@@ -78,6 +80,97 @@ pub fn cmd_hide(
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
+
+    // Orphaned-ciphertext gate (exit 42, runs before the empty-manifest
+    // early return — an emptied tracked.json is exactly the de-tracking
+    // attack shape). A committed `.secret` whose plaintext path is no
+    // longer tracked would be silently skipped by rotation: removeperson +
+    // hide never re-encrypts it, leaving a ciphertext a revoked
+    // collaborator can still decrypt. The gate reads the git index, not
+    // the manifest, as the source of what is established, because both are
+    // attacker-writable but the index is what gets pushed.
+    let tracked_set: HashSet<&PathBuf> = tracked.files.iter().collect();
+    let ls = Command::new("git")
+        .current_dir(repo_root)
+        .args(["ls-files", "--", "*.secret"])
+        .output()
+        .context("Failed to run git ls-files")?;
+    if !ls.status.success() {
+        anyhow::bail!(
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&ls.stderr).trim()
+        );
+    }
+    let mut orphans: Vec<String> = Vec::new();
+    // Plaintext paths whose ciphertext is already committed (established —
+    // no intent needed to re-encrypt them).
+    let mut established: HashSet<PathBuf> = HashSet::new();
+    for line in String::from_utf8_lossy(&ls.stdout).lines() {
+        // Reverse of the ciphertext naming rule: `<name>.secret` guards
+        // plaintext `<name>`. A file literally named `.secret` has no
+        // plaintext path and is always an orphan.
+        let ciphertext = PathBuf::from(line);
+        let plaintext = ciphertext
+            .file_name()
+            .and_then(|name| {
+                name.to_string_lossy()
+                    .strip_suffix(".secret")
+                    .map(String::from)
+            })
+            .filter(|stem| !stem.is_empty())
+            .map(|stem| {
+                ciphertext
+                    .parent()
+                    .expect("file_name is Some, so a parent exists")
+                    .join(stem)
+            })
+            .unwrap_or_default();
+        if !tracked_set.contains(&plaintext) {
+            orphans.push(line.to_string());
+        } else {
+            established.insert(plaintext);
+        }
+    }
+    if !orphans.is_empty() {
+        return Err(coded(
+            ExitCode::OrphanedCiphertext,
+            format!(
+                "refusing to hide: the committed ciphertext path(s) below are not tracked, so \
+                 rotation would silently leave them decryptable by removed collaborators; \
+                 re-track with `git-veil add <path>` or delete the stale ciphertext with \
+                 `git rm` (error code 42):\n  {}",
+                orphans.join("\n  ")
+            ),
+        ));
+    }
+
+    // Encryption-intent gate (exit 72, see "Encryption intent" in
+    // docs/design.md): tracked.json is committed and unsigned, so a repo
+    // writer can nominate a path. A tracked path whose ciphertext is NOT in
+    // the index must have been added on THIS machine (the intent log lives
+    // in the key store, outside any repo writer's reach) or hide refuses:
+    // first-encrypting an attacker-nominated path is exactly the
+    // exfiltration channel, and the gitignored-plaintext case would
+    // otherwise be silent.
+    let mut unintended: Vec<String> = Vec::new();
+    for file in &tracked.files {
+        if !established.contains(file) && !LocalAdds::has_intent(key_store, &repo_id, file) {
+            unintended.push(file.to_string_lossy().to_string());
+        }
+    }
+    if !unintended.is_empty() {
+        return Err(coded(
+            ExitCode::UnintendedEncryption,
+            format!(
+                "refusing to hide: the path(s) below are tracked but you never ran \
+                 `git-veil add` for them on this machine and their ciphertext was never \
+                 committed; tracked.json was likely modified by someone else — run \
+                 `git-veil add <path>` if the tracking is wanted, or `git-veil remove <path>` \
+                 if it is not (error code 72):\n  {}",
+                unintended.join("\n  ")
+            ),
+        ));
+    }
 
     if tracked.files.is_empty() {
         println!("No files tracked");

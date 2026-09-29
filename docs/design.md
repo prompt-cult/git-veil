@@ -94,6 +94,57 @@ fail-closed: a death between the two writes leaves a mismatch, never a silently
 accepted changed anchor. Re-pinning over a different existing fingerprint prints
 a loud `replacing the previously pinned fingerprint …` notice.
 
+## Keyring format and freshness (rollback refusal)
+
+The keyring file is an armored block:
+
+```
+-----BEGIN GIT-VEIL KEYRING-----
+version:<n>
+<email>:<age-recipient>:<fingerprint>
+...
+-----END GIT-VEIL KEYRING-----
+-----BEGIN GIT-VEIL SIGNATURE-----
+<base64 Ed25519 signature over everything above, markers included>
+-----END GIT-VEIL SIGNATURE-----
+```
+
+The `version:` line (Keyring, src/keyring.rs) is a **monotonic counter
+carried inside the signed payload**: the signature covers it, so a version
+number cannot be forged without the owner key. `tell` and `removeperson`
+write `current + 1` (current = the keyring's own version, 0 when absent) —
+the counter needs no state outside the keyring it is serialised into, and no
+clock, so there is no drift to reason about.
+
+**Rollback refusal.** The signature alone proves "the owner signed this at
+some point", not "this is current": a plain `git revert` of a removeperson
+commit restores an old, still-validly-signed keyring, silently returning a
+revoked collaborator to the recipient set. The defence is a per-machine
+**freshness baseline**: the highest keyring version this machine has ever
+accepted for this repo id, stored OUTSIDE the repository next to the pin
+(`<key store>/trust-pins/<sanitized repo id>.ring-version`,
+TrustPinStore, src/trust_store.rs). After the signature verifies,
+`verify_keyring_against_trust` (src/commands/verify_keyring.rs) compares:
+
+- keyring version **below the baseline** (a versionless pre-freshness
+  keyring counts as 0) → refusal, exit code 14 (KeyringRollback);
+- otherwise the baseline is advanced to the keyring's version and the
+  command proceeds.
+
+A fresh clone has no baseline: the first gated command records the current
+keyring's version as the baseline (a versionless keyring records 0) — the
+same trust-on-first-use posture as the pin itself. The baseline is
+machine-local state in the key store, which is exactly where it must live:
+anything committed to the repo would be attacker-writable and the refusal
+would be void.
+
+**Recovery.** A legitimate rollback (the owner really does want an older
+keyring state) is the same ceremony as a legitimate anchor change: re-run
+`git-veil trust`, which clears the freshness baseline along with re-pinning
+the key. Old keyrings written before freshness existed are accepted until
+the next `tell`/`removeperson` gives them a version; from then on their
+rollback is refused.
+
 ## Key discovery and selection
 
 git-veil **never generates key material**. A key the tool created is a key the
@@ -222,6 +273,75 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    risk, not a tool failure. The tutorials show an optional pre-commit hook
    that turns it into a hard stop.
 
+## Orphaned ciphertext (a committed `.secret` that is not tracked)
+
+`hide` re-encrypts only tracked paths. That makes the tracked manifest the
+de-facto revocation boundary: if a path is removed from `tracked.json`, the
+old ciphertext is never re-encrypted, so after a `removeperson` rotation the
+stale `.secret` stays decryptable by the removed collaborator — silently,
+with `hide` reporting success. Since `tracked.json` is committed and unsigned
+repo content, any repo writer can cause this by deleting manifest entries.
+
+Two mitigations close the hole:
+
+1. **`remove` deletes the sibling ciphertext by default.** Untracking a file
+   deletes `<name>.secret` from the working tree in the same step
+   (`--keep-ciphertext` preserves the old leave-in-place behaviour). The
+   ciphertext is committed content, so deletion is recoverable from git
+   history; the honest way to keep an untracked ciphertext around is now an
+   explicit flag, not a default.
+2. **`hide` refuses orphaned ciphertext (exit 42).** Before encrypting,
+   `hide` enumerates ciphertext paths committed to the git index
+   (`git ls-files -- '*.secret'`) and refuses with exit code 42 when any of
+   them does not correspond to a tracked path, naming each one. The remedies
+   are `git-veil add <path>` (the de-tracking was wrong) or deleting the
+   stale ciphertext (the de-tracking was right). The gate runs even when
+   `tracked.json` is empty — that is exactly the de-tracking-then-rotate
+   attack shape.
+
+Scope, stated honestly: the gate reads the git **index**, so it catches
+committed (staged) ciphertexts — the exfiltration channel. An uncommitted
+on-disk `.secret` left behind by `remove --keep-ciphertext` is not detected
+until staged; a blind `git add -A` could sweep it into a commit. This is the
+same risk class as the code-41 plaintext-leak warning and is documented as
+such, not hidden.
+
+## Encryption intent (refusing nominated paths)
+
+`tracked.json` is committed and unsigned: any repo writer can add a path to
+it. The victim's next `hide` would then encrypt a file the victim never
+added — typically a gitignored secret — to every keyring member, including
+the attacker's, and the ciphertext is committed in the ordinary flow. The
+plaintext being gitignored suppresses even the code-41 warning, so the
+exfiltration is silent. The manifest cannot distinguish "user intends to
+track this" from "attacker nominated it" — the manifest IS the attack
+surface — so intent is bound to the **victim's own action** instead:
+
+- **`add` records intent on the machine that ran it.** Each `git-veil add`
+  appends the resolved repo-relative path to a machine-local intent log,
+  `<key store>/local-adds/<sanitized repo id>` (one path per line;
+  `LocalAdds`, src/intent.rs). The key store is outside the repository and
+  permission-checked, so repo writers cannot write or poison it, and a
+  `pull` cannot alter it.
+- **`hide` requires intent for first encryption.** For each tracked path
+  whose ciphertext is not yet in the git index, `hide` consults the intent
+  log; a path with neither a committed ciphertext nor recorded intent is
+  refused with exit code 72 (UnintendedEncryption), naming the paths, the
+  last commit that touched `tracked.json`, and the remedies: run
+  `git-veil add <path>` if the tracking is wanted, or `git-veil remove
+  <path>` / restore `tracked.json` if it is not. An established ciphertext
+  (already in the index) needs no intent — re-encryption on rotation and
+  fresh-clone reveals are unaffected, so ordinary collaboration and CI
+  flows do not change.
+
+Stated honestly, the residual trade-offs: the intent log is machine-local,
+so an owner who re-hides from a machine whose key store was restored must
+re-run `add` for any not-yet-committed ciphertext (the committed-ciphertext
+path needs nothing); and a malicious collaborator can still make `hide`
+refuse (availability) by nominating junk paths — that is fail-closed by
+design, the same posture as the code-40 gate, and each refusal names the
+offending paths and the commit that nominated them.
+
 ## Path safety
 
 Tracked paths are repo-relative strings in `.git-veil/tracked.json`. Four
@@ -280,15 +400,18 @@ codes are never renumbered, only appended.
 | 11   | NoTrustPin                   | No local trust pin on this machine; run `git-veil trust` |
 | 12   | TrustMismatch                | Committed trust.json disagrees with this machine's pin; re-pin if intended |
 | 13   | TrustRepoIdMismatch          | repo_id argument does not match the one derived from the remote |
+| 14   | KeyringRollback              | Keyring version is below this machine's freshness baseline; re-`trust` if the rollback is intended |
 | 20   | NoSigningKey                 | No Ed25519 signing key in the key store; create one and back it up |
 | 21   | NoAgeIdentity                | No age identity in the key store matching your keyring entry; create and import one |
 | 22   | IdentityNotInKeyring         | Your email is not in the signed keyring; ask the owner to `tell` you |
 | 30   | UnsafeKeyStorePermissions    | Key store directory or private key file is group/world accessible |
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
+| 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `hide` refuses (see "Orphaned ciphertext") |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local identity |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
 | 63   | SignatureVerificationFailed  | Keyring signature missing or invalid |
 | 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`) |
 | 71   | UnsafePath                   | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
+| 72   | UnintendedEncryption         | `hide` refuses to encrypt a file the user never added on this machine (see "Encryption intent") |

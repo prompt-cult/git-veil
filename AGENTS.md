@@ -24,3 +24,32 @@ Preferred, not a straitjacket: common sense and context-specific good practice s
 
 - Break work into subtasks; delegate each to a subagent that must `git add` its own work.
 - The coordinator then: checks what is in the git index, confirms tests were added, runs the full test suite, commits if green, checks code coverage, and raises a new delegated todo if coverage is missing or follow-on work is required.
+
+## Verification (what CI actually enforces)
+
+- Format is blocking: `cargo fmt --all -- --check`
+- Tests are blocking: `cargo test --locked` (both debug and release in CI)
+- Clippy and `cargo audit` are **non-blocking** in CI (`continue-on-error`) — the tree carries ~90 pre-existing clippy warnings and known advisories on the locked tree. Do not "fix" this by adding `-D warnings`; see `.github/workflows/ci.yml`.
+- Single integration suite: `cargo test --test <name>` (e.g. `--test interop`, `--test trust_model`). Suite files live in `tests/`.
+- `mise` is the tool manager (`.mise.toml`); it provides the Rust toolchain and a gpg binary used only by interop tests.
+
+## Generated artifacts are committed
+
+`docs/man/*.1` and `docs/completions/*` are generated from the clap CLI definition and **committed**. After any change to `src/cli.rs` or a subcommand, regenerate them:
+
+```sh
+scripts/gen-docs.sh
+```
+
+Otherwise CI-facing docs drift from the real CLI.
+
+## Interop tests (tests/interop.rs)
+
+- Exercises every permutation of git-veil / `age` / `rage` / gpg and **skips cleanly when the external binary is absent** — a skip is expected behavior, not a failure.
+- CI deliberately does **not** install gpg, age, or rage (the skip path itself is tested). Do not "fix" CI by adding them.
+
+## Domain gotchas (git-veil is a secrets tool)
+
+- Failures use documented exit codes, not a generic 1 (trust 10–13, missing keys 20–22, permissions 30, gitignore 40–41, crypto 60–63, policy 70–71). Spec: `git-veil error-codes` and `docs/design.md`. Preserve these codes when changing error paths.
+- Key store permission checks (exit 30) apply to `$HOME/.git-veil` or `GIT_VEIL_HOME`; tests isolate state via `GIT_VEIL_HOME`. If local tests fail with exit 30, your real key store has loose modes — `chmod 700/600` it; do not weaken the check.
+- Ciphertexts must stay standard age format (age-encryption.org/v1) — `age`/`rage` interoperability is a contract, so avoid baking git-veil-specific data into encrypted payloads.

@@ -25,6 +25,8 @@ pub enum ExitCode {
     TrustMismatch = 12,
     /// repo_id argument does not match the one derived from the remote.
     TrustRepoIdMismatch = 13,
+    /// Keyring version is below this machine's freshness baseline (rollback).
+    KeyringRollback = 14,
     /// No Ed25519 signing key in the key store.
     NoSigningKey = 20,
     /// No age identity in the key store matching your keyring entry.
@@ -37,6 +39,10 @@ pub enum ExitCode {
     CiphertextIgnored = 40,
     /// Tracked plaintext on disk is not git-ignored (warning; exit stays 0).
     PlaintextNotIgnored = 41,
+    /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
+    OrphanedCiphertext = 42,
+    /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
+    PlaintextTracked = 43,
     /// Ciphertext could not be decrypted with the local identity.
     DecryptionFailed = 60,
     /// Encryption failed.
@@ -49,6 +55,8 @@ pub enum ExitCode {
     Refused = 70,
     /// Path-safety refusal (symlink, outside repository, unsafe tracked path).
     UnsafePath = 71,
+    /// `hide` refuses to encrypt a path the user never added on this machine.
+    UnintendedEncryption = 72,
 }
 
 impl ExitCode {
@@ -59,18 +67,22 @@ impl ExitCode {
         ExitCode::NoTrustPin,
         ExitCode::TrustMismatch,
         ExitCode::TrustRepoIdMismatch,
+        ExitCode::KeyringRollback,
         ExitCode::NoSigningKey,
         ExitCode::NoAgeIdentity,
         ExitCode::IdentityNotInKeyring,
         ExitCode::UnsafeKeyStorePermissions,
         ExitCode::CiphertextIgnored,
         ExitCode::PlaintextNotIgnored,
+        ExitCode::OrphanedCiphertext,
+        ExitCode::PlaintextTracked,
         ExitCode::DecryptionFailed,
         ExitCode::EncryptionFailed,
         ExitCode::KeyParseFailure,
         ExitCode::SignatureVerificationFailed,
         ExitCode::Refused,
         ExitCode::UnsafePath,
+        ExitCode::UnintendedEncryption,
     ];
 
     /// The enum name, as printed by `git-veil error-codes`.
@@ -81,18 +93,22 @@ impl ExitCode {
             ExitCode::NoTrustPin => "NoTrustPin",
             ExitCode::TrustMismatch => "TrustMismatch",
             ExitCode::TrustRepoIdMismatch => "TrustRepoIdMismatch",
+            ExitCode::KeyringRollback => "KeyringRollback",
             ExitCode::NoSigningKey => "NoSigningKey",
             ExitCode::NoAgeIdentity => "NoAgeIdentity",
             ExitCode::IdentityNotInKeyring => "IdentityNotInKeyring",
             ExitCode::UnsafeKeyStorePermissions => "UnsafeKeyStorePermissions",
             ExitCode::CiphertextIgnored => "CiphertextIgnored",
             ExitCode::PlaintextNotIgnored => "PlaintextNotIgnored",
+            ExitCode::OrphanedCiphertext => "OrphanedCiphertext",
+            ExitCode::PlaintextTracked => "PlaintextTracked",
             ExitCode::DecryptionFailed => "DecryptionFailed",
             ExitCode::EncryptionFailed => "EncryptionFailed",
             ExitCode::KeyParseFailure => "KeyParseFailure",
             ExitCode::SignatureVerificationFailed => "SignatureVerificationFailed",
             ExitCode::Refused => "Refused",
             ExitCode::UnsafePath => "UnsafePath",
+            ExitCode::UnintendedEncryption => "UnintendedEncryption",
         }
     }
 
@@ -112,6 +128,9 @@ impl ExitCode {
             ExitCode::TrustRepoIdMismatch => {
                 "repo_id argument does not match the one derived from the remote"
             }
+            ExitCode::KeyringRollback => {
+                "Keyring version is below this machine's freshness baseline; re-run git-veil trust if the rollback is intended"
+            }
             ExitCode::NoSigningKey => {
                 "No Ed25519 signing key in the key store; create one and back it up"
             }
@@ -130,6 +149,12 @@ impl ExitCode {
             ExitCode::PlaintextNotIgnored => {
                 "Tracked plaintext on disk is not git-ignored (warning; exit stays 0)"
             }
+            ExitCode::OrphanedCiphertext => {
+                "A committed .secret ciphertext path is not tracked; hide refuses"
+            }
+            ExitCode::PlaintextTracked => {
+                "The plaintext is tracked in git; reveal/unhide refuse (git rm --cached it if it is a secret)"
+            }
             ExitCode::DecryptionFailed => {
                 "Ciphertext could not be decrypted with the local identity"
             }
@@ -141,6 +166,9 @@ impl ExitCode {
             }
             ExitCode::UnsafePath => {
                 "Path-safety refusal (symlink, outside repository, unsafe tracked path)"
+            }
+            ExitCode::UnintendedEncryption => {
+                "hide refuses to encrypt a file the user never added on this machine (tracked.json nomination)"
             }
         }
     }

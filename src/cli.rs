@@ -274,6 +274,11 @@ repo-relative). Nothing is encrypted yet — hide does that. Files must
 exist, and a symlink must resolve inside the repository, so hide can
 never be tricked into reading or deleting a file outside the repo.
 
+Each added path is recorded in the machine-local intent log in your key
+store: hide refuses to first-encrypt a tracked path that was never added
+on this machine (exit code 72), so a tracked.json modified by someone
+else cannot silently nominate your files for encryption.
+
 Typical flow: init -> trust -> tell (once per collaborator) -> add -> hide.
 
 EXAMPLES
@@ -284,24 +289,36 @@ EXAMPLES
         /// File(s) to add
         #[arg(required = true)]
         files: Vec<String>,
+        /// Git remote name (derives the repository id for the intent log)
+        #[arg(long, default_value = "origin")]
+        remote: String,
     },
 
-    /// Untrack files (leaves any ciphertext in place)
+    /// Untrack files (deletes the sibling .secret unless --keep-ciphertext)
     #[command(after_long_help = "\
 Untracks files (removes them from .git-veil/tracked.json). The plaintext
 may already be gone — hide --dangerously-delete-plaintext removes it — so
-the file does not need to exist. Untracking is not decrypting: any
-<name>.secret ciphertext is left in place; restore the plaintext with
-unhide or reveal first if you want it gone too.
+the file does not need to exist.
+
+By default the sibling <name>.secret ciphertext is deleted too: a
+de-tracked but committed ciphertext would otherwise be silently skipped
+by the next hide and stay decryptable by collaborators removed in a
+later rotation (hide refuses such orphans with exit code 42). Deletion
+is recoverable from git history. Pass --keep-ciphertext to leave the
+ciphertext in place; hide will refuse it as an orphan until it is
+removed or the path is re-tracked.
 
 EXAMPLES
   $ git-veil remove .env
-  $ git-veil remove config/credentials.yml
+  $ git-veil remove --keep-ciphertext config/credentials.yml
 ")]
     Remove {
         /// File(s) to remove
         #[arg(required = true)]
         files: Vec<String>,
+        /// Leave the <name>.secret ciphertext in place (hide will refuse it as an orphan)
+        #[arg(long)]
+        keep_ciphertext: bool,
     },
 
     /// List all tracked files

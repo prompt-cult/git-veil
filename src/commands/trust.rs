@@ -98,6 +98,13 @@ pub fn cmd_trust(
     TrustPinStore::write_pin(key_store, repo_id, &fingerprint)
         .context("Failed to write local trust pin")?;
 
+    // Reset the keyring-freshness baseline along with the pin: re-running
+    // trust is the documented recovery for an intended keyring rollback, so
+    // the baseline must not outlive the ceremony or the next gated command
+    // would refuse the very keyring the user just re-anchored.
+    TrustPinStore::clear_ring_version(key_store, repo_id)
+        .context("Failed to reset keyring freshness baseline")?;
+
     println!("Trusted key for {} (fingerprint: {})", repo_id, fingerprint);
     println!("Pinned {} for {} on this machine", fingerprint, repo_id);
     Ok(())

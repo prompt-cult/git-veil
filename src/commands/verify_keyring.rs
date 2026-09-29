@@ -133,6 +133,36 @@ pub fn verify_keyring_against_trust(
         ));
     }
 
+    // Freshness check (see "Keyring format and freshness" in docs/design.md):
+    // a valid signature proves the owner signed this keyring at some point,
+    // not that it is current. A `git revert` of a removeperson commit would
+    // otherwise silently return a revoked collaborator to the recipient set.
+    // The per-machine baseline (highest version ever accepted here, stored
+    // outside the repo beside the pin) turns any version regression —
+    // including a versionless pre-freshness keyring, which counts as 0 —
+    // into a fail-closed refusal. A keyring with no version at all on a
+    // machine with no baseline is the pre-freshness migration state and is
+    // accepted; it writes no baseline, so the first versioned keyring is
+    // still free to establish one.
+    let observed = keyring.version.unwrap_or(0);
+    match TrustPinStore::read_ring_version(key_store, &repo_id)? {
+        Some(baseline) if baseline > observed => {
+            return Err(coded(
+                ExitCode::KeyringRollback,
+                format!(
+                    "keyring rollback refused for {}: version {} is below this machine's freshness baseline {}; if this rollback is intended, re-run git-veil trust {} <keyfile> to reset it (exit code 14)",
+                    repo_id, observed, baseline, repo_id
+                ),
+            ));
+        }
+        baseline if baseline != Some(observed) => {
+            // Advance the baseline to the accepted version (first versioned
+            // keyring on this machine, or a legitimate increase).
+            TrustPinStore::write_ring_version(key_store, &repo_id, observed)?;
+        }
+        _ => {}
+    }
+
     Ok((repo_id, trusted_fingerprint.to_string(), keyring))
 }
 

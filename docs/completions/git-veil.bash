@@ -187,12 +187,16 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__add)
-            opts="-h --dangerously-skip-permissions-check --help"
+            opts="-h --remote --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
@@ -785,7 +789,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__remove)
-            opts="-h --dangerously-skip-permissions-check --help"
+            opts="-h --keep-ciphertext --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

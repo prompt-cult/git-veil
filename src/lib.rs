@@ -7,6 +7,7 @@ pub mod cli;
 mod commands;
 mod exit_codes;
 mod fs_atomic;
+mod intent;
 mod key_discovery;
 mod keyring;
 mod permissions;
@@ -44,6 +45,7 @@ pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_tr
 pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
 pub use fs_atomic::{write_atomic, write_atomic_mode};
+pub use intent::LocalAdds;
 pub use key_discovery::{discover_identity, discover_signing_key, load_signing_keys};
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};
 pub use permissions::{

@@ -101,6 +101,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (add)
 _arguments "${_arguments_options[@]}" : \
+'--remote=[Git remote name (derives the repository id for the intent log)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -109,6 +110,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (remove)
 _arguments "${_arguments_options[@]}" : \
+'--keep-ciphertext[Leave the <name>.secret ciphertext in place (hide will refuse it as an orphan)]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -381,7 +383,7 @@ _git-veil_commands() {
 'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
-'remove:Untrack files (leaves any ciphertext in place)' \
+'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
 'hide:Encrypt all tracked files to the keyring' \
 'reveal:Decrypt all tracked files back to plaintext' \
@@ -447,7 +449,7 @@ _git-veil__subcmd__help_commands() {
 'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
-'remove:Untrack files (leaves any ciphertext in place)' \
+'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
 'hide:Encrypt all tracked files to the keyring' \
 'reveal:Decrypt all tracked files back to plaintext' \
