@@ -7,8 +7,8 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_verify_keyring, decrypt_with_identity, exit_code_of, generate_identity,
-    generate_signing_keypair, recipient_from_identity, TrackedFiles,
+    cmd_trust, cmd_unhide, cmd_verify_keyring, decrypt_with_identity, exit_code_of,
+    generate_identity, generate_signing_keypair, recipient_from_identity, TrackedFiles,
 };
 
 use std::fs;
@@ -550,22 +550,20 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
 }
 
 // ---------------------------------------------------------------------------
-// UNCOMMITTED REPRO — git-secret finding F-1 mapped to git-veil (task 376)
+// Regression — reveal/unhide refuse a tracked-in-git plaintext
+// (issue #8, FIXED — git-secret finding F-1 class)
 //
-// git-secret's reveal clobbers a TRACKED-IN-GIT repo file (e.g. deploy.sh)
-// with attacker-chosen ciphertext, giving RCE in the documented CI flow.
-// git-veil's reveal looks equally exposed: it writes attacker-committed
-// ciphertext over whatever plaintext is at the tracked path, and a
-// tracked-in-git plaintext passes ensure_regular_file (it is a regular
-// file). The ciphertext can be crafted by ANYONE (the ring's recipient
-// keys are public), needs no keyring re-sign, and the committed .secret
-// counts as "established" so the exit-72 intent gate does not apply to
-// reveal. This test must be committed + turned into an issue (needs user
-// confirmation per the externalization rule).
+// Previously: a repo writer nominated a tracked-in-git source file in
+// tracked.json and committed a payload ciphertext encrypted to the ring's
+// public keys; the victim's reveal overwrote the source file (RCE in the
+// documented CI flow).
+//
+// Now: reveal/unhide refuse (exit 43) when the target plaintext is tracked
+// in git — a git-tracked plaintext is repository content, not a secret.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn repro_f1_reveal_clobbers_tracked_repo_file() {
+fn fix_reveal_refuses_tracked_in_git_plaintext() {
     let f = Fixture::new("f1-reveal-clobber");
 
     // The victim: a legitimate collaborator with an identity in their key
@@ -593,7 +591,8 @@ fn repro_f1_reveal_clobbers_tracked_repo_file() {
     // A NORMAL repo source file, tracked in git — never a secret, never
     // git-veil add'ed. The victim would never hide this.
     fs::create_dir_all(f.repo.join("ci")).unwrap();
-    fs::write(f.repo.join("ci/deploy.sh"), "#!/bin/sh\necho legitimate\n").unwrap();
+    let legitimate = "#!/bin/sh\necho legitimate\n";
+    fs::write(f.repo.join("ci/deploy.sh"), legitimate).unwrap();
 
     // ATTACK: a repo writer nominates the source file in tracked.json and
     // commits a payload ciphertext encrypted to the ring's PUBLIC keys
@@ -617,28 +616,80 @@ fn repro_f1_reveal_clobbers_tracked_repo_file() {
     fs::write(f.repo.join("ci/deploy.sh.secret"), evil_ct).unwrap();
     f.stage_all(); // attacker commits tracked.json + the evil ciphertext
 
-    // VICTIM: reveal in the documented CI flow.
-    let result = cmd_reveal(
+    // FIXED: reveal refuses (exit 43) — the tracked-in-git source file is
+    // not overwritten.
+    let err = cmd_reveal(
         &f.repo.path,
         "victim@example.com",
         "origin",
         &f.key_store.path,
+    )
+    .expect_err("reveal must refuse a git-tracked plaintext");
+    assert_eq!(
+        exit_code_of(&err),
+        43,
+        "tracked-plaintext clobber must exit with the documented code 43"
     );
-    let outcome = match result {
-        Ok(()) => "CLOBBERED",
-        Err(e) => {
-            println!("reveal refused: {e:#}");
-            "REFUSED"
-        }
-    };
-    println!("F-1 outcome on git-veil: {outcome}");
-    let on_disk = fs::read_to_string(f.repo.join("ci/deploy.sh")).unwrap();
-    println!("ci/deploy.sh now: {on_disk}");
-    if outcome == "CLOBBERED" {
-        assert_eq!(
-            on_disk,
-            String::from_utf8_lossy(payload),
-            "F-1 APPLIES: reveal overwrote a tracked repo file with attacker payload"
-        );
-    }
+    assert_eq!(
+        fs::read_to_string(f.repo.join("ci/deploy.sh")).unwrap(),
+        legitimate,
+        "the source file must be untouched"
+    );
+
+    // And unhide refuses the same way.
+    let err = cmd_unhide(
+        &f.repo.path,
+        "ci/deploy.sh",
+        "victim@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect_err("unhide must refuse a git-tracked plaintext");
+    assert_eq!(exit_code_of(&err), 43);
+}
+
+#[test]
+fn fix_reveal_still_works_for_gitignored_plaintexts() {
+    // The normal flow: plaintext gitignored (never in the index), the
+    // committed ciphertext reveals fine — the exit-43 gate must not
+    // disturb legitimate reveal/unhide.
+    let f = Fixture::new("reveal-normal");
+    let _carol = f.add_collab("carol@example.com");
+    // The owner must be in the keyring too for the reveal below (their
+    // identity IS in the key store; the recipient is owner.signing line 2).
+    let owner_signing = fs::read_to_string(f.repo.join("owner.signing")).unwrap();
+    let owner_recipient = owner_signing.lines().nth(1).unwrap().trim();
+    fs::write(f.repo.join("owner.recipient"), owner_recipient).unwrap();
+    cmd_tell(
+        &f.repo.path,
+        "owner@example.com",
+        "owner.recipient",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .expect("tell owner");
+    let secret = b"TOKEN=v1\n";
+    f.add_file("secrets.env", secret);
+    f.hide();
+    f.stage_all();
+
+    fs::remove_file(f.repo.join("secrets.env")).unwrap(); // hidden state
+    cmd_reveal(
+        &f.repo.path,
+        "owner@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("reveal of a gitignored tracked plaintext must work");
+    assert_eq!(fs::read(f.repo.join("secrets.env")).unwrap(), secret);
+
+    cmd_unhide(
+        &f.repo.path,
+        "secrets.env",
+        "owner@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("unhide of a gitignored tracked plaintext must work");
 }

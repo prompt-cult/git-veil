@@ -41,6 +41,8 @@ pub enum ExitCode {
     PlaintextNotIgnored = 41,
     /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
     OrphanedCiphertext = 42,
+    /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
+    PlaintextTracked = 43,
     /// Ciphertext could not be decrypted with the local identity.
     DecryptionFailed = 60,
     /// Encryption failed.
@@ -73,6 +75,7 @@ impl ExitCode {
         ExitCode::CiphertextIgnored,
         ExitCode::PlaintextNotIgnored,
         ExitCode::OrphanedCiphertext,
+        ExitCode::PlaintextTracked,
         ExitCode::DecryptionFailed,
         ExitCode::EncryptionFailed,
         ExitCode::KeyParseFailure,
@@ -98,6 +101,7 @@ impl ExitCode {
             ExitCode::CiphertextIgnored => "CiphertextIgnored",
             ExitCode::PlaintextNotIgnored => "PlaintextNotIgnored",
             ExitCode::OrphanedCiphertext => "OrphanedCiphertext",
+            ExitCode::PlaintextTracked => "PlaintextTracked",
             ExitCode::DecryptionFailed => "DecryptionFailed",
             ExitCode::EncryptionFailed => "EncryptionFailed",
             ExitCode::KeyParseFailure => "KeyParseFailure",
@@ -147,6 +151,9 @@ impl ExitCode {
             }
             ExitCode::OrphanedCiphertext => {
                 "A committed .secret ciphertext path is not tracked; hide refuses"
+            }
+            ExitCode::PlaintextTracked => {
+                "The plaintext is tracked in git; reveal/unhide refuse (git rm --cached it if it is a secret)"
             }
             ExitCode::DecryptionFailed => {
                 "Ciphertext could not be decrypted with the local identity"

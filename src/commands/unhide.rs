@@ -2,12 +2,31 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::commands::add::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
 use crate::{decrypt_with_identity, verify_keyring_against_trust, TrackedFiles};
+
+/// Refuses (exit 43) when the tracked plaintext path is tracked in the git
+/// index — same gate as reveal; see docs/design.md "Ignore safety" gate 4.
+fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
+    if is_tracked_in_git(repo_root, file) {
+        return Err(coded(
+            ExitCode::PlaintextTracked,
+            format!(
+                "refusing to overwrite: '{}' is tracked in git, so it is repository content, \
+                 not a git-veil secret — a committed ciphertext for it may be attacker-nominated; \
+                 `git rm --cached '{}'` if it is genuinely a secret (error code 43)",
+                file.display(),
+                file.display()
+            ),
+        ));
+    }
+    Ok(())
+}
 
 /// Unhides a single tracked file: decrypts its in-place `<name>.secret`
 /// ciphertext back to the tracked plaintext path, leaving the ciphertext
@@ -75,6 +94,10 @@ pub fn cmd_unhide(
     // corrupt the link target outside the repo (or silently replace the
     // link); refuse for consistency with the read gates.
     ensure_regular_file(repo_root, &relative)?;
+
+    // Tracked-plaintext gate (exit 43): same refusal as reveal — see
+    // docs/design.md "Ignore safety" gate 4 and issue #8.
+    ensure_not_tracked_in_git(repo_root, &relative)?;
 
     // Compute encrypted path
     let encrypted_path = encrypted_path_for(repo_root, &relative);

@@ -2,12 +2,31 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::commands::add::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::discover_identity;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{cmd_verify_keyring, decrypt_with_identity, Keyring, TrackedFiles};
+
+/// Refuses (exit 43) when the tracked plaintext path is tracked in the git
+/// index — see docs/design.md "Ignore safety" gate 4 and issue #8.
+fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
+    if is_tracked_in_git(repo_root, file) {
+        return Err(coded(
+            ExitCode::PlaintextTracked,
+            format!(
+                "refusing to overwrite: '{}' is tracked in git, so it is repository content, \
+                 not a git-veil secret — a committed ciphertext for it may be attacker-nominated; \
+                 `git rm --cached '{}'` if it is genuinely a secret (error code 43)",
+                file.display(),
+                file.display()
+            ),
+        ));
+    }
+    Ok(())
+}
 
 /// Decrypts all tracked files using the user's private key.
 ///
@@ -69,6 +88,15 @@ pub fn cmd_reveal(
         // would corrupt the link target outside the repo (or silently
         // replace the link); refuse for consistency with the read gates.
         ensure_regular_file(repo_root, file)?;
+
+        // Tracked-plaintext gate (exit 43, docs/design.md "Ignore safety"
+        // gate 4): a plaintext tracked in git is ordinary repository
+        // content, not a secret. Overwriting it from committed ciphertext
+        // is the F-1 clobber channel: a repo writer nominates a source
+        // file in the unsigned tracked.json and commits payload ciphertext
+        // encrypted to the public ring keys; the victim's reveal would
+        // overwrite the source file for the CI to execute.
+        ensure_not_tracked_in_git(repo_root, file)?;
 
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);
