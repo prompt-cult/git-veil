@@ -187,9 +187,16 @@ impl Keyring {
     /// Bumps the monotonic freshness counter for a re-sign: the new version
     /// is current + 1 (a versionless keyring counts as 0). Called by tell
     /// and removeperson before signing, so the bump is covered by the new
-    /// signature.
-    pub fn bump_version(&mut self) {
-        self.version = Some(self.version.unwrap_or(0) + 1);
+    /// signature. Errors at u64::MAX rather than overflowing: a poisoned
+    /// ring (issue #22) must produce a clean refusal, never a panic.
+    pub fn bump_version(&mut self) -> Result<()> {
+        let next = self.version.unwrap_or(0).checked_add(1).ok_or_else(|| {
+            anyhow::anyhow!(
+                "keyring version exhausted (u64::MAX); re-sign at a lower version is required"
+            )
+        })?;
+        self.version = Some(next);
+        Ok(())
     }
 
     /// Finds the entry whose email matches the given email

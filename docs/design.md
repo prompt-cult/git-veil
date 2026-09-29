@@ -131,9 +131,18 @@ TrustPinStore, src/trust_store.rs). After the signature verifies,
 - otherwise the baseline is advanced to the keyring's version and the
   command proceeds.
 
+**Only a signed keyring may move the baseline.** An unsigned zero-entry
+keyring (the fresh-init state) is unauthenticated repo content: it is
+accepted as version 0 but never records a baseline — otherwise an attacker's
+junk ring carrying `version:u64::MAX` would poison the baseline and brick
+every machine past a revert of the attacker's commit. On a machine that
+already has a baseline, the unsigned ring is refused outright (a rollback to
+"no collaborators" fails closed); on a baseline-less machine it is accepted
+as the fresh-init state it is.
+
 A fresh clone has no baseline: the first gated command records the current
-keyring's version as the baseline (a versionless keyring records 0) — the
-same trust-on-first-use posture as the pin itself. The baseline is
+SIGNED keyring's version as the baseline (a versionless keyring records 0) —
+the same trust-on-first-use posture as the pin itself. The baseline is
 machine-local state in the key store, which is exactly where it must live:
 anything committed to the repo would be attacker-writable and the refusal
 would be void.
@@ -292,6 +301,27 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    prints a warning citing exit code 41 and proceeds — the condition is a
    risk, not a tool failure. The tutorials show an optional pre-commit hook
    that turns it into a hard stop.
+4. **Reveal-side tracked-plaintext refusal**: the inverse case is not a
+   warning but a hard refusal in the decryption-write commands. A plaintext
+   that is TRACKED IN GIT is ordinary repository content, not a secret
+   (git-veil plaintexts are gitignored by construction; a tracked plaintext
+   is exactly the state the code-41 warning flags). If `reveal` or `unhide`
+   refused nothing there, a repo writer could nominate a source file — say
+   `ci/deploy.sh` — in the unsigned `tracked.json` and commit a payload
+   ciphertext encrypted to the ring's public recipient keys (no signing key
+   needed, the keyring is untouched); the victim's `reveal` would overwrite
+   the source file and the CI would execute it. `reveal` and `unhide`
+   therefore refuse with exit code 43 (PlaintextTracked) when the target
+   plaintext path is tracked in the git index, naming the path and the
+   `git rm --cached` remedy. `cat` is not gated: it never writes. The gate
+   is `ensure_not_tracked_in_git` (src/commands/reveal.rs, unhide.rs) over
+   `is_tracked_in_git` (src/commands/add.rs), whose index match is
+   CASE-INSENSITIVE as a fallback: on the macOS and Windows default
+   filesystems a case-variant spelling (`BUILD.SH` vs `Build.sh`) resolves
+   to the same file, so an exact-match miss must still refuse when any
+   case-variant of the path is in the index. On case-sensitive filesystems
+   the fallback can in principle false-positive two genuinely distinct
+   case-variant files — for a secrets tool refusing beats overwriting.
 
 ## Orphaned ciphertext (a committed `.secret` that is not tracked)
 
@@ -311,13 +341,16 @@ Two mitigations close the hole:
    history; the honest way to keep an untracked ciphertext around is now an
    explicit flag, not a default.
 2. **`hide` refuses orphaned ciphertext (exit 42).** Before encrypting,
-   `hide` enumerates ciphertext paths committed to the git index
-   (`git ls-files -- '*.secret'`) and refuses with exit code 42 when any of
-   them does not correspond to a tracked path, naming each one. The remedies
-   are `git-veil add <path>` (the de-tracking was wrong) or deleting the
-   stale ciphertext (the de-tracking was right). The gate runs even when
-   `tracked.json` is empty — that is exactly the de-tracking-then-rotate
-   attack shape.
+   `hide` enumerates ciphertext paths committed to the git index and refuses
+   with exit code 42 when any of them does not correspond to a tracked path,
+   naming each one. The remedies are `git-veil add <path>` (the de-tracking
+   was wrong) or deleting the stale ciphertext (the de-tracking was right).
+   The gate runs even when `tracked.json` is empty — that is exactly the
+   de-tracking-then-rotate attack shape. The index is read verbatim
+   (`git -c core.quotePath=false ls-files -z`) so unicode/space names map
+   back to their tracked paths; a committed file named exactly `.secret`
+   (no plaintext stem — it cannot correspond to any tracked path) is warned
+   about and ignored rather than fatal, so one junk file cannot brick hide.
 
 Scope, stated honestly: the gate reads the git **index**, so it catches
 committed (staged) ciphertexts — the exfiltration channel. An uncommitted
@@ -344,10 +377,11 @@ surface — so intent is bound to the **victim's own action** instead:
   permission-checked, so repo writers cannot write or poison it, and a
   `pull` cannot alter it.
 - **`hide` requires intent for first encryption.** For each tracked path
-  whose ciphertext is not yet in the git index, `hide` consults the intent
-  log; a path with neither a committed ciphertext nor recorded intent is
-  refused with exit code 72 (UnintendedEncryption), naming the paths, the
-  last commit that touched `tracked.json`, and the remedies: run
+  whose ciphertext is not yet in the git index and whose plaintext exists on
+  disk (a path with no plaintext has nothing to exfiltrate — see "Plaintext
+  lifecycle"), `hide` consults the intent log; a path with neither a
+  committed ciphertext nor recorded intent is refused with exit code 72
+  (UnintendedEncryption), naming the paths and the remedies: run
   `git-veil add <path>` if the tracking is wanted, or `git-veil remove
   <path>` / restore `tracked.json` if it is not. An established ciphertext
   (already in the index) needs no intent — re-encryption on rotation and

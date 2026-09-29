@@ -73,7 +73,7 @@ pub fn cmd_tell(
     // covered by the new signature (see docs/design.md "Keyring format and
     // freshness"): the counter lives in the signed payload and needs no
     // state outside the keyring, so no clock and no cross-machine bookkeeping.
-    keyring.bump_version();
+    keyring.bump_version()?;
 
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();

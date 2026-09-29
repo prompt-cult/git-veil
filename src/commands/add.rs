@@ -83,14 +83,37 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
 /// committed). Shared by reveal and unhide's tracked-plaintext refusal
 /// (exit 43, docs/design.md "Ignore safety" gate 4): a git-tracked plaintext
 /// is ordinary repository content, not a secret, and overwriting it from
-/// attacker-committed ciphertext is the F-1 clobber channel.
+/// attacker-committed ciphertext is the reveal-clobber channel.
+///
+/// The check is case-INSENSITIVE as a fallback (issue #21): on the macOS and
+/// Windows default filesystems a case-variant spelling of a tracked path
+/// resolves to the SAME file, so an exact-match miss must still refuse when
+/// any case-variant of the path is in the index — a miss there would let a
+/// committed payload ciphertext overwrite a tracked source file through
+/// reveal. On case-sensitive filesystems the fallback can in principle
+/// false-positive two genuinely distinct case-variant files; for a secrets
+/// tool refusing beats overwriting, and the refusal names the path.
 pub(crate) fn is_tracked_in_git(repo_root: &Path, relative_path: &Path) -> bool {
-    Command::new("git")
+    let exact = Command::new("git")
         .current_dir(repo_root)
         .args(["ls-files", "--error-unmatch", "--"])
         .arg(relative_path)
+        .output();
+    match exact {
+        Ok(out) if out.status.success() => return true,
+        _ => {}
+    }
+    // Case-insensitive fallback over the full index listing.
+    Command::new("git")
+        .current_dir(repo_root)
+        .args(["ls-files", "-z"])
         .output()
-        .map(|out| out.status.success())
+        .map(|out| {
+            let wanted = relative_path.to_string_lossy();
+            out.stdout
+                .split(|b| *b == 0)
+                .any(|entry| entry.eq_ignore_ascii_case(wanted.as_bytes()))
+        })
         .unwrap_or(false)
 }
 

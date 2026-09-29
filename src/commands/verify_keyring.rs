@@ -140,11 +140,19 @@ pub fn verify_keyring_against_trust(
     // The per-machine baseline (highest version ever accepted here, stored
     // outside the repo beside the pin) turns any version regression —
     // including a versionless pre-freshness keyring, which counts as 0 —
-    // into a fail-closed refusal. A keyring with no version at all on a
-    // machine with no baseline is the pre-freshness migration state and is
-    // accepted; it writes no baseline, so the first versioned keyring is
-    // still free to establish one.
-    let observed = keyring.version.unwrap_or(0);
+    // into a fail-closed refusal.
+    //
+    // An UNSIGNED zero-entry keyring (the fresh-init state) is unauthenticated
+    // repo content: it is accepted as version 0 but must NEVER move the
+    // baseline — otherwise an attacker's junk ring (e.g. version:u64::MAX,
+    // issue #22) poisons the baseline and bricks every machine past a revert
+    // of the attacker's commit.
+    let unsigned_empty = keyring.entries.is_empty() && keyring.signature.is_none();
+    let observed = if unsigned_empty {
+        0
+    } else {
+        keyring.version.unwrap_or(0)
+    };
     match TrustPinStore::read_ring_version(key_store, &repo_id)? {
         Some(baseline) if baseline > observed => {
             return Err(coded(
@@ -155,10 +163,13 @@ pub fn verify_keyring_against_trust(
                 ),
             ));
         }
-        baseline if baseline != Some(observed) => {
-            // Advance the baseline to the accepted version (first versioned
-            // keyring on this machine, or a legitimate increase).
-            TrustPinStore::write_ring_version(key_store, &repo_id, observed)?;
+        _ if keyring.signature.is_some() => {
+            // Only an owner-signed ring may advance the baseline. A
+            // versionless ring records 0 — see the migration note below.
+            let baseline_now = TrustPinStore::read_ring_version(key_store, &repo_id)?;
+            if baseline_now != Some(observed) {
+                TrustPinStore::write_ring_version(key_store, &repo_id, observed)?;
+            }
         }
         _ => {}
     }
