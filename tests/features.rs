@@ -134,7 +134,13 @@ impl Fixture {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(&p, content).unwrap();
-        cmd_add(&self.repo.path, vec![name.to_string()]).expect("add");
+        cmd_add(
+            &self.repo.path,
+            vec![name.to_string()],
+            "origin",
+            &self.key_store.path,
+        )
+        .expect("add");
     }
 }
 
@@ -489,7 +495,13 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
 
     // add succeeds (it gitignores the plaintext), but warns that the
     // ciphertext path is swallowed by the .tmp/ rule
-    cmd_add(&f.repo.path, vec![".tmp/x.txt".to_string()]).expect("add");
+    cmd_add(
+        &f.repo.path,
+        vec![".tmp/x.txt".to_string()],
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("add");
 
     // hide FAILS CLOSED before encrypting anything: exit code 40
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).unwrap_err();

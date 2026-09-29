@@ -25,8 +25,10 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 
 /// Resolves the key store location for commands that consume a key_store:
 /// an explicit `--key-store` wins; then `$GIT_VEIL_HOME`; then `$HOME/.git-veil`.
-/// Resolved lazily so HOME-free subcommands (init/add/remove/list/clean/
-/// show-repo-id/error-codes) never fail on an unset HOME. list-keys is no
+/// Resolved lazily so HOME-free subcommands (remove/list/clean/
+/// show-repo-id/error-codes) never fail on an unset HOME. add is no longer
+/// in this set: it records the machine-local intent log in the key store
+/// (see "Encryption intent" in docs/design.md). list-keys is no
 /// longer in this set: it verifies the keyring signature against the pinned
 /// key, so it consumes a key_store like every other gated command.
 ///
@@ -165,7 +167,12 @@ fn run() -> Result<()> {
                 signing_key.as_deref(),
             )?;
         }
-        Commands::Add { files } => cmd_add(&repo_root, files)?,
+        Commands::Add { files, remote } => cmd_add(
+            &repo_root,
+            files,
+            &remote,
+            &resolve_key_store(None, skip_permissions_check)?,
+        )?,
         Commands::Remove {
             files,
             keep_ciphertext,
