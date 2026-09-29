@@ -4,10 +4,13 @@
 .SH NAME
 git\-veil\-add \- Track files for encryption
 .SH SYNOPSIS
-\fBgit\-veil add\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil add\fR [\fB\-\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
 Track files for encryption
 .SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name (derives the repository id for the intent log)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -19,6 +22,11 @@ Tracks files for encryption in .git\-veil/tracked.json (stored
 repo\-relative). Nothing is encrypted yet — hide does that. Files must
 exist, and a symlink must resolve inside the repository, so hide can
 never be tricked into reading or deleting a file outside the repo.
+
+Each added path is recorded in the machine\-local intent log in your key
+store: hide refuses to first\-encrypt a tracked path that was never added
+on this machine (exit code 72), so a tracked.json modified by someone
+else cannot silently nominate your files for encryption.
 
 Typical flow: init \-> trust \-> tell (once per collaborator) \-> add \-> hide.
 

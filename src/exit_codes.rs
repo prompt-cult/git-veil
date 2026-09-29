@@ -53,6 +53,8 @@ pub enum ExitCode {
     Refused = 70,
     /// Path-safety refusal (symlink, outside repository, unsafe tracked path).
     UnsafePath = 71,
+    /// `hide` refuses to encrypt a path the user never added on this machine.
+    UnintendedEncryption = 72,
 }
 
 impl ExitCode {
@@ -77,6 +79,7 @@ impl ExitCode {
         ExitCode::SignatureVerificationFailed,
         ExitCode::Refused,
         ExitCode::UnsafePath,
+        ExitCode::UnintendedEncryption,
     ];
 
     /// The enum name, as printed by `git-veil error-codes`.
@@ -101,6 +104,7 @@ impl ExitCode {
             ExitCode::SignatureVerificationFailed => "SignatureVerificationFailed",
             ExitCode::Refused => "Refused",
             ExitCode::UnsafePath => "UnsafePath",
+            ExitCode::UnintendedEncryption => "UnintendedEncryption",
         }
     }
 
@@ -155,6 +159,9 @@ impl ExitCode {
             }
             ExitCode::UnsafePath => {
                 "Path-safety refusal (symlink, outside repository, unsafe tracked path)"
+            }
+            ExitCode::UnintendedEncryption => {
+                "hide refuses to encrypt a file the user never added on this machine (tracked.json nomination)"
             }
         }
     }

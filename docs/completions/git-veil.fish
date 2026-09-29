@@ -79,6 +79,7 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l signi
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c git-veil -n "__fish_git_veil_using_subcommand add" -l remote -d 'Git remote name (derives the repository id for the intent log)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove" -l keep-ciphertext -d 'Leave the <name>.secret ciphertext in place (hide will refuse it as an orphan)'

@@ -2,7 +2,9 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
+use crate::intent::LocalAdds;
 use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, TrackedFiles};
+use crate::{derive_repo_id, get_remote_push_url};
 
 /// Adds files to the tracked files list.
 ///
@@ -12,9 +14,23 @@ use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, Tracked
 /// Relative user-supplied paths resolve against `repo_root`.
 ///
 /// Like git-secret, files not already in .gitignore are auto-added to it.
-pub fn cmd_add(repo_root: &Path, files: Vec<String>) -> Result<()> {
+///
+/// Each path is also recorded in the machine-local intent log in the key
+/// store (src/intent.rs): tracked.json is committed and attacker-writable,
+/// so hide refuses to first-encrypt a path that neither has a committed
+/// ciphertext nor was added on this machine. See "Encryption intent" in
+/// docs/design.md.
+pub fn cmd_add(
+    repo_root: &Path,
+    files: Vec<String>,
+    remote_name: &str,
+    key_store: &std::path::PathBuf,
+) -> Result<()> {
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
+
+    let push_url = get_remote_push_url(repo_root, remote_name)?;
+    let repo_id = derive_repo_id(&push_url)?;
 
     let mut count = 0;
     for file in &files {
@@ -40,7 +56,8 @@ pub fn cmd_add(repo_root: &Path, files: Vec<String>) -> Result<()> {
             );
         }
 
-        tracked.add(relative);
+        tracked.add(relative.clone());
+        LocalAdds::record(key_store, &repo_id, &relative)?;
         count += 1;
     }
 

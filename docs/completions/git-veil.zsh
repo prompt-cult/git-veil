@@ -101,6 +101,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (add)
 _arguments "${_arguments_options[@]}" : \
+'--remote=[Git remote name (derives the repository id for the intent log)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \

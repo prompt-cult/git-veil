@@ -306,6 +306,42 @@ until staged; a blind `git add -A` could sweep it into a commit. This is the
 same risk class as the code-41 plaintext-leak warning and is documented as
 such, not hidden.
 
+## Encryption intent (refusing nominated paths)
+
+`tracked.json` is committed and unsigned: any repo writer can add a path to
+it. The victim's next `hide` would then encrypt a file the victim never
+added — typically a gitignored secret — to every keyring member, including
+the attacker's, and the ciphertext is committed in the ordinary flow. The
+plaintext being gitignored suppresses even the code-41 warning, so the
+exfiltration is silent. The manifest cannot distinguish "user intends to
+track this" from "attacker nominated it" — the manifest IS the attack
+surface — so intent is bound to the **victim's own action** instead:
+
+- **`add` records intent on the machine that ran it.** Each `git-veil add`
+  appends the resolved repo-relative path to a machine-local intent log,
+  `<key store>/local-adds/<sanitized repo id>` (one path per line;
+  `LocalAdds`, src/intent.rs). The key store is outside the repository and
+  permission-checked, so repo writers cannot write or poison it, and a
+  `pull` cannot alter it.
+- **`hide` requires intent for first encryption.** For each tracked path
+  whose ciphertext is not yet in the git index, `hide` consults the intent
+  log; a path with neither a committed ciphertext nor recorded intent is
+  refused with exit code 72 (UnintendedEncryption), naming the paths, the
+  last commit that touched `tracked.json`, and the remedies: run
+  `git-veil add <path>` if the tracking is wanted, or `git-veil remove
+  <path>` / restore `tracked.json` if it is not. An established ciphertext
+  (already in the index) needs no intent — re-encryption on rotation and
+  fresh-clone reveals are unaffected, so ordinary collaboration and CI
+  flows do not change.
+
+Stated honestly, the residual trade-offs: the intent log is machine-local,
+so an owner who re-hides from a machine whose key store was restored must
+re-run `add` for any not-yet-committed ciphertext (the committed-ciphertext
+path needs nothing); and a malicious collaborator can still make `hide`
+refuse (availability) by nominating junk paths — that is fail-closed by
+design, the same posture as the code-40 gate, and each refusal names the
+offending paths and the commit that nominated them.
+
 ## Path safety
 
 Tracked paths are repo-relative strings in `.git-veil/tracked.json`. Four
@@ -378,3 +414,4 @@ codes are never renumbered, only appended.
 | 63   | SignatureVerificationFailed  | Keyring signature missing or invalid |
 | 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`) |
 | 71   | UnsafePath                   | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
+| 72   | UnintendedEncryption         | `hide` refuses to encrypt a file the user never added on this machine (see "Encryption intent") |

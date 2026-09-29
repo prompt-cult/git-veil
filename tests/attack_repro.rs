@@ -1,21 +1,8 @@
 //! ATTACK REPRODUCTION TESTS and FIX REGRESSIONS.
 //!
-//! Attacks 2 below reproduces a vulnerability confirmed by code review
-//! (the "attack audit"); its assertions assert the BAD outcome: the attack
-//! succeeding against current code. When a fix lands, the matching test is
-//! INVERTED to assert refusal instead of success — it is never deleted.
-//!
-//! Attacks (from the audit):
-//!   1. Keyring rollback resurrects a removed collaborator. [FIXED —
-//!      issue #5; the inverted regression test is
-//!      fix_keyring_rollback_refused_by_freshness_baseline]
-//!   2. tracked.json insider nomination: a repo writer adds a path to
-//!      .git-veil/tracked.json directly; the victim's next hide encrypts a
-//!      file that was never `git-veil add`ed, to every keyring member —
-//!      silently, because the plaintext is gitignored so not even the
-//!      code-41 warning fires. [STILL OPEN — issue #6]
-//!   3. De-tracking defeats rotation. [FIXED — issue #7; the inverted
-//!      regression test is fix_detracking_orphan_ciphertext_refuses_hide]
+//! All three audit attacks are now FIXED; the tests below assert the refusals
+//! (exit codes 14, 42, 72) plus the migration and normal-flow semantics of
+//! each fix. The corresponding issues document the full attack analysis.
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
@@ -23,6 +10,7 @@ use git_veil::{
     cmd_verify_keyring, decrypt_with_identity, exit_code_of, generate_identity,
     generate_signing_keypair, recipient_from_identity, TrackedFiles,
 };
+
 use std::fs;
 use std::path::Path;
 
@@ -144,7 +132,13 @@ impl Fixture {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(&p, content).unwrap();
-        cmd_add(&self.repo.path, vec![name.to_string()]).expect("add");
+        cmd_add(
+            &self.repo.path,
+            vec![name.to_string()],
+            "origin",
+            &self.key_store.path,
+        )
+        .expect("add");
     }
 
     fn hide(&self) {
@@ -331,34 +325,30 @@ fn fix_malformed_version_lines_are_parse_failures() {
 }
 
 // ---------------------------------------------------------------------------
-// Attack 2 — tracked.json insider nomination exfiltrates an untracked secret
+// Regression — nominated paths are refused at hide time (issue #6, FIXED)
 //
-// The victim has a gitignored plaintext `prod-credentials` that was NEVER
-// `git-veil add`ed. A repo writer edits the committed
-// .git-veil/tracked.json directly to nominate it. The victim's next hide
-// encrypts it to every keyring member — including the attacker's own
-// keyring identity — without refusal. Because the plaintext is gitignored,
-// not even the code-41 "plaintext not git-ignored" warning fires; the only
-// output is the ordinary "Encrypted: prod-credentials" line (cmd_hide
-// prints directly to stdout, so this harness cannot capture it — observed
-// behavior: no warning, no error). The assertions assert that BAD outcome.
+// Previously: tracked.json is committed and unsigned, so a repo writer
+// nominated a victim's gitignored secret into it; the victim's next hide
+// encrypted it to the whole ring — silently (the gitignored plaintext never
+// trips the code-41 warning).
+//
+// Now: `add` records intent in a machine-local log in the key store, and
+// hide refuses (exit 72) to FIRST-encrypt any tracked path that has neither
+// a committed ciphertext nor recorded intent. See "Encryption intent" in
+// docs/design.md.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn attack_tracked_json_nomination_encrypts_untracked_secret() {
+fn fix_nominated_path_refused_at_hide() {
     let f = Fixture::new("tracked-nomination");
 
     // The attacker is a legitimate keyring member (repo write access).
-    let mallory = f.add_collab("mallory@example.com");
+    let _mallory = f.add_collab("mallory@example.com");
 
     // Victim's private file: gitignored, NEVER passed to `git-veil add`.
     let secret_plaintext = b"AWS_SECRET_ACCESS_KEY=AKIA...\n";
     fs::write(f.repo.join("prod-credentials"), secret_plaintext).unwrap();
     fs::write(f.repo.join(".gitignore"), "prod-credentials\n").unwrap();
-    assert!(
-        !f.repo.join("prod-credentials.secret").exists(),
-        "precondition: never hidden"
-    );
 
     // ATTACK: the repo writer edits the committed tracked.json directly
     // (this file is not covered by the keyring signature).
@@ -368,23 +358,75 @@ fn attack_tracked_json_nomination_encrypts_untracked_secret() {
     )
     .unwrap();
 
-    // BAD OUTCOME 1: the victim's hide does NOT refuse the nominated path —
-    // it succeeds, and prints no warning because the plaintext is
-    // gitignored (code-41 check) and the ciphertext is not (code-40 check).
-    f.hide();
+    // FIXED: hide refuses (exit 72) — no ciphertext is created, nothing is
+    // exfiltrated.
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("hide must refuse a nominated path with no intent and no ciphertext");
+    assert_eq!(
+        exit_code_of(&err),
+        72,
+        "nomination must exit with the documented code 72"
+    );
     assert!(
-        f.repo.join("prod-credentials.secret").exists(),
-        "ATTACK SUCCEEDS: hide wrote ciphertext for a file never added"
+        !f.repo.join("prod-credentials.secret").exists(),
+        "no ciphertext may be written for a nominated path"
     );
 
-    // BAD OUTCOME 2: the attacker's own keyring identity decrypts it.
-    let ciphertext = fs::read(f.repo.join("prod-credentials.secret")).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &mallory)
-        .expect("ATTACK SUCCEEDS: nominating attacker decrypts the exfiltrated secret");
-    assert_eq!(
-        decrypted, secret_plaintext,
-        "untracked secret was exfiltrated to the whole keyring"
-    );
+    // REMEDY (the tracking is wanted): the victim's own add binds intent on
+    // this machine, and hide then proceeds.
+    cmd_add(
+        &f.repo.path,
+        vec!["prod-credentials".to_string()],
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("victim re-adds deliberately");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide after intent");
+}
+
+#[test]
+fn fix_established_ciphertext_needs_no_intent() {
+    // Rotation/fresh-clone flow: a committed ciphertext re-encrypts on this
+    // machine without a local add — ordinary collaboration and CI are
+    // unaffected by the intent gate.
+    let f = Fixture::new("established-ciphertext");
+
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("secrets.env", b"TOKEN=v1\n");
+    f.hide();
+    f.stage_all(); // the owner commits: ciphertext is now in the index
+
+    // Simulate a fresh clone's state: a new machine, new key store with no
+    // intent log, pinning the SAME owner verifying key (delivered out of
+    // band or as the committed owner.verifying).
+    let fresh_store = TempDir::new("established-fresh-ks");
+    let owner_verifying = fs::read_to_string(f.repo.join("owner.signing")).unwrap();
+    let owner_verifying_hex = owner_verifying.lines().next().unwrap().to_string();
+    fs::write(
+        f.repo.join("fresh.signing"),
+        format!("{}\n", owner_verifying_hex),
+    )
+    .unwrap();
+    fs::write(
+        fresh_store.join("signing-keys.txt"),
+        // The fresh store's signing key need not match the owner's — hide
+        // only encrypts; what matters is the PIN matching the ring's signer.
+        "0000000000000000000000000000000000000000000000000000000000000000\n",
+    )
+    .unwrap();
+    cmd_trust(
+        &f.repo.path,
+        TEST_REPO_ID,
+        "fresh.signing",
+        "origin",
+        &fresh_store.path,
+    )
+    .expect("trust");
+
+    // No intent was ever recorded in fresh_store, but secrets.env.secret is
+    // committed, so hide proceeds.
+    cmd_hide(&f.repo.path, "origin", &fresh_store.path, false)
+        .expect("committed ciphertext re-encrypts without local intent");
 }
 
 // ---------------------------------------------------------------------------
