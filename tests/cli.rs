@@ -8,7 +8,7 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
-    cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
+    cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell,
     cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, fingerprint_for_recipient,
     generate_identity, generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles,
     TrustPinStore, TrustStore,
@@ -112,13 +112,6 @@ impl TestRepo {
         )
         .expect("write identity file");
 
-        let signing_key_file = repo.join("owner.signing");
-        fs::write(
-            &signing_key_file,
-            format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
-        )
-        .expect("write signing key file");
-
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(owner_signing_key.to_bytes())),
@@ -129,15 +122,6 @@ impl TestRepo {
 
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path)
             .expect("import owner identity");
-
-        cmd_trust(
-            &repo.path,
-            TEST_REPO_ID,
-            "owner.signing",
-            "origin",
-            &key_store.path,
-        )
-        .expect("trust");
 
         Self {
             repo,
@@ -241,67 +225,6 @@ fn test_init_refuses_reinit_with_trust() {
         .unwrap_err()
         .to_string()
         .contains("already initialized"));
-}
-
-// ---------------------------------------------------------------------------
-// trust
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_trust_wrong_repo_id_fails() {
-    let repo = TempDir::new("trust-wrong-id");
-    let key_store = TempDir::new("trust-wrong-id-keys");
-    init_git_repo(&repo.path);
-    cmd_init(&repo.path).expect("init");
-
-    let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::write(repo.join("owner.signing"), format!("{}\n", verifying_hex)).unwrap();
-    fs::write(
-        key_store.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(signing_key.to_bytes())),
-    )
-    .unwrap();
-
-    let result = cmd_trust(
-        &repo.path,
-        "wrong+id@github.com",
-        "owner.signing",
-        "origin",
-        &key_store.path,
-    );
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("mismatch"));
-}
-
-#[test]
-fn test_trust_writes_pin() {
-    let repo = TempDir::new("trust-pin");
-    let key_store = TempDir::new("trust-pin-keys");
-    init_git_repo(&repo.path);
-    cmd_init(&repo.path).expect("init");
-
-    let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::write(repo.join("owner.signing"), format!("{}\n", verifying_hex)).unwrap();
-    fs::write(
-        key_store.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(signing_key.to_bytes())),
-    )
-    .unwrap();
-
-    cmd_trust(
-        &repo.path,
-        TEST_REPO_ID,
-        "owner.signing",
-        "origin",
-        &key_store.path,
-    )
-    .expect("trust");
-
-    let pin = TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID).unwrap();
-    assert!(pin.is_some());
-
-    let trust = TrustStore::load_from_file(&repo.join(".git-veil/trust.json")).unwrap();
-    assert!(trust.get_trusted_fingerprint(TEST_REPO_ID).is_some());
 }
 
 // ---------------------------------------------------------------------------
@@ -504,11 +427,6 @@ fn test_hide_no_keys_fails() {
     )
     .unwrap();
     fs::write(
-        repo.join("owner.signing"),
-        format!("{}\n{}\n", verifying_hex, recipient),
-    )
-    .unwrap();
-    fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
@@ -516,14 +434,6 @@ fn test_hide_no_keys_fails() {
 
     cmd_init(&repo.path).expect("init");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-    cmd_trust(
-        &repo.path,
-        TEST_REPO_ID,
-        "owner.signing",
-        "origin",
-        &key_store.path,
-    )
-    .expect("trust");
 
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add(

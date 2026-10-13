@@ -7,7 +7,7 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_unhide, cmd_verify_keyring, decrypt_with_identity, exit_code_of,
+    cmd_unhide, cmd_verify_keyring, decrypt_with_identity, exit_code_of,
     generate_identity, generate_signing_keypair, recipient_from_identity, TrackedFiles,
 };
 
@@ -83,11 +83,6 @@ impl Fixture {
         )
         .unwrap();
         fs::write(
-            repo.join("owner.signing"),
-            format!("{}\n{}\n", verifying_hex, recipient),
-        )
-        .unwrap();
-        fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
         )
@@ -95,14 +90,6 @@ impl Fixture {
 
         cmd_init(&repo.path).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(
-            &repo.path,
-            TEST_REPO_ID,
-            "owner.signing",
-            "origin",
-            &key_store.path,
-        )
-        .expect("trust");
 
         Self { repo, key_store }
     }
@@ -223,18 +210,6 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     // what she always could, but no NEW secret can flow to her — hide
     // refused. That refusal is the fix.
 
-    // RECOVERY: a genuinely intended rollback is re-anchored with trust,
-    // which resets the freshness baseline along with the pin.
-    cmd_trust(
-        &f.repo.path,
-        TEST_REPO_ID,
-        "owner.signing",
-        "origin",
-        &f.key_store.path,
-    )
-    .expect("re-trust");
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
-        .expect("verify succeeds after the re-trust reset the baseline");
     let _ = carol;
 }
 
@@ -400,13 +375,6 @@ fn fix_established_ciphertext_needs_no_intent() {
     // intent log, pinning the SAME owner verifying key (delivered out of
     // band or as the committed owner.verifying).
     let fresh_store = TempDir::new("established-fresh-ks");
-    let owner_verifying = fs::read_to_string(f.repo.join("owner.signing")).unwrap();
-    let owner_verifying_hex = owner_verifying.lines().next().unwrap().to_string();
-    fs::write(
-        f.repo.join("fresh.signing"),
-        format!("{}\n", owner_verifying_hex),
-    )
-    .unwrap();
     fs::write(
         fresh_store.join("signing-keys.txt"),
         // The fresh store's signing key need not match the owner's — hide
@@ -414,14 +382,6 @@ fn fix_established_ciphertext_needs_no_intent() {
         "0000000000000000000000000000000000000000000000000000000000000000\n",
     )
     .unwrap();
-    cmd_trust(
-        &f.repo.path,
-        TEST_REPO_ID,
-        "fresh.signing",
-        "origin",
-        &fresh_store.path,
-    )
-    .expect("trust");
 
     // No intent was ever recorded in fresh_store, but secrets.env.secret is
     // committed, so hide proceeds.
@@ -657,9 +617,6 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     let _carol = f.add_collab("carol@example.com");
     // The owner must be in the keyring too for the reveal below (their
     // identity IS in the key store; the recipient is owner.signing line 2).
-    let owner_signing = fs::read_to_string(f.repo.join("owner.signing")).unwrap();
-    let owner_recipient = owner_signing.lines().nth(1).unwrap().trim();
-    fs::write(f.repo.join("owner.recipient"), owner_recipient).unwrap();
     cmd_tell(
         &f.repo.path,
         "owner@example.com",
