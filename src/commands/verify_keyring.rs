@@ -88,7 +88,7 @@ pub fn verify_keyring_against_trust(
             return Err(coded(
                 ExitCode::NoTrustRecord,
                 format!(
-                    ".git-veil/trust.json records trust for {} but this repository derives {} (from remote '{}'); this looks like a rename or a remote change based on the repository's existing trust record",
+                    "trust.json records trust for {} but this repository derives {} from remote {}. this looks like a rename or a remote change based on the existing trust record",
                     pinned_ids.join(", "),
                     repo_id,
                     remote_name
