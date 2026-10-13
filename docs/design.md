@@ -79,7 +79,7 @@ so the name can never escape the pin directory (`TrustPinStore::sanitize_repo_id
 The pin is written only by the two pin-creation paths below; a
 fresh clone has no pin, which is why trust must be re-established per machine.
 
-### Pin creation (possession proof only — issue #28)
+### Pin creation (possession proof only)
 
 A repository can never supply its own trust anchor: there is no keyfile
 argument, no compatibility mode, no feature flag. Exactly two paths create a

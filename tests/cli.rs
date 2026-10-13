@@ -6,6 +6,7 @@
 //! signing keys. No PGP, no external key servers, no passphrases.
 
 use age::secrecy::ExposeSecret;
+use clap::Parser as _;
 use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,

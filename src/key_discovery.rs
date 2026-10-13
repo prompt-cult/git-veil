@@ -114,10 +114,7 @@ pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: &str) -> Resul
 /// Zero matches → exit code 20. More than one match (a degenerate
 /// duplicated store) → exit code 70; silently picking one is not
 /// acceptable.
-pub fn discover_signing_key_explicit(
-    key_store: &Path,
-    fingerprint: &str,
-) -> Result<SigningKey> {
+pub fn discover_signing_key_explicit(key_store: &Path, fingerprint: &str) -> Result<SigningKey> {
     let keys = load_signing_keys(key_store)?;
     let wanted = fingerprint.trim().to_lowercase();
     let matches: Vec<&SigningKey> = keys
