@@ -114,7 +114,7 @@ impl Fixture {
 #[test]
 fn test_trust_keyfile_argument_is_a_parse_error() {
     use clap::Parser as _;
-    // `git-veil trust <repo-id> <keyfile>` — the old self-anchoring form —
+    // `git-veil trust <repo-id> <keyfile>` - the old self-anchoring form  -
     // must not even parse.
     let result = Cli::try_parse_from(["git-veil", "trust", TEST_REPO_ID, "owner.verifying"]);
     assert!(
@@ -173,7 +173,7 @@ fn test_trust_without_matching_seed_refuses() {
     init_git_repo(&repo.path);
 
     // The repository's owner.verifying is keypair A's public half; the
-    // store holds keypair B's seed — possession of A is NOT proven.
+    // store holds keypair B's seed - possession of A is NOT proven.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
     fs::write(
@@ -306,7 +306,7 @@ fn test_export_pin_without_matching_seed_refuses() {
     init_git_repo(&repo.path);
 
     // The repository's owner.verifying is keypair A's public half; the
-    // store holds keypair B's seed — export must refuse.
+    // store holds keypair B's seed - export must refuse.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
     fs::write(
@@ -328,7 +328,7 @@ fn test_export_pin_without_matching_seed_refuses() {
     assert_eq!(exit_code_of(&err), 20);
     assert!(
         !out.exists(),
-        "no pin-file may be written on refusal — store-less machines are consumers, never producers"
+        "no pin-file may be written on refusal - store-less machines are consumers, never producers"
     );
 }
 
@@ -420,7 +420,7 @@ fn test_import_happy_path_on_storeless_machine() {
     )
     .expect("export-pin on the signing machine");
 
-    // The store-less machine has no signing key anywhere — import is its
+    // The store-less machine has no signing key anywhere - import is its
     // only pin-creation path, and it must work.
     assert!(!fresh_store.path.join("signing-keys.txt").exists());
     cmd_trust_import(
@@ -536,8 +536,8 @@ fn test_import_fingerprint_mismatch_refuses() {
     .expect("export-pin");
 
     // Tamper the committed metadata fingerprint (check c): the pin-file
-    // and the committed key still agree, but the recorded fingerprint —
-    // the human verification token — does not.
+    // and the committed key still agree, but the recorded fingerprint  -
+    // the human verification token - does not.
     let trust_path = f.repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "00".repeat(32));
@@ -758,7 +758,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     )
     .unwrap();
 
-    // The attacker's repository: self-consistent — its own signing key,
+    // The attacker's repository: self-consistent - its own signing key,
     // its own committed owner.verifying, its own signed keyring, its own
     // metadata fingerprint, and a bogus pin-file committed in-repo.
     let attacked = TempDir::new("attacker-repo");
@@ -829,7 +829,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
 
 // ---------------------------------------------------------------------------
 // Repo rename / remote change: the existing trust record names a different
-// repo-id. The error states the suspicion and STOPS — no remedy is printed,
+// repo-id. The error states the suspicion and STOPS - no remedy is printed,
 // because the remedy is exactly what an attacker would want the operator to
 // run without thinking. The operator reads the docs and fixes it with their
 // brain engaged.
@@ -923,7 +923,7 @@ fn test_rename_suspicion_no_remedy_on_import() {
 
 // ---------------------------------------------------------------------------
 // Stale-entry reconcile (issue #43): when trust writes the owner fingerprint
-// metadata it also reconciles trusted_keys — entries whose repository id no
+// metadata it also reconciles trusted_keys - entries whose repository id no
 // configured remote derives are pruned, the removal is printed, and entries
 // matching any configured remote are kept.
 // ---------------------------------------------------------------------------

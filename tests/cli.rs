@@ -815,8 +815,8 @@ fn test_whoami() {
     cmd_whoami(&fixture.repo.path, None, &fixture.key_store.path).expect("whoami");
 }
 
-/// The principal label is committed in the public keyring — a public
-/// repository fact — so whoami prints it (issue #42). Drives the built
+/// The principal label is committed in the public keyring - a public
+/// repository fact - so whoami prints it (issue #42). Drives the built
 /// binary because the label is asserted on stdout.
 #[test]
 fn test_whoami_prints_the_principal_label() {
@@ -1238,7 +1238,7 @@ fn test_hide_skips_missing_plaintext_instead_of_erroring() {
     assert!(!fixture.repo.join(".env").exists());
 
     // Steady state of the delete-by-default lifecycle: plaintext absent,
-    // ciphertext committed — re-hiding is a skip-and-report, not an error.
+    // ciphertext committed - re-hiding is a skip-and-report, not an error.
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
         .expect("re-hide with absent plaintext must succeed (skip-and-report)");
     assert!(

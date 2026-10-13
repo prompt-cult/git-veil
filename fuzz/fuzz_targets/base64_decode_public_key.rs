@@ -6,7 +6,7 @@ use git_veil::{base64_decode_public_key, base64_encode_public_key, extract_key_f
 fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };
     // non-base64, non-UTF-8-after-decode, and non-armour inputs must all be
-    // Err — never Ok and never panic
+    // Err - never Ok and never panic
     if let Ok(key) = base64_decode_public_key(s) {
         if let Ok(enc) = base64_encode_public_key(&key) {
             let re = base64_decode_public_key(&enc)

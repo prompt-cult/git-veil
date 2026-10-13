@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
 
             // repo_id shape: `repo+user@service`; feeding the derived id
             // back into parse must be Err (a repo_id is not a supported URL
-            // — no accidental round-trip confusion)
+            // - no accidental round-trip confusion)
             let repo_id = derive_repo_id(s).expect("derive_repo_id must agree with parse");
             assert_eq!(repo_id, format!("{repo}+{user}@{service}"));
             assert_eq!(derive_repo_id(s).unwrap(), repo_id, "derive must be deterministic");

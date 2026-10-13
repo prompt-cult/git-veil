@@ -1,6 +1,6 @@
 //! Key store permission tests: the gpg-style check, the git-style trust
 //! acknowledgment, and the 0600-at-creation guarantee for files git-veil
-//! writes holding private key material. Unix only — the check is a no-op
+//! writes holding private key material. Unix only - the check is a no-op
 //! elsewhere.
 
 #![cfg(unix)]
@@ -130,7 +130,7 @@ fn test_acknowledgment_unblocks_then_mode_change_refails() {
         & 0o777;
     assert_eq!(ack_mode, 0o600);
 
-    // A LATER change to anything else fails again — the ack pins the exact
+    // A LATER change to anything else fails again - the ack pins the exact
     // (path, mode) pair.
     fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o640)).unwrap();
     let code = code_of(check_key_store_permissions(&ks.path, false).unwrap_err());

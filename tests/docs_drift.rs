@@ -1,7 +1,7 @@
 //! Generated-docs ratification: the committed man pages and shell
 //! completions must be EXACTLY what the current clap definition produces,
 //! and `error-codes` must print every documented exit code. These tests make
-//! docs drift a CI failure instead of a silent divergence — the release
+//! docs drift a CI failure instead of a silent divergence - the release
 //! pipeline packages docs/man and installs docs/completions, so stale
 //! artifacts would ship.
 
@@ -86,7 +86,7 @@ fn test_completions_match_committed_docs() {
     }
 }
 
-/// The error-codes table must list every documented code — a new code added
+/// The error-codes table must list every documented code - a new code added
 /// to the enum but missing from docs/design.md is a spec gap, and the table
 /// is the public exit-code contract.
 #[test]
@@ -99,7 +99,7 @@ fn test_error_codes_are_all_documented() {
             .any(|line| line.starts_with(&needle_num) && line.contains(code.name()));
         assert!(
             found,
-            "exit code {} ({}) is missing from the docs/design.md exit-code table — the table is the public spec",
+            "exit code {} ({}) is missing from the docs/design.md exit-code table - the table is the public spec",
             *code as u8,
             code.name()
         );
@@ -147,9 +147,9 @@ fn test_no_legacy_fingerprint_code_remains_in_src() {
 }
 
 /// Issue #40: the core and the code speak RFC-standard cryptography only.
-/// The ageisms — age's marketing words for key material: `recipient` for
+/// The ageisms - age's marketing words for key material: `recipient` for
 /// the bech32 X25519 public key, `identity`/`identities` for the bech32
-/// X25519 private key (docs/design.md, "Terminology") — are forbidden in
+/// X25519 private key (docs/design.md, "Terminology") - are forbidden in
 /// src/ outside user-surface string literals. This grep test strips string
 /// and char literals from every src/*.rs (the user surface lives in string
 /// literals, where the bracketed `(age ...)` spanning form is allowed when
@@ -381,7 +381,7 @@ fn test_terminology_law_is_carried() {
     );
 }
 
-/// Every subcommand's clap definition carries discussion help — a bare
+/// Every subcommand's clap definition carries discussion help - a bare
 /// subcommand with no after_long_help is a docs gap a user hits as an empty
 /// help page.
 #[test]
@@ -395,7 +395,7 @@ fn test_every_subcommand_has_help_discussion() {
             .unwrap_or_default();
         assert!(
             !discussion.trim().is_empty(),
-            "subcommand `{name}` has no after_long_help discussion — every command must document its workflow"
+            "subcommand `{name}` has no after_long_help discussion - every command must document its workflow"
         );
         assert!(
             discussion.contains("EXAMPLES") || discussion.contains("git-veil"),

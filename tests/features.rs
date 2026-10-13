@@ -155,7 +155,7 @@ fn test_hide_all_or_nothing_missing_plaintext() {
     fs::remove_file(f.repo.join(".env")).unwrap();
 
     // Issue #13 semantics: a missing plaintext is a skip-and-report, not an
-    // error — the file with a plaintext IS encrypted, and (default) its
+    // error - the file with a plaintext IS encrypted, and (default) its
     // plaintext is deleted after the ciphertext is durable.
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide succeeds with skip");
 

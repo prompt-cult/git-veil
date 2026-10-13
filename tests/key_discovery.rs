@@ -1,4 +1,4 @@
-//! Key discovery tests: git-veil never generates keys — a missing key
+//! Key discovery tests: git-veil never generates keys - a missing key
 //! fails with a documented exit code and the create-and-back-up recipe;
 //! selection honours the pinned fingerprint and the explicit verifying
 //! key form.

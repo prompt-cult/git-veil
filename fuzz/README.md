@@ -57,7 +57,7 @@ The generated/live corpus, crash artifacts, and coverage output are
 gitignored via `fuzz/.gitignore`; because `corpus` is ignored wholesale,
 new seed files must be added with `git add -f fuzz/corpus/<target>/<file>`.
 
-Upstream corpora worth pulling in (do not vendor blindly — see the research
+Upstream corpora worth pulling in (do not vendor blindly - see the research
 plan §4B for licence/provenance notes):
 
 - rpgp (`pgp` 0.19 upstream): `tests/` key artifacts incl.
@@ -71,10 +71,10 @@ plan §4B for licence/provenance notes):
 1. Reproduce with `cargo fuzz run <target> <artifact>`.
 2. Check the panic location: inside `src/` = in-tree bug → minimize
    (`tmin`), add a Red regression test in `tests/`, fix, go Green.
-   Inside `~/.cargo/registry/.../pgp-0.19.0/` = upstream (rpgp) — file
+   Inside `~/.cargo/registry/.../pgp-0.19.0/` = upstream (rpgp) - file
    upstream with the artifact, add the artifact to the seed corpus, do NOT
    patch the dependency in-tree.
-3. Timeout/OOM artifacts are genuine DoS findings for a secrets tool —
+3. Timeout/OOM artifacts are genuine DoS findings for a secrets tool  - 
    triage, never suppress.
 
 ## Known findings
@@ -87,7 +87,7 @@ plan §4B for licence/provenance notes):
   mis-scoped harness oracles (BEGIN-count invariant on the splitters, bare
   serde parse instead of `TrackedFiles::load`'s validate step, echo check on
   the empty string). Harnesses corrected; library unchanged.
-- **RESOLVED (was OPEN — Andon)**: `parse_git_remote_url` accepted
+- **RESOLVED (was OPEN - Andon)**: `parse_git_remote_url` accepted
   `'@'`/`':'` inside the user/repo capture groups, so credential-shaped
   material landed IN the derived repo_id
   (`https://github.com/user:pass@evil/repo` ⇒ user = `"user:pass@evil"`).

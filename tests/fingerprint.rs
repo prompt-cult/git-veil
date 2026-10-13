@@ -27,7 +27,7 @@ use std::process::Command;
 /// The first vector's public key is a real age-keygen X25519 public key;
 /// the second's is a real openssl-generated Ed25519 verifying key (the
 /// raw 32 public bytes, lowercase hex). The expected values are the
-/// sha256sum output over exactly those bytes — code must equal coreutils.
+/// sha256sum output over exactly those bytes - code must equal coreutils.
 const GOLDEN_VECTORS: [(&str, &str, &str); 2] = [
     (
         "alice@example.com",
@@ -277,7 +277,7 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     let (repo, key_store) = trusted_fixture("legacy-both");
 
     // The pre-#41 state: a 16-hex SipHash pin with the agreeing committed
-    // record — the pair every old machine holds.
+    // record - the pair every old machine holds.
     let legacy = "0123456789abcdef";
     let pin_path = TrustPinStore::pin_path(&key_store.path, TEST_REPO_ID);
     TrustPinStore::write_pin(&key_store.path, TEST_REPO_ID, legacy).unwrap();
