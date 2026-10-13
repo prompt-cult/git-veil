@@ -30,7 +30,7 @@ pub fn cmd_init(repo_root: &Path, quiet: bool) -> Result<()> {
             return Err(coded(
                 ExitCode::Refused,
                 "git-veil is already initialized here; refusing to reset existing trust state \
-                 — remove .git-veil/ explicitly if you really want a fresh start",
+                 remove .git-veil/ explicitly if you really want a fresh start",
             ));
         }
     }
@@ -58,7 +58,7 @@ pub fn cmd_init(repo_root: &Path, quiet: bool) -> Result<()> {
 
     println!("git-veil initialized");
 
-    // Issue #27: suggest CODEOWNERS coverage for the trust-critical paths —
+    // Issue #27: suggest CODEOWNERS coverage for the trust-critical paths  -
     // once, in plain text, opt-out via -q, never a prompt, never a block.
     if !quiet && !covers_trust_critical_paths(repo_root) {
         println!("{}", suggestion_text());

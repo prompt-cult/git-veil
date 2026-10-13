@@ -7,11 +7,11 @@ rely on them:
 - `removeperson` deletes bob's entry from the signed keyring and re-signs
   it. It is **forward-looking only**.
 - Ciphertexts that already exist were encrypted TO bob's key. He can still
-  decrypt every one of them he can obtain — with this tool, or with the
+  decrypt every one of them he can obtain - with this tool, or with the
   reference `age` CLI, forever. Removing him changes nothing about the bytes
   already on disk or already in git history.
 - Only a fresh `git-veil hide` of every file produces new ciphertext
-  that is not encrypted to bob's key — and even then, **git history still
+  that is not encrypted to bob's key - and even then, **git history still
   contains every old ciphertext**. Old commits stay decryptable by bob
   indefinitely.
 - Therefore: if bob ever saw (or could have decrypted) a secret, treat that
@@ -47,9 +47,9 @@ was dropped and the ring re-signed with the owner's key. From this hide
 onward, new ciphertext does not include bob.
 
 The re-hide replaces ciphertext only for files whose plaintext was on
-disk. It does NOT scrub git history — every previous version of
+disk. It does NOT scrub git history - every previous version of
 `.env.secret` remains in old commits, encrypted to bob's key. If the
-secrets must truly be gone from bob's reach, rotate them (see step 3) —
+secrets must truly be gone from bob's reach, rotate them (see step 3)  - 
 rewriting history with `git filter-repo` is an additional, separate
 measure.
 
@@ -128,7 +128,7 @@ keyrings, but no software can un-ring old ciphertext in his possession.
 
 ## Checklist
 
-- [ ] Owner: `removeperson <email>` — fails if the email is not in the ring
+- [ ] Owner: `removeperson <email>` - fails if the email is not in the ring
 - [ ] Owner: `reveal` then `hide`, commit `.git-veil/keyring` + re-hidden `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members

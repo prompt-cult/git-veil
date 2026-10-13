@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::age_crypto::load_x25519_public_keys_from_store;
 use crate::fs_atomic::write_atomic;
 
-/// Resolves `identifier` — an exact X25519 public key encoding — against
+/// Resolves `identifier` - an exact X25519 public key encoding - against
 /// every public key in the local key store and returns its encoding.
 ///
 /// Matching is exact equality on the public key string; no

@@ -56,7 +56,7 @@ pub fn cmd_cat(
     }
 
     // Lstat gate: refuse if the tracked path is a committed symlink or not a
-    // regular file (absent is fine — the plaintext is normally hidden).
+    // regular file (absent is fine - the plaintext is normally hidden).
     ensure_regular_file(repo_root, &relative)?;
 
     // Compute encrypted path

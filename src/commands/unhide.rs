@@ -11,7 +11,7 @@ use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, Pat
 use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
-/// index — same gate as reveal; see docs/design.md "Ignore safety" gate 4.
+/// index - same gate as reveal; see docs/design.md "Ignore safety" gate 4.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
@@ -31,7 +31,7 @@ fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
 ///
 /// This is the inverse of hide for ONE file (matching cat's single-file
 /// scope): hide encrypts the plaintext and leaves the ciphertext beside it;
-/// unhide restores the plaintext and also leaves the ciphertext in place —
+/// unhide restores the plaintext and also leaves the ciphertext in place  -
 /// neither copy is deleted, so hide can re-encrypt and reveal can re-restore
 /// without touching git. The keyring signature is verified against the
 /// pinned trust before any decryption, exactly as reveal and cat do.
@@ -40,8 +40,8 @@ fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
 /// cmd_cat resolves paths. Unlike cat, the plaintext may not exist (it is
 /// hidden), so an absolute path is checked lexically against the canonical
 /// repository root instead of canonicalised; relative paths go through the
-/// shared tracked-path validation. The file must be tracked — unhide refuses
-/// untracked paths — and the ciphertext must exist beside the plaintext.
+/// shared tracked-path validation. The file must be tracked - unhide refuses
+/// untracked paths - and the ciphertext must exist beside the plaintext.
 pub fn cmd_unhide(
     repo_root: &Path,
     file: &str,
@@ -86,7 +86,7 @@ pub fn cmd_unhide(
     // link); refuse for consistency with the read gates.
     ensure_regular_file(repo_root, &relative)?;
 
-    // Tracked-plaintext gate (exit 43): same refusal as reveal — see
+    // Tracked-plaintext gate (exit 43): same refusal as reveal - see
     // docs/design.md "Ignore safety" gate 4 and issue #15.
     ensure_not_tracked_in_git(repo_root, &relative)?;
 

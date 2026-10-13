@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
 
-/// SSH SCP-style: `user@host:owner/repo[.git][/][?]` — any SSH user (not just
+/// SSH SCP-style: `user@host:owner/repo[.git][/][?]` - any SSH user (not just
 /// `git`). The user part must not contain `/` so that scheme URLs like
 /// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The user,
 /// host and owner/repo groups additionally exclude `@` and `:` (where shape
@@ -18,7 +18,7 @@ static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Scheme URL shared shape: `scheme://[user[:pass]@]host[:port]/owner/repo`.
 /// The optional userinfo (`user[:pass]@`) is a login credential and is
-/// stripped — it never becomes part of the repository id. The owner/repo
+/// stripped - it never becomes part of the repository id. The owner/repo
 /// groups exclude `@` and `:` so credential-shaped material can never land
 /// in the derived repository id (fails closed instead).
 static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -115,13 +115,13 @@ pub fn derive_repo_id(push_url: &str) -> Result<String> {
 
 /// Derives the repository id of every configured remote's push URL
 /// (`git remote --verbose`): the set of repository ids this checkout
-/// currently points at — one id per remote, so a multi-remote repository
+/// currently points at - one id per remote, so a multi-remote repository
 /// contributes one entry per remote.
 ///
 /// The `(push)` lines carry the effective push URLs (the pushurl when
 /// set, url rewriting applied). A remote with no fetch URL also prints a
 /// bare `name` line with no URL; bare lines and push URLs with no
-/// supported shape are skipped — trust records only ever hold ids derived
+/// supported shape are skipped - trust records only ever hold ids derived
 /// from supported shapes, so such a remote cannot correspond to any
 /// recorded entry.
 pub fn derive_configured_repo_ids(repo_path: &Path) -> Result<BTreeSet<String>> {

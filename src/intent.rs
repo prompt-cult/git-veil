@@ -1,7 +1,7 @@
 //! Machine-local encryption-intent log.
 //!
 //! `add` records each tracked path here so `hide` can refuse "nominated"
-//! paths — committed to tracked.json by some other repo writer — that the
+//! paths - committed to tracked.json by some other repo writer - that the
 //! user on THIS machine never added. See "Encryption intent" in
 //! docs/design.md. The log lives in the key store (outside the repository,
 //! permission-checked) because anything committed would be attacker-writable
@@ -23,7 +23,7 @@ impl LocalAdds {
     }
 
     /// Records intent for one repo-relative path (append; dedup is
-    /// unnecessary — membership is what hide asks).
+    /// unnecessary - membership is what hide asks).
     pub fn record(key_store: &Path, repo_id: &str, relative: &Path) -> Result<()> {
         let path = Self::path(key_store, repo_id);
         fs::create_dir_all(path.parent().expect("intent path always has a parent"))?;

@@ -3,7 +3,7 @@
 A tool for storing encrypted secrets in a git repository, written in Rust.
 It uses [age] encryption (via the pure-Rust [`age` crate][age-crate]) for
 secrecy and [Ed25519][ed25519] signing (via [`ed25519-dalek`][dalek]) for
-keyring integrity — no PGP, no GPG, no external crypto process. All
+keyring integrity - no PGP, no GPG, no external crypto process. All
 cryptographic operations happen in-process.
 
 [age]: https://age-encryption.org
@@ -25,14 +25,14 @@ Each repository is identified by a repository ID derived from its git remote
 push URL, e.g. `git@github.com:example/demo.git` gives `demo+example@github.com`
 (run `git-veil show-repo-id` to print it). The repository owner's signing key
 is pinned per machine, and a repository can never supply its own trust
-anchor: the only direct pin-creation mode is a possession proof —
+anchor: the only direct pin-creation mode is a possession proof  - 
 `git-veil trust <repo-id>` matches the repository's committed `owner.verifying`
 against the verifying key derived from a seed in the local signing key store,
 and refuses when no seed matches. Machines without the signing key
 (unattended boxes) receive their pin by import: a seed-holding machine runs
 `git-veil export-pin <repo-id> --output <pin-file>`, the file travels out of
 band (never through the repository), and the box runs
-`git-veil trust --import <pin-file>` — three consistency checks tie the
+`git-veil trust --import <pin-file>` - three consistency checks tie the
 pin-file to the repository's committed key and metadata. The pin lives in the
 local key store outside the repository and is never committed, so every
 machine pins for itself. The keyring of collaborator public keys in
@@ -54,7 +54,7 @@ group- or world-accessible. git-veil never changes permissions on files it
 did not create. On a violation it exits with code 30 and names the exact
 paths and modes; either `chmod` them right, or acknowledge the current
 state with `git-veil trust-permissions` (which pins the exact `(path,
-mode)` pairs — a later change fails again), or bypass with
+mode)` pairs - a later change fails again), or bypass with
 `--dangerously-skip-permissions-check` / `GIT_VEIL_SKIP_PERMISSIONS=1`.
 
 ## Exit codes
@@ -67,7 +67,7 @@ prints the full table with names and meanings; the specification is in
 
 ## Quick start (solo)
 
-Prerequisite: your own keys (see [Key setup](#key-setup) below) — an
+Prerequisite: your own keys (see [Key setup](#key-setup) below) - an
 X25519 private key (age identity) and an Ed25519 signing key. git-veil
 generates no keys: it only ever reads keys you created and own, and every
 command that needs a missing key tells you how to make one and back it up
@@ -110,7 +110,7 @@ chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/g
 ```
 
 `cargo binstall git-veil` resolves the same release assets (manifest wired
-into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned —
+into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned  - 
 see issue #10 for the live status of each channel.
 
 Build from source with cargo:
@@ -144,20 +144,20 @@ tools, then back the private halves up (a password-manager note is enough).
 
 ### Create an X25519 private key (for encryption/decryption)
 
-Use any age key generator — `age-keygen` (from the [age CLI][age-cli]) or
+Use any age key generator - `age-keygen` (from the [age CLI][age-cli]) or
 `rage-keygen` (from [rage]):
 
 ```sh
 umask 077
 age-keygen -o my-age-identity.txt
 # Output includes:
-#   # public key: age1...    (your X25519 public key — share this)
-#   AGE-SECRET-KEY-1...       (your X25519 private key — keep this secret, BACK IT UP)
+#   # public key: age1...    (your X25519 public key - share this)
+#   AGE-SECRET-KEY-1...       (your X25519 private key - keep this secret, BACK IT UP)
 ```
 
-The **X25519 public key** (age recipient) — the `age1...` line — is safe to
-share with collaborators. The **X25519 private key** (age identity) — the
-`AGE-SECRET-KEY-1...` line — is never committed; without a backup of it,
+The **X25519 public key** (age recipient) - the `age1...` line - is safe to
+share with collaborators. The **X25519 private key** (age identity) - the
+`AGE-SECRET-KEY-1...` line - is never committed; without a backup of it,
 ciphertexts are unrecoverable.
 `git-veil import my-age-identity.txt` copies it into the local key store
 (accepts any file containing an `AGE-SECRET-KEY-1...` line; `#` comment lines
@@ -166,18 +166,18 @@ like age-keygen's are skipped).
 ### Create an Ed25519 signing key (for keyring signing)
 
 The repository owner also needs an Ed25519 keypair for signing the keyring.
-git-veil never creates or manages it — you make it with `openssl` and you back
+git-veil never creates or manages it - you make it with `openssl` and you back
 it up:
 
 ```sh
 umask 077
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 
-# The seed (private — what tell/removeperson read), 64 hex characters:
+# The seed (private - what tell/removeperson read), 64 hex characters:
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key (public — commit this file; trust proves your seed matches it):
+# The verifying key (public - commit this file; trust proves your seed matches it):
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > owner.verifying
 ```
@@ -190,7 +190,7 @@ after printing how to create and back it up.
 
 `owner.verifying` (the 64-hex public half) is committed to the repository:
 it is the candidate `git-veil trust` proves your seed against, and the
-witness `trust --import` cross-checks. Committing it is safe — it is public
+witness `trust --import` cross-checks. Committing it is safe - it is public
 material, and it can never pin anything by itself.
 
 ## Commands
@@ -198,7 +198,7 @@ material, and it can never pin anything by itself.
 git-veil is a CLI tool inspired by git-secret, yet uses the more modern and
 compact `age` encryption tools rather than the older `pgp`/`gpg` tools. The
 underlying algorithms are common to many tools; it is the key formats and
-ergonomics that differ — such as a smaller final binary size.
+ergonomics that differ - such as a smaller final binary size.
 
 | Command          | Purpose                                                                 |
 |------------------|-------------------------------------------------------------------------|

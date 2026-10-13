@@ -1,15 +1,15 @@
 //! Pin creation (issue #28): possession proof is the ONLY way to create a
-//! pin directly, and the keyfile argument is gone — a repository must never
+//! pin directly, and the keyfile argument is gone - a repository must never
 //! be able to supply its own trust anchor.
 //!
 //! Two pin-creation paths exist, and nothing else:
 //!
-//! 1. `git-veil trust <repo_id>` — possession proof. The candidate is the
+//! 1. `git-veil trust <repo_id>` - possession proof. The candidate is the
 //!    repository's committed `owner.verifying`; the proof is an exact match
 //!    between that candidate and the verifying key derived from a seed in
 //!    the signing key store (`<key store>/signing-keys.txt`). A machine
 //!    without the matching seed cannot pin.
-//! 2. `git-veil trust --import <pin-file>` — a pin-file produced by
+//! 2. `git-veil trust --import <pin-file>` - a pin-file produced by
 //!    `git-veil export-pin` on a machine that DID prove possession. Three
 //!    mandatory consistency checks tie the pin-file to the repository's
 //!    committed key and metadata; any mismatch is a refusal.
@@ -195,7 +195,7 @@ fn write_pin_state(
 
     // Re-trust visibility: if a pin already exists for this repo and names
     // a DIFFERENT fingerprint, this machine's record of the repository's
-    // trust anchor is about to CHANGE — say so loudly before rewriting it.
+    // trust anchor is about to CHANGE - say so loudly before rewriting it.
     if let Some(previous) = TrustPinStore::read_pin(key_store, repo_id)? {
         if !previous.eq_ignore_ascii_case(&fingerprint) {
             println!(
@@ -222,7 +222,7 @@ fn write_pin_state(
         // Reconcile the committed store (issue #43): a repository move or
         // rename leaves trusted_keys entries for ids no configured remote
         // derives any more. Entries matching any configured remote are
-        // kept — one per remote — and the pruned ids are public repository
+        // kept - one per remote - and the pruned ids are public repository
         // facts, so the removal names them (issue #42).
         let live = derive_configured_repo_ids(repo_root)?;
         for pruned_id in trust_store.reconcile_trusted_keys(&live) {
@@ -262,7 +262,7 @@ pub fn cmd_trust(
         ));
     }
 
-    // The candidate is the repository's committed owner.verifying — never
+    // The candidate is the repository's committed owner.verifying - never
     // an argument. The proof: a seed in the signing key store derives to
     // exactly this key.
     let (verifying_key, verifying_key_hex, public_key) = read_owner_verifying(repo_root)?;
@@ -318,7 +318,7 @@ pub fn cmd_trust_import(
 
     // Check (c): the pin-file's owner key fingerprint (the single
     // documented derivation with the repository id as the label, over the
-    // public half — never the seed) exactly matches the owner fingerprint
+    // public half - never the seed) exactly matches the owner fingerprint
     // recorded in the committed .git-veil/ metadata. An absent field is a
     // refusal: the metadata predates this rule and must be refreshed by
     // the owner.
@@ -360,7 +360,7 @@ pub fn cmd_trust_import(
 
     // All three channels agree: the pin-file is the anchor, the committed
     // key and the committed fingerprint are the witnesses. The metadata is
-    // already committed and correct — import records the pin without
+    // already committed and correct - import records the pin without
     // rewriting it.
     write_pin_state(
         repo_root,

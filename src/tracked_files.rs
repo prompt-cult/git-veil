@@ -15,7 +15,7 @@ pub struct TrackedFiles {
 /// Validates that a tracked path is a safe repo-relative path.
 ///
 /// Tracked paths must be relative, must contain no `..` (or other
-/// non-normal) components, and — as defence in depth — must stay inside
+/// non-normal) components, and - as defence in depth - must stay inside
 /// the repository root when joined under it (ciphertext lives beside the
 /// plaintext as `<name>.secret`, so every tracked path is used both for
 /// reads and for sibling writes). This is the shared boundary check used

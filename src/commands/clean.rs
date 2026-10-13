@@ -8,7 +8,7 @@ use crate::{coded, ExitCode, TrackedFiles};
 /// Removes the .git-veil internal state directory.
 ///
 /// Single responsibility: destroy git-veil's internal state (.git-veil/).
-/// `.gitignore` is never rewritten — init no longer adds any entry, and the
+/// `.gitignore` is never rewritten - init no longer adds any entry, and the
 /// in-place `<name>.secret` ciphertext files are ordinary committable files
 /// that a clean must not disown.
 ///

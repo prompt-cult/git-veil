@@ -3,8 +3,8 @@
 //! git-veil NEVER generates key material: a key the tool made would be a
 //! key the user never backed up, and when the user's disk dies their
 //! ciphertext dies with it. When a key is missing, discovery fails with
-//! the documented exit code and prints the recipe to create it — with the
-//! backup instruction — instead of manufacturing one.
+//! the documented exit code and prints the recipe to create it - with the
+//! backup instruction - instead of manufacturing one.
 
 use anyhow::{Context, Result};
 use ed25519_dalek::SigningKey;
@@ -32,7 +32,7 @@ fn signing_key_recipe(_key_store: &Path) -> String {
 ///
 /// One 64-hex-character Ed25519 seed per line; `#` comments and blank
 /// lines are skipped. A missing file is an empty list (fresh machine),
-/// not an error; a present-but-garbage line IS an error — never guess
+/// not an error; a present-but-garbage line IS an error - never guess
 /// which line the user meant.
 pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
     let path = key_store.join("signing-keys.txt");
@@ -51,7 +51,7 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
 
 /// Selects the Ed25519 signing key for keyring curation (tell/removeperson).
 ///
-/// The TRUSTED key is used — the one whose owner key fingerprint under
+/// The TRUSTED key is used - the one whose owner key fingerprint under
 /// the single derivation (repository id as the label, see
 /// src/fingerprint.rs) equals `pinned_fingerprint`. The keyring must be
 /// signed with exactly the key the pin names (that is what verify_keyring
@@ -93,7 +93,7 @@ pub fn discover_signing_key(
 
 /// Explicit signing-key selection by the full verifying key.
 ///
-/// The ONLY selection form: the 64 hex character Ed25519 verifying key —
+/// The ONLY selection form: the 64 hex character Ed25519 verifying key  -
 /// the public half, never the seed. The 1-based index into
 /// signing-keys.txt was removed (reordering the file silently renamed what
 /// an index selected), the full 64-hex seed was removed (the private

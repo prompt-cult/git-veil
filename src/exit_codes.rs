@@ -7,7 +7,7 @@
 //!
 //! Codes are carried inside `anyhow` errors as a [`CodedError`] payload so
 //! command signatures stay `anyhow::Result` and `main` can still exit with
-//! the right status — no error-type rewrite across every command.
+//! the right status - no error-type rewrite across every command.
 
 use std::fmt;
 
@@ -60,7 +60,7 @@ pub enum ExitCode {
 }
 
 impl ExitCode {
-    /// Every code, in numeric order — the source for `git-veil error-codes`.
+    /// Every code, in numeric order - the source for `git-veil error-codes`.
     pub const ALL: &'static [ExitCode] = &[
         ExitCode::GeneralError,
         ExitCode::NoTrustRecord,

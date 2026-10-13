@@ -5,7 +5,7 @@
 //! Export requires the SAME possession proof as `trust`: an exact match
 //! between the repository's committed `owner.verifying` and the verifying
 //! key derived from a seed in the signing key store. A machine without the
-//! matching seed cannot export at all — pins originate only from machines
+//! matching seed cannot export at all - pins originate only from machines
 //! holding the signing key; store-less machines are consumers, never
 //! producers. The output path must be outside the repository worktree.
 

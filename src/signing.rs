@@ -24,8 +24,8 @@ pub fn sign_keyring_content(keyring_content: &str, signing_key: &SigningKey) -> 
 
 /// SHA-256 hex digest of the canonical signed keyring content. Recorded in
 /// the per-machine baseline beside the freshness counter so that an
-/// equal-version keyring with DIFFERENT content (a curation fork — two
-/// machines both curating without pulling — issue #20) is refused rather
+/// equal-version keyring with DIFFERENT content (a curation fork - two
+/// machines both curating without pulling - issue #20) is refused rather
 /// than silently replacing the accepted collaborator set.
 pub fn keyring_content_digest(keyring_content: &str) -> String {
     use sha2::{Digest, Sha256};

@@ -52,7 +52,7 @@ impl TrustStore {
 
     /// Reconciles `trusted_keys` against `live`, the repository ids the
     /// configured remotes currently derive (issue #43): every entry whose
-    /// id no remote derives — the residue of a repository move or rename —
+    /// id no remote derives - the residue of a repository move or rename  -
     /// is removed. Returns the pruned ids in sorted order so the caller
     /// can print the removals (repository ids are public repository
     /// facts, so naming them is allowed).
@@ -101,7 +101,7 @@ impl TrustStore {
 /// it points at ships with the repo too. The pin is the out-of-band record,
 /// written only by `git-veil trust` on this machine, of which fingerprint the
 /// user actually chose to trust. A fresh clone has no pin, so trust must be
-/// re-established per machine — the correct posture for a secrets tool.
+/// re-established per machine - the correct posture for a secrets tool.
 pub struct TrustPinStore;
 
 impl TrustPinStore {
@@ -157,10 +157,10 @@ impl TrustPinStore {
     }
 
     /// The path of the per-machine keyring baseline for `repo_id`:
-    /// the highest keyring version this machine has ever accepted, plus —
-    /// since the fork fix (issue #20) — the SHA-256 digest of the accepted
+    /// the highest keyring version this machine has ever accepted, plus  -
+    /// since the fork fix (issue #20) - the SHA-256 digest of the accepted
     /// signed content at that version. Lives beside the pin, OUTSIDE the
-    /// repository — a committed baseline would be attacker-writable and the
+    /// repository - a committed baseline would be attacker-writable and the
     /// rollback refusal would be void. See "Keyring format and freshness" in
     /// docs/design.md.
     ///

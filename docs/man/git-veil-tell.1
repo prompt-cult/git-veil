@@ -33,7 +33,7 @@ keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test\-encrypted to the new key so a key that
 cannot encrypt is never signed into the ring.
 
-The keyring is signed with the TRUSTED key — the one whose owner key
+The keyring is signed with the TRUSTED key \- the one whose owner key
 fingerprint is pinned for this repository. signing\-keys.txt must contain
 that seed; git\-veil never generates it (docs/solo.md step 1 has the
 recipe). With several signing keys present, \-\-signing\-key names one by

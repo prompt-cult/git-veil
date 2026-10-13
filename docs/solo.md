@@ -6,7 +6,7 @@ private key, one keyring entry: yours.
 Prerequisite: build the binary (`cargo build --release`; it lands at
 `target/release/git-veil`), plus two standard tools for the one-time key
 creation below: `openssl` (ships with macOS and every Linux) and
-`age-keygen` (or `rage-keygen`). git-veil generates **no** keys — a key
+`age-keygen` (or `rage-keygen`). git-veil generates **no** keys - a key
 the tool made is a key you never backed up, and when your disk dies your
 ciphertext dies with it. You create the keys, you own the keys, you back
 up the keys.
@@ -16,7 +16,7 @@ your own remote and emails throughout.
 
 ## 1. Create your keys and back them up
 
-Two keys, two jobs: an **X25519 private key** (age identity — encrypts
+Two keys, two jobs: an **X25519 private key** (age identity - encrypts
 and decrypts secrets) and an **Ed25519 signing key** (signs the keyring
 so a rewritten keyring is caught on this machine). Neither private half
 is ever committed.
@@ -27,28 +27,28 @@ umask 077   # everything created below stays private to you
 # The X25519 private key (encryption/decryption):
 age-keygen -o my-age-identity.txt
 # Output includes:
-#   # public key: age1...    (your X25519 public key — share this)
-#   AGE-SECRET-KEY-1...      (your X25519 private key — keep this secret)
+#   # public key: age1...    (your X25519 public key - share this)
+#   AGE-SECRET-KEY-1...      (your X25519 private key - keep this secret)
 
 # The Ed25519 signing key (keyring signing):
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key (public half of the signing key — commit this file):
+# The verifying key (public half of the signing key - commit this file):
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > owner.verifying
 ```
 
 What just happened: `signing-keys.txt` holds the 64-hex-character Ed25519
 seed (the last 32 bytes of the key's DER encoding); `owner.verifying`
-holds the matching public key, also as hex. **Back both secrets up now** —
+holds the matching public key, also as hex. **Back both secrets up now**  - 
 the `AGE-SECRET-KEY-1...` line from `my-age-identity.txt` and
 `ed25519.pem`/`signing-keys.txt` (the same signing secret in two forms); a
 password-manager note holding the strings is a complete backup. Lose the
 X25519 private key and every ciphertext is unrecoverable; lose the signing
 key and you cannot re-sign the keyring (re-key from scratch).
-`owner.verifying` is public: commit it — it is the candidate `trust`
+`owner.verifying` is public: commit it - it is the candidate `trust`
 proves your seed against.
 
 ## 2. Initialize, import, identify
@@ -70,10 +70,10 @@ Your principal: example@github.com
 What just happened: `.git-veil/` now holds `keyring`, `trust.json` and
 `tracked.json` (init never touches `.gitignore`); your X25519 private key
 lives in the per-machine key store `$HOME/.git-veil/identities.txt`
-(created mode 0600), never committed — `reveal`, `cat`, `unhide` and
+(created mode 0600), never committed - `reveal`, `cat`, `unhide` and
 `changes` look their key up there. `show-repo-id` prints the exact repo ID
 `trust` wants (it re-derives it from the remote and refuses a mismatch);
-`whoami` shows which principal decrypting commands will use — from
+`whoami` shows which principal decrypting commands will use - from
 `git config user.email`, or `--email`.
 
 ## 3. Trust your own key (possession proof)
@@ -84,18 +84,18 @@ $ git-veil trust demo+example@github.com
 ✓ Pinned 1a2b3c4d… for demo+example@github.com on this machine
 ```
 
-What just happened: there is no keyfile argument — a repository must never
+What just happened: there is no keyfile argument - a repository must never
 supply its own trust anchor. `trust` read the committed `owner.verifying`,
 derived the verifying key from every seed in your
 `$HOME/.git-veil/signing-keys.txt`, and found the exact match that proves
 you hold the signing key. The fingerprint was **pinned on this machine**
-in `$HOME/.git-veil/trust-pins/` — outside the repository, never committed
-— and the fixed-derivation owner fingerprint was recorded in
+in `$HOME/.git-veil/trust-pins/` - outside the repository, never committed
+ -  and the fixed-derivation owner fingerprint was recorded in
 `.git-veil/trust.json` (commit it alongside `owner.verifying`). Every gated
 command checks the keyring signature against this pin first and fails
 closed without it (see `git-veil error-codes`: a missing pin is exit code
 11, a mismatch between the committed record and your pin is 12). A fresh
-clone (even yours) has no pin until you run `trust` there again — and a
+clone (even yours) has no pin until you run `trust` there again - and a
 machine without the signing seed cannot pin directly at all: it imports a
 pin-file you export with `git-veil export-pin` (see
 [docs/joining.md](joining.md) for that flow).
@@ -135,13 +135,13 @@ $ ls .env .env.secret
 
 What just happened: `add` gitignored the plaintext name for you
 (git-secret behaviour) and `hide` encrypted `.env` to your key as
-`.env.secret`, **keeping the plaintext** — deletion is opt-in with
+`.env.secret`, **keeping the plaintext** - deletion is opt-in with
 `--keep-plaintext`, and manual deletion is only reversible with your
 X25519 private key. Two guards watch the working tree: if a tracked
 plaintext is on
 disk but not gitignored, `hide` prints a warning (error code 41) because a
 blind `git add -A` would commit it; if a `.secret` path is itself
-gitignored — e.g. swallowed by a parent-directory rule like `.tmp/` —
+gitignored - e.g. swallowed by a parent-directory rule like `.tmp/`  - 
 `hide` refuses outright (error code 40), because that ciphertext would
 silently never reach the repository. Commit the ciphertext and state, not
 the plaintext:
@@ -152,7 +152,7 @@ git commit -m "Add encrypted secrets"
 ```
 
 Gitignore the plaintext names (`.env`); commit the `.secret` files and
-`.git-veil/`. Never gitignore `*.secret` — that would defeat the
+`.git-veil/`. Never gitignore `*.secret` - that would defeat the
 fresh-clone decryptability contract.
 
 ## 6. The daily cycle
@@ -177,10 +177,10 @@ plaintext path and leave the `.secret` files in place; `changes` decrypts
 each ciphertext and diffs it against the plaintext beside it
 (`unchanged: …`, `no hidden version: …` and `not present on disk
 (hidden): …` appear instead where applicable). To peek without disturbing
-anything, `git-veil cat .env` writes the plaintext to stdout only —
+anything, `git-veil cat .env` writes the plaintext to stdout only  - 
 neither the plaintext nor the ciphertext on disk is touched.
 
-For the tightest solo posture — no plaintext lingering on disk — run
+For the tightest solo posture - no plaintext lingering on disk - run
 `git-veil hide --keep-plaintext` in the cycle above and
 treat `reveal` as the working state you re-hide from.
 
@@ -216,7 +216,7 @@ way gpg checks `~/.gnupg`: the store directory and the private files
 (`identities.txt`, `signing-keys.txt`) must not be group- or
 world-accessible. It never changes permissions itself. On a violation it
 exits with code 30, names the exact paths and modes, and offers the
-remedies: `chmod` them right, or — if you accept the risk — record the
+remedies: `chmod` them right, or - if you accept the risk - record the
 current state as trusted:
 
 ```sh

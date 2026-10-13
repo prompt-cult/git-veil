@@ -32,7 +32,7 @@ cat prints one file without touching disk state.
 
 reveal is TWO\-PHASE and ALL\-OR\-NOTHING: EVERY tracked file must have its
 \&.secret ciphertext present and decrypt successfully. Phase 1 verifies and
-decrypts all files in memory — if any ciphertext is missing or cannot be
+decrypts all files in memory \- if any ciphertext is missing or cannot be
 decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
 (only after every decryption succeeded) writes each plaintext atomically.
 

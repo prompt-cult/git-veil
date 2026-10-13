@@ -74,7 +74,7 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l key-store -d
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l suppress-codeowners -d 'Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l output -d 'Pin-file destination — must be OUTSIDE the repository worktree' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l output -d 'Pin-file destination - must be OUTSIDE the repository worktree' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'

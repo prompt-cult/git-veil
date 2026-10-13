@@ -4,7 +4,7 @@
 //! tracked.json, the key store, ciphertext `.secret` files,
 //! restored plaintext) goes through [`write_atomic`]. A plain
 //! `fs::write` truncates the target in place, so a crash mid-write
-//! leaves half-written state — for a secrets tool the worst case is a
+//! leaves half-written state - for a secrets tool the worst case is a
 //! torn private key store (bricks ALL decryption access, fail-closed)
 //! or a torn plaintext/ciphertext pair (data loss). The write-temp-then-
 //! rename sequence below is atomic on POSIX and Windows same-volume, so
@@ -14,7 +14,7 @@
 //! The key stores are APPENDS (identities.txt, recipients.txt): their
 //! atomic-append shape is read-existing + `write_atomic` of the whole
 //! accumulated content. The O(n) rewrite per append is the accepted
-//! trade — a torn store of private keys bricks all decryption access,
+//! trade - a torn store of private keys bricks all decryption access,
 //! so a partial write must never be possible.
 
 use anyhow::{Context, Result};
@@ -28,7 +28,7 @@ use std::path::Path;
 /// volume, so the rename can never degrade into a copy), fsync the file,
 /// rename it over the target, then best-effort fsync the parent
 /// directory so the rename itself survives a crash (directory fsync is
-/// not portable — errors there are ignored by design).
+/// not portable - errors there are ignored by design).
 ///
 /// On any failure the original target is untouched and the temp file is
 /// removed. Note the temp name is per-target (`<name>.tmp-<pid>`), so
@@ -38,8 +38,8 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 /// [`write_atomic`] with an explicit creation mode (Unix only) for files
-/// git-veil creates that hold private key material — `identities.txt`,
-/// the permissions acknowledgment — so they land 0600 regardless of the
+/// git-veil creates that hold private key material - `identities.txt`,
+/// the permissions acknowledgment - so they land 0600 regardless of the
 /// process umask. Repo working-tree files keep [`write_atomic`].
 #[cfg(unix)]
 pub fn write_atomic_mode(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {

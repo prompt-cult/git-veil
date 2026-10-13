@@ -87,7 +87,7 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
 /// The check is case-INSENSITIVE as a fallback (issue #21): on the macOS and
 /// Windows default filesystems a case-variant spelling of a tracked path
 /// resolves to the SAME file, so an exact-match miss must still refuse when
-/// any case-variant of the path is in the index — a miss there would let a
+/// any case-variant of the path is in the index - a miss there would let a
 /// committed payload ciphertext overwrite a tracked source file through
 /// reveal. On case-sensitive filesystems the fallback can in principle
 /// false-positive two genuinely distinct case-variant files; for a secrets

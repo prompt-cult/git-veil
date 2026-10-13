@@ -75,7 +75,7 @@ pub fn cmd_tell(
     // keyring, so it must sign with the TRUSTED key (the one verify_keyring
     // checks against), never with the collaborator's key. Discovery selects
     // the signing key whose owner key fingerprint matches the pinned
-    // fingerprint; git-veil never generates one — a missing key fails with
+    // fingerprint; git-veil never generates one - a missing key fails with
     // the recipe.
     let signing_key = match signing_key_selection {
         Some(verifying_key_hex) => discover_signing_key_explicit(key_store, verifying_key_hex)?,

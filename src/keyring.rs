@@ -55,7 +55,7 @@ impl Keyring {
         // anything else (END before BEGIN, or an END overlapping the BEGIN
         // region) is a misordered keyring. The keyring is committed repo
         // content and therefore attacker-writable, so this is rejected as a
-        // parse error — never a slicing panic.
+        // parse error - never a slicing panic.
         if end_idx < begin_idx + BEGIN_MARKER.len() {
             return Err(coded(
                 ExitCode::KeyParseFailure,

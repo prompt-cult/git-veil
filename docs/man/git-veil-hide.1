@@ -29,7 +29,7 @@ keyring member via reveal.
 
 hide is TWO\-PHASE and ALL\-OR\-NOTHING: phase 1 reads and validates every
 tracked plaintext and encrypts EVERY file to the full public key set in
-memory — if any plaintext is missing, unreadable or cannot be encrypted,
+memory \- if any plaintext is missing, unreadable or cannot be encrypted,
 hide aborts having changed NOTHING on disk. Phase 2 (only after every
 encryption succeeded) writes each .secret atomically.
 
@@ -40,12 +40,12 @@ Before encrypting anything, the keyring signature is verified against the
 pinned trusted key. unhide, reveal and cat invert hide.
 
 hide REFUSES (exit code 40) when a <name>.secret ciphertext path is
-itself git\-ignored — e.g. swallowed by a parent\-directory rule like
-\&.tmp/ — because that ciphertext would silently never reach the
+itself git\-ignored \- e.g. swallowed by a parent\-directory rule like
+\&.tmp/ \- because that ciphertext would silently never reach the
 repository. It WARNS (error code 41) when a tracked plaintext exists on
 disk but is not git\-ignored, since a blind `git add \-A` would then commit
 it. The plaintext is DELETED by default once every ciphertext is durably
-written — the normal loop is reveal (restore plaintexts) \-> edit \-> hide.
+written \- the normal loop is reveal (restore plaintexts) \-> edit \-> hide.
 \-\-keep\-plaintext leaves the plaintexts beside their ciphertexts. Tracked
 paths whose plaintext is absent are skipped and reported, never an error.
 

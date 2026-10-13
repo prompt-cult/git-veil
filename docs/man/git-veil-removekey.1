@@ -36,11 +36,11 @@ removekey is the departing user\*(Aqs housekeeping step for their own
 machine\*(Aqs store.
 
 Danger guard: if the target private key is the only one in
-identities.txt, removekey refuses without \-\-yes — this is your only
+identities.txt, removekey refuses without \-\-yes \- this is your only
 private key, and without it you cannot decrypt anything.
 
 The store rewrite is atomic and lossless for the retained lines. A
-corrupt (e.g. truncated) store is refused untouched — the error names the
+corrupt (e.g. truncated) store is refused untouched \- the error names the
 file, the line number, and the corrupt line so you can delete exactly it;
 removekey never rewrites a store it could not fully parse. On success a
 per\-store summary prints the public key encodings removed.

@@ -6,12 +6,12 @@ ID `demo+example@github.com`. Each person has their own machine, their own
 `$HOME/.git-veil` key store, and their own keys. git-veil generates **no**
 keys: each person creates their own X25519 private key (age identity) with
 `age-keygen` or `rage-keygen`, and the owner additionally creates an
-Ed25519 signing key (`openssl`) — see step 1 of
+Ed25519 signing key (`openssl`) - see step 1 of
 [docs/solo.md](solo.md). Exporting public keys needs no external tool:
 each person runs `git-veil export <public-key> --output <file>` from
 their own key store.
 
-## Part 1 — the owner sets the repository up
+## Part 1 - the owner sets the repository up
 
 Steps 1–5 of [docs/solo.md](solo.md) cover this in detail; the shape is:
 
@@ -34,7 +34,7 @@ git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets
 git push
 ```
 
-## Part 2 — the key handoff (the only manual exchange)
+## Part 2 - the key handoff (the only manual exchange)
 
 Public keys travel as plain text files over any channel you
 both trust. **Alice** creates her X25519 private key (age identity)
@@ -76,7 +76,7 @@ git commit -m "Add alice to keyring and re-hide"
 git push
 ```
 
-The owner also exports the repository's pin-file for Alice — she holds no
+The owner also exports the repository's pin-file for Alice - she holds no
 signing key, so the pin-file is the only way she can pin:
 
 ```sh
@@ -86,13 +86,13 @@ owner key fingerprint: 22fb3bcb…
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 ```
 
-The owner transfers `/tmp/demo.pin` to Alice OUT OF BAND (e.g. `scp`) —
-never committed to the repository — and reads her the printed
+The owner transfers `/tmp/demo.pin` to Alice OUT OF BAND (e.g. `scp`)  - 
+never committed to the repository - and reads her the printed
 fingerprint so she can compare it with the one recorded in the committed
 `.git-veil/trust.json` before importing. She does **not** need any
 private key of the owner's.
 
-## Part 3 — Alice clones and decrypts
+## Part 3 - Alice clones and decrypts
 
 ```sh
 $ git clone git@github.com:example/demo.git
@@ -106,7 +106,7 @@ Summary: 1 imported, 0 skipped
 She imports only her OWN X25519 private key into her local key store
 (exit code 21 tells anyone missing one exactly how to create and back it
 up). Then
-she pins the owner key — this is per machine, and her machine holds no
+she pins the owner key - this is per machine, and her machine holds no
 signing key, so she imports the pin-file the owner sent her:
 
 ```sh
@@ -119,7 +119,7 @@ What just happened: `trust --import` checked that the pin-file's
 repository ID matches her remote, that its verifying key exactly matches
 the repository's committed `owner.verifying`, and that its fingerprint
 matches the owner fingerprint recorded in the committed
-`.git-veil/trust.json` — three channels, all mandatory. The pin lives in
+`.git-veil/trust.json` - three channels, all mandatory. The pin lives in
 her `$HOME/.git-veil`, outside the repository; the committed
 `.git-veil/trust.json` is attacker-writable, so her local pin is the real
 anchor. A pin-file path inside the repository is refused outright.
@@ -140,7 +140,7 @@ $ git-veil cat .env        # peek to stdout; touches no disk state
 ## Who can decrypt what
 
 - Every `hide` produces ONE ciphertext carrying one stanza for
-  every key in the signed keyring — any keyring member can reveal.
+  every key in the signed keyring - any keyring member can reveal.
 - The keyring (`.git-veil/keyring`, committed) is signed by the owner's
   key. Every gated command verifies that signature against the local pin
   before touching anything, so a keyring edited by a non-owner fails

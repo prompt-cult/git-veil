@@ -54,7 +54,7 @@ fn print_keyring(keyring: &Keyring) {
     } else {
         println!("Keys in keyring:");
         for entry in &keyring.entries {
-            // The binding fingerprint is computed at print time — the
+            // The binding fingerprint is computed at print time - the
             // keyring stores only the principal and the public key
             // (issue #41).
             println!(

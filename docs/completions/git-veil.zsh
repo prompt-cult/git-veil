@@ -81,7 +81,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (export-pin)
 _arguments "${_arguments_options[@]}" : \
-'--output=[Pin-file destination — must be OUTSIDE the repository worktree]:OUTPUT:_files' \
+'--output=[Pin-file destination - must be OUTSIDE the repository worktree]:OUTPUT:_files' \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \

@@ -8,7 +8,7 @@
 //!
 //! Pattern matching reuses the gitignore matcher (gix-ignore): CODEOWNERS
 //! patterns are a subset of gitignore, and the matcher answers exactly the
-//! question asked here — does any pattern cover these paths, last match
+//! question asked here - does any pattern cover these paths, last match
 //! wins. Owner strings are not validated; that is the platform's job.
 
 use anyhow::{Context, Result};
@@ -73,7 +73,7 @@ fn content_covers(content: &[u8], path: &str, is_dir: bool) -> bool {
 
 /// Whether a found CODEOWNERS file covers both trust-critical paths: the
 /// committed owner verifying key and the `.git-veil/` directory (a pattern
-/// matching a representative file inside the directory also counts —
+/// matching a representative file inside the directory also counts  -
 /// gitignore patterns may name files rather than the directory itself).
 pub fn covers_trust_critical_paths(repo_root: &Path) -> bool {
     let Some(codeowners) = find(repo_root) else {

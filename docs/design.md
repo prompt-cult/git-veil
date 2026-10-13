@@ -10,8 +10,8 @@ enforcing function; the named function, not any line number, is the contract.
 ## Terminology: crypto terms in the core, ageisms at the boundary
 
 git-veil's core and code speak RFC-standard cryptography only. The words
-the age ecosystem uses as its marketing names for key material — the
-**ageisms** (the not-insulting name chosen for them) — appear only at the
+the age ecosystem uses as its marketing names for key material, the
+**ageisms**, appear only at the
 user surface, and only where the documentation advises the operator how to
 do something in age (run an age command, interoperate with age/rage
 tooling). Where both vocabularies must span, the form is the crypto term
@@ -19,11 +19,11 @@ followed by the ageism in brackets: "X25519 private key (age identity)".
 
 | Crypto term (git-veil core and code) | ageism (age marketing vocabulary) |
 |--------------------------------------|-----------------------------------|
-| X25519 public key — bech32-encoded per the age spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
-| X25519 private key — bech32-encoded per the age spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
-| principal — the keyring label (a collaborator's email) | — (age has no word for it) |
-| Ed25519 verifying key — the public half of the keyring signing key | — (already standard vocabulary) |
-| Ed25519 signing key — the private seed | — (already standard vocabulary) |
+| X25519 public key - bech32-encoded per the age spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
+| X25519 private key - bech32-encoded per the age spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
+| principal - the keyring label (a collaborator's email) | - (age has no word for it) |
+| Ed25519 verifying key - the public half of the keyring signing key | - (already standard vocabulary) |
+| Ed25519 signing key - the private seed | - (already standard vocabulary) |
 
 The law:
 
@@ -58,8 +58,8 @@ URL. The algorithm lives in `parse_git_remote_url` and `derive_repo_id`
      must not contain `/` or `@`; any SSH user is accepted, not just `git`.
    - **Scheme URLs**: `ssh://`, `git://` or `https://`, with optional userinfo
      `user[:pass]@`, a host, an optional `:port`, then `/owner/repo` (regex in
-     `URL_RE`, src/repo_identity.rs). No other scheme — in particular `http://`
-     — is accepted. IPv6 literal hosts and paths with extra segments are also
+     `URL_RE`, src/repo_identity.rs). No other scheme - in particular `http://`
+     - is accepted. IPv6 literal hosts and paths with extra segments are also
      rejected.
 2. **Userinfo is stripped.** Embedded credentials never become part of the
    identity and are never echoed in errors (`strip_userinfo`,
@@ -67,18 +67,18 @@ URL. The algorithm lives in `parse_git_remote_url` and `derive_repo_id`
 3. **The port is discarded.** The service component is the bare host.
 4. **A trailing `.git` is stripped** (only at the very end of the repo name), and
    a trailing slash is tolerated.
-5. **All three components — host, owner and repo — are lowercased**
+5. **All three components - host, owner and repo - are lowercased**
    (`derive_repo_id`, src/repo_identity.rs), so `GitHub.com/Owner/Repo` and
    `github.com/owner/repo` derive the same identity.
 6. The result is formatted `repo+owner@host`, e.g.
    `git@github.com:example/demo.git` → `demo+example@github.com`.
 
 The owner and repo components must not contain `@` or `:`, and the SCP user
-must not contain `@` — credential-shaped material is *rejected*, not laundered
+must not contain `@` - credential-shaped material is *rejected*, not laundered
 into the identity (regex character classes, src/repo_identity.rs). An
-unsupported shape fails with a fixed message —
-`invalid git remote URL format; expected a supported GitHub/GitLab/Codeberg shape — see git-veil help trust`
-— that deliberately does not echo the failing URL, because echoing it could
+unsupported shape fails with a fixed message  - 
+`invalid git remote URL format; expected a supported GitHub/GitLab/Codeberg shape - see git-veil help trust`
+ -  that deliberately does not echo the failing URL, because echoing it could
 surface embedded credentials (`parse_git_remote_url`, src/repo_identity.rs).
 
 `show-repo-id` prints the derived id. `trust` re-derives it from the live
@@ -91,11 +91,11 @@ wrong identity.
 `trust.json` lives at `.git-veil/trust.json` and holds one JSON object with
 two maps (`TrustStore`, src/trust_store.rs):
 
-- `trusted_keys`: `{ "<repo_id>": "<fingerprint>" }` — the fingerprint of
+- `trusted_keys`: `{ "<repo_id>": "<fingerprint>" }` - the fingerprint of
   the owner key pinned for the repository under the single derivation (see
   "Fingerprints": the repository id is the label), compared against the
   local pin by every gated command;
-- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` — the same
+- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` - the same
   value: the fingerprint of the repository's committed owner verifying key
   (`owner.verifying`) under the single derivation, used by pin-file import
   and by humans verifying out of band.
@@ -108,7 +108,7 @@ the file is written pretty-printed and atomically
 Its role is **team visibility, not trust**. It is committed so every
 collaborator can see which key the repository claims as its owner, and so a
 changed claim is visible in git history. Because it is committed, it is
-attacker-writable by anyone with write access to the repository — the docs
+attacker-writable by anyone with write access to the repository - the docs
 are explicit that it is never the anchor.
 
 The actual anchor is the **per-machine pin**: a file at
@@ -125,7 +125,7 @@ A repository can never supply its own trust anchor: there is no keyfile
 argument, no compatibility mode, no feature flag. Exactly two paths create a
 pin:
 
-1. **Possession proof** — `git-veil trust <repo_id>`
+1. **Possession proof** - `git-veil trust <repo_id>`
    (`cmd_trust`, src/commands/trust.rs). The candidate is the repository's
    committed `owner.verifying` (64-hex Ed25519 verifying key on line 1; the
    owner's X25519 public key (age recipient) may follow on line 2). The
@@ -142,17 +142,17 @@ pin:
 
    The same write reconciles `trusted_keys` (issue #43): every entry whose
    repository id matches no configured remote is removed, and each removal
-   is printed — repository ids are public repository facts, so naming them
+   is printed - repository ids are public repository facts, so naming them
    is allowed. Entries matching any configured remote (`origin`,
    `upstream`, ...) are kept, so a multi-remote repository keeps one entry
    per remote. Without the reconcile a repository move or rename would
    leave the old id recorded in the committed store forever.
 
-2. **Pin-file import** — `git-veil trust --import <pin-file>`
+2. **Pin-file import** - `git-veil trust --import <pin-file>`
    (`cmd_trust_import`, src/commands/trust.rs). The pin-file is produced by
    `git-veil export-pin <repo_id> --output <pin-file>`
    (`cmd_export_pin`, src/commands/export_pin.rs) on a machine that passed
-   the SAME possession proof — a machine without the matching seed cannot
+   the SAME possession proof - a machine without the matching seed cannot
    export at all (exit code 20), so pins originate only from machines
    holding the signing key; store-less machines are consumers, never
    producers. The pin-file format is exactly two lines
@@ -168,7 +168,7 @@ pin:
    from the live remote); (b) the pin-file's verifying key exactly matches
    the repository's committed `owner.verifying`; (c) the pin-file's
    owner key fingerprint exactly matches the owner fingerprint recorded
-   in `trust.json`'s `owner_fingerprints` — an absent field is a refusal
+   in `trust.json`'s `owner_fingerprints` - an absent field is a refusal
    (the owner must re-run `trust` on a seed-holding machine and commit the
    updated metadata). Any mismatch refuses with
    `pin-file does not match this repository's committed owner key; one of
@@ -189,17 +189,17 @@ resolves inside the repository worktree (`ensure_path_outside_repo`, exit
 code 71): an attacker with repo write access could otherwise commit a bogus
 pin-file and have the victim import it, and since without a pin the tool
 refuses all other operations, the pin cannot travel through git-veil's own
-tracked-file mechanism either. Pin-file integrity rides the transport —
-the same model as `known_hosts` provisioning — and the printed owner
+tracked-file mechanism either. Pin-file integrity rides the transport  - 
+the same model as `known_hosts` provisioning - and the printed owner
 fingerprint is the token for human out-of-band verification (read it over
 the phone and compare with the committed `owner_fingerprints` value).
 
 **Repo renames** change the repo_id (it is derived from the remote push
 URL), so a new pin is required. When the committed `trust.json` records
 trust for a repo_id that differs from the one the current remote derives,
-the gated commands refuse with a stated suspicion — `this looks like a
+the gated commands refuse with a stated suspicion - `this looks like a
 rename or a remote change based on the existing trust record` (exit
-code 10 on the verify path, 70 on the import path) — naming the recorded
+code 10 on the verify path, 70 on the import path) - naming the recorded
 and derived repo-ids as the clue and **nothing else**. Error text is
 plain ASCII: no quoting marks, no parentheses, no path echoes, nothing
 that trips a log parser or a terminal. No remedy is printed: handing an
@@ -222,8 +222,8 @@ Every gated command verifies the keyring signature through
    The message policy distinguishes secret material from public repository
    facts: plaintext contents, key material and anything derivable only by
    decryption are never printed, while facts readable in the committed
-   tree — tracked paths, committed ciphertext paths, principal labels,
-   repository identities — may be named, since refusing to name them buys
+   tree - tracked paths, committed ciphertext paths, principal labels,
+   repository identities - may be named, since refusing to name them buys
    no security and costs the operator the ability to act:
    - committed record missing → `no trust record for this repository. See
      the trust documentation.` (exit code 10);
@@ -233,7 +233,7 @@ Every gated command verifies the keyring signature through
      change based on the existing trust record.` (exit code 10);
    - pin missing → `no trust pin exists on this machine for repository
      identity <repo-id> derived from remote <remote>. See the trust
-     documentation.` (exit code 11) — names the derived repository
+     documentation.` (exit code 11) - names the derived repository
      identity and the remote it came from, the facts that explain every
      rename/move failure;
    - pin or committed record in the retired 16 hex character fingerprint
@@ -252,8 +252,8 @@ Every gated command verifies the keyring signature through
    it (`verify_keyring_signature`, src/signing.rs); a keyring with entries but
    no signature is refused (exit code 63).
 
-So an attacker who rewrites `trust.json` — or commits a self-consistent
-`owner.verifying`, signed keyring, metadata fingerprint and bogus pin-file —
+So an attacker who rewrites `trust.json` - or commits a self-consistent
+`owner.verifying`, signed keyring, metadata fingerprint and bogus pin-file  - 
 achieves nothing on a machine that holds the real seed: the proof fails, and
 an in-repo pin-file is refused by the path gate. Writing trust.json *before*
 the pin in the pin-creation paths (src/commands/trust.rs) keeps the crash
@@ -274,8 +274,8 @@ FP = SHA-256( UTF8(label) + ":" + UTF8(public-key-encoding) )
 printed as 64 lowercase hex characters. The label is the principal label
 for a keyring principal, or the repository id for the owner key. The
 public key encoding is the bech32 X25519 public key (`age1...`) or the 64
-hex character Ed25519 verifying key. Both inputs are used verbatim — no
-trimming, no case folding — so the construction is reproducible outside
+hex character Ed25519 verifying key. Both inputs are used verbatim - no
+trimming, no case folding - so the construction is reproducible outside
 the tool.
 
 The derivation is a pure function over public values: no repository, no
@@ -295,7 +295,7 @@ on line 2.
 
 **Golden vectors.** These (label, public key encoding, fingerprint)
 triples are produced by the one-liners above and asserted against the Rust
-implementation (tests/fingerprint.rs) — code equals coreutils for every
+implementation (tests/fingerprint.rs) - code equals coreutils for every
 key type. The first public key is a real age-keygen X25519 public key; the
 second is a real openssl-generated Ed25519 verifying key:
 
@@ -310,12 +310,12 @@ else.
 Where fingerprints are used:
 
 - the per-machine pin and the committed `trusted_keys` record carry the
-  owner key fingerprint — the derivation with the repository id as the
+  owner key fingerprint - the derivation with the repository id as the
   label (`owner_key_fingerprint`);
 - `owner_fingerprints` carries the same value: the human out-of-band token
   (`export-pin` prints it) and the pin-file import witness;
-- `list-keys` prints the binding fingerprint of each keyring principal —
-  the derivation with the principal label — computed at print time; the
+- `list-keys` prints the binding fingerprint of each keyring principal  - 
+  the derivation with the principal label - computed at print time; the
   keyring stores only the principal and the public key (format v2), never
   a fingerprint;
 - key selection in `export`, `import`, `removekey` and `--signing-key` is
@@ -341,8 +341,8 @@ version:<n>
 <base64 Ed25519 signature over everything above, markers included>
 ```
 
-Keyring format v2 (issue #41): exactly two fields per entry — the
-principal (email) and the bech32 X25519 public key — with the signature
+Keyring format v2 (issue #41): exactly two fields per entry - the
+principal (email) and the bech32 X25519 public key - with the signature
 over the pair.
 Fingerprints are computed on demand (see "Fingerprints") and NEVER stored;
 a legacy three-field entry carrying a stored fingerprint is a parse
@@ -351,7 +351,7 @@ refusal (exit code 62), never a silent migration.
 The `version:` line (Keyring, src/keyring.rs) is a **monotonic counter
 carried inside the signed payload**: the signature covers it, so a version
 number cannot be forged without the owner key. `tell` and `removeperson`
-write `current + 1` (current = the keyring's own version, 0 when absent) —
+write `current + 1` (current = the keyring's own version, 0 when absent)  - 
 the counter needs no state outside the keyring it is serialised into, and no
 clock, so there is no drift to reason about.
 
@@ -372,7 +372,7 @@ TrustPinStore, src/trust_store.rs). After the signature verifies,
 
 **Only a signed keyring may move the baseline.** An unsigned zero-entry
 keyring (the fresh-init state) is unauthenticated repo content: it is
-accepted as version 0 but never records a baseline — otherwise an attacker's
+accepted as version 0 but never records a baseline - otherwise an attacker's
 junk ring carrying `version:u64::MAX` would poison the baseline and brick
 every machine past a revert of the attacker's commit. On a machine that
 already has a baseline, the unsigned ring is refused outright (a rollback to
@@ -391,7 +391,7 @@ rule existed carry no digest and are upgraded in place on the next accepted
 signed ring.
 
 A fresh clone has no baseline: the first gated command records the current
-SIGNED keyring's version as the baseline (a versionless keyring records 0) —
+SIGNED keyring's version as the baseline (a versionless keyring records 0)  - 
 the same trust-on-first-use posture as the pin itself. The baseline is
 machine-local state in the key store, which is exactly where it must live:
 anything committed to the repo would be attacker-writable and the refusal
@@ -408,13 +408,13 @@ rollback is refused.
 
 git-veil **never generates key material**. A key the tool created is a key the
 user never backed up; the tool's job on a missing key is to say so, teach the
-creation recipe, and exit with a documented code — not to silently manufacture
+creation recipe, and exit with a documented code - not to silently manufacture
 credentials (`src/key_discovery.rs`).
 
 **Signing keys** (`discover_signing_key`): the owner's Ed25519 signing keys are
 read from `<key store>/signing-keys.txt`, one 64-hex-character seed per line
-(`#` comments and blank lines skipped). `tell` and `removeperson` — the two
-keyring-curating commands — select a key as follows:
+(`#` comments and blank lines skipped). `tell` and `removeperson` - the two
+keyring-curating commands - select a key as follows:
 
 With several signing keys present, `--signing-key` names one explicitly by
 its full 64 hex character Ed25519 verifying key
@@ -430,11 +430,11 @@ the derivation change (issue #41). An explicit verifying key matching no
 store key refuses with code 20; matching more than one (a degenerate
 duplicated store) refuses with code 70 rather than silently picking one.
 
-1. The TRUSTED key is used — the one whose owner key fingerprint equals
+1. The TRUSTED key is used - the one whose owner key fingerprint equals
    the fingerprint pinned for this repository. The keyring
    must be signed with exactly the key the pin names (that is what
    verify_keyring checks against), so the pin, not list order, selects the
-   key. Selection is deterministic and the pin is mandatory — no
+   key. Selection is deterministic and the pin is mandatory - no
    interactive menu is needed.
 2. No usable key → the command exits with code 20 after printing, to stderr,
    the `openssl` recipe that creates the key (the last 32 bytes of the Ed25519
@@ -463,21 +463,21 @@ The key store is checked at load time the way gpg checks `~/.gnupg`
 git-veil **never chmods a file it did not create**. On a violation the command
 exits with code 30, listing each offending path with its observed mode, the
 `chmod` remedy, and the acknowledgment alternative. The check runs once, in
-`main`, for every command that resolves a key store — before any key material
+`main`, for every command that resolves a key store - before any key material
 is read.
 
 **Acknowledgment model** (git's dubious-ownership pattern): `git-veil
 trust-permissions` records the current findings as exact `(path, mode)` pairs
 in `<key store>/permissions-ack.json` (created mode 0600 via
 `write_atomic_mode`). A later check passes only if every finding matches an
-acknowledged pair exactly — permissions that later change to anything else fail
+acknowledged pair exactly - permissions that later change to anything else fail
 again. The check is bypassed entirely by the global
 `--dangerously-skip-permissions-check` flag or a truthy `GIT_VEIL_SKIP_PERMISSIONS`
 environment variable.
 
-Files git-veil itself creates that hold private key material —
+Files git-veil itself creates that hold private key material  - 
 `identities.txt` (via `import` and `import_x25519_private_key_to_store`) and the
-acknowledgment file — are created mode 0600 at write time
+acknowledgment file - are created mode 0600 at write time
 (`write_atomic_mode`, src/fs_atomic.rs), independent of the process umask.
 Repo working-tree files (revealed plaintext, `.secret` ciphertext) are
 deliberately not permission-policed: they are ordinary repository content.
@@ -488,7 +488,7 @@ deliberately not permission-policed: they are ordinary repository content.
 (src/fs_atomic.rs): write to a temp file `<name>.tmp-<pid>` in the same
 directory (same volume, so the rename can never degrade into a copy), fsync the
 file, rename it over the target, then best-effort fsync the parent directory
-(directory-fsync errors are ignored — not portable). On any failure the temp
+(directory-fsync errors are ignored - not portable). On any failure the temp
 file is removed and the target is untouched. The target is therefore always
 either the old content or the new content, never a mix. `write_atomic_mode` is
 the same sequence with an explicit creation mode for private key material.
@@ -501,7 +501,7 @@ restored plaintext (`cmd_reveal`,
 `cmd_unhide`), export output (`cmd_export`), the removekey rewrite
 (`cmd_removekey`), and the permissions acknowledgment
 (`cmd_trust_permissions`). Key-store appends are implemented as read-existing
-plus `write_atomic` of the whole accumulated content — an accepted O(n) trade
+plus `write_atomic` of the whole accumulated content - an accepted O(n) trade
 so a torn private-key store (which would brick all decryption) is impossible.
 
 **Two-phase hide/reveal.** `hide` is compute-then-commit: phase 1 reads and
@@ -523,12 +523,12 @@ while it is being edited. Consequences, stated honestly:
 
 - **Skip-and-report, not error.** A tracked path whose plaintext is absent
   and whose ciphertext exists (on disk or committed) is skipped and reported
-  as "already hidden" — re-running `hide` on a hidden repo does nothing and
+  as "already hidden" - re-running `hide` on a hidden repo does nothing and
   succeeds. A tracked path with neither plaintext nor ciphertext is skipped
   and reported as never-hidden. Neither state is an error: absence of
   plaintext is the steady state of this lifecycle.
 - **Rotation requires the plaintext.** `removeperson` + `hide` alone cannot
-  re-encrypt ciphertexts whose plaintexts are gone — the correct rotation is
+  re-encrypt ciphertexts whose plaintexts are gone - the correct rotation is
   `reveal` (restores plaintexts), `removeperson`, `hide` (re-encrypts to the
   new ring, deletes plaintexts again). Documented here because it is the one
   workflow that changed shape with this default.
@@ -556,13 +556,13 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    `.gitignore` when not already ignored.
 2. **Ciphertext-ignored refusal**: a `.secret` path can be silently swallowed
    by an unrelated broad rule (e.g. a parent directory like `.tmp/` in
-   `.gitignore`) — `add` would succeed and the ciphertext would never reach
+   `.gitignore`) - `add` would succeed and the ciphertext would never reach
    the repository. `add` therefore warns (exit stays 0) when the future
    `.secret` path is git-ignored, and `hide` **refuses outright** with exit
    code 40 before encrypting anything, listing every offending path.
 3. **Plaintext-leak warning**: if a tracked plaintext exists on disk but is
    not gitignored (typically after a rename or a `.gitignore` edit), `hide`
-   prints a warning citing exit code 41 and proceeds — the condition is a
+   prints a warning citing exit code 41 and proceeds - the condition is a
    risk, not a tool failure. The tutorials show an optional pre-commit hook
    that turns it into a hard stop.
 4. **Reveal-side tracked-plaintext refusal**: the inverse case is not a
@@ -570,8 +570,8 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    that is TRACKED IN GIT is ordinary repository content, not a secret
    (git-veil plaintexts are gitignored by construction; a tracked plaintext
    is exactly the state the code-41 warning flags). If `reveal` or `unhide`
-   refused nothing there, a repo writer could nominate a source file — say
-    `ci/deploy.sh` — in the unsigned `tracked.json` and commit a payload
+   refused nothing there, a repo writer could nominate a source file - say
+    `ci/deploy.sh` - in the unsigned `tracked.json` and commit a payload
     ciphertext encrypted to the ring's public keys (no signing key
     needed, the keyring is untouched); the victim's `reveal` would overwrite
    the source file and the CI would execute it. `reveal` and `unhide`
@@ -585,14 +585,14 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    to the same file, so an exact-match miss must still refuse when any
    case-variant of the path is in the index. On case-sensitive filesystems
    the fallback can in principle false-positive two genuinely distinct
-   case-variant files — for a secrets tool refusing beats overwriting.
+   case-variant files - for a secrets tool refusing beats overwriting.
 
 ## Orphaned ciphertext (a committed `.secret` that is not tracked)
 
 `hide` re-encrypts only tracked paths. That makes the tracked manifest the
 de-facto revocation boundary: if a path is removed from `tracked.json`, the
 old ciphertext is never re-encrypted, so after a `removeperson` rotation the
-stale `.secret` stays decryptable by the removed collaborator — silently,
+stale `.secret` stays decryptable by the removed collaborator - silently,
 with `hide` reporting success. Since `tracked.json` is committed and unsigned
 repo content, any repo writer can cause this by deleting manifest entries.
 
@@ -609,15 +609,15 @@ Two mitigations close the hole:
    with exit code 42 when any of them does not correspond to a tracked path,
    naming each one. The remedies are `git-veil add <path>` (the de-tracking
    was wrong) or deleting the stale ciphertext (the de-tracking was right).
-   The gate runs even when `tracked.json` is empty — that is exactly the
+   The gate runs even when `tracked.json` is empty - that is exactly the
    de-tracking-then-rotate attack shape. The index is read verbatim
    (`git -c core.quotePath=false ls-files -z`) so unicode/space names map
    back to their tracked paths; a committed file named exactly `.secret`
-   (no plaintext stem — it cannot correspond to any tracked path) is warned
+   (no plaintext stem - it cannot correspond to any tracked path) is warned
    about and ignored rather than fatal, so one junk file cannot brick hide.
 
 Scope, stated honestly: the gate reads the git **index**, so it catches
-committed (staged) ciphertexts — the exfiltration channel. An uncommitted
+committed (staged) ciphertexts - the exfiltration channel. An uncommitted
 on-disk `.secret` left behind by `remove --keep-ciphertext` is not detected
 until staged; a blind `git add -A` could sweep it into a commit. This is the
 same risk class as the code-41 plaintext-leak warning and is documented as
@@ -627,12 +627,12 @@ such, not hidden.
 
 `tracked.json` is committed and unsigned: any repo writer can add a path to
 it. The victim's next `hide` would then encrypt a file the victim never
-added — typically a gitignored secret — to every keyring member, including
+added - typically a gitignored secret - to every keyring member, including
 the attacker's, and the ciphertext is committed in the ordinary flow. The
 plaintext being gitignored suppresses even the code-41 warning, so the
 exfiltration is silent. The manifest cannot distinguish "user intends to
-track this" from "attacker nominated it" — the manifest IS the attack
-surface — so intent is bound to the **victim's own action** instead:
+track this" from "attacker nominated it" - the manifest IS the attack
+surface - so intent is bound to the **victim's own action** instead:
 
 - **`add` records intent on the machine that ran it.** Each `git-veil add`
   appends the resolved repo-relative path to a machine-local intent log,
@@ -642,12 +642,12 @@ surface — so intent is bound to the **victim's own action** instead:
   `pull` cannot alter it.
 - **`hide` requires intent for first encryption.** For each tracked path
   whose ciphertext is not established and whose plaintext exists on
-  disk (a path with no plaintext has nothing to exfiltrate — see "Plaintext
+  disk (a path with no plaintext has nothing to exfiltrate - see "Plaintext
   lifecycle"), `hide` consults the intent log; a path with neither an
   established ciphertext nor recorded intent is refused with exit code 72
-  (UnintendedEncryption), naming the paths; the remedy — deliberate `add`
+  (UnintendedEncryption), naming the paths; the remedy - deliberate `add`
   on this machine when the tracking is wanted, or restoring `tracked.json`
-  when it is not — is this document, not the error text.
+  when it is not - is this document, not the error text.
 - **Established means the ciphertext predates the manifest entry (issue
   #19).** The git index is attacker-writable, so a committed ciphertext
   alone proves nothing: a repo writer can commit the `tracked.json`
@@ -663,7 +663,7 @@ surface — so intent is bound to the **victim's own action** instead:
   store at `<key store>/baselines/<sanitized repo id>/<sha-256 of
   tracked.json content>` (one proven repo-relative path per line;
   src/happen_before.rs). The key store either holds a baseline for that
-  manifest hash or it does not — there is no clone-versus-update
+  manifest hash or it does not - there is no clone-versus-update
   distinction anywhere in the logic. Any manifest change (add, remove,
   reorder) changes the hash, which selects a fresh cache entry, so a
   remove-and-readd is re-checked against the re-add commit with no
@@ -672,9 +672,9 @@ surface — so intent is bound to the **victim's own action** instead:
 - **Honest residual (issue #19).** The happen-before check raises the
   attacker's cost from one visible change to a crafted history: a dummy
   ciphertext committed BEFORE the nomination still predates the manifest
-  entry and passes the check. The intent log remains the real anchor —
+  entry and passes the check. The intent log remains the real anchor  - 
   every machine that wants to first-encrypt a path must have run `add`
-  for it — and the check only removes the free ride a same-commit dummy
+  for it - and the check only removes the free ride a same-commit dummy
   otherwise gets. A stricter rule (for example binding the manifest hash
   into the signed keyring payload) is the follow-up direction.
 
@@ -682,7 +682,7 @@ Stated honestly, the residual trade-offs: the intent log is machine-local,
 so an owner who re-hides from a machine whose key store was restored must
 re-run `add` for any path without an established ciphertext; and a
 malicious collaborator can still make `hide` refuse (availability) by
-nominating junk paths — that is fail-closed by design, the same posture as
+nominating junk paths - that is fail-closed by design, the same posture as
 the code-40 gate, and each refusal names the offending paths.
 
 ## CODEOWNERS coverage for the trust-critical paths (suggested, never required)
@@ -703,7 +703,7 @@ harmless.
   matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
   character ranges, no escape handling), so the matcher answers whether a
   pattern covers `owner.verifying` and the `.git-veil/` directory,
-  last-match-wins. Owner strings are not validated — only the question
+  last-match-wins. Owner strings are not validated - only the question
   does any pattern match these paths is answered. Gitea and Forgejo use a
   different pattern language; the gitignore matcher may produce false
   negatives there, and the warning is non-blocking, so a false negative
@@ -724,7 +724,7 @@ harmless.
   repository and attacker-proof) at the same moment the possession proof
   or import pins the anchor. Only the pin-creation command can write the
   entry, so creating a suppression requires holding the machine that
-  proved possession of the signing key — the possession proof is the
+  proved possession of the signing key - the possession proof is the
   signature on the suppression. Suppressed repositories print no
   CODEOWNERS warning.
 
@@ -733,17 +733,17 @@ harmless.
 Tracked paths are repo-relative strings in `.git-veil/tracked.json`. Four
 layers guard them:
 
-1. **Tracked-path validation** — `validate_tracked_path`
+1. **Tracked-path validation** - `validate_tracked_path`
    (src/tracked_files.rs) requires the path to be non-empty and relative,
    rejects every non-`Normal` path component (so `..`, `.`, absolute prefixes
-   are out), and — defence in depth — requires lexical containment under the
+   are out), and - defence in depth - requires lexical containment under the
    repository root (`ensure_within_repo_root`, src/tracked_files.rs), so if the
    component rule were ever relaxed the containment check still holds.
    Enforced when tracked.json loads (`TrackedFiles::load`) and again before
    each use in hide, reveal, unhide, cat and changes. *Threat countered:* a
    malicious committed tracked.json making git-veil read or write outside the
    repository. Exit code 71.
-2. **Add-time canonicalise-and-reject** — `git-veil add` canonicalises each
+2. **Add-time canonicalise-and-reject** - `git-veil add` canonicalises each
    input against the canonical repository root (symlinks resolved, `..`
    collapsed) before stripping the prefix (`resolve_repo_relative_input` with
    `PathResolveMode::CanonicaliseRequireExists`, src/tracked_files.rs); a
@@ -751,17 +751,17 @@ layers guard them:
    `File is outside the repository`. *Threat countered:* tracking a link to
    e.g. `/home/victim/.ssh/id_rsa`, which hide would otherwise read and
    (deleted by default; the read gate applies whether or not the plaintext exists) delete. Exit code 71.
-3. **Read-time regular-file gate** — `ensure_regular_file`
+3. **Read-time regular-file gate** - `ensure_regular_file`
    (src/tracked_files.rs) uses `symlink_metadata` (lstat; does not follow
    links): a symlink is refused, a non-regular file is refused, and a
    *missing* path is accepted (the plaintext is normally absent while hidden).
    It fires on every use of a tracked path in hide, reveal, unhide, cat and
    changes. *Threat countered:* a tracked.json committed by one writer naming
-   a path another writer committed as a symlink out of the repo — reading
+   a path another writer committed as a symlink out of the repo - reading
    through it would exfiltrate the link target into committed ciphertext
    (hide) or print it (cat/changes), and writing through it would corrupt the
    link target or replace the link (reveal/unhide). Exit code 71.
-4. **Ciphertext-beside-plaintext** — `ensure_ciphertext_beside_plaintext`
+4. **Ciphertext-beside-plaintext** - `ensure_ciphertext_beside_plaintext`
    (src/commands/hide.rs) requires the ciphertext path to be exactly
    `<plaintext>.secret` and inside the repository root; it is checked at hide,
    reveal, unhide, cat and changes. *Threat countered:* any future drift in
@@ -775,7 +775,7 @@ which form gets validated) is pinned down per caller in `PathResolveMode`
 
 Every deliberate failure exits with a documented code (`ExitCode`,
 src/exit_codes.rs); errors without a specific code exit 1, and clap usage
-errors exit 2. `git-veil error-codes` prints this table; it is public API —
+errors exit 2. `git-veil error-codes` prints this table; it is public API  - 
 codes are never renumbered, only appended.
 
 | Code | Name                        | Meaning |

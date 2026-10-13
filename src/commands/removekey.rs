@@ -14,7 +14,7 @@ struct StoreLine {
 }
 
 /// A key store file parsed into lines. `exists` is false when the store
-/// file is absent (fresh machine) — absent stores are never created.
+/// file is absent (fresh machine) - absent stores are never created.
 struct StoreContents {
     path: PathBuf,
     exists: bool,
@@ -26,7 +26,7 @@ struct StoreContents {
 /// A non-comment line that is not a parseable X25519 private key is a hard
 /// error naming the corrupt line: the store is refused untouched. Silently
 /// skipping corrupt lines would let a successful removal rewrite the store
-/// without them — deleting key material removekey was never asked to touch
+/// without them - deleting key material removekey was never asked to touch
 /// (the same fail-closed rule every key store read applies).
 fn load_private_key_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
@@ -58,7 +58,7 @@ fn load_private_key_store(path: &Path) -> Result<StoreContents> {
 ///
 /// The same fail-closed rule as every key store read: a non-comment line
 /// that is not a parseable X25519 public key is a hard error naming the
-/// corrupt line — the store is refused untouched, never rewritten from a
+/// corrupt line - the store is refused untouched, never rewritten from a
 /// partial parse.
 fn load_public_key_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {

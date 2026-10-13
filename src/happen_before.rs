@@ -10,7 +10,7 @@
 //! The check walks git history, so its result is cached per manifest
 //! version in the machine-local key store. The cache key is the SHA-256 of
 //! the `tracked.json` content: the key store either holds a baseline for
-//! that hash or it does not — there is no clone-versus-update distinction.
+//! that hash or it does not - there is no clone-versus-update distinction.
 //! Any manifest change (add, remove, reorder) changes the hash and selects
 //! a fresh cache entry, so remove-and-readd is re-checked with no
 //! invalidation logic and no garbage collection. A path that fails the
@@ -103,7 +103,7 @@ pub fn ciphertext_predates_manifest_entry(
     let stdout = String::from_utf8_lossy(&log.stdout);
     // Newest first: the entry's introduction commit is the MOST RECENT
     // commit where the entry appears while absent from the parent's
-    // manifest version — the (re-)introduction. A remove-and-readd
+    // manifest version - the (re-)introduction. A remove-and-readd
     // therefore re-anchors the check at the re-add commit, exactly as the
     // issue specifies.
     for commit in stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
@@ -139,7 +139,7 @@ pub fn ciphertext_predates_manifest_entry(
 
 /// Whether the manifest version at hand names the plaintext path. A
 /// historical manifest that no longer parses (an older schema) counts as
-/// not naming the path — fail-closed.
+/// not naming the path - fail-closed.
 fn manifest_entry_present(manifest_content: &str, plaintext_rel: &str) -> bool {
     let tracked: TrackedFiles = match serde_json::from_str(manifest_content) {
         Ok(tracked) => tracked,

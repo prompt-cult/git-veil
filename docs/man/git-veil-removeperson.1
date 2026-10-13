@@ -27,11 +27,11 @@ Email of the collaborator to remove
 Removes a collaborator\*(Aqs entry from the keyring and re\-signs it with the
 owner\*(Aqs Ed25519 signing key. The existing keyring signature is verified
 against the pinned trusted key before any modification. After removal the
-ex\-collaborator can no longer decrypt newly hidden files — but files
+ex\-collaborator can no longer decrypt newly hidden files \- but files
 hidden while they were a member were encrypted to their key, so rotate
 the underlying secrets if that matters.
 
-The keyring is signed with the TRUSTED key — the one whose owner key
+The keyring is signed with the TRUSTED key \- the one whose owner key
 fingerprint is pinned for this repository. With several signing keys
 present, \-\-signing\-key names one by its full 64 hex character Ed25519
 verifying key (the public half, never the seed). A missing signing key

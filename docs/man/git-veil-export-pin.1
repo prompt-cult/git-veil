@@ -10,7 +10,7 @@ Export this repository\*(Aqs pin\-file for import on another machine
 .SH OPTIONS
 .TP
 \fB\-\-output\fR \fI<OUTPUT>\fR
-Pin\-file destination — must be OUTSIDE the repository worktree
+Pin\-file destination \- must be OUTSIDE the repository worktree
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
@@ -29,7 +29,7 @@ signing key (which runs git\-veil trust \-\-import <pin\-file>). Export
 requires the same possession proof as trust: an exact match between the
 repository\*(Aqs committed owner.verifying and the verifying key derived from
 a seed in <key store>/signing\-keys.txt. A machine without the matching
-seed cannot export at all — pins originate only from machines holding the
+seed cannot export at all \- pins originate only from machines holding the
 signing key; store\-less machines are consumers, never producers.
 
 \-\-output must point OUTSIDE the repository worktree: a committed pin\-file

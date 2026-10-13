@@ -77,7 +77,7 @@ pub fn cmd_changes(
 
     let mut changed = Vec::new();
     for file in &targets {
-        // Lstat gate: refuse if the tracked path is a committed symlink —
+        // Lstat gate: refuse if the tracked path is a committed symlink  -
         // reading the on-disk plaintext through it would diff (and print)
         // the link target outside the repository.
         ensure_regular_file(repo_root, file)?;

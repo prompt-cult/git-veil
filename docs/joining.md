@@ -1,7 +1,7 @@
 # Joining an existing team repository
 
 You are the new person. This page separates what **you** run from what the
-**owner** must have run first — most "it doesn't work" cases are an owner
+**owner** must have run first - most "it doesn't work" cases are an owner
 step that has not happened yet.
 
 Example throughout: repository `git@github.com:example/demo.git`, your
@@ -12,10 +12,10 @@ email `newcomer@example.com`, owner key `example@github.com`.
 1. The repository URL (so you can clone).
 2. The **pin-file** for this repository, exported by the owner with
    `git-veil export-pin` on a machine holding the signing key, and sent to
-   you OUT OF BAND (e.g. over ssh) — never committed to the repository.
+   you OUT OF BAND (e.g. over ssh) - never committed to the repository.
 
 That is all. The repository ID you print yourself after cloning (step 3).
-Your own X25519 private key you create yourself (step 2) — git-veil
+Your own X25519 private key you create yourself (step 2) - git-veil
 generates no keys, and a key it made would be a key you never backed up.
 
 ## What the owner must do FIRST (not you)
@@ -35,18 +35,18 @@ $ git-veil tell newcomer@example.com newcomer.pub
 
 (You send them your X25519 public key first: create an X25519 private key
 (age identity) as in step 1 of [docs/solo.md](solo.md) with any key
-generator — git-veil has **no** key generation — import it with
+generator - git-veil has **no** key generation - import it with
 `git-veil import newcomer-age-identity.txt`, and send the `age1...`
 public key line it printed, or `git-veil export age1... --output
 newcomer.pub`.)
 
 The owner then transfers `/tmp/demo.pin` to you out of band (e.g.
-`scp`), and reads you the printed **owner key fingerprint** —
-over a voice call is ideal — so you can compare it with the fingerprint
+`scp`), and reads you the printed **owner key fingerprint**  - 
+over a voice call is ideal - so you can compare it with the fingerprint
 recorded in the repository's committed `.git-veil/trust.json` before you
 import (step 4).
 
-Then — critical — the owner re-hides, because files hidden before you were
+Then - critical - the owner re-hides, because files hidden before you were
 told were not encrypted to your key:
 
 ```sh
@@ -76,7 +76,7 @@ $ git config user.email newcomer@example.com
 
 What just happened: you cloned ciphertext plus `.git-veil/` (keyring,
 trust.json, tracked.json). Decrypting commands resolve your principal
-from `git config user.email` — or pass `--email` explicitly.
+from `git config user.email` - or pass `--email` explicitly.
 
 ### 2. Import your own X25519 private key
 
@@ -90,9 +90,9 @@ What just happened: your X25519 private key (the `AGE-SECRET-KEY-1...`
 line) sits in the per-machine key store `$HOME/.git-veil/identities.txt`
 (never committed, mode 0600). Import ONLY your own key; the owner's
 public half arrives with the clone as the committed `owner.verifying`
-file — the pin-file from the team (step 4) is what lets you pin it. If
+file - the pin-file from the team (step 4) is what lets you pin it. If
 you have not created a private key yet, exit code 21 prints the
-`age-keygen` recipe — and back the private key up; without it the
+`age-keygen` recipe - and back the private key up; without it the
 ciphertexts are unrecoverable.
 
 ### 3. Print the repository ID
@@ -108,7 +108,7 @@ What just happened: the ID is derived from the remote push URL, not from
 your own email. `trust` re-derives and cross-checks it, so a typo fails
 loudly. Non-`origin` remotes: add `--remote <name>`.
 
-### 4. Import the pin-file — per machine
+### 4. Import the pin-file - per machine
 
 ```sh
 $ git-veil trust --import ~/demo.pin
@@ -116,14 +116,14 @@ $ git-veil trust --import ~/demo.pin
 ✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
 ```
 
-What just happened: your machine holds no signing key — it never needs
+What just happened: your machine holds no signing key - it never needs
 one. `trust --import` ran three mandatory consistency checks: the
 pin-file's repository ID matches the one derived from your remote; its
 verifying key exactly matches the repository's committed
 `owner.verifying`; and its fingerprint matches the owner fingerprint
 recorded in the committed `.git-veil/trust.json`. All three agreed, so the
 key was pinned in YOUR `$HOME/.git-veil`, outside the repository. Any
-mismatch is a hard refusal — one of the two channels is compromised —
+mismatch is a hard refusal - one of the two channels is compromised  - 
 and the pin-file path must live OUTSIDE the repository (an in-repo
 pin-file is exactly the self-supplied anchor the model refuses). Before
 importing, compare the fingerprint the owner read to you with the one in
@@ -142,7 +142,7 @@ Total: 2 keys
 
 What just happened: the keyring signature verified against your fresh pin
 and you are listed. If your entry is missing, the owner has not run `tell`
-yet — nothing on your side can fix that.
+yet - nothing on your side can fix that.
 
 ### 6. Reveal
 ```sh
@@ -167,24 +167,24 @@ Run `git-veil error-codes` for the full table; the ones you will actually
 meet as a newcomer:
 
 - `no trust pin exists on this machine for repository identity … derived
-  from remote …. See the trust documentation.` (exit code 11) — you have
+  from remote …. See the trust documentation.` (exit code 11) - you have
   not pinned this repository (the message names its derived repository
   identity and the remote it came from) on this machine: import the
   owner's pin-file (step 4).
 - `user not found in the keyring. Check the principal, or ask the owner
-  to add it` (exit code 22) — the owner has not run `tell` (or has not
+  to add it` (exit code 22) - the owner has not run `tell` (or has not
   pushed the updated keyring; `git pull` first).
 - `decryption failed. This ciphertext was not encrypted to your key and
   no stanza in it is addressed to your X25519 public key` (exit code 60)
-  — the owner told you but did not re-`hide` (or you are on an old
+  - the owner told you but did not re-`hide` (or you are on an old
   commit; `git pull`).
-- `no X25519 private key …` (exit code 21) — your key store lacks your
+- `no X25519 private key …` (exit code 21) - your key store lacks your
   private key; the message prints the creation and backup recipe. Redo
   step 2.
 
 ## Daily use
 
-Identical to any other member — see [docs/solo.md](solo.md) section 6 for
+Identical to any other member - see [docs/solo.md](solo.md) section 6 for
 the edit → `changes` → `hide` → commit → `reveal` cycle. Check with the
 owner before re-hiding a shared repo: `hide` encrypts to the whole current
 keyring (and deletes plaintexts by default; `--keep-plaintext` keeps them).

@@ -33,7 +33,7 @@ pub(crate) fn encrypted_path_for(repo_root: &Path, file: &Path) -> PathBuf {
 }
 
 /// Defence in depth: the ciphertext must stay inside the repository root,
-/// exactly beside its plaintext — i.e. it must be `<plaintext>.secret`.
+/// exactly beside its plaintext - i.e. it must be `<plaintext>.secret`.
 /// Call this after computing the ciphertext path with `encrypted_path_for`;
 /// never re-invent per-call-site path math.
 pub(crate) fn ensure_ciphertext_beside_plaintext(
@@ -89,7 +89,7 @@ pub fn cmd_hide(
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     // Orphaned-ciphertext gate (exit 42, runs before the empty-manifest
-    // early return — an emptied tracked.json is exactly the de-tracking
+    // early return - an emptied tracked.json is exactly the de-tracking
     // attack shape). A committed `.secret` whose plaintext path is no
     // longer tracked would be silently skipped by rotation: removeperson +
     // hide never re-encrypts it, leaving a ciphertext a revoked
@@ -99,7 +99,7 @@ pub fn cmd_hide(
     let tracked_set: HashSet<&PathBuf> = tracked.files.iter().collect();
     // core.quotePath=false + -z: the index listing arrives verbatim (no
     // octal-UTF8 quoting, NUL-separated) so the plaintext-path reversal
-    // below sees the real names — with the default quoting, a committed
+    // below sees the real names - with the default quoting, a committed
     // unicode/space ciphertext name never matches any tracked entry and
     // false-positives the orphan gate into a permanent exit-42 bricking
     // (issue #23).
@@ -122,11 +122,11 @@ pub fn cmd_hide(
         );
     }
     let mut orphans: Vec<String> = Vec::new();
-    // Plaintext paths whose ciphertext is already committed (established —
+    // Plaintext paths whose ciphertext is already committed (established  -
     // no intent needed to re-encrypt them).
     // Issue #19: a committed ciphertext is established only when it PREDATES
     // the manifest entry naming it. The index is attacker-writable, so mere
-    // presence proves nothing — a nomination and a dummy `<path>.secret`
+    // presence proves nothing - a nomination and a dummy `<path>.secret`
     // landing in one commit would otherwise mark the path established and
     // ride past the intent gate. The happen-before result is cached per
     // manifest content hash in the machine-local key store: the key store
@@ -144,7 +144,7 @@ pub fn cmd_hide(
         let line = String::from_utf8_lossy(raw).to_string();
         // Reverse of the ciphertext naming rule: `<name>.secret` guards
         // plaintext `<name>`. A committed file named exactly `.secret` has
-        // no plaintext path — it cannot correspond to ANY tracked path, so
+        // no plaintext path - it cannot correspond to ANY tracked path, so
         // refusing on it would let one attacker-committed junk file brick
         // hide repo-wide (issue #23). Ignore it with a warning instead.
         let ciphertext = PathBuf::from(&line);
@@ -202,7 +202,7 @@ pub fn cmd_hide(
     // otherwise be silent.
     let mut unintended: Vec<String> = Vec::new();
     for file in &tracked.files {
-        // Only paths that HAVE a plaintext can be first-encrypted — a path
+        // Only paths that HAVE a plaintext can be first-encrypted - a path
         // with no plaintext has nothing to exfiltrate and is handled by the
         // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
         // lifecycle").
@@ -234,7 +234,7 @@ pub fn cmd_hide(
 
     // Ciphertext-ignored gate: a `.secret` swallowed by a broad ignore rule
     // (e.g. a parent directory like `.tmp/`) would silently never reach the
-    // repository — add succeeded, but the ciphertext is untrackable. Refuse
+    // repository - add succeeded, but the ciphertext is untrackable. Refuse
     // outright BEFORE encrypting anything (exit code 40).
     let mut ignored_secrets: Vec<String> = Vec::new();
     for file in &tracked.files {
@@ -252,7 +252,7 @@ pub fn cmd_hide(
     }
 
     // Plaintext-leak warning: the plaintext's only protection is its
-    // .gitignore entry, and add only guarantees it at add time — a rename
+    // .gitignore entry, and add only guarantees it at add time - a rename
     // or .gitignore edit can drift it. A blind `git add -A` would then
     // commit the plaintext. Warning only (error code 41); hide proceeds.
     for file in &tracked.files {
@@ -268,7 +268,7 @@ pub fn cmd_hide(
     // Two-phase, all-or-nothing hide (compute-then-commit). PHASE 1 reads and
     // validates every tracked plaintext and encrypts EVERY file to the full
     // public key set, holding all ciphertexts in memory; ANY failure here
-    // aborts with nothing changed on disk — no mixed state where some files
+    // aborts with nothing changed on disk - no mixed state where some files
     // are hidden and others remain plaintext. Memory trade: secrets are
     // small config-scale files, so holding every ciphertext in memory is
     // acceptable; hide is not a bulk-archival path.
@@ -288,7 +288,7 @@ pub fn cmd_hide(
         // lifecycle, never an error. With a ciphertext present (disk or
         // committed) the file is already hidden; with neither, it was never
         // hidden and has nothing to hide. Either way there is nothing to
-        // encrypt — and nothing to exfiltrate — so the path is skipped.
+        // encrypt - and nothing to exfiltrate - so the path is skipped.
         if !repo_root.join(file).exists() {
             let state =
                 if encrypted_path_for(repo_root, file).exists() || established.contains(file) {
@@ -360,7 +360,7 @@ pub fn cmd_hide(
     // lifecycle"): the plaintext's only worktree protection is a
     // .gitignore line, so it is deleted once every ciphertext is durably
     // on disk. --keep-plaintext opts out. The delete happens only after
-    // the full all-or-nothing write phase above succeeded — at worst both
+    // the full all-or-nothing write phase above succeeded - at worst both
     // copies exist, never neither.
     if !keep_plaintext {
         for (file, _, _) in &prepared {

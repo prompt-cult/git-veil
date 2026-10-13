@@ -31,7 +31,7 @@ use sha2::{Digest, Sha256};
 /// SHA-256 over the UTF-8 label, exactly one colon separator, and the
 /// UTF-8 public key encoding, printed as 64 lowercase hex characters.
 ///
-/// The inputs are used verbatim — no trimming, no case folding — so the
+/// The inputs are used verbatim - no trimming, no case folding - so the
 /// result matches the stock-tool one-liners byte for byte.
 pub fn fingerprint_for_public_key(label: &str, public_key_encoding: &str) -> String {
     let mut hasher = Sha256::new();
@@ -44,8 +44,8 @@ pub fn fingerprint_for_public_key(label: &str, public_key_encoding: &str) -> Str
 /// The owner key fingerprint: the single derivation with the repository
 /// id as the label and the canonical lowercase hex of the Ed25519
 /// verifying key bytes as the public key encoding. Deriving the hex from
-/// the key bytes (never from a file string) keeps every channel — pin,
-/// committed metadata, pin-file — in agreement regardless of file casing.
+/// the key bytes (never from a file string) keeps every channel - pin,
+/// committed metadata, pin-file - in agreement regardless of file casing.
 pub fn owner_key_fingerprint(repo_id: &str, verifying_key: &ed25519_dalek::VerifyingKey) -> String {
     fingerprint_for_public_key(repo_id, &hex::encode(verifying_key.to_bytes()))
 }

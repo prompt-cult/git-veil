@@ -11,7 +11,7 @@ use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{cmd_verify_keyring, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
-/// index — see docs/design.md "Ignore safety" gate 4 and issue #15.
+/// index - see docs/design.md "Ignore safety" gate 4 and issue #15.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
@@ -70,7 +70,7 @@ pub fn cmd_reveal(
     // Two-phase, all-or-nothing reveal (compute-then-commit). PHASE 1
     // verifies every tracked file's ciphertext exists and decrypts ALL of
     // them into memory; ANY failure (missing ciphertext, key error) aborts
-    // with nothing changed on disk — no mixed state where some files are
+    // with nothing changed on disk - no mixed state where some files are
     // revealed and others remain hidden. Memory trade: secrets are small
     // config-scale files, so holding every plaintext in memory is
     // acceptable; reveal is not a bulk-restoration path.

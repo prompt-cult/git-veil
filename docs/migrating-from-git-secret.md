@@ -1,7 +1,7 @@
 # Migrating from git-secret to git-veil
 
-git-veil is a git-secret work-alike: the mental model — tracked files
-encrypted in place to a per-repository keyring of collaborator keys — maps
+git-veil is a git-secret work-alike: the mental model - tracked files
+encrypted in place to a per-repository keyring of collaborator keys - maps
 over almost one-to-one. What does NOT map is the material itself: git-veil
 does not maintain compatibility with git-secret's cryptographic material
 (see the [README's compatibility statement](../README.md#compatibility-with-git-secret)).
@@ -27,12 +27,12 @@ To be plain about it:
 
 So there is no in-place upgrade: the path is *reveal everything, tear down
 git-secret, re-key with git-veil, re-hide*. Everything stays plain files
-in between, so the migration is low-drama — but plan a moment when nobody
+in between, so the migration is low-drama - but plan a moment when nobody
 else is pushing.
 
 ## What git-veil deliberately does differently
 
-These are factual differences, not judgements — git-veil is inspired by
+These are factual differences, not judgements - git-veil is inspired by
 git-secret, and git-secret works fine for many teams. But they change
 habits, so they are stated up front:
 
@@ -44,7 +44,7 @@ habits, so they are stated up front:
    `age-keygen` (or `rage-keygen`) and moved as plain text files, with
    `import` (your own private key, per machine) and `export` (the public
    key, to hand to the owner). Your existing OpenPGP keys do NOT carry
-   over — the migration includes creating fresh X25519 keys.
+   over - the migration includes creating fresh X25519 keys.
 2. **The keyring is signed and tamper-evident.** git-secret's
    `.gitsecret/keys/` keyring is an ordinary gpg keyring; nothing in
    git-secret detects it being edited in place. git-veil's keyring file
@@ -53,7 +53,7 @@ habits, so they are stated up front:
    encryption, decryption or keyring mutation. A tampered keyring fails
    closed.
 3. **Trust is pinned per machine.** With git-secret, a fresh clone worked
-   as soon as your `~/.gnupg` had a matching private key — the trust
+   as soon as your `~/.gnupg` had a matching private key - the trust
    anchor was implicit in your keychain. In git-veil the trust anchor is
    an explicit pin of the owner's signing key, stored in your local key
    store and never committed. Machines holding the signing key pin with
@@ -61,8 +61,8 @@ habits, so they are stated up front:
    imports a pin-file exported by one (`git-veil trust --import`), which
    travels out of band. This is the single biggest new habit.
 4. **Keys are proven at the door.** `tell` test-encrypts an in-memory
-   canary to a new collaborator's key before signing it into the ring — a
-   key that cannot encrypt never enters the keyring — and `trust` proves
+   canary to a new collaborator's key before signing it into the ring - a
+   key that cannot encrypt never enters the keyring - and `trust` proves
    possession of the seed matching the committed `owner.verifying` before
    pinning it. (git-secret's
    `tell` warns about invalid keys since 0.3.2 but the keyring itself is
@@ -70,7 +70,7 @@ habits, so they are stated up front:
 5. **hide/reveal keep both sides by default.** `hide` encrypts and KEEPS
    the plaintext (deletion is the default since 0.5.x; `--keep-plaintext` opts out,
    mirroring git-secret's `-d`), and `reveal` writes the plaintexts and
-   LEAVES the `.secret` files in place — the same defaults git-secret has.
+   LEAVES the `.secret` files in place - the same defaults git-secret has.
    git-veil additionally refuses `hide` outright when a `.secret` path is
    git-ignored (e.g. swallowed by a parent-directory rule), a silent-loss
    mode git-secret does not detect. See the cheat-sheet for the mapping.
@@ -94,12 +94,12 @@ $ cat .gitsecret/paths/mapping.cfg   # same list, in git-secret's own store
 
 What just happened: every tracked file now exists as plaintext on disk.
 git-secret's `list` reads its path mappings from
-`.gitsecret/paths/mapping.cfg`; capture both outputs — this is the exact
+`.gitsecret/paths/mapping.cfg`; capture both outputs - this is the exact
 file list you will `git-veil add` in step 4. Save the plaintexts somewhere
 safe outside the repo until step 5's verification (do not commit them).
 
 Note for teams whose workflow was `git secret hide -d`: if some tracked
-files have *no* plaintext on disk right now, this is why — `hide -d`
+files have *no* plaintext on disk right now, this is why - `hide -d`
 deleted it and only ciphertext remains. `git secret reveal` brings them
 back; make sure all tracked files decrypt before moving on (a stale
 keyring or gpg version mismatch shows up here first).
@@ -121,12 +121,12 @@ and `paths/`) and added `.gitsecret/keys/random_seed` to `.gitignore`; all
 other `.gitsecret/` contents were meant to be committed. Deleting the
 directory and dropping that one `.gitignore` line is the full teardown.
 The plaintext-name lines that `git secret add` appended to `.gitignore`
-(`.env` etc.) **stay** — git-veil wants exactly the same rule: ignore the
+(`.env` etc.) **stay** - git-veil wants exactly the same rule: ignore the
 plaintext names, commit the `.secret` ciphertexts. Keep those lines as
 they are.
 
 One warning: do NOT use `git secret clean` as a teardown shortcut. It
-deletes every file ending in `.secret` in the repo — tracked or not —
+deletes every file ending in `.secret` in the repo - tracked or not  - 
 which is fine here only because step 1 already put plaintexts on disk, but
 it is a habit that destroys the only copy of a secret in normal use.
 
@@ -135,7 +135,7 @@ it is a habit that destroys the only copy of a secret in normal use.
 git-veil never generates keys, and your existing OpenPGP keys do not carry
 over: encryption is age (X25519) and keyring signing is raw Ed25519, so
 this step creates fresh key material with `age-keygen` and `openssl`.
-See [docs/solo.md](solo.md) step 1 for the details — and back the private
+See [docs/solo.md](solo.md) step 1 for the details - and back the private
 halves up.
 
 The owner, in the repo:
@@ -212,7 +212,7 @@ and the `.env.secret` files. Repeat `add` + `hide` for every file from
 your step-1 list, then spot-check `git-veil list` against it.
 
 Note: your pre-push plaintexts from step 1 are still on disk and still
-gitignored — exactly the state git-secret left them in. `hide` refuses
+gitignored - exactly the state git-secret left them in. `hide` refuses
 (exit code 40) if any `.secret` path is itself git-ignored, and warns
 (exit code 41 in the message) if a plaintext is not gitignored.
 
@@ -244,7 +244,7 @@ $ sha256sum .env               # or compare bytes against your step-1 copy
 
 Checklist:
 
-- [ ] `trust` run on this machine — **this step is new for git-secret
+- [ ] `trust` run on this machine - **this step is new for git-secret
       users**: your gpg keychain "just worked" before because the trust
       anchor was implicit in it; here each machine pins the owner key
       explicitly, and every gated command fails closed without the pin
@@ -257,7 +257,7 @@ Checklist:
       owner runs `git-veil tell` for them and re-hides (see
       [docs/joining.md](joining.md))
 - [ ] Anyone leaving the team: `removeperson` + re-hide, and rotate the
-      secrets they ever saw — the same forward-looking-revocation rules as
+      secrets they ever saw - the same forward-looking-revocation rules as
       git-secret apply (see [docs/departing.md](departing.md))
 
 ## Cheat-sheet: git-secret → git-veil
@@ -265,7 +265,7 @@ Checklist:
 | git-secret                              | git-veil                        | Notes |
 |-----------------------------------------|---------------------------------|-------|
 | `git secret init`                       | `git-veil init` + `git-veil trust` | Setup splits in two: `init` creates `.git-veil/`, `trust` pins the owner's key per machine (git-secret had no pin step) |
-| `git secret tell`                       | `git-veil import` + `git-veil tell` | Two steps, because there is no gpg keychain for `tell` to find keys in — public keys arrive as files; `import` is for *your own* X25519 private key (per machine) |
+| `git secret tell`                       | `git-veil import` + `git-veil tell` | Two steps, because there is no gpg keychain for `tell` to find keys in - public keys arrive as files; `import` is for *your own* X25519 private key (per machine) |
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
 | `git secret add`                        | `git-veil add`                  | Both append the plaintext name to `.gitignore` when not already ignored; git-veil additionally warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove`               | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
@@ -274,12 +274,12 @@ Checklist:
 | `git secret cat`                        | `git-veil cat`                  | Both print one file to stdout without touching disk state |
 | `git secret changes`                    | `git-veil changes`              | Both compare on-disk plaintext with the last hidden version |
 | `git secret list`                       | `git-veil list`                 | git-secret reads `.gitsecret/paths/mapping.cfg`; git-veil reads `.git-veil/tracked.json` |
-| `git secret removeperson`               | `git-veil removeperson`         | Both remove a member from the repo keyring; both are forward-looking only — see [docs/departing.md](departing.md) |
+| `git secret removeperson`               | `git-veil removeperson`         | Both remove a member from the repo keyring; both are forward-looking only - see [docs/departing.md](departing.md) |
 | `git secret killperson` (≤ 0.4.0)       | `git-veil removeperson`         | `killperson` was renamed to `removeperson` in git-secret 0.5.0; it always meant "delete from the repo's inner keyring", not from your gpg keyring |
 | *(departing user's own key)*            | `git-veil removekey`            | git-secret has no equivalent: your private key lived in `~/.gnupg` and you managed it with `gpg` yourself. `removekey` is the local-store housekeeping step (local-only, destructive) |
-| `git secret clean`                      | *(no bulk equivalent)*          | git-secret `clean` deletes all `*.secret` files repo-wide; git-veil deletes one file's ciphertext with `unhide <file>` — there is no repo-wide ciphertext deletion |
+| `git secret clean`                      | *(no bulk equivalent)*          | git-secret `clean` deletes all `*.secret` files repo-wide; git-veil deletes one file's ciphertext with `unhide <file>` - there is no repo-wide ciphertext deletion |
 | `git secret usage`                      | `git-veil help`                 | Also `git-veil help <command>` for a workflow discussion, `git-veil <command> --help` for flags |
-| *(none — verify-keyring)*               | `git-veil verify-keyring`       | No git-secret counterpart: git-secret's keyring is an unsigned gpg keyring, so there is nothing to verify. (git-secret has no `warnings` command — its invalid-key notices come from `tell`/`whoknows` output) |
+| *(none - verify-keyring)*               | `git-veil verify-keyring`       | No git-secret counterpart: git-secret's keyring is an unsigned gpg keyring, so there is nothing to verify. (git-secret has no `warnings` command - its invalid-key notices come from `tell`/`whoknows` output) |
 | *(none)*                                | `git-veil trust`, `import`, `export`, `unhide`, `whoami`, `show-repo-id` | The rest of the machinery: per-machine trust pin, key hand-off without a gpg keychain, single-file reveal, principal/store introspection |
 
 ## Sources

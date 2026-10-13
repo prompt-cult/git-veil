@@ -18,13 +18,13 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 <\fIFILES\fR>
 File(s) containing AGE\-SECRET\-KEY\-1... lines (age\-keygen output works as\-is)
 .SH EXTRA
-Imports X25519 private keys (age identities — the AGE\-SECRET\-KEY\-1...
+Imports X25519 private keys (age identities \- the AGE\-SECRET\-KEY\-1...
 lines produced by age\-keygen) into your per\-machine key store
 ($GIT_VEIL_HOME or $HOME/.git\-veil). This is where reveal/cat/unhide/
 changes find the private key matching your keyring entry. The key store
 is local to this machine and is never committed; each collaborator
 imports their own private key. The store is written mode 0600 regardless
-of umask. git\-veil never generates keys — create yours with age\-keygen
+of umask. git\-veil never generates keys \- create yours with age\-keygen
 (or rage\-keygen) and back the AGE\-SECRET\-KEY\-1... line up; without it,
 ciphertexts encrypted to you are unrecoverable.
 

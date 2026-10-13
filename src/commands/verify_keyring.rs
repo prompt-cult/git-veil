@@ -22,12 +22,12 @@ fn legacy_fingerprint_error() -> anyhow::Error {
     )
 }
 
-/// Loads the Ed25519 verifying key whose owner key fingerprint — the
-/// single derivation with the repository id as the label — equals
+/// Loads the Ed25519 verifying key whose owner key fingerprint - the
+/// single derivation with the repository id as the label - equals
 /// `fingerprint`, from the key store.
 ///
 /// Like every key store read, a non-comment line that does not parse is a
-/// hard refusal (code 62) naming the corrupt line — never a silent skip
+/// hard refusal (code 62) naming the corrupt line - never a silent skip
 /// that would misreport the pin as missing.
 fn load_verifying_key_by_fingerprint(
     key_store: &Path,
@@ -110,7 +110,7 @@ pub fn verify_keyring_against_trust(
     // A 16 hex character value is a retired fingerprint (issue #41):
     // hostile wherever it is found. The pin is checked before the
     // committed record so a missing pin stays a missing pin and a legacy
-    // pin is never silently compared away; nothing is rewritten — the
+    // pin is never silently compared away; nothing is rewritten - the
     // recovery is re-establishing the pin.
     let pinned = match TrustPinStore::read_pin(key_store, &repo_id)? {
         Some(pinned) => {
@@ -179,13 +179,13 @@ pub fn verify_keyring_against_trust(
     // not that it is current. A `git revert` of a removeperson commit would
     // otherwise silently return a revoked collaborator to the keyring.
     // The per-machine baseline (highest version ever accepted here, stored
-    // outside the repo beside the pin) turns any version regression —
-    // including a versionless pre-freshness keyring, which counts as 0 —
+    // outside the repo beside the pin) turns any version regression  -
+    // including a versionless pre-freshness keyring, which counts as 0  -
     // into a fail-closed refusal.
     //
     // An UNSIGNED zero-entry keyring (the fresh-init state) is unauthenticated
     // repo content: it is accepted as version 0 but must NEVER move the
-    // baseline — otherwise an attacker's junk ring (e.g. version:u64::MAX,
+    // baseline - otherwise an attacker's junk ring (e.g. version:u64::MAX,
     // issue #22) poisons the baseline and bricks every machine past a revert
     // of the attacker's commit.
     //
@@ -193,7 +193,7 @@ pub fn verify_keyring_against_trust(
     // digest of the accepted signed content. An equal-version keyring with
     // DIFFERENT content (two machines curating without pulling, or an
     // attacker substituting a same-version ring) is refused as the same
-    // trust violation class as a rollback — re-trust is the recovery.
+    // trust violation class as a rollback - re-trust is the recovery.
     let unsigned_empty = keyring.entries.is_empty() && keyring.signature.is_none();
     let observed = if unsigned_empty {
         0

@@ -6,9 +6,9 @@
 //! crate's own vocabulary is this import, where the upstream type names are
 //! aliased to the crypto terms used everywhere else:
 //!
-//! - `age::x25519::Recipient` — the bech32 X25519 public key — is
+//! - `age::x25519::Recipient` - the bech32 X25519 public key - is
 //!   [`X25519PublicKey`]
-//! - `age::x25519::Identity` — the bech32 X25519 private key — is
+//! - `age::x25519::Identity` - the bech32 X25519 private key - is
 //!   [`X25519PrivateKey`]
 
 pub(crate) use age::x25519::{Identity as X25519PrivateKey, Recipient as X25519PublicKey};
@@ -228,7 +228,7 @@ pub fn import_x25519_public_key_to_store(key_store: &Path, public_key_str: &str)
 /// Returns an empty Vec if the store is absent (fresh machine).
 ///
 /// A non-comment line that does not parse is a hard refusal (code 62)
-/// naming the corrupt line — key material is never silently skipped.
+/// naming the corrupt line - key material is never silently skipped.
 pub fn load_x25519_private_keys_from_store(
     key_store: &Path,
 ) -> Result<Vec<(X25519PrivateKey, String)>> {
