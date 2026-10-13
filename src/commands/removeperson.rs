@@ -37,10 +37,7 @@ pub fn cmd_removeperson(
     if keyring.find_by_email(email_to_remove).is_none() {
         return Err(coded(
             ExitCode::IdentityNotInKeyring,
-            format!(
-                "'{}' not found in keyring; check the email against git-veil list-keys",
-                email_to_remove
-            ),
+            "that identity is not in the keyring. Check the email against the keyring listing.",
         ));
     }
 
@@ -78,6 +75,6 @@ pub fn cmd_removeperson(
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
-    println!("✓ Removed {} from keyring", email_to_remove);
+    println!("removed {} from the keyring", email_to_remove);
     Ok(())
 }

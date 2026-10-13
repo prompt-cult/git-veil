@@ -165,15 +165,22 @@ Every gated command verifies the keyring signature through
 `verify_keyring_against_trust` (src/commands/verify_keyring.rs), which:
 
 1. reads the fingerprint `trust.json` claims for the repo id;
-2. reads the local pin and **fails closed** on any disagreement:
-   - committed record missing → `no trust established for <repo_id> … pin this repository's key on this machine with git-veil trust <repo_id> or git-veil trust --import <pin-file>`
-     (exit code 10),
-   - pin missing → `no local pin for <repo_id> … pin this repository with git-veil trust <repo_id> or git-veil trust --import <pin-file>`
-     (exit code 11) — the error names exactly the two pin-creation paths
-     and nothing else,
+2. reads the local pin and **fails closed** on any disagreement. Every
+   refusal below is a plain ASCII statement that names no repository
+   identity, no fingerprint, no path and no command line; the remedy is
+   this document, which the operator reads deliberately:
+   - committed record missing → `no trust record for this repository. See
+     the trust documentation.` (exit code 10);
+   - committed record present but naming a different repository identity →
+     `the committed trust record names a different repository identity
+     than this repository derives. This looks like a rename or a remote
+     change based on the existing trust record.` (exit code 10);
+   - pin missing → `no trust pin exists on this machine. See the trust
+     documentation.` (exit code 11);
    - pin present but different (case-insensitively) from the committed
-     fingerprint → `trust for <repo_id> … changed on this machine's record (<pinned> → <committed>); … re-pin with git-veil trust <repo_id> or git-veil trust --import <pin-file>`
-     (exit code 12);
+     fingerprint → `the pinned repository identity changed on this
+     machine. The committed trust record and this machine pin disagree. See
+     the trust documentation.` (exit code 12);
 3. loads the pinned key from the key store (`load_verifying_key_by_fingerprint`,
    src/commands/verify_keyring.rs) and verifies the keyring signature against
    it (`verify_keyring_signature`, src/signing.rs); a keyring with entries but

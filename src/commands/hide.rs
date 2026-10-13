@@ -67,7 +67,7 @@ pub fn cmd_hide(
     let _ = &keyring;
 
     if keyring.entries.is_empty() {
-        anyhow::bail!("No keys in keyring. Add collaborators with 'git-veil tell' first.");
+        anyhow::bail!("no keys in the keyring. Add a collaborator first.");
     }
 
     // Parse all recipient strings
@@ -215,8 +215,7 @@ pub fn cmd_hide(
     if !ignored_secrets.is_empty() {
         return Err(coded(
             ExitCode::CiphertextIgnored,
-            format!(
-                "refusing to hide: the ciphertext path(s) below are git-ignored, so they would never reach the repository; fix .gitignore first (error code 40):\n  {}",
+            format!(                "refusing to hide: the ciphertext paths below are git-ignored with error code 40 so they would never reach the repository. Fix .gitignore first:\n  {}",
                 ignored_secrets.join("\n  ")
             ),
         ));
@@ -230,7 +229,7 @@ pub fn cmd_hide(
         let relative_str = file.to_string_lossy();
         if repo_root.join(file).exists() && !is_gitignored(repo_root, &relative_str)? {
             println!(
-                "warning: tracked plaintext '{}' is not git-ignored; a blind `git add -A` would commit it (error code 41)",
+                "warning: the tracked plaintext is not git-ignored with error code 41. A blind add of every file would commit it: {}",
                 relative_str
             );
         }
@@ -263,9 +262,9 @@ pub fn cmd_hide(
         if !repo_root.join(file).exists() {
             let state =
                 if encrypted_path_for(repo_root, file).exists() || established.contains(file) {
-                    "already hidden (plaintext absent)"
+                    "already hidden because the plaintext is absent"
                 } else {
-                    "never hidden (no plaintext, no ciphertext)"
+                    "never hidden because there is no plaintext and no ciphertext"
                 };
             skipped.push(format!("{}: {}", file.display(), state));
             continue;
@@ -317,7 +316,7 @@ pub fn cmd_hide(
 
     if let Some(err) = first_error {
         return Err(err.context(format!(
-            "hide failed: {} of {} ciphertext(s) written",
+            "hide failed: {} of {} ciphertexts written",
             written.len(),
             prepared.len()
         )));
@@ -343,6 +342,6 @@ pub fn cmd_hide(
         }
     }
 
-    println!("✓ Files hidden");
+    println!("files hidden");
     Ok(())
 }

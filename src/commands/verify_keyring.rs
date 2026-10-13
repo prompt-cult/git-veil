@@ -34,15 +34,11 @@ fn load_verifying_key_by_fingerprint(
         Ok(())
     })?;
 
+    let _ = repo_id_for_hint;
     found.ok_or_else(|| {
         coded(
             ExitCode::NoTrustPin,
-            format!(
-                "Trusted key with fingerprint {} not found in {}; re-run git-veil trust {} on this machine",
-                wanted,
-                verifying_keys_path.display(),
-                repo_id_for_hint
-            ),
+            "the pinned trusted key is not present in this machine key store. See the trust documentation.".to_string(),
         )
     })
 }
@@ -74,25 +70,12 @@ pub fn verify_keyring_against_trust(
             if trust_store.trusted_keys.is_empty() {
                 return Err(coded(
                     ExitCode::NoTrustRecord,
-                    format!(
-                        "no trust established for {} (from remote '{}'); pin this repository's key on this machine with git-veil trust {} or git-veil trust --import <pin-file>",
-                        repo_id, remote_name, repo_id
-                    ),
+                    "no trust record for this repository. See the trust documentation.".to_string(),
                 ));
             }
-            let pinned_ids: Vec<&str> = trust_store
-                .trusted_keys
-                .keys()
-                .map(String::as_str)
-                .collect();
             return Err(coded(
                 ExitCode::NoTrustRecord,
-                format!(
-                    "trust.json records trust for {} but this repository derives {} from remote {}. this looks like a rename or a remote change based on the existing trust record",
-                    pinned_ids.join(", "),
-                    repo_id,
-                    remote_name
-                ),
+                "the committed trust record names a different repository identity than this repository derives. This looks like a rename or a remote change based on the existing trust record.".to_string(),
             ));
         }
     };
@@ -102,20 +85,18 @@ pub fn verify_keyring_against_trust(
     // pin written by cmd_trust, and fail closed on any disagreement.
     match TrustPinStore::read_pin(key_store, &repo_id)? {
         Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
-        Some(pinned) => return Err(coded(
-            ExitCode::TrustMismatch,
-            format!(
-                "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-pin with git-veil trust {} or git-veil trust --import <pin-file>",
-                repo_id, remote_name, pinned, trusted_fingerprint, repo_id
-            ),
-        )),
-        None => return Err(coded(
-            ExitCode::NoTrustPin,
-            format!(
-                "no local pin for {} (from remote '{}'); pin this repository with git-veil trust {} or git-veil trust --import <pin-file>",
-                repo_id, remote_name, repo_id
-            ),
-        )),
+        Some(_) => {
+            return Err(coded(
+                ExitCode::TrustMismatch,
+                "the pinned repository identity changed on this machine. The committed trust record and this machine pin disagree. See the trust documentation.".to_string(),
+            ))
+        }
+        None => {
+            return Err(coded(
+                ExitCode::NoTrustPin,
+                "no trust pin exists on this machine. See the trust documentation.".to_string(),
+            ))
+        }
     }
 
     // Load signing (verifying) public key
@@ -140,17 +121,14 @@ pub fn verify_keyring_against_trust(
             .map_err(|_| {
                 coded(
                     ExitCode::SignatureVerificationFailed,
-                    format!(
-                        "keyring signature verification failed for {}; the keyring or its signature does not match the pinned trusted key",
-                        repo_id
-                    ),
+                    "keyring signature verification failed. The keyring or its signature does not match the pinned trusted key.".to_string(),
                 )
             })?;
     } else if !keyring.entries.is_empty() {
         return Err(coded(
             ExitCode::SignatureVerificationFailed,
             format!(
-                "Keyring contains {} entries but has no signature; refusing to trust unverified keyring",
+                "keyring contains {} entries but has no signature. Refusing to trust an unverified keyring.",
                 keyring.entries.len()
             ),
         ));
@@ -193,10 +171,7 @@ pub fn verify_keyring_against_trust(
         if bv > observed {
             return Err(coded(
                 ExitCode::KeyringRollback,
-                format!(
-                    "keyring rollback refused for {}: version {} is below this machine's freshness baseline {}; if this rollback is intended, re-run git-veil trust {} to reset it (exit code 14)",
-                    repo_id, observed, bv, repo_id
-                ),
+                "keyring rollback refused. The presented version is below this machine freshness baseline. See the keyring freshness documentation.".to_string(),
             ));
         }
         if bv == observed {
@@ -204,10 +179,7 @@ pub fn verify_keyring_against_trust(
                 if bd != cd {
                     return Err(coded(
                         ExitCode::KeyringRollback,
-                        format!(
-                            "keyring fork refused for {}: the version-{} keyring accepted on this machine has different content than the one presented (equal-version substitution); if this is intended, re-run git-veil trust {} to reset the baseline (exit code 14)",
-                            repo_id, observed, repo_id
-                        ),
+                        "keyring fork refused. The keyring accepted on this machine at this version has different content than the one presented. This is an equal version substitution. See the keyring freshness documentation.".to_string(),
                     ));
                 }
             }
@@ -229,9 +201,8 @@ pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, key_store: &Path)
     let (repo_id, fingerprint, keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
-    println!("✓ Keyring signature verified");
-    println!("Signed by fingerprint: {}", fingerprint);
-    println!("Repository ID: {}", repo_id);
-    println!("Keys in keyring: {}", keyring.entries.len());
+    let _ = (&repo_id, &fingerprint);
+    println!("keyring signature verified");
+    println!("keys in keyring: {}", keyring.entries.len());
     Ok(())
 }

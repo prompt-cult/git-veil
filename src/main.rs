@@ -54,7 +54,7 @@ fn handle_help_subcommand(rest: &[String]) -> Result<()> {
         }
         Some(name) => {
             let Some(sub) = root.find_subcommand(name.as_str()) else {
-                eprintln!("error: unrecognized subcommand '{name}'");
+                eprintln!("error: unrecognized subcommand");
                 std::process::exit(2);
             };
             let mut sub = sub.clone();
@@ -140,7 +140,9 @@ fn run() -> Result<()> {
                 // clap's required_unless_present/conflicts_with make both
                 // remaining arms unreachable; keep them total anyway.
                 (Some(_), Some(_)) => anyhow::bail!("--import cannot be combined with a repo_id"),
-                (None, None) => anyhow::bail!("trust requires a repo_id or --import <pin-file>"),
+                (None, None) => anyhow::bail!(
+                    "trust requires a repository id or the import flag with a pin file"
+                ),
             }
         }
         Commands::ExportPin {

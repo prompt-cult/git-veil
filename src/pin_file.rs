@@ -62,7 +62,7 @@ impl PinFile {
             let (key, value) = line.split_once(':').ok_or_else(|| {
                 coded(
                     ExitCode::KeyParseFailure,
-                    format!("pin-file line {} is not a '<key>: <value>' line", index + 1),
+                    format!("pin file line {} is not a key and value line", index + 1),
                 )
             })?;
             let key = key.trim();
@@ -95,7 +95,7 @@ impl PinFile {
                 _ => {
                     return Err(coded(
                         ExitCode::KeyParseFailure,
-                        format!("pin-file carries an unknown field '{}'", key),
+                        format!("pin file carries an unknown field {}", key),
                     ));
                 }
             }
@@ -144,10 +144,7 @@ pub fn derive_and_check_repo_id(repo_root: &Path, remote_name: &str, repo_id: &s
     if repo_id != computed {
         return Err(coded(
             ExitCode::TrustRepoIdMismatch,
-            format!(
-                "Repository ID mismatch: provided '{}' does not match computed '{}'",
-                repo_id, computed
-            ),
+            "the provided repository id does not match the one derived from the remote",
         ));
     }
     Ok(())

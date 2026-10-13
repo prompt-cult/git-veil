@@ -18,7 +18,7 @@ use crate::fs_atomic::write_atomic_mode;
 /// newline-separated identity strings.
 pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Result<()> {
     if files.is_empty() {
-        anyhow::bail!("no key files given; pass one or more age identity files, e.g. git-veil import alice.age");
+        anyhow::bail!("no key files given. Pass one or more age identity files.");
     }
     let identities_path = key_store.join("identities.txt");
 
@@ -73,7 +73,7 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Resul
             if known.contains(&fingerprint) {
                 skipped += 1;
                 println!(
-                    "= skipped (already imported): {} ({})",
+                    "= skipped because already imported: {} {}",
                     recipient, fingerprint
                 );
             } else {
@@ -84,7 +84,7 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Resul
                 identities_content.push('\n');
                 known.insert(fingerprint.clone());
                 imported += 1;
-                println!("+ imported: {} ({})", recipient, fingerprint);
+                println!("+ imported: {} {}", recipient, fingerprint);
             }
         }
 

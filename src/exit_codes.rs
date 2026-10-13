@@ -116,44 +116,32 @@ impl ExitCode {
     pub fn description(self) -> &'static str {
         match self {
             ExitCode::GeneralError => "Failure without a more specific code",
-            ExitCode::NoTrustRecord => {
-                "Committed trust.json has no entry for this repository; run git-veil trust"
-            }
-            ExitCode::NoTrustPin => {
-                "No local trust pin on this machine; run git-veil trust"
-            }
-            ExitCode::TrustMismatch => {
-                "Committed trust.json disagrees with this machine's pin; re-pin if intended"
-            }
+            ExitCode::NoTrustRecord => "No committed trust entry for this repository",
+            ExitCode::NoTrustPin => "No local trust pin on this machine",
+            ExitCode::TrustMismatch => "The committed trust record disagrees with this machine pin",
             ExitCode::TrustRepoIdMismatch => {
                 "repo_id argument does not match the one derived from the remote"
             }
-            ExitCode::KeyringRollback => {
-                "Keyring version is below this machine's freshness baseline; re-run git-veil trust if the rollback is intended"
-            }
-            ExitCode::NoSigningKey => {
-                "No Ed25519 signing key in the key store; create one and back it up"
-            }
+            ExitCode::KeyringRollback => "Keyring version is below this machine freshness baseline",
+            ExitCode::NoSigningKey => "No Ed25519 signing key in the key store",
             ExitCode::NoAgeIdentity => {
-                "No age identity in the key store matching your keyring entry; create and import one"
+                "No age identity in the key store matching your keyring entry"
             }
-            ExitCode::IdentityNotInKeyring => {
-                "Your email is not in the signed keyring; ask the owner to tell you"
-            }
+            ExitCode::IdentityNotInKeyring => "Your identity is not in the signed keyring",
             ExitCode::UnsafeKeyStorePermissions => {
                 "Key store directory or private key file is group/world accessible"
             }
             ExitCode::CiphertextIgnored => {
-                "A .secret ciphertext path is git-ignored (fatal in hide; warning in add)"
+                "A ciphertext path is git-ignored which is fatal in hide and a warning in add"
             }
             ExitCode::PlaintextNotIgnored => {
-                "Tracked plaintext on disk is not git-ignored (warning; exit stays 0)"
+                "Tracked plaintext on disk is not git-ignored which is a warning only"
             }
             ExitCode::OrphanedCiphertext => {
-                "A committed .secret ciphertext path is not tracked; hide refuses"
+                "A committed ciphertext path is not tracked which hide refuses"
             }
             ExitCode::PlaintextTracked => {
-                "The plaintext is tracked in git; reveal/unhide refuse (git rm --cached it if it is a secret)"
+                "The plaintext is tracked in git which reveal and unhide refuse"
             }
             ExitCode::DecryptionFailed => {
                 "Ciphertext could not be decrypted with the local identity"
@@ -161,14 +149,12 @@ impl ExitCode {
             ExitCode::EncryptionFailed => "Encryption failed",
             ExitCode::KeyParseFailure => "A key, keyring or signature could not be parsed",
             ExitCode::SignatureVerificationFailed => "Keyring signature missing or invalid",
-            ExitCode::Refused => {
-                "Policy refusal (e.g. init over established trust, clean without --yes)"
-            }
+            ExitCode::Refused => "Policy refusal such as init over established trust",
             ExitCode::UnsafePath => {
-                "Path-safety refusal (symlink, outside repository, unsafe tracked path)"
+                "Path safety refusal such as a symlink or a path outside the repository"
             }
             ExitCode::UnintendedEncryption => {
-                "hide refuses to encrypt a file the user never added on this machine (tracked.json nomination)"
+                "hide refuses to encrypt a file the user never added on this machine"
             }
         }
     }

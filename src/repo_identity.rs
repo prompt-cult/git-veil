@@ -78,9 +78,7 @@ pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
     // Never echo the failing URL: the user typed it, and echoing it risks
     // surfacing embedded credentials (redaction is shape-dependent and
     // cannot be made exhaustive). A fixed message carries no input material.
-    anyhow::bail!(
-        "invalid git remote URL format; expected a supported GitHub/GitLab/Codeberg shape — see git-veil help trust"
-    )
+    anyhow::bail!("invalid git remote URL format. Expected a supported GitHub GitLab or Codeberg shape. See the trust documentation.")
 }
 
 /// Gets the push URL for a given remote from a git repository.
@@ -100,7 +98,7 @@ pub fn get_remote_push_url(repo_path: &Path, remote_name: &str) -> Result<String
 
     let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if url.is_empty() {
-        anyhow::bail!("No push URL found for remote '{}'", remote_name);
+        anyhow::bail!("No push URL found for the requested remote");
     }
 
     Ok(url)

@@ -164,14 +164,15 @@ the last hidden version.
 Run `git-veil error-codes` for the full table; the ones you will actually
 meet as a newcomer:
 
-- `no local pin for …` (exit code 11) — you have not pinned on this
-  machine: import the owner's pin-file (step 4).
-- `user newcomer@example.com not found in keyring; …` (exit code 22) — the
-  owner has not run `tell` (or has not pushed the updated keyring;
-  `git pull` first).
-- `decryption failed: this ciphertext was not encrypted to your key …`
-  (exit code 60) — the owner told you but did not re-`hide` (or you are on
-  an old commit; `git pull`).
+- `no trust pin exists on this machine. See the trust documentation.`
+  (exit code 11) — you have not pinned on this machine: import the
+  owner's pin-file (step 4).
+- `user not found in the keyring. Check the identity, or ask the owner to
+  add it` (exit code 22) — the owner has not run `tell` (or has not pushed
+  the updated keyring; `git pull` first).
+- `decryption failed. This ciphertext was not encrypted to your key and
+  you are not a listed recipient` (exit code 60) — the owner told you but
+  did not re-`hide` (or you are on an old commit; `git pull`).
 - `no age identity …` (exit code 21) — your key store lacks your identity;
   the message prints the creation and backup recipe. Redo step 2.
 

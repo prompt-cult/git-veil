@@ -40,10 +40,8 @@ pub fn cmd_changes(
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
             ExitCode::IdentityNotInKeyring,
-            format!(
-                "user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell",
-                email
-            ),
+            "user not found in the keyring. Check the identity, or ask the owner to add it"
+                .to_string(),
         )
     })?;
 
@@ -69,11 +67,7 @@ pub fn cmd_changes(
             )?;
 
             if !tracked.files.contains(&relative) {
-                anyhow::bail!(
-                    "file not tracked: {}; run git-veil add '{}' to track it",
-                    file,
-                    file
-                );
+                anyhow::bail!("file not tracked: {}. Add it before checking it", file);
             }
 
             resolved.push(relative);
@@ -105,7 +99,10 @@ pub fn cmd_changes(
         let on_disk = match fs::read(repo_root.join(file)) {
             Ok(bytes) => bytes,
             Err(_) => {
-                println!("not present on disk (hidden): {}", file.display());
+                println!(
+                    "  not present on disk because it is hidden: {}",
+                    file.display()
+                );
                 continue;
             }
         };
@@ -152,7 +149,7 @@ pub fn cmd_changes(
             }
         } else {
             println!(
-                "differs ({} bytes vs {} bytes): {}",
+                "  differs in size {} bytes against {} bytes: {}",
                 hidden.len(),
                 on_disk.len(),
                 file.display()
@@ -161,6 +158,6 @@ pub fn cmd_changes(
         changed.push(file.clone());
     }
 
-    println!("{} file(s) with changes", changed.len());
+    println!("\n{} files with changes", changed.len());
     Ok(changed)
 }

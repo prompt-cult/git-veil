@@ -37,13 +37,8 @@ pub fn cmd_tell(
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
     // The key file contains the age recipient string on the first line.
-    let key_content =
-        fs::read_to_string(repo_root.join(collaborator_key_path)).with_context(|| {
-            format!(
-                "failed to read collaborator key file '{}'",
-                collaborator_key_path
-            )
-        })?;
+    let key_content = fs::read_to_string(repo_root.join(collaborator_key_path))
+        .with_context(|| "failed to read the collaborator key file".to_string())?;
     let recipient_str = key_content.lines().next().unwrap_or("").trim();
     let collaborator_recipient = parse_recipient(recipient_str)?;
 
@@ -100,7 +95,7 @@ pub fn cmd_tell(
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
-    println!("✓ Added {} to keyring", email);
+    println!("added {} to the keyring", email);
 
     // UX hint: any ciphertext hidden BEFORE this tell was encrypted to the
     // previous keyring and does not include the new collaborator's key, so
@@ -114,10 +109,7 @@ pub fn cmd_tell(
             .iter()
             .any(|file| encrypted_path_for(repo_root, file).exists());
         if has_ciphertext {
-            println!(
-                "note: existing ciphertext does not include {}; run git-veil hide to re-encrypt all tracked files to the current keyring",
-                email
-            );
+            println!("note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.");
         }
     }
     Ok(())

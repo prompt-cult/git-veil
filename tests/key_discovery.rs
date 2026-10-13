@@ -54,8 +54,8 @@ fn test_missing_signing_key_fails_with_code_20_and_recipe() {
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), 20);
     assert!(
-        message.contains("openssl genpkey"),
-        "recipe printed: {message}"
+        message.contains("Create an Ed25519 signing key yourself and back it up"),
+        "guidance printed: {message}"
     );
     assert!(
         message.contains("signing-keys.txt"),
@@ -190,8 +190,14 @@ fn test_missing_identity_fails_with_code_21_and_recipe() {
     };
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), ExitCode::NoAgeIdentity as i32);
-    assert!(message.contains("age-keygen"), "recipe printed: {message}");
-    assert!(message.contains("import"), "import step printed: {message}");
+    assert!(
+        message.contains("Create your own age identity and back it up"),
+        "guidance printed: {message}"
+    );
+    assert!(
+        message.contains("import"),
+        "import step mentioned: {message}"
+    );
     assert!(
         message.to_lowercase().contains("back it up"),
         "backup instruction: {message}"

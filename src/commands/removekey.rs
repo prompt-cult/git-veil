@@ -126,17 +126,14 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
 
     if identity_matches.is_empty() && recipient_matches.is_empty() {
         anyhow::bail!(
-            "No key matching '{}' found in the key store {} (identities.txt, recipients.txt); removekey only removes keys this machine's local store holds",
-            identifier,
-            key_store.display()
+            "no matching key found in the key store. removekey only removes keys this machine local store holds"
         );
     }
 
     // Danger guard: the target is the only identity in identities.txt.
     if !identity_matches.is_empty() && identity_store.lines.len() == 1 && !yes {
         anyhow::bail!(
-            "Refusing to remove '{}': this is your only identity; without it you cannot decrypt anything — pass --yes to confirm",
-            identifier
+            "refusing to remove the only identity. Without it you cannot decrypt anything. Confirm to continue"
         );
     }
 
@@ -150,9 +147,7 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
     }
     if matched_fingerprints.len() > 1 && !yes {
         anyhow::bail!(
-            "Multiple keys match '{}' in the key store {}; pass a fingerprint instead, or re-run with --yes to remove ALL of them. Matching fingerprints:\n  {}",
-            identifier,
-            key_store.display(),
+            "multiple keys match in the key store. Pass a fingerprint instead, or confirm to remove all of them. Matching fingerprints:\n  {}",
             matched_fingerprints
                 .iter()
                 .cloned()

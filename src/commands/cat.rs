@@ -30,10 +30,8 @@ pub fn cmd_cat(
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
             ExitCode::IdentityNotInKeyring,
-            format!(
-                "user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell",
-                email
-            ),
+            "user not found in the keyring. Check the identity, or ask the owner to add it"
+                .to_string(),
         )
     })?;
 
@@ -54,11 +52,7 @@ pub fn cmd_cat(
     )?;
 
     if !tracked.files.contains(&relative) {
-        anyhow::bail!(
-            "file not tracked: {}; run git-veil add '{}' to track it",
-            file,
-            file
-        );
+        anyhow::bail!("file not tracked: {}. Add it before reading it", file);
     }
 
     // Lstat gate: refuse if the tracked path is a committed symlink or not a
@@ -75,7 +69,7 @@ pub fn cmd_cat(
     // Check encrypted file exists
     if !encrypted_path.exists() {
         anyhow::bail!(
-            "Encrypted file not found: {}; run git-veil hide to create it",
+            "encrypted file not found: {}. Hide it first to create it",
             encrypted_path.display()
         );
     }

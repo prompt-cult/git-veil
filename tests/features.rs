@@ -567,8 +567,8 @@ fn test_tell_fails_with_code_20_when_signing_key_missing() {
         "missing signing key exits 20"
     );
     assert!(
-        message.contains("openssl genpkey"),
-        "recipe printed: {message}"
+        message.contains("Create an Ed25519 signing key yourself and back it up"),
+        "guidance printed: {message}"
     );
     let keyring = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     assert!(

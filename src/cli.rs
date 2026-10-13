@@ -15,7 +15,7 @@ fn fingerprint_selection(s: &str) -> Result<String, String> {
         Ok(trimmed)
     } else {
         Err(
-            "--signing-key takes a 16-hex-character verifying-key fingerprint (printed by git-veil verify-keyring and stored in every pin file); the 1-based index form and the full-key form are removed".to_string(),
+            "--signing-key takes a 16 hex character verifying key fingerprint. The index form and the full key form are removed.".to_string(),
         )
     }
 }
