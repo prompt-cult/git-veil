@@ -31,7 +31,8 @@ use crate::key_discovery::load_signing_keys;
 use crate::pin_file::load_pin_file;
 use crate::signing::parse_verifying_key;
 use crate::{
-    derive_repo_id, get_remote_push_url, import_recipient_to_store, TrustPinStore, TrustStore,
+    derive_configured_repo_ids, derive_repo_id, get_remote_push_url, import_recipient_to_store,
+    TrustPinStore, TrustStore,
 };
 
 /// The repository's committed owner verifying key: line 1 is the 64-hex
@@ -217,6 +218,16 @@ fn write_pin_state(
         // The owner fingerprint IS the pinned fingerprint: one derivation,
         // the repository id as the label (issue #41).
         trust_store.set_owner_fingerprint(repo_id.to_string(), fingerprint.clone());
+
+        // Reconcile the committed store (issue #43): a repository move or
+        // rename leaves trusted_keys entries for ids no configured remote
+        // derives any more. Entries matching any configured remote are
+        // kept — one per remote — and the pruned ids are public repository
+        // facts, so the removal names them (issue #42).
+        let live = derive_configured_repo_ids(repo_root)?;
+        for pruned_id in trust_store.reconcile_trusted_keys(&live) {
+            println!("pruned the stale trusted key entry for {}", pruned_id);
+        }
     }
     trust_store.save_to_file(&trust_path)?;
 

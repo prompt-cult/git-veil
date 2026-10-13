@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use regex::Regex;
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
@@ -110,4 +111,45 @@ pub fn get_remote_push_url(repo_path: &Path, remote_name: &str) -> Result<String
 pub fn derive_repo_id(push_url: &str) -> Result<String> {
     let (repo, user, service) = parse_git_remote_url(push_url)?;
     Ok(format!("{}+{}@{}", repo, user, service))
+}
+
+/// Derives the repository id of every configured remote's push URL
+/// (`git remote --verbose`): the set of repository identities this
+/// checkout currently points at — one id per remote, so a multi-remote
+/// repository contributes one entry per remote.
+///
+/// The `(push)` lines carry the effective push URLs (the pushurl when
+/// set, url rewriting applied). A remote with no fetch URL also prints a
+/// bare `name` line with no URL; bare lines and push URLs with no
+/// supported shape are skipped — trust records only ever hold ids derived
+/// from supported shapes, so such a remote cannot correspond to any
+/// recorded entry.
+pub fn derive_configured_repo_ids(repo_path: &Path) -> Result<BTreeSet<String>> {
+    let output = Command::new("git")
+        .current_dir(repo_path)
+        .args(["remote", "--verbose"])
+        .output()
+        .context("failed to enumerate the configured remotes")?;
+
+    if !output.status.success() {
+        anyhow::bail!("failed to enumerate the configured remotes");
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut ids = BTreeSet::new();
+    for line in stdout.lines() {
+        // `name<TAB>url (push)`; multiple pushurls print one line each.
+        let Some(head) = line.strip_suffix(" (push)") else {
+            continue;
+        };
+        let mut fields = head.split_whitespace();
+        let _name = fields.next();
+        let Some(url) = fields.next() else {
+            continue;
+        };
+        if let Ok(id) = derive_repo_id(url) {
+            ids.insert(id);
+        }
+    }
+    Ok(ids)
 }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -48,6 +48,24 @@ impl TrustStore {
     /// re-run `trust` on a seed-holding machine and commit the update).
     pub fn get_owner_fingerprint(&self, repo_id: &str) -> Option<&str> {
         self.owner_fingerprints.get(repo_id).map(|s| s.as_str())
+    }
+
+    /// Reconciles `trusted_keys` against `live`, the repository ids the
+    /// configured remotes currently derive (issue #43): every entry whose
+    /// id no remote derives — the residue of a repository move or rename —
+    /// is removed. Returns the pruned ids in sorted order so the caller
+    /// can print the removals (repository ids are public repository
+    /// facts, so naming them is allowed).
+    pub fn reconcile_trusted_keys(&mut self, live: &BTreeSet<String>) -> Vec<String> {
+        let mut pruned: Vec<String> = self
+            .trusted_keys
+            .keys()
+            .filter(|id| !live.contains(*id))
+            .cloned()
+            .collect();
+        pruned.sort();
+        self.trusted_keys.retain(|id, _| live.contains(id));
+        pruned
     }
 
     pub fn serialize(&self) -> Result<String> {

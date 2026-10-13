@@ -920,3 +920,141 @@ fn test_rename_suspicion_no_remedy_on_import() {
         "no pin may be written on refusal"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Stale-entry reconcile (issue #43): when trust writes the owner fingerprint
+// metadata it also reconciles trusted_keys — entries whose repository id no
+// configured remote derives are pruned, the removal is printed, and entries
+// matching any configured remote are kept.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_reconcile_trusted_keys_removes_only_non_live_ids() {
+    let mut store = TrustStore::new();
+    store.add_trust("a+owner@github.com".to_string(), "f".to_string());
+    store.add_trust("b+owner@github.com".to_string(), "f".to_string());
+    store.add_trust("c+owner@github.com".to_string(), "f".to_string());
+
+    let live = std::collections::BTreeSet::from([
+        "a+owner@github.com".to_string(),
+        "c+owner@github.com".to_string(),
+    ]);
+    let pruned = store.reconcile_trusted_keys(&live);
+
+    assert_eq!(
+        pruned,
+        vec!["b+owner@github.com".to_string()],
+        "the pruned ids are returned in sorted order"
+    );
+    assert!(store
+        .get_trusted_fingerprint("a+owner@github.com")
+        .is_some());
+    assert!(store
+        .get_trusted_fingerprint("b+owner@github.com")
+        .is_none());
+    assert!(store
+        .get_trusted_fingerprint("c+owner@github.com")
+        .is_some());
+}
+
+/// The observed-live scenario: the repository moved, the old id is a stale
+/// entry in the committed store, and the owner re-runs the possession proof
+/// under the new id. Drives the built binary so the printed removal can be
+/// asserted on stdout.
+#[test]
+fn test_trust_after_a_move_prunes_the_stale_entry_and_prints_the_removal() {
+    let f = Fixture::new("prune-move");
+    rename_remote(&f.repo.path, "git@github.com:owner/fara-moved.git");
+    let new_repo_id = "fara-moved+owner@github.com";
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .current_dir(&f.repo.path)
+        .args([
+            "--dangerously-skip-permissions-check",
+            "trust",
+            new_repo_id,
+            "--key-store",
+            f.key_store.path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run git-veil trust");
+    assert!(
+        output.status.success(),
+        "trust runs: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let expected_line = format!("pruned the stale trusted key entry for {}", TEST_REPO_ID);
+    assert!(
+        stdout.contains(&expected_line),
+        "the removal is printed at reconcile time and names the pruned id: {stdout}"
+    );
+
+    let trust = TrustStore::load_from_file(&f.repo.join(".git-veil/trust.json")).unwrap();
+    assert!(
+        trust.get_trusted_fingerprint(TEST_REPO_ID).is_none(),
+        "the stale entry left by the move is gone"
+    );
+    assert!(
+        trust.get_trusted_fingerprint(new_repo_id).is_some(),
+        "the entry matching the configured remote is kept"
+    );
+    assert_eq!(
+        trust.trusted_keys.len(),
+        1,
+        "the committed store names exactly the ids the remotes derive"
+    );
+    // The reconcile is scoped to trusted_keys: the owner fingerprint
+    // metadata is not pruned by it.
+    assert!(
+        trust.get_owner_fingerprint(TEST_REPO_ID).is_some(),
+        "owner_fingerprints is outside the reconcile scope"
+    );
+    assert!(trust.get_owner_fingerprint(new_repo_id).is_some());
+}
+
+#[test]
+fn test_trust_reconcile_keeps_one_entry_per_configured_remote() {
+    let f = Fixture::new("prune-multi");
+    let upstream_id = "fara-mirror+owner@github.com";
+
+    // A second configured remote: the repository is also pushed elsewhere.
+    let s = std::process::Command::new("git")
+        .current_dir(&f.repo.path)
+        .args([
+            "remote",
+            "add",
+            "upstream",
+            "git@github.com:owner/fara-mirror.git",
+        ])
+        .status()
+        .expect("git");
+    assert!(s.success());
+
+    // The committed store records one entry per configured remote.
+    let trust_path = f.repo.join(".git-veil/trust.json");
+    let mut store = TrustStore::load_from_file(&trust_path).unwrap();
+    store.add_trust(upstream_id.to_string(), "ab".repeat(32));
+    store.save_to_file(&trust_path).unwrap();
+
+    cmd_trust(
+        &f.repo.path,
+        TEST_REPO_ID,
+        "origin",
+        &f.key_store.path,
+        false,
+    )
+    .expect("re-trust");
+
+    let store = TrustStore::load_from_file(&trust_path).unwrap();
+    assert!(
+        store.get_trusted_fingerprint(TEST_REPO_ID).is_some(),
+        "the origin entry is kept"
+    );
+    assert!(
+        store.get_trusted_fingerprint(upstream_id).is_some(),
+        "the upstream entry is kept: a multi-remote repository keeps one entry per remote"
+    );
+    assert_eq!(store.trusted_keys.len(), 2);
+}

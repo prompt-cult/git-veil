@@ -100,6 +100,14 @@ pin:
    the owner fingerprint is recorded in `owner_fingerprints` (the owner
    commits the updated `trust.json` alongside `owner.verifying`).
 
+   The same write reconciles `trusted_keys` (issue #43): every entry whose
+   repository id matches no configured remote is removed, and each removal
+   is printed — repository ids are public repository facts, so naming them
+   is allowed. Entries matching any configured remote (`origin`,
+   `upstream`, ...) are kept, so a multi-remote repository keeps one entry
+   per remote. Without the reconcile a repository move or rename would
+   leave the old id recorded in the committed store forever.
+
 2. **Pin-file import** — `git-veil trust --import <pin-file>`
    (`cmd_trust_import`, src/commands/trust.rs). The pin-file is produced by
    `git-veil export-pin <repo_id> --output <pin-file>`
@@ -159,7 +167,10 @@ operator a one-line fix for a trust-anchor change is exactly what an
 attacker staging a repo move wants them to run without thinking. The
 operator reads the docs, satisfies themselves the rename is theirs, and
 fixes it with the possession proof (or a fresh pin-file export) on a
-machine holding the signing key.
+machine holding the signing key. That possession-proof re-run records the
+new repo id and its reconcile prunes the old one from `trusted_keys`, so
+the committed store returns to naming exactly the ids the configured
+remotes derive.
 
 Every gated command verifies the keyring signature through
 `verify_keyring_against_trust` (src/commands/verify_keyring.rs), which:

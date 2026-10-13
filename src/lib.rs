@@ -70,7 +70,9 @@ pub use permissions::{
     permissions_check_bypassed_from_env,
 };
 pub use pin_file::{load_pin_file, write_pin_file, PinFile};
-pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};
+pub use repo_identity::{
+    derive_configured_repo_ids, derive_repo_id, get_remote_push_url, parse_git_remote_url,
+};
 pub use signing::{
     create_signature_block, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
     generate_signing_keypair, keyring_content_digest, parse_signing_key, parse_verifying_key,
