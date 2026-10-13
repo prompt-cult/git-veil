@@ -126,25 +126,12 @@ pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
         return Ok(());
     }
 
-    let mut message = String::from("unsafe permissions on git-veil key store material:\n\n");
-    for finding in &unacked {
-        message.push_str(&format!(
-            "  {} with mode {:04o}\n",
-            finding.path.display(),
-            finding.mode
-        ));
-    }
-    message.push_str("\nPrivate key material must not be group- or world-accessible. Fix it:\n\n");
-    message.push_str(&format!("  chmod 700 {}\n", key_store.display()));
-    for finding in &unacked {
-        if finding.path != key_store {
-            message.push_str(&format!("  chmod 600 {}\n", finding.path.display()));
-        }
-    }
-    message.push_str(&format!(
-        "\nOr, if you accept the risk, acknowledge the current state:\n\n  git-veil trust-permissions --key-store {}\n\nThis check can be bypassed with --dangerously-skip-permissions-check or GIT_VEIL_SKIP_PERMISSIONS=1.",
-        key_store.display()
-    ));
+    let message = "unsafe permissions on git-veil key store material. \
+             Private key material must not be group- or world-accessible. \
+             Fix the permissions on the key store directory and private key files. \
+             See the permissions documentation. \
+             This check can be bypassed with --dangerously-skip-permissions-check or GIT_VEIL_SKIP_PERMISSIONS=1"
+        .to_string();
 
     Err(coded(ExitCode::UnsafeKeyStorePermissions, message))
 }

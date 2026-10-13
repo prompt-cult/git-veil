@@ -545,6 +545,49 @@ malicious collaborator can still make `hide` refuse (availability) by
 nominating junk paths — that is fail-closed by design, the same posture as
 the code-40 gate, and each refusal names the offending paths.
 
+## CODEOWNERS coverage for the trust-critical paths (suggested, never required)
+
+CODEOWNERS is a platform feature, not a git feature: plain git ignores the
+file. Where the platform enforces it (with branch protection), a
+write-access attacker's rekey of the trust anchor becomes a review-gated
+change instead of a silent push. The tool suggests and warns; it never
+requires, and it works unchanged on plain-git hosting. On platforms with
+no CODEOWNERS support the file simply sits there ignored, which is
+harmless.
+
+- **Locations, in platform precedence order**: the repository root,
+  then `.github/`, `docs/`, `.gitlab/`, `.gitea/`, `.forgejo/` and
+  `.bitbucket/`. The first file found in that order is the one evaluated
+  (src/codeowners.rs).
+- **Matching reuses the gitignore matcher** (gix-ignore, the gitoxide
+  matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
+  character ranges, no escape handling), so the matcher answers whether a
+  pattern covers `owner.verifying` and the `.git-veil/` directory,
+  last-match-wins. Owner strings are not validated — only the question
+  does any pattern match these paths is answered. Gitea and Forgejo use a
+  different pattern language; the gitignore matcher may produce false
+  negatives there, and the warning is non-blocking, so a false negative
+  only costs an unnecessary reminder.
+- **`git-veil init` suggests, once, in plain text.** After initializing
+  `.git-veil/`, a non-quiet `init` prints a suggestion naming the
+  trust-critical paths and the lines to add, with no prompt, no stdin and
+  no file creation. `git-veil init -q` prints nothing. The tool never
+  creates a CODEOWNERS file.
+- **`git-veil trust` warns when the trust anchor is not review-gated.**
+  After a successful pin (proof or import), a non-blocking warning is
+  printed when no CODEOWNERS file covers the trust-critical paths. The
+  warning never refuses and never alters the exit code.
+- **Suppression is deliberate and bound to the pin.** A user who does not
+  want CODEOWNERS and does not want the reminder suppresses it per pinned
+  repository: `git-veil trust --suppress-codeowners` records the
+  repository id in the key store (`codeowners-suppression`, outside the
+  repository and attacker-proof) at the same moment the possession proof
+  or import pins the anchor. Only the pin-creation command can write the
+  entry, so creating a suppression requires holding the machine that
+  proved possession of the signing key — the possession proof is the
+  signature on the suppression. Suppressed repositories print no
+  CODEOWNERS warning.
+
 ## Path safety
 
 Tracked paths are repo-relative strings in `.git-veil/tracked.json`. Four

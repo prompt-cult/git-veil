@@ -49,7 +49,11 @@ remove .git-veil/ explicitly if you really want a fresh start.
 EXAMPLES
   $ git-veil init    # create .git-veil/ in the current git repository
 ")]
-    Init,
+    Init {
+        /// Suppress the CODEOWNERS suggestion and other non-error output
+        #[arg(long, short = 'q')]
+        quiet: bool,
+    },
 
     /// Import your age identity (private key) into the git-veil key store
     #[command(after_long_help = "\
@@ -208,6 +212,10 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
+        /// Suppress the CODEOWNERS warning for this pinned repository; the suppression is
+        /// recorded in the key store next to the pin
+        #[arg(long)]
+        suppress_codeowners: bool,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its
         /// pins are the trust boundary for every repository that uses it.
         #[arg(long)]

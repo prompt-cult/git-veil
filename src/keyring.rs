@@ -167,9 +167,8 @@ impl Keyring {
     ) -> Result<()> {
         if email.contains(':') {
             anyhow::bail!(
-                "Invalid keyring email {}: emails must not contain a colon \
-                 because it is the keyring line field separator",
-                email
+                "Invalid keyring email: emails must not contain a colon \
+                 because it is the keyring line field separator"
             );
         }
         if let Some(existing) = self

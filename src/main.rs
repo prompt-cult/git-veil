@@ -90,7 +90,7 @@ fn run() -> Result<()> {
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
-        Commands::Init => cmd_init(&repo_root)?,
+        Commands::Init { quiet } => cmd_init(&repo_root, quiet)?,
         Commands::Import {
             files,
             key_store: opt,
@@ -127,15 +127,28 @@ fn run() -> Result<()> {
             repo_id,
             import,
             remote,
+            suppress_codeowners,
             key_store: opt,
         } => {
             let key_store = resolve_key_store(opt, skip_permissions_check)?;
             match (import, repo_id) {
                 (Some(pin_file), None) => {
-                    cmd_trust_import(&repo_root, &pin_file, &remote, &key_store)?;
+                    cmd_trust_import(
+                        &repo_root,
+                        &pin_file,
+                        &remote,
+                        &key_store,
+                        suppress_codeowners,
+                    )?;
                 }
                 (None, Some(repo_id)) => {
-                    cmd_trust(&repo_root, &repo_id, &remote, &key_store)?;
+                    cmd_trust(
+                        &repo_root,
+                        &repo_id,
+                        &remote,
+                        &key_store,
+                        suppress_codeowners,
+                    )?;
                 }
                 // clap's required_unless_present/conflicts_with make both
                 // remaining arms unreachable; keep them total anyway.

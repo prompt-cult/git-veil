@@ -147,12 +147,7 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
     }
     if matched_fingerprints.len() > 1 && !yes {
         anyhow::bail!(
-            "multiple keys match in the key store. Pass a fingerprint instead, or confirm to remove all of them. Matching fingerprints:\n  {}",
-            matched_fingerprints
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join("\n  ")
+            "multiple keys match in the key store. Pass a fingerprint to select one, or confirm to remove all of them"
         );
     }
 

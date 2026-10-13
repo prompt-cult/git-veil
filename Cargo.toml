@@ -52,6 +52,9 @@ regex = "1.10"
 
 # SHA-256 digest of accepted keyrings (fork detection, issue #20)
 sha2 = "0.10"
+gix-ignore = "0.24.0"
+bstr = "1.13.1"
+gix-glob = "0.29.0"
 
 [dev-dependencies]
 tempfile = "3.10"

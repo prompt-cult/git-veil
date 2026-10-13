@@ -53,6 +53,7 @@ complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "clean" -d 'Remove
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "completions" -d 'Emit a shell completion script for the given shell to stdout'
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "manpages" -d 'Write roff man pages (git-veil.1 plus one per subcommand) to a directory'
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand init" -s q -l quiet -d 'Suppress the CODEOWNERS suggestion and other non-error output'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand import" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
@@ -69,6 +70,7 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand removekey" -s h -l hel
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l import -d 'Import a pin-file produced by git-veil export-pin on a machine holding the signing key' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it' -r -F
+complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l suppress-codeowners -d 'Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l output -d 'Pin-file destination — must be OUTSIDE the repository worktree' -r -F

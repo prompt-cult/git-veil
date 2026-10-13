@@ -4,6 +4,7 @@
 
 mod age_crypto;
 pub mod cli;
+mod codeowners;
 mod commands;
 mod exit_codes;
 mod fs_atomic;
@@ -24,6 +25,11 @@ pub use age_crypto::{
     fingerprint_for_recipient, generate_identity, import_identity_to_store,
     import_recipient_to_store, load_identities_from_store, load_recipients_from_store,
     parse_identity, parse_recipient, recipient_from_identity,
+};
+pub use codeowners::{
+    covers_trust_critical_paths, find as find_codeowners, is_suppressed as codeowners_suppressed,
+    record_suppression as record_codeowners_suppression, suggestion_text as codeowners_suggestion,
+    warning_text as codeowners_warning,
 };
 pub use commands::add::cmd_add;
 pub use commands::cat::cmd_cat;

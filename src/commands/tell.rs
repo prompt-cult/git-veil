@@ -45,10 +45,11 @@ pub fn cmd_tell(
     // Test-encrypt a canary to the collaborator key to verify it can actually
     // encrypt, BEFORE any keyring mutation: a malformed-but-parseable key
     // must never be signed into the committed keyring. The canary is in-memory only.
-    if let Err(cause) = encrypt_to_recipient(TELL_CANARY, &collaborator_recipient) {
+    if encrypt_to_recipient(TELL_CANARY, &collaborator_recipient).is_err() {
         return Err(coded(
             ExitCode::EncryptionFailed,
-            format!("collaborator key cannot encrypt for {}: {}", email, cause),
+            "collaborator key cannot encrypt. The public key may be invalid. See the tell documentation"
+                .to_string(),
         ));
     }
 

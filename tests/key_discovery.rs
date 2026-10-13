@@ -222,8 +222,8 @@ fn test_corrupt_identity_store_line_refused_with_code_62_not_21() {
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), ExitCode::KeyParseFailure as i32);
     assert!(
-        message.contains("AGE-SECRET-KEY-1TRUNCATEDGARBAGE"),
-        "error names the corrupt line: {message}"
+        message.contains("corrupt key store line"),
+        "error states the corrupt line: {message}"
     );
     assert!(
         !message.contains("age-keygen"),

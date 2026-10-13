@@ -51,8 +51,7 @@ pub fn cmd_add(
         let secret_relative = format!("{}.secret", relative_str);
         if is_gitignored(repo_root, &secret_relative)? {
             println!(
-                "warning: a ciphertext path is git-ignored with error code 40 so it will never reach the repository. Fix .gitignore before hiding: {}",
-                secret_relative
+                "warning: a ciphertext path is git-ignored with error code 40 so it will never reach the repository. Fix .gitignore before hiding"
             );
         }
 

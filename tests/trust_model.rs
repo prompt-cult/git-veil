@@ -94,9 +94,9 @@ impl Fixture {
         )
         .unwrap();
 
-        cmd_init(&repo.path).expect("init");
+        cmd_init(&repo.path, false).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self {
             repo,
@@ -187,9 +187,9 @@ fn test_trust_without_matching_seed_refuses() {
     )
     .unwrap();
     let _ = owner_signing_key;
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
-    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path)
+    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false)
         .expect_err("trust must refuse without a matching seed");
     assert_eq!(exit_code_of(&err), 20);
     assert!(
@@ -220,9 +220,9 @@ fn test_trust_ambiguous_seeds_refuse() {
         format!("{}\n{}\n", seed, seed),
     )
     .unwrap();
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
-    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path)
+    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false)
         .expect_err("ambiguous seed matches must refuse");
     assert_eq!(exit_code_of(&err), 70);
     assert!(TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
@@ -243,10 +243,16 @@ fn test_trust_wrong_repo_id_fails() {
         format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
     .unwrap();
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
-    let err = cmd_trust(&repo.path, "wrong+id@github.com", "origin", &key_store.path)
-        .expect_err("repo-id mismatch must refuse");
+    let err = cmd_trust(
+        &repo.path,
+        "wrong+id@github.com",
+        "origin",
+        &key_store.path,
+        false,
+    )
+    .expect_err("repo-id mismatch must refuse");
     assert_eq!(exit_code_of(&err), 13);
 }
 
@@ -271,7 +277,14 @@ fn test_retrust_replaces_pin() {
     )
     .unwrap();
 
-    cmd_trust(&f.repo.path, TEST_REPO_ID, "origin", &f.key_store.path).expect("re-trust");
+    cmd_trust(
+        &f.repo.path,
+        TEST_REPO_ID,
+        "origin",
+        &f.key_store.path,
+        false,
+    )
+    .expect("re-trust");
 
     let new_pin = TrustPinStore::read_pin(&f.key_store.path, TEST_REPO_ID)
         .unwrap()
@@ -307,7 +320,7 @@ fn test_export_pin_without_matching_seed_refuses() {
     )
     .unwrap();
     let _ = owner_signing_key;
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
     let out = elsewhere.join("fara.pin");
     let err = cmd_export_pin(&repo.path, TEST_REPO_ID, &out, "origin", &key_store.path)
@@ -386,7 +399,7 @@ fn test_import_inside_repo_refuses() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &in_repo, "origin", &f.key_store.path)
+    let err = cmd_trust_import(&f.repo.path, &in_repo, "origin", &f.key_store.path, false)
         .expect_err("import must refuse a path inside the repository");
     assert_eq!(exit_code_of(&err), 71);
 }
@@ -410,8 +423,14 @@ fn test_import_happy_path_on_storeless_machine() {
     // The store-less machine has no signing key anywhere — import is its
     // only pin-creation path, and it must work.
     assert!(!fresh_store.path.join("signing-keys.txt").exists());
-    cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
-        .expect("import with all three checks passing writes the pin");
+    cmd_trust_import(
+        &f.repo.path,
+        &pin_file_path,
+        "origin",
+        &fresh_store.path,
+        false,
+    )
+    .expect("import with all three checks passing writes the pin");
 
     assert!(
         TrustPinStore::read_pin(&fresh_store.path, TEST_REPO_ID)
@@ -441,8 +460,14 @@ fn test_import_repo_id_mismatch_refuses() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
-        .expect_err("import must refuse a pin-file for another repository");
+    let err = cmd_trust_import(
+        &f.repo.path,
+        &pin_file_path,
+        "origin",
+        &fresh_store.path,
+        false,
+    )
+    .expect_err("import must refuse a pin-file for another repository");
     assert_eq!(exit_code_of(&err), 70);
     assert!(
         err.to_string()
@@ -477,8 +502,14 @@ fn test_import_key_mismatch_refuses() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
-        .expect_err("import must refuse a key that differs from the committed owner key");
+    let err = cmd_trust_import(
+        &f.repo.path,
+        &pin_file_path,
+        "origin",
+        &fresh_store.path,
+        false,
+    )
+    .expect_err("import must refuse a key that differs from the committed owner key");
     assert_eq!(exit_code_of(&err), 70);
     assert!(err
         .to_string()
@@ -512,8 +543,14 @@ fn test_import_fingerprint_mismatch_refuses() {
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "00".repeat(32));
     trust.save_to_file(&trust_path).unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
-        .expect_err("import must refuse a fingerprint mismatch against the metadata");
+    let err = cmd_trust_import(
+        &f.repo.path,
+        &pin_file_path,
+        "origin",
+        &fresh_store.path,
+        false,
+    )
+    .expect_err("import must refuse a fingerprint mismatch against the metadata");
     assert_eq!(exit_code_of(&err), 70);
     assert!(err
         .to_string()
@@ -551,8 +588,14 @@ fn test_import_missing_metadata_fingerprint_refuses() {
     });
     fs::write(&trust_path, serde_json::to_string_pretty(&legacy).unwrap()).unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
-        .expect_err("import must refuse when the metadata fingerprint field is absent");
+    let err = cmd_trust_import(
+        &f.repo.path,
+        &pin_file_path,
+        "origin",
+        &fresh_store.path,
+        false,
+    )
+    .expect_err("import must refuse when the metadata fingerprint field is absent");
     assert_eq!(exit_code_of(&err), 70);
     assert!(TrustPinStore::read_pin(&fresh_store.path, TEST_REPO_ID)
         .unwrap()
@@ -568,7 +611,7 @@ fn test_no_pin_fails_closed() {
     let repo = TempDir::new("no-pin");
     let key_store = TempDir::new("no-pin-ks");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
     // Committed trust.json entry, but no local pin.
     let mut trust = TrustStore::new();
@@ -601,7 +644,7 @@ fn test_hide_and_tell_fail_without_trust() {
     let repo = TempDir::new("no-trust");
     let key_store = TempDir::new("no-trust-ks");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
     assert!(
         cmd_hide(&repo.path, "origin", &key_store.path, true).is_err(),
@@ -653,7 +696,7 @@ fn test_reveal_no_pin_error_names_both_paths() {
     let repo = TempDir::new("reveal-no-pin");
     let key_store = TempDir::new("reveal-no-pin-ks");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
     let mut trust = TrustStore::new();
     trust.add_trust(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
@@ -703,7 +746,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     // metadata fingerprint, and a bogus pin-file committed in-repo.
     let attacked = TempDir::new("attacker-repo");
     init_git_repo(&attacked.path);
-    cmd_init(&attacked.path).expect("init");
+    cmd_init(&attacked.path, false).expect("init");
 
     let (attacker_signing_key, attacker_verifying_hex) = generate_signing_keypair();
     fs::write(
@@ -735,8 +778,14 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
 
     // The repository supplies its own trust anchor -> the proof fails:
     // the real seed does not derive the attacker's key.
-    let err = cmd_trust(&attacked.path, TEST_REPO_ID, "origin", &real_store.path)
-        .expect_err("a self-consistent attacker repo must not be pinnable by proof");
+    let err = cmd_trust(
+        &attacked.path,
+        TEST_REPO_ID,
+        "origin",
+        &real_store.path,
+        false,
+    )
+    .expect_err("a self-consistent attacker repo must not be pinnable by proof");
     assert_eq!(exit_code_of(&err), 20);
     assert!(err
         .to_string()
@@ -755,6 +804,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
         &attacked.join("pinned.pin"),
         "origin",
         &real_store.path,
+        false,
     )
     .expect_err("an in-repo pin-file must not be importable");
     assert_eq!(exit_code_of(&err), 71);
@@ -825,8 +875,14 @@ fn test_rename_suspicion_no_remedy_on_import() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
-        .expect_err("import must refuse while the committed metadata names the old repo-id");
+    let err = cmd_trust_import(
+        &f.repo.path,
+        &pin_file_path,
+        "origin",
+        &fresh_store.path,
+        false,
+    )
+    .expect_err("import must refuse while the committed metadata names the old repo-id");
     assert_eq!(exit_code_of(&err), 70);
     let message = format!("{:#}", err);
     assert!(
