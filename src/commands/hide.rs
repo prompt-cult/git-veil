@@ -7,6 +7,10 @@ use std::process::Command;
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
+use crate::happen_before::{
+    baseline_path, ciphertext_predates_manifest_entry, manifest_digest, read_baseline,
+    record_baseline,
+};
 use crate::intent::LocalAdds;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{encrypt_to_recipients, parse_recipient, verify_keyring_against_trust, TrackedFiles};
@@ -117,7 +121,19 @@ pub fn cmd_hide(
     let mut orphans: Vec<String> = Vec::new();
     // Plaintext paths whose ciphertext is already committed (established —
     // no intent needed to re-encrypt them).
-    let mut established: HashSet<PathBuf> = HashSet::new();
+    // Issue #19: a committed ciphertext is established only when it PREDATES
+    // the manifest entry naming it. The index is attacker-writable, so mere
+    // presence proves nothing — a nomination and a dummy `<path>.secret`
+    // landing in one commit would otherwise mark the path established and
+    // ride past the intent gate. The happen-before result is cached per
+    // manifest content hash in the machine-local key store: the key store
+    // either holds a baseline for this manifest version or it does not.
+    let manifest_rel = ".git-veil/tracked.json";
+    let manifest_content = fs::read_to_string(repo_root.join(manifest_rel)).unwrap_or_default();
+    let digest = manifest_digest(&manifest_content);
+    let baseline = baseline_path(key_store, &repo_id, &digest);
+    let cached_safe = read_baseline(&baseline);
+    let mut committed_pairs: Vec<(PathBuf, String)> = Vec::new();
     for raw in ls.stdout.split(|b| *b == 0) {
         if raw.is_empty() {
             continue;
@@ -145,17 +161,28 @@ pub fn cmd_hide(
         if !tracked_set.contains(&plaintext) {
             orphans.push(line);
         } else {
-            established.insert(plaintext);
+            committed_pairs.push((plaintext, line));
+        }
+    }
+    let mut established: HashSet<PathBuf> = HashSet::new();
+    for (plaintext, ciphertext_rel) in &committed_pairs {
+        let relative = plaintext.to_string_lossy().to_string();
+        if cached_safe.contains(&relative) {
+            established.insert(plaintext.clone());
+            continue;
+        }
+        if ciphertext_predates_manifest_entry(repo_root, manifest_rel, &relative, ciphertext_rel)? {
+            record_baseline(&baseline, &relative)?;
+            established.insert(plaintext.clone());
         }
     }
     if !orphans.is_empty() {
         return Err(coded(
             ExitCode::OrphanedCiphertext,
             format!(
-                "refusing to hide: the committed ciphertext path(s) below are not tracked, so \
-                 rotation would silently leave them decryptable by removed collaborators; \
-                 re-track with `git-veil add <path>` or delete the stale ciphertext with \
-                 `git rm` (error code 42):\n  {}",
+                "refusing to hide: the committed ciphertext paths below are not tracked with \
+                 error code 42. Rotation would silently leave them decryptable by removed \
+                 collaborators. Re-track the paths, or delete the stale ciphertext.\n  {}",
                 orphans.join("\n  ")
             ),
         ));
@@ -186,11 +213,10 @@ pub fn cmd_hide(
         return Err(coded(
             ExitCode::UnintendedEncryption,
             format!(
-                "refusing to hide: the path(s) below are tracked but you never ran \
-                 `git-veil add` for them on this machine and their ciphertext was never \
-                 committed; tracked.json was likely modified by someone else — run \
-                 `git-veil add <path>` if the tracking is wanted, or `git-veil remove <path>` \
-                 if it is not (error code 72):\n  {}",
+                "refusing to hide: the paths below are tracked but were never added on this \
+                 machine and their ciphertext was never established. tracked.json was likely \
+                 modified by someone else. Add the paths deliberately if the tracking is \
+                 wanted, or restore tracked.json if it is not. Error code 72.\n  {}",
                 unintended.join("\n  ")
             ),
         ));
