@@ -6,11 +6,11 @@ use std::process::ExitCode as StdExitCode;
 use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin, cmd_hide, cmd_import,
-    cmd_init, cmd_list, cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal,
-    cmd_show_repo_id, cmd_tell, cmd_trust, cmd_trust_import, cmd_trust_permissions, cmd_unhide,
-    cmd_verify_keyring, cmd_whoami, default_key_store, exit_code_of, get_git_config_email,
-    permissions_check_bypassed_from_env, ExitCode,
+    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin, cmd_fingerprint,
+    cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys, cmd_remove, cmd_removekey,
+    cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust, cmd_trust_import,
+    cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami, default_key_store,
+    exit_code_of, get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -171,6 +171,9 @@ fn run() -> Result<()> {
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
             )?;
+        }
+        Commands::Fingerprint { label, public_key } => {
+            cmd_fingerprint(&label, &public_key);
         }
         Commands::Tell {
             email,

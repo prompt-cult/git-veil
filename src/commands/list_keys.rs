@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
+use crate::fingerprint::fingerprint_for_public_key;
 use crate::{verify_keyring_against_trust, Keyring};
 
 /// Lists all keys in the keyring, gated on keyring signature verification.
@@ -53,7 +54,14 @@ fn print_keyring(keyring: &Keyring) {
     } else {
         println!("Keys in keyring:");
         for entry in &keyring.entries {
-            println!("  {}", entry.email);
+            // The binding fingerprint is computed at print time — the
+            // keyring stores only the principal and the public key
+            // (issue #41).
+            println!(
+                "  {} {}",
+                entry.email,
+                fingerprint_for_public_key(&entry.email, &entry.recipient)
+            );
         }
         println!("\nTotal: {} keys", keyring.entries.len());
     }

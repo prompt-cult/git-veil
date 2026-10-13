@@ -27,7 +27,7 @@ their machine (which holds the signing key):
 ```sh
 $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
-owner verifying-key fingerprint: 22fb3bcb…
+owner key fingerprint: 22fb3bcb…
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com newcomer.pub
 ✓ Added newcomer@example.com to keyring
@@ -40,7 +40,7 @@ newcomer-age-identity.txt`, and send the `age1...` recipient line it
 printed, or `git-veil export age1... --output newcomer.pub`.)
 
 The owner then transfers `/tmp/demo.pin` to you out of band (e.g.
-`scp`), and reads you the printed **owner verifying-key fingerprint** —
+`scp`), and reads you the printed **owner key fingerprint** —
 over a voice call is ideal — so you can compare it with the fingerprint
 recorded in the repository's committed `.git-veil/trust.json` before you
 import (step 4).

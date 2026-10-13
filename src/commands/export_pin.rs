@@ -14,7 +14,6 @@ use std::path::Path;
 
 use crate::commands::trust::{ensure_path_outside_repo, prove_possession, read_owner_verifying};
 use crate::pin_file::{derive_and_check_repo_id, write_pin_file, PinFile};
-use crate::signing::owner_fingerprint_for_verifying_key;
 
 pub fn cmd_export_pin(
     repo_root: &Path,
@@ -40,14 +39,12 @@ pub fn cmd_export_pin(
     };
     write_pin_file(output, &pin_file)?;
 
-    // The fixed-derivation fingerprint is the human out-of-band
-    // verification token: read it to the importing machine's operator and
-    // have them compare it against the repository's committed metadata.
+    // The owner key fingerprint (the single derivation with the repository
+    // id as the label) is the human out-of-band verification token: read
+    // it to the importing machine's operator and have them compare it
+    // against the repository's committed metadata.
     println!("pin-file written to {}", output.display());
-    println!(
-        "owner verifying-key fingerprint: {}",
-        owner_fingerprint_for_verifying_key(&verifying_key)
-    );
+    println!("owner key fingerprint: {}", pin_file.owner_fingerprint());
     println!(
         "import it on the target machine with: git-veil trust --import {}",
         output.display()

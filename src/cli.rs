@@ -9,13 +9,13 @@ use anyhow::{Context as _, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
-fn fingerprint_selection(s: &str) -> Result<String, String> {
+fn verifying_key_selection(s: &str) -> Result<String, String> {
     let trimmed = s.trim().to_lowercase();
-    if trimmed.len() == 16 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+    if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
         Ok(trimmed)
     } else {
         Err(
-            "--signing-key takes a 16 hex character verifying key fingerprint. The index form and the full key form are removed.".to_string(),
+            "--signing-key takes the full 64 hex character Ed25519 verifying key. The index form and the fingerprint form are removed.".to_string(),
         )
     }
 }
@@ -86,10 +86,10 @@ EXAMPLES
     /// Export a public key (recipient string) from the local key store
     #[command(after_long_help = "\
 Prints — or with --output writes — the public key (age recipient string,
-age1...) for the given recipient or fingerprint, read from the local key
-store on this machine ($GIT_VEIL_HOME or $HOME/.git-veil). This is the key
-handoff between collaborators without any external tool: the local store
-only holds keys THIS machine knows about (your imported identity and any
+age1...) for the given recipient, read from the local key store on this
+machine ($GIT_VEIL_HOME or $HOME/.git-veil). This is the key handoff
+between collaborators without any external tool: the local store only
+holds keys THIS machine knows about (your imported identity and any
 recipient trust has pinned), so each collaborator runs export on their OWN
 machine and sends the recipient string to the owner, who adds it to the
 keyring with tell. It cannot export a collaborator's key for them.
@@ -97,18 +97,17 @@ keyring with tell. It cannot export a collaborator's key for them.
 The output never contains private key material — even when the match is
 your imported identity, export always emits the public recipient half.
 
-Matching is exact: the identifier equals the key's fingerprint, or its
-recipient string. If several keys share the requested recipient, the
-fingerprints are listed so you can retry with one of them.
+Matching is exact: the identifier is the key's recipient string. Keys are
+selected by public key string only; no fingerprint-as-identifier mode
+remains.
 export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
   $ git-veil export age1axmf...                     # to stdout
   $ git-veil export age1axmf... --output alice.pub  # hand-off file
-  $ git-veil export 9A1F... --output alice.pub      # by fingerprint
 ")]
     Export {
-        /// Recipient string (age1...) or fingerprint of the key to export
+        /// Recipient string (age1...) of the key to export
         identifier: String,
         /// Write the recipient string to this file instead of stdout
         #[arg(long)]
@@ -122,11 +121,10 @@ EXAMPLES
     #[command(name = "removekey")]
     #[command(after_long_help = "\
 Drops key material from the LOCAL key store: every identity in
-$GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt whose recipient
-matches the identifier, or whose exact case-insensitive fingerprint
-matches, is removed. Prefer the FINGERPRINT when it is not unambiguous
-which key you mean — a shared recipient that matches several identities
-is refused unless --yes confirms removing ALL of them.
+$GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt and every recipient in
+recipients.txt whose recipient string exactly matches the identifier is
+removed. Keys are selected by public key string only; no
+fingerprint-as-identifier mode remains.
 
 This is destructive and LOCAL-ONLY: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. Removing an
@@ -143,20 +141,18 @@ The store rewrite is atomic and lossless for the retained lines. A
 corrupt (e.g. truncated) store is refused untouched — the error names the
 file, the line number, and the corrupt line so you can delete exactly it;
 removekey never rewrites a store it could not fully parse. On success a
-per-store summary prints the fingerprints removed.
+per-store summary prints the recipient strings removed.
 
 EXAMPLES
-  $ git-veil removekey 9A1F...                     # by fingerprint (preferred)
   $ git-veil removekey age1axmf...                 # exact recipient string
   $ git-veil removekey age1axmf... --yes           # confirm only-identity removal
   $ git-veil removekey age1axmf... --key-store /path/to/store
 ")]
     RemoveKey {
-        /// Fingerprint or exact recipient string of the identity to remove
+        /// Exact recipient string (age1...) of the key to remove
         identifier: String,
-        /// Confirm destructive removals: required when the target is the only
-        /// private key in the store, and to remove ALL keys when the email
-        /// matches several.
+        /// Confirm destructive removal: required when the target is the only
+        /// private key in the store.
         #[arg(long)]
         yes: bool,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
@@ -181,9 +177,13 @@ pin-creation paths exist, and nothing else:
    produced by git-veil export-pin on a machine that proved possession.
    Three mandatory consistency checks: the pin-file's repo-id must match
    this repository; its verifying key must exactly match the committed
-   owner.verifying; and its fingerprint must match the owner fingerprint
-   recorded in .git-veil/trust.json. Any mismatch -> refusal: one of the
-   two channels is compromised.
+   owner.verifying; and its owner key fingerprint must match the owner
+   fingerprint recorded in .git-veil/trust.json. Any mismatch -> refusal:
+   one of the two channels is compromised.
+
+A pin or trust record in the retired 16 hex character fingerprint format
+is hostile: every gated command refuses it until trust is re-established.
+See the fingerprint documentation for the current derivation.
 
 Both paths refuse a path inside the repository worktree, so a pin-file
 always travels out of band (e.g. ssh) — the same model as known_hosts
@@ -238,9 +238,11 @@ would be exactly the self-supplied anchor the pin model exists to
 prevent. Transfer the file out of band (e.g. ssh); its integrity rides
 the transport, the same model as known_hosts provisioning.
 
-The printed owner verifying-key fingerprint is the human out-of-band
-verification token: read it to the importing machine's operator and have
-them compare it against the repository's committed .git-veil/trust.json.
+The printed owner key fingerprint is the human out-of-band verification
+token: read it to the importing machine's operator and have them compare
+it against the repository's committed .git-veil/trust.json. It is the
+single documented derivation with the repository id as the label, so it
+is reproducible with stock OS tools; see the fingerprint documentation.
 
 EXAMPLES
   $ git-veil export-pin fara+simbo1905@github.com --output /tmp/fara.pin
@@ -261,6 +263,41 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
+    /// Print the git-veil fingerprint of a labelled public key
+    #[command(after_long_help = "\
+Computes and prints the single fingerprint derivation every git-veil
+fingerprint uses:
+
+  FP = SHA-256( UTF8(label) + \":\" + UTF8(public-key-encoding) )
+
+printed as 64 lowercase hex characters.
+
+label is the principal label for a keyring principal, or the repository
+id for the owner key. public-key-encoding is the bech32 X25519 public
+key (age1...) or the 64 hex character Ed25519 verifying key. Both
+arguments are used verbatim — no trimming, no case folding.
+
+This is a pure function: no repository, no key store, no pin, no
+network. A clean host reproduces the exact value with stock OS tools:
+
+  printf '%s:%s' 'alice@example.com' \"$(age-keygen -y identity.txt)\" | sha256sum
+  printf '%s:%s' 'demo+example@github.com' \"$(head -n 1 owner.verifying)\" | sha256sum
+
+Use printf, never echo (echo appends a newline and hashes different
+bytes). Exactly one colon separates label and key. The digest is
+lowercase hex.
+
+EXAMPLES
+  $ git-veil fingerprint alice@example.com age1axmf...
+  $ git-veil fingerprint demo+example@github.com 3f1a9c...64hex
+")]
+    Fingerprint {
+        /// Principal label (keyring principal) or repository id (owner key)
+        label: String,
+        /// Public key encoding: bech32 X25519 public key (age1...) or 64-hex Ed25519 verifying key
+        public_key: String,
+    },
+
     /// Add a collaborator's age recipient key to the keyring and re-sign it
     #[command(after_long_help = "\
 Adds a collaborator's age recipient key to the repository keyring and
@@ -269,12 +306,13 @@ keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test-encrypted to the new key so a key that
 cannot encrypt is never signed into the ring.
 
-The keyring is signed with the TRUSTED key — the one whose verifying-key
+The keyring is signed with the TRUSTED key — the one whose owner key
 fingerprint is pinned for this repository. signing-keys.txt must contain
 that seed; git-veil never generates it (docs/solo.md step 1 has the
 recipe). With several signing keys present, --signing-key names one by
-its 16-hex-character verifying-key fingerprint. A missing signing key
-exits with code 20 and the create-and-back-up recipe.
+its full 64 hex character Ed25519 verifying key (the public half, never
+the seed). A missing signing key exits with code 20 and the
+create-and-back-up recipe.
 
 Requires init, an established trust pin (trust) for this repository on
 this machine, and the signing key in the local key store. Next steps:
@@ -291,8 +329,8 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Signing key to use: its 16-hex verifying-key fingerprint (default: the key matching the pinned fingerprint)
-        #[arg(long, value_name = "FINGERPRINT", value_parser = fingerprint_selection)]
+        /// Signing key to use: its full 64-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)
+        #[arg(long, value_name = "VERIFYING_KEY", value_parser = verifying_key_selection)]
         signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
@@ -309,11 +347,11 @@ ex-collaborator can no longer decrypt newly hidden files — but files
 hidden while they were a member were encrypted to their key, so rotate
 the underlying secrets if that matters.
 
-The keyring is signed with the TRUSTED key — the one whose verifying-key
+The keyring is signed with the TRUSTED key — the one whose owner key
 fingerprint is pinned for this repository. With several signing keys
-present, --signing-key names one by its 16-hex-character verifying-key
-fingerprint. A missing signing key exits with code 20 and the
-create-and-back-up recipe.
+present, --signing-key names one by its full 64 hex character Ed25519
+verifying key (the public half, never the seed). A missing signing key
+exits with code 20 and the create-and-back-up recipe.
 
 Requires init, an established trust pin (trust), and the signing key in
 the local key store.
@@ -327,8 +365,8 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Signing key to use: its 16-hex verifying-key fingerprint (default: the key matching the pinned fingerprint)
-        #[arg(long, value_name = "FINGERPRINT", value_parser = fingerprint_selection)]
+        /// Signing key to use: its full 64-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)
+        #[arg(long, value_name = "VERIFYING_KEY", value_parser = verifying_key_selection)]
         signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]

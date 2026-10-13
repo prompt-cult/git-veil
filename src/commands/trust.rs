@@ -26,12 +26,12 @@ use crate::codeowners::{
     covers_trust_critical_paths, is_suppressed, record_suppression, warning_text,
 };
 use crate::exit_codes::{coded, ExitCode};
+use crate::fingerprint::owner_key_fingerprint;
 use crate::key_discovery::load_signing_keys;
 use crate::pin_file::load_pin_file;
-use crate::signing::{owner_fingerprint_for_verifying_key, parse_verifying_key};
+use crate::signing::parse_verifying_key;
 use crate::{
-    derive_repo_id, fingerprint_for_verifying_key, get_remote_push_url, import_recipient_to_store,
-    TrustPinStore, TrustStore,
+    derive_repo_id, get_remote_push_url, import_recipient_to_store, TrustPinStore, TrustStore,
 };
 
 /// The repository's committed owner verifying key: line 1 is the 64-hex
@@ -186,7 +186,11 @@ fn write_pin_state(
 
     append_verifying_key_to_store(key_store, verifying_key_hex)?;
 
-    let fingerprint = fingerprint_for_verifying_key(verifying_key);
+    // The one derivation (issue #41): the repository id is the label, the
+    // canonical lowercase hex of the verifying key bytes is the public key
+    // encoding. The committed record, the per-machine pin and the owner
+    // fingerprint metadata all carry this same value.
+    let fingerprint = owner_key_fingerprint(repo_id, verifying_key);
 
     // Re-trust visibility: if a pin already exists for this repo and names
     // a DIFFERENT fingerprint, this machine's record of the repository's
@@ -210,10 +214,9 @@ fn write_pin_state(
     let mut trust_store = TrustStore::load_from_file(&trust_path)?;
     trust_store.add_trust(repo_id.to_string(), fingerprint.clone());
     if record_owner_fingerprint {
-        trust_store.set_owner_fingerprint(
-            repo_id.to_string(),
-            owner_fingerprint_for_verifying_key(verifying_key),
-        );
+        // The owner fingerprint IS the pinned fingerprint: one derivation,
+        // the repository id as the label (issue #41).
+        trust_store.set_owner_fingerprint(repo_id.to_string(), fingerprint.clone());
     }
     trust_store.save_to_file(&trust_path)?;
 
@@ -302,11 +305,12 @@ pub fn cmd_trust_import(
         ));
     }
 
-    // Check (c): the pin-file's verifying-key fingerprint (fixed, documented
-    // derivation over the public half — never the seed) exactly matches the
-    // owner fingerprint recorded in the committed .git-veil/ metadata. An
-    // absent field is a refusal: the metadata predates this rule and must
-    // be refreshed by the owner.
+    // Check (c): the pin-file's owner key fingerprint (the single
+    // documented derivation with the repository id as the label, over the
+    // public half — never the seed) exactly matches the owner fingerprint
+    // recorded in the committed .git-veil/ metadata. An absent field is a
+    // refusal: the metadata predates this rule and must be refreshed by
+    // the owner.
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let recorded = match trust_store.get_owner_fingerprint(&repo_id) {

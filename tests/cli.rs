@@ -11,9 +11,8 @@ use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
     cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
-    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, fingerprint_for_recipient,
-    generate_identity, generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles,
-    TrustStore,
+    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, generate_identity,
+    generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -684,7 +683,7 @@ fn test_removeperson_re_signs_keyring() {
 }
 
 // ---------------------------------------------------------------------------
-// --signing-key parse shape: fingerprint only (issues #29, #30)
+// --signing-key parse shape: full verifying key only (issues #29, #30, #41)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -702,22 +701,10 @@ fn test_tell_signing_key_index_form_is_a_parse_error() {
 }
 
 #[test]
-fn test_tell_signing_key_seed_form_is_a_parse_error() {
+fn test_tell_signing_key_fingerprint_form_is_a_parse_error() {
+    // The 16-hex fingerprint form was retired with the derivation change
+    // (issue #41): it must not even parse.
     let err = Cli::try_parse_from([
-        "git-veil",
-        "tell",
-        "alice@example.com",
-        "alice.pub",
-        "--signing-key",
-        &"a".repeat(64),
-    ])
-    .unwrap_err();
-    assert!(err.use_stderr(), "the full-key form must be rejected");
-}
-
-#[test]
-fn test_tell_signing_key_fingerprint_form_parses_normalized() {
-    let cli = Cli::try_parse_from([
         "git-veil",
         "tell",
         "alice@example.com",
@@ -725,10 +712,24 @@ fn test_tell_signing_key_fingerprint_form_parses_normalized() {
         "--signing-key",
         "ABCDEF0123456789",
     ])
-    .expect("the fingerprint form parses");
+    .unwrap_err();
+    assert!(err.use_stderr(), "the fingerprint form must be rejected");
+}
+
+#[test]
+fn test_tell_signing_key_verifying_key_form_parses_normalized() {
+    let cli = Cli::try_parse_from([
+        "git-veil",
+        "tell",
+        "alice@example.com",
+        "alice.pub",
+        "--signing-key",
+        &"A".repeat(64),
+    ])
+    .expect("the full verifying key form parses");
     match cli.command {
         Commands::Tell { signing_key, .. } => {
-            assert_eq!(signing_key.as_deref(), Some("abcdef0123456789"));
+            assert_eq!(signing_key.as_deref(), Some("a".repeat(64).as_str()));
         }
         _ => panic!("expected the Tell subcommand"),
     }
@@ -748,31 +749,31 @@ fn test_removeperson_signing_key_index_form_is_a_parse_error() {
 }
 
 #[test]
-fn test_removeperson_signing_key_seed_form_is_a_parse_error() {
+fn test_removeperson_signing_key_fingerprint_form_is_a_parse_error() {
     let err = Cli::try_parse_from([
-        "git-veil",
-        "removeperson",
-        "alice@example.com",
-        "--signing-key",
-        &"b".repeat(64),
-    ])
-    .unwrap_err();
-    assert!(err.use_stderr(), "the full-key form must be rejected");
-}
-
-#[test]
-fn test_removeperson_signing_key_fingerprint_form_parses() {
-    let cli = Cli::try_parse_from([
         "git-veil",
         "removeperson",
         "alice@example.com",
         "--signing-key",
         "0123456789abcdef",
     ])
-    .expect("the fingerprint form parses");
+    .unwrap_err();
+    assert!(err.use_stderr(), "the fingerprint form must be rejected");
+}
+
+#[test]
+fn test_removeperson_signing_key_verifying_key_form_parses() {
+    let cli = Cli::try_parse_from([
+        "git-veil",
+        "removeperson",
+        "alice@example.com",
+        "--signing-key",
+        &"b".repeat(64),
+    ])
+    .expect("the full verifying key form parses");
     match cli.command {
         Commands::RemovePerson { signing_key, .. } => {
-            assert_eq!(signing_key.as_deref(), Some("0123456789abcdef"));
+            assert_eq!(signing_key.as_deref(), Some("b".repeat(64).as_str()));
         }
         _ => panic!("expected the RemovePerson subcommand"),
     }
@@ -832,17 +833,21 @@ fn test_export_by_recipient() {
 }
 
 #[test]
-fn test_export_by_fingerprint() {
+fn test_export_by_fingerprint_is_not_an_identifier() {
+    // issue #41: export selects by public key string only. Even the new
+    // 64-hex binding fingerprint is not an export identifier.
     let fixture = TestRepo::new("export-fp");
 
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
-    let fingerprint = fingerprint_for_recipient(&recipient);
+    let fingerprint = git_veil::fingerprint_for_public_key("alice@example.com", &recipient);
 
-    // Import the collaborator's recipient to the key store so export can find it
     git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
 
-    let exported = export_public_key(&fixture.key_store.path, &fingerprint).unwrap();
-    assert_eq!(exported.trim(), recipient);
+    let result = export_public_key(&fixture.key_store.path, &fingerprint);
+    assert!(
+        result.is_err(),
+        "a fingerprint must not select a key for export"
+    );
 }
 
 #[test]
@@ -858,15 +863,13 @@ fn test_export_not_found_fails() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_removekey_by_fingerprint() {
+fn test_removekey_by_recipient() {
     let fixture = TestRepo::new("removekey");
 
     let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&collab_identity, "alice.age");
 
-    let fingerprint = fingerprint_for_recipient(&recipient);
-
-    cmd_removekey(&fixture.key_store.path, &fingerprint, false).expect("removekey");
+    cmd_removekey(&fixture.key_store.path, &recipient, false).expect("removekey");
 
     // The collaborator's identity should be gone; the owner's identity remains
     let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
@@ -876,12 +879,33 @@ fn test_removekey_by_fingerprint() {
 }
 
 #[test]
+fn test_removekey_by_fingerprint_is_not_an_identifier() {
+    // issue #41: removekey selects by public key string only. Even the new
+    // 64-hex binding fingerprint removes nothing.
+    let fixture = TestRepo::new("removekey-fp");
+
+    let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+    let fingerprint = git_veil::fingerprint_for_public_key("alice@example.com", &recipient);
+
+    let result = cmd_removekey(&fixture.key_store.path, &fingerprint, false);
+    assert!(
+        result.is_err(),
+        "a fingerprint must not select a key for removekey"
+    );
+
+    // Nothing was removed.
+    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
+    let collab_recipient = recipient_from_identity(&collab_identity);
+    assert!(identities.iter().any(|(_, r)| *r == collab_recipient));
+}
+
+#[test]
 fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
     let fixture = TestRepo::new("removekey-corrupt");
 
     let (_collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&_collab_identity, "alice.age");
-    let fingerprint = fingerprint_for_recipient(&recipient);
 
     // Corrupt the store: a truncated identity line the tool cannot parse
     let identities_path = fixture.key_store.path.join("identities.txt");
@@ -890,7 +914,7 @@ fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
     fs::write(&identities_path, &corrupt).unwrap();
 
     // Removing any key must refuse, exit 62, and name the corrupt line
-    let err = cmd_removekey(&fixture.key_store.path, &fingerprint, false)
+    let err = cmd_removekey(&fixture.key_store.path, &recipient, false)
         .expect_err("removekey must refuse a corrupt store");
     let message = format!("{:#}", err);
     assert_eq!(
@@ -913,7 +937,6 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
     let fixture = TestRepo::new("removekey-corrupt-recipients");
 
     let (_identity, recipient) = fixture.add_collaborator("alice@example.com");
-    let fingerprint = fingerprint_for_recipient(&recipient);
     git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
 
     // Corrupt the recipients store with a line that is not a parseable
@@ -922,7 +945,7 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
     let corrupt = fs::read_to_string(&recipients_path).unwrap() + "not-a-recipient\n";
     fs::write(&recipients_path, &corrupt).unwrap();
 
-    let err = cmd_removekey(&fixture.key_store.path, &fingerprint, false)
+    let err = cmd_removekey(&fixture.key_store.path, &recipient, false)
         .expect_err("removekey must refuse a corrupt recipients store");
     let message = format!("{:#}", err);
     assert_eq!(
@@ -944,9 +967,7 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
 fn test_removekey_only_identity_refuses_without_yes() {
     let fixture = TestRepo::new("removekey-only");
 
-    let fingerprint = fingerprint_for_recipient(&fixture.owner_recipient);
-
-    let result = cmd_removekey(&fixture.key_store.path, &fingerprint, false);
+    let result = cmd_removekey(&fixture.key_store.path, &fixture.owner_recipient, false);
     assert!(result.is_err(), "should refuse to remove only identity");
     assert!(result.unwrap_err().to_string().contains("only identity"));
 }
@@ -955,9 +976,8 @@ fn test_removekey_only_identity_refuses_without_yes() {
 fn test_removekey_only_identity_with_yes() {
     let fixture = TestRepo::new("removekey-only-yes");
 
-    let fingerprint = fingerprint_for_recipient(&fixture.owner_recipient);
-
-    cmd_removekey(&fixture.key_store.path, &fingerprint, true).expect("removekey with --yes");
+    cmd_removekey(&fixture.key_store.path, &fixture.owner_recipient, true)
+        .expect("removekey with --yes");
 
     let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
     assert!(identities.is_empty());

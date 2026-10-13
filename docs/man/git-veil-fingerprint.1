@@ -1,0 +1,45 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-fingerprint 1  "git-veil-fingerprint " 
+.SH NAME
+git\-veil\-fingerprint \- Print the git\-veil fingerprint of a labelled public key
+.SH SYNOPSIS
+\fBgit\-veil fingerprint\fR [\fB\-h\fR|\fB\-\-help\fR] <\fILABEL\fR> <\fIPUBLIC_KEY\fR> 
+.SH DESCRIPTION
+Print the git\-veil fingerprint of a labelled public key
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fILABEL\fR>
+Principal label (keyring principal) or repository id (owner key)
+.TP
+<\fIPUBLIC_KEY\fR>
+Public key encoding: bech32 X25519 public key (age1...) or 64\-hex Ed25519 verifying key
+.SH EXTRA
+Computes and prints the single fingerprint derivation every git\-veil
+fingerprint uses:
+
+  FP = SHA\-256( UTF8(label) + ":" + UTF8(public\-key\-encoding) )
+
+printed as 64 lowercase hex characters.
+
+label is the principal label for a keyring principal, or the repository
+id for the owner key. public\-key\-encoding is the bech32 X25519 public
+key (age1...) or the 64 hex character Ed25519 verifying key. Both
+arguments are used verbatim — no trimming, no case folding.
+
+This is a pure function: no repository, no key store, no pin, no
+network. A clean host reproduces the exact value with stock OS tools:
+
+  printf \*(Aq%s:%s\*(Aq \*(Aqalice@example.com\*(Aq "$(age\-keygen \-y identity.txt)" | sha256sum
+  printf \*(Aq%s:%s\*(Aq \*(Aqdemo+example@github.com\*(Aq "$(head \-n 1 owner.verifying)" | sha256sum
+
+Use printf, never echo (echo appends a newline and hashes different
+bytes). Exactly one colon separates label and key. The digest is
+lowercase hex.
+
+EXAMPLES
+  $ git\-veil fingerprint alice@example.com age1axmf...
+  $ git\-veil fingerprint demo+example@github.com 3f1a9c...64hex

@@ -107,6 +107,45 @@ fn test_error_codes_are_all_documented() {
     }
 }
 
+/// Issue #41: the SipHash-1-3 fingerprint derivations and every one of
+/// their call sites were deleted; fingerprints are the single SHA-256
+/// derivation in src/fingerprint.rs. This grep test fails the build if
+/// any of the retired code reappears in src/.
+#[test]
+fn test_no_legacy_fingerprint_code_remains_in_src() {
+    let banned = [
+        "DefaultHasher",
+        "SipHash",
+        "fingerprint_for_recipient",
+        "fingerprint_for_verifying_key",
+        "owner_fingerprint_for_verifying_key",
+        "find_identity_by_fingerprint",
+        "find_recipient_by_fingerprint",
+        "extract_fingerprints",
+    ];
+    let mut offenders = Vec::new();
+    let mut stack = vec![repo_root().join("src")];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).expect("read src directory") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let content = fs::read_to_string(&path).expect("read source file");
+                for needle in banned {
+                    if content.contains(needle) {
+                        offenders.push(format!("{} contains {}", path.display(), needle));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "retired fingerprint code must not reappear in src/: {offenders:?}"
+    );
+}
+
 /// Every subcommand's clap definition carries discussion help — a bare
 /// subcommand with no after_long_help is a docs gap a user hits as an empty
 /// help page.

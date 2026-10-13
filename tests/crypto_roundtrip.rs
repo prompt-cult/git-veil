@@ -1,10 +1,9 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     create_signature_block, decrypt_with_identity, encrypt_to_recipient, encrypt_to_recipients,
-    extract_content_to_verify_from_keyring, extract_signature_from_keyring,
-    fingerprint_for_recipient, generate_identity, generate_signing_keypair, parse_identity,
-    parse_recipient, parse_signing_key, parse_verifying_key, recipient_from_identity,
-    verify_keyring_signature,
+    extract_content_to_verify_from_keyring, extract_signature_from_keyring, generate_identity,
+    generate_signing_keypair, parse_identity, parse_recipient, parse_signing_key,
+    parse_verifying_key, recipient_from_identity, verify_keyring_signature,
 };
 
 #[test]
@@ -53,21 +52,11 @@ fn test_age_decrypt_with_wrong_key_fails() {
 }
 
 #[test]
-fn test_fingerprint_is_consistent() {
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
-    let fp1 = fingerprint_for_recipient(&recipient_str);
-    let fp2 = fingerprint_for_recipient(&recipient_str);
-    assert_eq!(fp1, fp2);
-}
-
-#[test]
 fn test_ed25519_sign_verify_roundtrip() {
     let (signing_key, verifying_key_hex) = generate_signing_keypair();
     let verifying_key = parse_verifying_key(&verifying_key_hex).unwrap();
 
-    let content =
-        "-----BEGIN GIT-VEIL KEYRING-----\nalice:age1xxx:deadbeef\n-----END GIT-VEIL KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice:age1xxx\n-----END GIT-VEIL KEYRING-----";
     let sig_block = create_signature_block(content, &signing_key).unwrap();
 
     // Extract and verify
@@ -83,8 +72,7 @@ fn test_ed25519_verify_tampered_content_fails() {
     let (signing_key, verifying_key_hex) = generate_signing_keypair();
     let verifying_key = parse_verifying_key(&verifying_key_hex).unwrap();
 
-    let content =
-        "-----BEGIN GIT-VEIL KEYRING-----\nalice:age1xxx:deadbeef\n-----END GIT-VEIL KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice:age1xxx\n-----END GIT-VEIL KEYRING-----";
     let sig_block = create_signature_block(content, &signing_key).unwrap();
 
     // Tamper with content
@@ -103,8 +91,7 @@ fn test_ed25519_verify_wrong_key_fails() {
     let (_, other_verifying_key_hex) = generate_signing_keypair();
     let other_verifying_key = parse_verifying_key(&other_verifying_key_hex).unwrap();
 
-    let content =
-        "-----BEGIN GIT-VEIL KEYRING-----\nalice:age1xxx:deadbeef\n-----END GIT-VEIL KEYRING-----";
+    let content = "-----BEGIN GIT-VEIL KEYRING-----\nalice:age1xxx\n-----END GIT-VEIL KEYRING-----";
     let sig_block = create_signature_block(content, &signing_key).unwrap();
 
     let full_text = format!("{}\n{}", content, sig_block);

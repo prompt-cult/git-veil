@@ -1,17 +1,14 @@
 use anyhow::{Context, Result};
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::age_crypto::{
-    fingerprint_for_recipient, for_each_store_line, parse_identity, parse_recipient,
-    recipient_from_identity,
+    for_each_store_line, parse_identity, parse_recipient, recipient_from_identity,
 };
 use crate::fs_atomic::write_atomic;
 
 /// One key line parsed out of a key store file.
 struct StoreLine {
     text: String,
-    fingerprint: String,
     recipient: String,
 }
 
@@ -43,10 +40,8 @@ fn load_identity_store(path: &Path) -> Result<StoreContents> {
     for_each_store_line(path, &content, |_, line_str| {
         let identity = parse_identity(line_str)?;
         let recipient = recipient_from_identity(&identity);
-        let fingerprint = fingerprint_for_recipient(&recipient);
         lines.push(StoreLine {
             text: line_str.to_string(),
-            fingerprint,
             recipient,
         });
         Ok(())
@@ -78,7 +73,6 @@ fn load_recipient_store(path: &Path) -> Result<StoreContents> {
         parse_recipient(line_str)?;
         lines.push(StoreLine {
             text: line_str.to_string(),
-            fingerprint: fingerprint_for_recipient(line_str),
             recipient: line_str.to_string(),
         });
         Ok(())
@@ -90,15 +84,11 @@ fn load_recipient_store(path: &Path) -> Result<StoreContents> {
     })
 }
 
-/// Matching: the identifier equals the key's fingerprint (case-insensitively),
-/// or equals the recipient string.
-fn line_matches(line: &StoreLine, wanted_fingerprint: &str, wanted_recipient: &str) -> bool {
-    line.fingerprint == wanted_fingerprint || line.recipient == wanted_recipient
-}
-
 /// Removes key material from the LOCAL key store: every line in
 /// `<key_store>/identities.txt` and `<key_store>/recipients.txt` whose
-/// fingerprint matches `identifier`, or whose recipient string matches, is dropped.
+/// recipient string exactly matches `identifier` is dropped. Keys are
+/// selected by public key string only; no fingerprint-as-identifier mode
+/// remains (issue #41).
 pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
     let identities_path = key_store.join("identities.txt");
     let recipients_path = key_store.join("recipients.txt");
@@ -107,20 +97,19 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
     let recipient_store = load_recipient_store(&recipients_path)?;
 
     let wanted_recipient = identifier.trim();
-    let wanted_fingerprint = identifier.trim().to_lowercase();
 
     let identity_matches: Vec<usize> = identity_store
         .lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| line_matches(line, &wanted_fingerprint, wanted_recipient))
+        .filter(|(_, line)| line.recipient == wanted_recipient)
         .map(|(i, _)| i)
         .collect();
     let recipient_matches: Vec<usize> = recipient_store
         .lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| line_matches(line, &wanted_fingerprint, wanted_recipient))
+        .filter(|(_, line)| line.recipient == wanted_recipient)
         .map(|(i, _)| i)
         .collect();
 
@@ -134,20 +123,6 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
     if !identity_matches.is_empty() && identity_store.lines.len() == 1 && !yes {
         anyhow::bail!(
             "refusing to remove the only identity. Without it you cannot decrypt anything. Confirm to continue"
-        );
-    }
-
-    // Ambiguity guard: several DISTINCT keys match the identifier.
-    let mut matched_fingerprints: BTreeSet<String> = BTreeSet::new();
-    for i in &identity_matches {
-        matched_fingerprints.insert(identity_store.lines[*i].fingerprint.clone());
-    }
-    for i in &recipient_matches {
-        matched_fingerprints.insert(recipient_store.lines[*i].fingerprint.clone());
-    }
-    if matched_fingerprints.len() > 1 && !yes {
-        anyhow::bail!(
-            "multiple keys match in the key store. Pass a fingerprint to select one, or confirm to remove all of them"
         );
     }
 
@@ -166,7 +141,7 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
         }
         let removed: Vec<String> = matches
             .iter()
-            .map(|i| store.lines[*i].fingerprint.clone())
+            .map(|i| store.lines[*i].recipient.clone())
             .collect();
         let mut retained = String::new();
         for (i, line) in store.lines.iter().enumerate() {

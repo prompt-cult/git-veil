@@ -10,7 +10,7 @@ Remove an age identity from the local key store (destructive, local\-only)
 .SH OPTIONS
 .TP
 \fB\-\-yes\fR
-Confirm destructive removals: required when the target is the only private key in the store, and to remove ALL keys when the email matches several
+Confirm destructive removal: required when the target is the only private key in the store
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
@@ -19,14 +19,13 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIIDENTIFIER\fR>
-Fingerprint or exact recipient string of the identity to remove
+Exact recipient string (age1...) of the key to remove
 .SH EXTRA
 Drops key material from the LOCAL key store: every identity in
-$GIT_VEIL_HOME (or $HOME/.git\-veil) identities.txt whose recipient
-matches the identifier, or whose exact case\-insensitive fingerprint
-matches, is removed. Prefer the FINGERPRINT when it is not unambiguous
-which key you mean — a shared recipient that matches several identities
-is refused unless \-\-yes confirms removing ALL of them.
+$GIT_VEIL_HOME (or $HOME/.git\-veil) identities.txt and every recipient in
+recipients.txt whose recipient string exactly matches the identifier is
+removed. Keys are selected by public key string only; no
+fingerprint\-as\-identifier mode remains.
 
 This is destructive and LOCAL\-ONLY: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. Removing an
@@ -43,10 +42,9 @@ The store rewrite is atomic and lossless for the retained lines. A
 corrupt (e.g. truncated) store is refused untouched — the error names the
 file, the line number, and the corrupt line so you can delete exactly it;
 removekey never rewrites a store it could not fully parse. On success a
-per\-store summary prints the fingerprints removed.
+per\-store summary prints the recipient strings removed.
 
 EXAMPLES
-  $ git\-veil removekey 9A1F...                     # by fingerprint (preferred)
   $ git\-veil removekey age1axmf...                 # exact recipient string
   $ git\-veil removekey age1axmf... \-\-yes           # confirm only\-identity removal
   $ git\-veil removekey age1axmf... \-\-key\-store /path/to/store

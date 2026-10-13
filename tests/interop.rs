@@ -5,8 +5,7 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     decrypt_with_identity, encrypt_to_recipient, encrypt_to_recipients, export_public_key,
-    find_identity_by_fingerprint, find_identity_by_recipient, find_recipient_by_fingerprint,
-    fingerprint_for_recipient, generate_identity, import_identity_to_store,
+    find_identity_by_recipient, generate_identity, import_identity_to_store,
     import_recipient_to_store, load_identities_from_store, load_recipients_from_store,
     parse_identity, parse_recipient, recipient_from_identity, Keyring,
 };
@@ -138,34 +137,6 @@ fn test_find_identity_by_recipient() {
 }
 
 #[test]
-fn test_find_identity_by_fingerprint() {
-    let store = TempDir::new("ks-find-fp");
-    let identity = generate_identity();
-    let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
-    let fingerprint = fingerprint_for_recipient(&recipient_str);
-
-    import_identity_to_store(&store.path, &identity_str).unwrap();
-
-    let found = find_identity_by_fingerprint(&store.path, &fingerprint).unwrap();
-    let found_recipient = recipient_from_identity(&found);
-    assert_eq!(found_recipient, recipient_str);
-}
-
-#[test]
-fn test_find_recipient_by_fingerprint() {
-    let store = TempDir::new("ks-find-rcpt-fp");
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
-    let fingerprint = fingerprint_for_recipient(&recipient_str);
-
-    import_recipient_to_store(&store.path, &recipient_str).unwrap();
-
-    let found = find_recipient_by_fingerprint(&store.path, &fingerprint).unwrap();
-    assert_eq!(found, recipient_str);
-}
-
-#[test]
 fn test_export_by_recipient_str() {
     let store = TempDir::new("ks-export");
     let identity = generate_identity();
@@ -181,15 +152,10 @@ fn test_export_by_recipient_str() {
 fn test_keyring_serialize_parse_roundtrip() {
     let identity = generate_identity();
     let recipient_str = recipient_from_identity(&identity);
-    let fingerprint = fingerprint_for_recipient(&recipient_str);
 
     let mut keyring = Keyring::new();
     keyring
-        .add_entry(
-            "alice@example.com".to_string(),
-            recipient_str.clone(),
-            fingerprint.clone(),
-        )
+        .add_entry("alice@example.com".to_string(), recipient_str.clone())
         .unwrap();
 
     let serialized = keyring.serialize();
@@ -198,18 +164,51 @@ fn test_keyring_serialize_parse_roundtrip() {
     assert_eq!(parsed.entries.len(), 1);
     assert_eq!(parsed.entries[0].email, "alice@example.com");
     assert_eq!(parsed.entries[0].recipient, recipient_str);
-    assert_eq!(parsed.entries[0].fingerprint, fingerprint);
+}
+
+#[test]
+fn test_keyring_v2_two_field_format() {
+    // Keyring format v2 (issue #41): exactly two fields per entry,
+    // principal and public key; fingerprints are computed, never stored.
+    let identity = generate_identity();
+    let recipient_str = recipient_from_identity(&identity);
+
+    let mut keyring = Keyring::new();
+    keyring
+        .add_entry("alice@example.com".to_string(), recipient_str.clone())
+        .unwrap();
+
+    let serialized = keyring.serialize();
+    let entry_line = serialized
+        .lines()
+        .find(|l| l.contains("alice@example.com"))
+        .expect("entry line");
+    assert_eq!(
+        entry_line,
+        format!("alice@example.com:{}", recipient_str),
+        "the serialized entry is exactly principal and public key"
+    );
+
+    // A legacy three-field entry (with a stored fingerprint) is a parse
+    // refusal, never a silent migration.
+    let legacy = format!(
+        "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:{}:deadbeefdeadbeef\n-----END GIT-VEIL KEYRING-----\n",
+        recipient_str
+    );
+    assert!(
+        Keyring::parse(&legacy).is_err(),
+        "a stored-fingerprint entry must be refused"
+    );
 }
 
 #[test]
 fn test_keyring_with_signature_roundtrip() {
     let identity = generate_identity();
     let recipient_str = recipient_from_identity(&identity);
-    let fingerprint = fingerprint_for_recipient(&recipient_str);
 
     let mut keyring = Keyring::new();
     keyring
-        .add_entry("bob@example.com".to_string(), recipient_str, fingerprint)
+        .add_entry("bob@example.com".to_string(), recipient_str)
         .unwrap();
     keyring.signature = Some(
         "-----BEGIN GIT-VEIL SIGNATURE-----\ndGVzdA==\n-----END GIT-VEIL SIGNATURE-----\n"
@@ -226,11 +225,7 @@ fn test_keyring_with_signature_roundtrip() {
 #[test]
 fn test_keyring_rejects_colon_in_email() {
     let mut keyring = Keyring::new();
-    let result = keyring.add_entry(
-        "alice:evil@example.com".to_string(),
-        "age1xxx".to_string(),
-        "deadbeef".to_string(),
-    );
+    let result = keyring.add_entry("alice:evil@example.com".to_string(), "age1xxx".to_string());
     assert!(result.is_err());
 }
 
@@ -238,11 +233,7 @@ fn test_keyring_rejects_colon_in_email() {
 fn test_keyring_remove_clears_signature() {
     let mut keyring = Keyring::new();
     keyring
-        .add_entry(
-            "alice@example.com".to_string(),
-            "age1xxx".to_string(),
-            "deadbeef".to_string(),
-        )
+        .add_entry("alice@example.com".to_string(), "age1xxx".to_string())
         .unwrap();
     keyring.signature = Some("sig".to_string());
 
@@ -259,39 +250,13 @@ fn test_keyring_remove_clears_signature() {
 fn test_keyring_find_case_insensitive() {
     let mut keyring = Keyring::new();
     keyring
-        .add_entry(
-            "Alice@Example.COM".to_string(),
-            "age1xxx".to_string(),
-            "deadbeef".to_string(),
-        )
+        .add_entry("Alice@Example.COM".to_string(), "age1xxx".to_string())
         .unwrap();
 
     assert!(keyring.find_by_email("alice@example.com").is_some());
     assert!(keyring.find_by_email("ALICE@EXAMPLE.COM").is_some());
     assert!(keyring.find_by_email("Alice@Example.COM").is_some());
     assert!(keyring.find_by_email("bob@example.com").is_none());
-}
-
-#[test]
-fn test_fingerprint_format() {
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
-    let fingerprint = fingerprint_for_recipient(&recipient_str);
-
-    assert_eq!(fingerprint.len(), 16, "fingerprint should be 16 hex chars");
-    assert!(
-        fingerprint.chars().all(|c| c.is_ascii_hexdigit()),
-        "fingerprint should be hex"
-    );
-}
-
-#[test]
-fn test_different_identities_different_fingerprints() {
-    let id1 = generate_identity();
-    let id2 = generate_identity();
-    let fp1 = fingerprint_for_recipient(&recipient_from_identity(&id1));
-    let fp2 = fingerprint_for_recipient(&recipient_from_identity(&id2));
-    assert_ne!(fp1, fp2);
 }
 
 // ===========================================================================

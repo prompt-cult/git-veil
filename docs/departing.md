@@ -59,10 +59,9 @@ rm -rf ~/work/demo                 # wipe his clone (ciphertext + .git-veil/)
 ```
 
 And his local key store, `$HOME/.git-veil`, holds his PRIVATE age
-identity. He removes it from that store with `removekey` — by fingerprint
-where known (preferred: a recipient string that matches several keys is
-refused without confirmation), or by exact recipient string. The identity
-is usually the only one in his store, so `--yes` confirms its removal:
+identity. He removes it from that store with `removekey`, selected by his
+exact recipient string. The identity is usually the only one in his
+store, so `--yes` confirms its removal:
 
 ```sh
 git-veil removekey age1... --yes

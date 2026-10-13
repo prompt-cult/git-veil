@@ -8,8 +8,8 @@ use git_veil::cli::Cli;
 use git_veil::{
     cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
     cmd_trust_import, cmd_verify_keyring, exit_code_of, generate_identity,
-    generate_signing_keypair, owner_fingerprint_for_verifying_key, recipient_from_identity,
-    PinFile, TrustPinStore, TrustStore,
+    generate_signing_keypair, owner_key_fingerprint, recipient_from_identity, PinFile,
+    TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::Path;
@@ -159,8 +159,8 @@ fn test_trust_proof_writes_pin_and_verifies() {
     );
     assert_eq!(
         trust.get_owner_fingerprint(TEST_REPO_ID).unwrap(),
-        owner_fingerprint_for_verifying_key(&f.signing_key.verifying_key()),
-        "the metadata must record the fixed-derivation owner fingerprint"
+        owner_key_fingerprint(TEST_REPO_ID, &f.signing_key.verifying_key()),
+        "the metadata must record the owner fingerprint under the single derivation"
     );
     cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify-keyring passes after a proven pin");
@@ -632,7 +632,7 @@ fn test_no_pin_fails_closed() {
 fn test_mismatched_pin_fails_closed() {
     let f = Fixture::new("mismatch-pin");
 
-    TrustPinStore::write_pin(&f.key_store.path, TEST_REPO_ID, "ffffffffffffffff").unwrap();
+    TrustPinStore::write_pin(&f.key_store.path, TEST_REPO_ID, &"ff".repeat(32)).unwrap();
 
     let result = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path);
     assert!(result.is_err(), "should fail with mismatched pin");
@@ -672,7 +672,7 @@ fn test_hide_and_tell_fail_without_trust() {
 fn test_unsigned_keyring_with_entries_fails() {
     let f = Fixture::new("unsigned");
 
-    let keyring_content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:age1xxx:deadbeef\n-----END GIT-VEIL KEYRING-----\n";
+    let keyring_content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:age1xxx\n-----END GIT-VEIL KEYRING-----\n";
     fs::write(f.repo.join(".git-veil/keyring"), keyring_content).unwrap();
 
     let result = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path);
@@ -757,11 +757,11 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     let mut trust = TrustStore::new();
     trust.add_trust(
         TEST_REPO_ID.to_string(),
-        git_veil::fingerprint_for_verifying_key(&attacker_signing_key.verifying_key()),
+        owner_key_fingerprint(TEST_REPO_ID, &attacker_signing_key.verifying_key()),
     );
     trust.set_owner_fingerprint(
         TEST_REPO_ID.to_string(),
-        owner_fingerprint_for_verifying_key(&attacker_signing_key.verifying_key()),
+        owner_key_fingerprint(TEST_REPO_ID, &attacker_signing_key.verifying_key()),
     );
     trust
         .save_to_file(&attacked.join(".git-veil/trust.json"))

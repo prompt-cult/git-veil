@@ -37,9 +37,11 @@ would be exactly the self\-supplied anchor the pin model exists to
 prevent. Transfer the file out of band (e.g. ssh); its integrity rides
 the transport, the same model as known_hosts provisioning.
 
-The printed owner verifying\-key fingerprint is the human out\-of\-band
-verification token: read it to the importing machine\*(Aqs operator and have
-them compare it against the repository\*(Aqs committed .git\-veil/trust.json.
+The printed owner key fingerprint is the human out\-of\-band verification
+token: read it to the importing machine\*(Aqs operator and have them compare
+it against the repository\*(Aqs committed .git\-veil/trust.json. It is the
+single documented derivation with the repository id as the label, so it
+is reproducible with stock OS tools; see the fingerprint documentation.
 
 EXAMPLES
   $ git\-veil export\-pin fara+simbo1905@github.com \-\-output /tmp/fara.pin

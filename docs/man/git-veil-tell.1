@@ -12,8 +12,8 @@ Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-signing\-key\fR \fI<FINGERPRINT>\fR
-Signing key to use: its 16\-hex verifying\-key fingerprint (default: the key matching the pinned fingerprint)
+\fB\-\-signing\-key\fR \fI<VERIFYING_KEY>\fR
+Signing key to use: its full 64\-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
@@ -33,12 +33,13 @@ keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test\-encrypted to the new key so a key that
 cannot encrypt is never signed into the ring.
 
-The keyring is signed with the TRUSTED key — the one whose verifying\-key
+The keyring is signed with the TRUSTED key — the one whose owner key
 fingerprint is pinned for this repository. signing\-keys.txt must contain
 that seed; git\-veil never generates it (docs/solo.md step 1 has the
 recipe). With several signing keys present, \-\-signing\-key names one by
-its 16\-hex\-character verifying\-key fingerprint. A missing signing key
-exits with code 20 and the create\-and\-back\-up recipe.
+its full 64 hex character Ed25519 verifying key (the public half, never
+the seed). A missing signing key exits with code 20 and the
+create\-and\-back\-up recipe.
 
 Requires init, an established trust pin (trust) for this repository on
 this machine, and the signing key in the local key store. Next steps:

@@ -213,5 +213,4 @@ impl Keyring {
     pub fn list_emails(&self) -> Vec<&str> {
         self.entries.iter().map(|e| e.email.as_str()).collect()
     }
-
 }

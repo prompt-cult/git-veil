@@ -17,15 +17,17 @@
 //! verifying-key: <64-hex Ed25519 verifying key>
 //! ```
 //!
-//! The fingerprint is NOT stored: it is derived with the fixed, documented
-//! derivation (`owner_fingerprint_for_verifying_key`) by whoever needs it,
-//! so the file cannot disagree with itself.
+//! The fingerprint is NOT stored: it is derived with the single documented
+//! derivation (src/fingerprint.rs — the repository id as the label, the
+//! verifying key hex as the public key encoding) by whoever needs it, so
+//! the file cannot disagree with itself.
 
 use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::exit_codes::{coded, ExitCode};
-use crate::signing::{owner_fingerprint_for_verifying_key, parse_verifying_key};
+use crate::fingerprint::owner_key_fingerprint;
+use crate::signing::parse_verifying_key;
 use crate::{derive_repo_id, get_remote_push_url};
 use ed25519_dalek::VerifyingKey;
 
@@ -114,11 +116,12 @@ impl PinFile {
         })
     }
 
-    /// The fixed-derivation fingerprint of the carried verifying key — the
-    /// token for pin-file/metadata cross-checks and human out-of-band
+    /// The owner key fingerprint of the carried verifying key under the
+    /// single derivation, with the carried repository id as the label —
+    /// the token for pin-file/metadata cross-checks and human out-of-band
     /// verification.
     pub fn owner_fingerprint(&self) -> String {
-        owner_fingerprint_for_verifying_key(&self.verifying_key)
+        owner_key_fingerprint(&self.repo_id, &self.verifying_key)
     }
 }
 

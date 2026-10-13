@@ -52,13 +52,14 @@ wrong identity.
 `trust.json` lives at `.git-veil/trust.json` and holds one JSON object with
 two maps (`TrustStore`, src/trust_store.rs):
 
-- `trusted_keys`: `{ "<repo_id>": "<fingerprint>" }` — the internal-derivation
-  fingerprint of the key pinned for the repository, compared against the
+- `trusted_keys`: `{ "<repo_id>": "<fingerprint>" }` — the fingerprint of
+  the owner key pinned for the repository under the single derivation (see
+  "Fingerprints": the repository id is the label), compared against the
   local pin by every gated command;
-- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` — the
-  FIXED-derivation fingerprint of the repository's committed owner
-  verifying key (`owner.verifying`), used by pin-file import and by humans
-  verifying out of band.
+- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` — the same
+  value: the fingerprint of the repository's committed owner verifying key
+  (`owner.verifying`) under the single derivation, used by pin-file import
+  and by humans verifying out of band.
 
 Both fields default to absent when missing (pre-0.6 files parse cleanly);
 the file is written pretty-printed and atomically
@@ -96,9 +97,8 @@ pin:
    and more than one (a degenerate duplicated store) refuses on ambiguity
    (exit code 70). On success the verifying key is appended to
    `verifying-keys.txt`, the pin and the committed record are written, and
-   the fixed-derivation owner fingerprint is recorded in
-   `owner_fingerprints` (the owner commits the updated `trust.json`
-   alongside `owner.verifying`).
+   the owner fingerprint is recorded in `owner_fingerprints` (the owner
+   commits the updated `trust.json` alongside `owner.verifying`).
 
 2. **Pin-file import** — `git-veil trust --import <pin-file>`
    (`cmd_trust_import`, src/commands/trust.rs). The pin-file is produced by
@@ -119,7 +119,7 @@ pin:
    (a) the pin-file's repo-id matches the repository being pinned (derived
    from the live remote); (b) the pin-file's verifying key exactly matches
    the repository's committed `owner.verifying`; (c) the pin-file's
-   verifying-key fingerprint exactly matches the owner fingerprint recorded
+   owner key fingerprint exactly matches the owner fingerprint recorded
    in `trust.json`'s `owner_fingerprints` — an absent field is a refusal
    (the owner must re-run `trust` on a seed-holding machine and commit the
    updated metadata). Any mismatch refuses with
@@ -128,12 +128,12 @@ pin:
    anchor; the repository's committed key and fingerprint are the witnesses.
 
 **The owner fingerprint derivation is fixed and documented** so any
-implementation can compute it (`owner_fingerprint_for_verifying_key`,
-src/signing.rs): SHA-256 of the 32 raw verifying-key bytes, hex-encoded
-(64 characters). It is never computed over the seed, only the public half.
-This is distinct from the internal pin fingerprint
-(`fingerprint_for_verifying_key`), which exists only to be written and
-compared by git-veil itself.
+implementation can compute it (`owner_key_fingerprint`,
+src/fingerprint.rs): the single derivation with the repository id as the
+label and the canonical lowercase hex of the 32 verifying-key bytes as the
+public key encoding. It is never computed over the seed, only the public
+half. See "Fingerprints" for the exact construction, the stock-tool
+one-liners and the golden vectors.
 
 **Pin-files travel out of band, never through the repository.** Both
 `export-pin --output` and `trust --import <pin-file>` refuse any path that
@@ -177,6 +177,13 @@ Every gated command verifies the keyring signature through
      change based on the existing trust record.` (exit code 10);
    - pin missing → `no trust pin exists on this machine. See the trust
      documentation.` (exit code 11);
+   - pin or committed record in the retired 16 hex character fingerprint
+     format → `a trust pin or record in the retired 16 hex character
+     fingerprint format was found. The fingerprint derivation changed to
+     SHA-256 over the label, a colon, and the public key encoding, printed
+     as 64 lowercase hex characters. Re-establish the pin as described in
+     the trust documentation.` (exit code 70). Nothing is rewritten; the
+     recovery is re-establishing the pin (see "Fingerprints");
    - pin present but different (case-insensitively) from the committed
      fingerprint → `the pinned repository identity changed on this
      machine. The committed trust record and this machine pin disagree. See
@@ -196,6 +203,70 @@ never a silently accepted changed anchor. Re-pinning over a different
 existing fingerprint prints a loud `replacing the previously pinned
 fingerprint …` notice.
 
+## Fingerprints
+
+Every fingerprint in git-veil is ONE derivation (`fingerprint_for_public_key`,
+src/fingerprint.rs), stated exactly:
+
+```
+FP = SHA-256( UTF8(label) + ":" + UTF8(public-key-encoding) )
+```
+
+printed as 64 lowercase hex characters. The label is the principal label
+for a keyring principal, or the repository id for the owner key. The
+public key encoding is the bech32 X25519 public key (`age1...`) or the 64
+hex character Ed25519 verifying key. Both inputs are used verbatim — no
+trimming, no case folding — so the construction is reproducible outside
+the tool.
+
+The derivation is a pure function over public values: no repository, no
+key store, no pin, no network. A user on a clean host reproduces the exact
+value with stock OS tools:
+
+```sh
+printf '%s:%s' 'alice@example.com' "$(age-keygen -y identity.txt)" | sha256sum
+printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
+```
+
+Use `printf`, never `echo` (echo appends a newline and hashes different
+bytes). Exactly one colon separates label and key. The digest is lowercase
+hex. `owner.verifying` line 1 is the verifying key; `head -n 1` selects it
+because the file may carry the owner's age recipient on line 2.
+
+**Golden vectors.** These (label, public key encoding, fingerprint)
+triples are produced by the one-liners above and asserted against the Rust
+implementation (tests/fingerprint.rs) — code equals coreutils for every
+key type. The first public key is a real age-keygen X25519 public key; the
+second is a real openssl-generated Ed25519 verifying key:
+
+| label | public key encoding | fingerprint |
+|-------|---------------------|-------------|
+| `alice@example.com` | `age1ga9us2r837a445htpvmuvxnygc8mrxglvtzrfwk0kyy7q55r3ypqlt28nk` | `263e683748d60e61ea89a6470e209f697c5ec23452e8bc8f222e2aff48e0d36b` |
+| `demo+example@github.com` | `92cf641b35021f2c38fa5016fe9c413d4a399bfdc67c6832b4f9fdd019ccebdb` | `b7480ed036c6ab15e0446b8caa694faeb2983959bb49e7920a94d14b6bb773d1` |
+
+`git-veil fingerprint <LABEL> <PUBLIC_KEY>` prints the value and nothing
+else.
+
+Where fingerprints are used:
+
+- the per-machine pin and the committed `trusted_keys` record carry the
+  owner key fingerprint — the derivation with the repository id as the
+  label (`owner_key_fingerprint`);
+- `owner_fingerprints` carries the same value: the human out-of-band token
+  (`export-pin` prints it) and the pin-file import witness;
+- `list-keys` prints the binding fingerprint of each keyring principal —
+  the derivation with the principal label — computed at print time; the
+  keyring stores only the principal and the public key (format v2), never
+  a fingerprint;
+- key selection in `export`, `import`, `removekey` and `--signing-key` is
+  by public key string only; no fingerprint-as-identifier mode remains.
+
+**Legacy 16 hex character values are hostile.** The retired derivations
+produced 16 hex character fingerprints. A pin or committed trust record in
+that format is refused by every gated command with exit code 70, in a
+message naming the derivation change; nothing is rewritten silently. The
+recovery is re-establishing the pin as described in "Pin creation".
+
 ## Keyring format and freshness (rollback refusal)
 
 The keyring file is an armored block:
@@ -203,13 +274,19 @@ The keyring file is an armored block:
 ```
 -----BEGIN GIT-VEIL KEYRING-----
 version:<n>
-<email>:<age-recipient>:<fingerprint>
+<email>:<age-recipient>
 ...
 -----END GIT-VEIL KEYRING-----
 -----BEGIN GIT-VEIL SIGNATURE-----
 <base64 Ed25519 signature over everything above, markers included>
 -----END GIT-VEIL SIGNATURE-----
 ```
+
+Keyring format v2 (issue #41): exactly two fields per entry — the
+principal and the public key — with the signature over the pair.
+Fingerprints are computed on demand (see "Fingerprints") and NEVER stored;
+a legacy three-field entry carrying a stored fingerprint is a parse
+refusal (exit code 62), never a silent migration.
 
 The `version:` line (Keyring, src/keyring.rs) is a **monotonic counter
 carried inside the signed payload**: the signature covers it, so a version
@@ -280,20 +357,21 @@ read from `<key store>/signing-keys.txt`, one 64-hex-character seed per line
 keyring-curating commands — select a key as follows:
 
 With several signing keys present, `--signing-key` names one explicitly by
-its 16-hex-character verifying-key fingerprint
-(`discover_signing_key_explicit`): the fingerprint is public (printed by
-`verify-keyring`, stored in every pin file) and stable under reordering
-because it is derived from the key itself, not its position. The only other
-selection forms that ever existed are removed: a 1-based index is positional
-and silently names a different key after the file is reordered or a key is
-inserted, and a full 64-hex seed puts the private key on the command line,
+its full 64 hex character Ed25519 verifying key
+(`discover_signing_key_explicit`): the verifying key is public (it is the
+committed `owner.verifying` content, never the seed) and stable under
+reordering because it IS the key, not its position. The other selection
+forms that ever existed are removed: a 1-based index is positional and
+silently names a different key after the file is reordered or a key is
+inserted; a full 64-hex seed puts the private key on the command line,
 where it lands in shell history, `ps` output, scrollback and agent
-transcripts. An explicit fingerprint matching no store key refuses with code
-20; matching more than one (a degenerate duplicated store) refuses with
-code 70 rather than silently picking one.
+transcripts; and the 16 hex character fingerprint form was retired with
+the derivation change (issue #41). An explicit verifying key matching no
+store key refuses with code 20; matching more than one (a degenerate
+duplicated store) refuses with code 70 rather than silently picking one.
 
-1. The TRUSTED key is used — the one whose verifying-key
-   fingerprint equals the fingerprint pinned for this repository. The keyring
+1. The TRUSTED key is used — the one whose owner key fingerprint equals
+   the fingerprint pinned for this repository. The keyring
    must be signed with exactly the key the pin names (that is what
    verify_keyring checks against), so the pin, not list order, selects the
    key. Selection is deterministic and the pin is mandatory — no

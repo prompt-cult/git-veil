@@ -3,9 +3,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use crate::age_crypto::{
-    fingerprint_for_recipient, for_each_store_line, parse_identity, recipient_from_identity,
-};
+use crate::age_crypto::{for_each_store_line, parse_identity, recipient_from_identity};
 use crate::fs_atomic::write_atomic_mode;
 
 /// Imports age identity strings from one or more files into the
@@ -13,8 +11,8 @@ use crate::fs_atomic::write_atomic_mode;
 ///
 /// Relative key-file paths resolve against `repo_root`. Each file must
 /// contain at least one parseable age identity line, or the command refuses
-/// it. Identities whose fingerprint is already present in the store are
-/// skipped rather than duplicated. On success the store is written as
+/// it. Identities whose recipient string is already present in the store
+/// are skipped rather than duplicated. On success the store is written as
 /// newline-separated identity strings.
 pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Result<()> {
     if files.is_empty() {
@@ -28,15 +26,15 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Resul
         String::new()
     };
 
-    // Fingerprints already present in the identity store. A corrupt store
-    // line refuses the import outright (code 62, naming the line) — never
-    // append to a store we could not fully parse.
+    // Recipient strings already present in the identity store. A corrupt
+    // store line refuses the import outright (code 62, naming the line) —
+    // never append to a store we could not fully parse.
     let mut known: HashSet<String> = HashSet::new();
     if identities_path.exists() {
         for_each_store_line(&identities_path, &identities_content, |_, line| {
             let identity = parse_identity(line)?;
             let recipient = recipient_from_identity(&identity);
-            known.insert(fingerprint_for_recipient(&recipient));
+            known.insert(recipient);
             Ok(())
         })?;
     }
@@ -68,23 +66,19 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Resul
             parseable += 1;
 
             let recipient = recipient_from_identity(&identity);
-            let fingerprint = fingerprint_for_recipient(&recipient);
 
-            if known.contains(&fingerprint) {
+            if known.contains(&recipient) {
                 skipped += 1;
-                println!(
-                    "= skipped because already imported: {} {}",
-                    recipient, fingerprint
-                );
+                println!("= skipped because already imported: {}", recipient);
             } else {
                 if !identities_content.is_empty() && !identities_content.ends_with('\n') {
                     identities_content.push('\n');
                 }
                 identities_content.push_str(line);
                 identities_content.push('\n');
-                known.insert(fingerprint.clone());
+                known.insert(recipient.clone());
                 imported += 1;
-                println!("+ imported: {} {}", recipient, fingerprint);
+                println!("+ imported: {}", recipient);
             }
         }
 

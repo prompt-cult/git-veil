@@ -54,17 +54,17 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Recipient string (age1...) or fingerprint of the key to export:_default' \
+':identifier -- Recipient string (age1...) of the key to export:_default' \
 && ret=0
 ;;
 (removekey)
 _arguments "${_arguments_options[@]}" : \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
-'--yes[Confirm destructive removals\: required when the target is the only private key in the store, and to remove ALL keys when the email matches several]' \
+'--yes[Confirm destructive removal\: required when the target is the only private key in the store]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Fingerprint or exact recipient string of the identity to remove:_default' \
+':identifier -- Exact recipient string (age1...) of the key to remove:_default' \
 && ret=0
 ;;
 (trust)
@@ -90,10 +90,19 @@ _arguments "${_arguments_options[@]}" : \
 ':repo_id -- Repository ID (e.g., fara+simbo1905@github.com):_default' \
 && ret=0
 ;;
+(fingerprint)
+_arguments "${_arguments_options[@]}" : \
+'--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':label -- Principal label (keyring principal) or repository id (owner key):_default' \
+':public_key -- Public key encoding\: bech32 X25519 public key (age1...) or 64-hex Ed25519 verifying key:_default' \
+&& ret=0
+;;
 (tell)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--signing-key=[Signing key to use\: its 16-hex verifying-key fingerprint (default\: the key matching the pinned fingerprint)]:FINGERPRINT:_default' \
+'--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -105,7 +114,7 @@ _arguments "${_arguments_options[@]}" : \
 (removeperson)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--signing-key=[Signing key to use\: its 16-hex verifying-key fingerprint (default\: the key matching the pinned fingerprint)]:FINGERPRINT:_default' \
+'--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -301,6 +310,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(fingerprint)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (tell)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -399,6 +412,7 @@ _git-veil_commands() {
 'removekey:Remove an age identity from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
+'fingerprint:Print the git-veil fingerprint of a labelled public key' \
 'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
@@ -462,6 +476,11 @@ _git-veil__subcmd__export-pin_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil export-pin commands' commands "$@"
 }
+(( $+functions[_git-veil__subcmd__fingerprint_commands] )) ||
+_git-veil__subcmd__fingerprint_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil fingerprint commands' commands "$@"
+}
 (( $+functions[_git-veil__subcmd__help_commands] )) ||
 _git-veil__subcmd__help_commands() {
     local commands; commands=(
@@ -471,6 +490,7 @@ _git-veil__subcmd__help_commands() {
 'removekey:Remove an age identity from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
+'fingerprint:Print the git-veil fingerprint of a labelled public key' \
 'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
@@ -533,6 +553,11 @@ _git-veil__subcmd__help__subcmd__export_commands() {
 _git-veil__subcmd__help__subcmd__export-pin_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help export-pin commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__help__subcmd__fingerprint_commands] )) ||
+_git-veil__subcmd__help__subcmd__fingerprint_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil help fingerprint commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__help_commands] )) ||
 _git-veil__subcmd__help__subcmd__help_commands() {

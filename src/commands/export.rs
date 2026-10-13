@@ -1,39 +1,33 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::age_crypto::{fingerprint_for_recipient, load_recipients_from_store};
+use crate::age_crypto::load_recipients_from_store;
 use crate::fs_atomic::write_atomic;
 
-/// Resolves `identifier` (an age recipient string or a fingerprint, matched
-/// case-insensitively) against every recipient in the local key store and
-/// returns it as a recipient string.
+/// Resolves `identifier` — an exact age recipient string — against every
+/// recipient in the local key store and returns it as a recipient string.
 ///
-/// Matching is exact equality: the identifier equals a recipient string, or
-/// equals the fingerprint derived from one. The store may hold recipients
-/// imported via `trust` or derived from imported identities.
+/// Matching is exact equality on the public key string; no
+/// fingerprint-as-identifier mode remains (issue #41). The store may hold
+/// recipients imported via `trust` or derived from imported identities;
+/// it deduplicates by recipient string, so at most one entry matches.
 pub fn export_public_key(key_store: &Path, identifier: &str) -> Result<String> {
     let recipients = load_recipients_from_store(key_store)?;
-    let wanted_fingerprint = identifier.trim().to_lowercase();
+    let wanted = identifier.trim();
 
     let matched: Vec<&String> = recipients
         .iter()
         .map(|(_, recipient_str)| recipient_str)
-        .filter(|recipient_str| {
-            *recipient_str == identifier.trim()
-                || fingerprint_for_recipient(recipient_str) == wanted_fingerprint
-        })
+        .filter(|recipient_str| *recipient_str == wanted)
         .collect();
 
-    if matched.is_empty() {
+    let Some(recipient_str) = matched.first() else {
         anyhow::bail!(
             "no matching key found in the key store. Export only finds keys this machine knows"
         );
-    }
-    if matched.len() > 1 {
-        anyhow::bail!("multiple keys match in the key store. Pass a fingerprint to select one");
-    }
+    };
 
-    let mut result = matched[0].clone();
+    let mut result = (*recipient_str).clone();
     if !result.ends_with('\n') {
         result.push('\n');
     }

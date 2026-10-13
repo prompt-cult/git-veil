@@ -8,8 +8,7 @@ use crate::fs_atomic::write_atomic;
 use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
 use crate::{
     create_signature_block, encrypt_to_recipient, extract_content_to_verify_from_keyring,
-    fingerprint_for_recipient, parse_recipient, verify_keyring_against_trust, Keyring,
-    TrackedFiles,
+    parse_recipient, verify_keyring_against_trust, Keyring, TrackedFiles,
 };
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
@@ -32,7 +31,7 @@ pub fn cmd_tell(
     // keyring containing entries must already carry a valid signature
     // from the trusted key, otherwise tell would launder trust by
     // re-signing attacker-supplied content.
-    let (_, trusted_fingerprint, _) =
+    let (repo_id, trusted_fingerprint, _) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
@@ -53,17 +52,15 @@ pub fn cmd_tell(
         ));
     }
 
-    // Extract fingerprint from the recipient string
-    let fingerprint = fingerprint_for_recipient(recipient_str);
-
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_content =
         fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let mut keyring = Keyring::parse(&keyring_content)?;
 
-    // Add entry (this clears signature)
-    keyring.add_entry(email.to_string(), recipient_str.to_string(), fingerprint)?;
+    // Add the two-field entry (principal, public key). The binding
+    // fingerprint is computed on demand, never stored (issue #41).
+    keyring.add_entry(email.to_string(), recipient_str.to_string())?;
 
     // Bump the monotonic freshness counter BEFORE signing, so the counter is
     // covered by the new signature (see docs/design.md "Keyring format and
@@ -77,11 +74,12 @@ pub fn cmd_tell(
     // Find signing key: tell is run by the repo owner curating the
     // keyring, so it must sign with the TRUSTED key (the one verify_keyring
     // checks against), never with the collaborator's key. Discovery selects
-    // the signing key whose verifying key matches the pinned fingerprint;
-    // git-veil never generates one — a missing key fails with the recipe.
+    // the signing key whose owner key fingerprint matches the pinned
+    // fingerprint; git-veil never generates one — a missing key fails with
+    // the recipe.
     let signing_key = match signing_key_selection {
-        Some(fingerprint) => discover_signing_key_explicit(key_store, fingerprint)?,
-        None => discover_signing_key(key_store, &trusted_fingerprint)?,
+        Some(verifying_key_hex) => discover_signing_key_explicit(key_store, verifying_key_hex)?,
+        None => discover_signing_key(key_store, &repo_id, &trusted_fingerprint)?,
     };
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will

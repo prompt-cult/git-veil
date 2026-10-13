@@ -80,7 +80,7 @@ signing key, so the pin-file is the only way she can pin:
 ```sh
 $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
-owner verifying-key fingerprint: 22fb3bcb…
+owner key fingerprint: 22fb3bcb…
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 ```
 
