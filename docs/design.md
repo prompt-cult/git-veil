@@ -16,9 +16,9 @@ render here in LaTeX math blocks and on the project GitHub Pages site.
 
 ## Terminology: crypto terms in the core, ageisms at the boundary
 
-git-veil's core and code speak RFC-standard cryptography only. The words
-the `age` ecosystem uses as its marketing names for key material, the
-**ageisms**, appear only at the
+git-veil's core and code speak RFC-standard cryptography only. The
+vocabulary the `age` tool uses for these values is called **ageisms**. They
+appear only at the
 user surface, and only where the documentation advises the operator how to
 do something in `age` (run an `age` command, interoperate with `age`/`rage`
 tooling). Where both vocabularies must span, the form is the crypto term
@@ -29,7 +29,7 @@ which may be installed separately to securely create and maintain
 cryptographic keys outside of the git repo; the `git-veil` software uses the
 Rust `rage` library to work with the keys.
 
-| Crypto term (git-veil core and code) | ageism (`age` marketing vocabulary) |
+| Crypto term (git-veil core and code) | ageism (`age` vocabulary) |
 |--------------------------------------|-----------------------------------|
 | X25519 public key - bech32-encoded per the `age` spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
 | X25519 private key - bech32-encoded per the `age` spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
@@ -347,7 +347,7 @@ version:<n>
 <base64 Ed25519 signature over everything above, markers included>
 ```
 
-Keyring format v2 (issue #41): exactly two fields per entry - the
+Keyring format v2: exactly two fields per entry - the
 principal (email) and the bech32 X25519 public key - with the signature
 over the pair.
 Fingerprints are computed on demand (see "Fingerprints") and NEVER stored;
@@ -665,7 +665,7 @@ so a remove-and-readd is re-checked against the re-add commit with no
 invalidation logic and no garbage collection. A path that fails the check
 is never cached: every `hide` re-runs the check and refuses again.
 
-**Honest residual (issue #19).** The happen-before check raises the
+Honest residual. The happen-before check raises the
 attacker's cost from one visible change to a crafted history: a dummy
 ciphertext committed BEFORE the nomination still predates the manifest
 entry and passes the check. The intent log remains the real anchor -

@@ -1,10 +1,10 @@
 # git-veil
 
-A tool for storing encrypted secrets in a git repository, written in Rust.
-It uses [`age`][age] encryption (via the pure-Rust [`age` crate][age-crate]) for
-secrecy and [Ed25519][ed25519] signing (via [`ed25519-dalek`][dalek]) for
-keyring integrity - no PGP, no GPG, no external crypto process. All
-cryptographic operations happen in-process.
+git-veil stores encrypted secrets in a git repository. It is written in Rust.
+It encrypts with [`age`][age] (via the pure-Rust [`age` crate][age-crate]) and
+signs the keyring with [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]).
+There is no PGP, no GPG, and no external crypto process. All cryptography
+happens in-process.
 
 In the following, `age` refers to the open source `age` encryption tooling,
 which may be installed separately to securely create and maintain
@@ -16,51 +16,58 @@ Rust `rage` library to work with the keys.
 [ed25519]: https://en.wikipedia.org/wiki/EdDSA#Ed25519
 [dalek]: https://crates.io/crates/ed25519-dalek
 
-The `age` format is a modern, RFC-track encryption format designed by Filippo
-Valsorda. git-veil's ciphertexts are standard `age` files: any compliant `age`
-implementation can decrypt them, including the reference [`age`][age-cli] CLI
-and the Rust [`rage`][rage] CLI.
+The `age` format is an encryption format designed by Filippo Valsorda.
+git-veil's ciphertexts are standard `age` files. Any compliant `age` tool can
+decrypt them, including the reference [`age`][age-cli] command-line tool and
+the Rust [`rage`][rage] command-line tool.
 
 [age-cli]: https://github.com/FiloSottile/age
 [rage]: https://github.com/str4d/rage
 
 ## Trust model
 
-Each repository is identified by a repository ID derived from its git remote
-push URL, e.g. `git@github.com:example/demo.git` gives `demo+example@github.com`
-(run `git-veil show-repo-id` to print it). The repository owner's signing key
-is pinned per machine, and a repository can never supply its own trust
-anchor: the only direct pin-creation mode is a possession proof  - 
-`git-veil trust <repo-id>` matches the repository's committed `owner.verifying`
-against the verifying key derived from a seed in the local signing key store,
-and refuses when no seed matches. Machines without the signing key
-(unattended boxes) receive their pin by import: a seed-holding machine runs
-`git-veil export-pin <repo-id> --output <pin-file>`, the file travels out of
-band (never through the repository), and the box runs
-`git-veil trust --import <pin-file>` - three consistency checks tie the
-pin-file to the repository's committed key and metadata. The pin lives in the
-local key store outside the repository and is never committed, so every
-machine pins for itself. The keyring of collaborator public keys in
-`.git-veil/keyring` is signed by that trusted key, and the signature is
-verified before any encryption, decryption or keyring mutation. Every gated
-command fails closed: without a pin, or with a signature that does not
-verify, nothing is touched. The key store and its pins are the trust boundary
-for every repository that uses that store, so sharing one store across
-mutually distrusting repositories is not advised. Set `GIT_VEIL_HOME` to
-isolate a project's keys from your default `$HOME/.git-veil`
-(e.g. `GIT_VEIL_HOME=~/keys/project-a`); `--key-store` overrides both for
-ad-hoc use.
+Each repository has an ID derived from its git remote push URL. The remote
+`git@github.com:example/demo.git` gives the ID `demo+example@github.com`.
+Run `git-veil show-repo-id` to print your repository's ID.
+
+The repository owner's signing key is pinned on each machine. A repository
+can never supply its own trust anchor. The only way to create a pin directly
+is a possession proof. `git-veil trust <repo-id>` checks the repository's
+committed `owner.verifying` against the verifying key derived from a seed in
+your local signing key store. If no seed matches, trust refuses.
+
+Machines without the signing key get their pin by import. A machine that
+holds a seed runs `git-veil export-pin <repo-id> --output <pin-file>`. The
+pin-file travels out of band, never through the repository. The target
+machine runs `git-veil trust --import <pin-file>`. Three consistency checks
+tie the pin-file to the repository's committed key and metadata.
+
+The pin lives in the local key store, outside the repository. It is never
+committed, so every machine pins for itself.
+
+The keyring of collaborator public keys in `.git-veil/keyring` is signed by
+the trusted key. git-veil verifies the signature before any encryption,
+decryption, or keyring change. Every gated command fails closed. Without a
+pin, or with a signature that does not verify, nothing is touched.
+
+The key store and its pins are the trust boundary for every repository that
+uses that store. Do not share one store across repositories that do not
+trust each other. Set `GIT_VEIL_HOME` to isolate a project's keys from your
+default `$HOME/.git-veil` (for example `GIT_VEIL_HOME=~/keys/project-a`).
+`--key-store` overrides both for one-off use.
 
 ## Key store permissions
 
-The key store is checked the way gpg checks `~/.gnupg`: the store directory
+The key store is checked the way gpg checks `~/.gnupg`. The store directory
 and the private files (`identities.txt`, `signing-keys.txt`) must not be
-group- or world-accessible. git-veil never changes permissions on files it
-did not create. On a violation it exits with code 30 and names the exact
-paths and modes; either `chmod` them right, or acknowledge the current
-state with `git-veil trust-permissions` (which pins the exact `(path,
-mode)` pairs - a later change fails again), or bypass with
-`--dangerously-skip-permissions-check` / `GIT_VEIL_SKIP_PERMISSIONS=1`.
+readable or writable by group or other. git-veil never changes permissions on
+files it did not create.
+
+If the check fails, git-veil exits with code 30 and names the paths and modes
+at fault. Fix them with `chmod`. To accept the current state instead, run
+`git-veil trust-permissions`. It pins the exact `(path, mode)` pairs, and a
+later change fails again. To bypass the check for one command, use
+`--dangerously-skip-permissions-check` or set `GIT_VEIL_SKIP_PERMISSIONS=1`.
 
 ## Exit codes
 
@@ -72,12 +79,16 @@ prints the full table with names and meanings; the specification is in
 
 ## Quick start (solo)
 
-Prerequisite: your own keys (see [Key setup](#key-setup) below) - an
-X25519 private key (an `age` identity, created with the separate `age`
-tooling) and an Ed25519 signing key. git-veil
-generates no keys: it only ever reads keys you created and own, and every
-command that needs a missing key tells you how to make one and back it up
-instead.
+You need two keys before you start (see [Key setup](#key-setup) below):
+
+- an X25519 private key for encryption, made with the separate `age` tooling
+  (`age-keygen`)
+- an Ed25519 signing key for the keyring. This is not an `age` key, and no
+  `age` tool makes it. Make it with `openssl`, as shown below.
+
+git-veil generates no keys. It only reads keys you created and own. If a
+command needs a key you do not have, it tells you how to make one and how to
+back it up.
 
 ```sh
 git-veil init                                   # create .git-veil/ state
@@ -97,10 +108,10 @@ The `.secret` ciphertext files are standard `age`-encrypted blobs. You can
 verify interoperability with any `age`-compatible tool:
 
 ```sh
-# git-veil encrypted, the `age` CLI decrypts:
+# git-veil encrypted this file. The age CLI decrypts it.
 age -d -i my-age-identity.txt .env.secret
 
-# `age` CLI encrypted, git-veil decrypts (via reveal/cat):
+# The age CLI encrypted this file. git-veil decrypts it.
 echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 ```
 
@@ -109,15 +120,14 @@ echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 Prebuilt binaries are attached to every [GitHub release](https://github.com/prompt-cult/git-veil/releases):
 
 ```sh
-# Linux x86_64 example; macOS binaries (x86_64 / Apple Silicon) sit beside it
+# Linux x86_64 example. macOS binaries sit beside it in the same release.
 curl -sLO https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64
 echo "$(curl -sL https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64.sha256)  git-veil-linux-x86_64" | sha256sum -c -
 chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
 ```
 
 `cargo binstall git-veil` resolves the same release assets (manifest wired
-into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned  - 
-see issue #10 for the live status of each channel.
+into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned.
 
 Build from source with cargo:
 
@@ -143,10 +153,15 @@ cp docs/man/*.1 /usr/local/share/man/man1/
 
 ## Key setup
 
-git-veil uses [`age`][age] X25519 keys for encryption and a separate Ed25519 key for
-keyring signing. You need both, and git-veil generates **neither**: keys the
-tool created would be keys you never backed up. Create them once with standard
-tools, then back the private halves up (a password-manager note is enough).
+git-veil uses two kinds of key:
+
+- [`age`][age] X25519 keys for encryption
+- a separate Ed25519 key for signing the keyring
+
+You need both. git-veil generates neither, because a key the tool created
+would be a key you never backed up. Create each key once with a standard
+tool, then back up the private half. A note in your password manager is
+enough.
 
 ### Create an X25519 private key (for encryption/decryption)
 
@@ -157,33 +172,34 @@ Use any `age` key generator - `age-keygen` (from the [`age`][age-cli] CLI) or
 umask 077
 age-keygen -o my-age-identity.txt
 # Output includes:
-#   # public key: age1...    (your X25519 public key - share this)
-#   AGE-SECRET-KEY-1...       (your X25519 private key - keep this secret, BACK IT UP)
+#   # public key: age1...    your X25519 public key. Share it.
+#   AGE-SECRET-KEY-1...       your X25519 private key. Keep it secret. Back it up.
 ```
 
-The **X25519 public key** (`age` recipient) - the `age1...` line - is safe to
-share with collaborators. The **X25519 private key** (`age` identity) - the
-`AGE-SECRET-KEY-1...` line - is never committed; without a backup of it,
+The X25519 public key (`age` recipient), the `age1...` line, is safe to share
+with collaborators. The X25519 private key (`age` identity), the
+`AGE-SECRET-KEY-1...` line, is never committed. Without a backup of it, your
 ciphertexts are unrecoverable.
-`git-veil import my-age-identity.txt` copies it into the local key store
-(accepts any file containing an `AGE-SECRET-KEY-1...` line; `#` comment lines
-like `age-keygen`'s are skipped).
+
+`git-veil import my-age-identity.txt` copies it into the local key store. The
+file may contain other lines; `#` comment lines like `age-keygen`'s are
+skipped.
 
 ### Create an Ed25519 signing key (for keyring signing)
 
 The repository owner also needs an Ed25519 keypair for signing the keyring.
-git-veil never creates or manages it - you make it with `openssl` and you back
-it up:
+This key is not an `age` key, and no `age` tool makes it. You make it with
+`openssl`, and you back it up:
 
 ```sh
 umask 077
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 
-# The seed (private - what tell/removeperson read), 64 hex characters:
+# The seed. tell and removeperson read it. 64 hex characters.
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key (public - commit this file; trust proves your seed matches it):
+# The verifying key. Commit this file. git-veil trust checks your seed against it.
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > owner.verifying
 ```
@@ -194,17 +210,16 @@ verifying fingerprint is pinned for the repository. Commands that
 need a missing key exit with a documented code (`git-veil error-codes`)
 after printing how to create and back it up.
 
-`owner.verifying` (the 64-hex public half) is committed to the repository:
-it is the candidate `git-veil trust` proves your seed against, and the
-witness `trust --import` cross-checks. Committing it is safe - it is public
-material, and it can never pin anything by itself.
+`owner.verifying` holds the 64-hex public half. Commit it to the repository.
+`git-veil trust` checks your seed against it, and `trust --import`
+cross-checks it. Committing it is safe. It is public material, and on its own
+it can never pin anything.
 
 ## Commands
 
-git-veil is a CLI tool inspired by git-secret, yet uses the more modern and
-compact `age` encryption tools rather than the older `pgp`/`gpg` tools. The
-underlying algorithms are common to many tools; it is the key formats and
-ergonomics that differ - such as a smaller final binary size.
+git-veil is a command-line tool in the style of git-secret. It encrypts with
+`age` rather than PGP. The algorithms are the same kind many tools use. The
+key formats and the workflow differ. One payoff is a smaller binary.
 
 | Command          | Purpose                                                                 |
 |------------------|-------------------------------------------------------------------------|
@@ -234,10 +249,8 @@ ergonomics that differ - such as a smaller final binary size.
 | `completions`    | Emit a shell completion script for the given shell to stdout            |
 | `manpages`       | Write roff man pages (`git-veil.1` plus one per subcommand) to a directory |
 
-Run `git-veil help` for the list of commands, `git-veil help <command>` for a
-workflow discussion with examples, and `git-veil <command> --help` for flags.
-Run `git-veil help <command>` to learn more about any command above. Rendered
-man pages live in `docs/man/`.
+Run `git-veil help` for the list of commands and `git-veil help <command>` for
+a workflow discussion with examples. Rendered man pages live in `docs/man/`.
 
 ## Tutorials
 
@@ -250,9 +263,8 @@ Step-by-step guides are in `docs/`:
 - Migrating from git-secret: [docs/migrating-from-git-secret.md](docs/migrating-from-git-secret.md)
 - Migrating from git-crypt: [docs/migrating-from-git-crypt.md](docs/migrating-from-git-crypt.md)
 
-The specification of the underlying mechanisms (repository identity, trust
-anchoring, key validity, crash safety, path safety) is in
-[docs/design.md](docs/design.md).
+[docs/design.md](docs/design.md) specifies how repository identity, trust
+anchoring, key validity, crash safety and path safety work.
 
 ## Compatibility with `age` and `rage`
 

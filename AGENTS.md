@@ -44,35 +44,51 @@ scripts/gen-docs.sh
 
 Otherwise CI-facing docs drift from the real CLI.
 
-## Interop tests (tests/interop.rs)
-
-- Exercises every permutation of git-veil / `age` / `rage` / gpg and **skips cleanly when the external binary is absent** - a skip is expected behavior, not a failure.
-- CI deliberately does **not** install gpg, age, or rage (the skip path itself is tested). Do not "fix" CI by adding them.
-
 ## Domain gotchas (git-veil is a secrets tool)
 
 - Failures use documented exit codes, not a generic 1 (trust 10–13, missing keys 20–22, permissions 30, gitignore 40–41, crypto 60–63, policy 70–71). Spec: `git-veil error-codes` and `docs/design.md`. Preserve these codes when changing error paths.
 - Key store permission checks (exit 30) apply to `$HOME/.git-veil` or `GIT_VEIL_HOME`; tests isolate state via `GIT_VEIL_HOME`. If local tests fail with exit 30, your real key store has loose modes - `chmod 700/600` it; do not weaken the check.
 - Ciphertexts must stay standard age format (age-encryption.org/v1) - `age`/`rage` interoperability is a contract, so avoid baking git-veil-specific data into encrypted payloads.
 
-## Terminology law (issue #40)
+## Terminology law
 
-git-veil's core and code speak RFC-standard cryptography only. **Ageisms**  - 
-the marketing slurry words age uses: `recipient` as the value, `identity` /
-`identity file` as the private key, and the rest of the kiddielingo, are
-forbidden in `src/` outside user-surface string literals.
-
-| Crypto term (git-veil core and code) | ageism (age marketing vocabulary) |
-|--------------------------------------|-----------------------------------|
-| X25519 public key - bech32-encoded per the age spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
-| X25519 private key - bech32-encoded per the age spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
-| principal - the keyring label (a collaborator's email) | - (age has no word for it) |
-| Ed25519 verifying key - the public half of the keyring signing key | - (already standard vocabulary) |
-| Ed25519 signing key - the private seed | - (already standard vocabulary) |
+git-veil's core and code speak RFC-standard cryptography only. **Ageisms**,
+the vocabulary the `age` tool uses for these values, are forbidden in `src/`
+outside user-surface string literals. The crypto terms are: X25519 public
+key, X25519 private key, principal (the keyring label), Ed25519 verifying
+key, Ed25519 signing key. The ageisms are: `recipient`, `identity`,
+`identity file`.
 
 The boundary:
 
 1. Core and code (`src/`, internals, comments, error messages, commit messages) use the crypto column only. An ageism in `src/` outside a user-surface string literal is a defect; `tests/docs_drift.rs` (`test_no_ageisms_in_src_outside_string_literals`) greps for exactly that and fails the build.
 2. The user surface (CLI help text, operator docs) uses crypto terminology too, EXCEPT where the documentation advises the operator how to do something in age (run this age command, interoperate with age/rage tooling). In those places only, age terminology appears, and where both vocabularies must span, the form is crypto terminology then brackets (ageism) - e.g. "X25519 private key (age identity)".
-3. `docs/design.md` ("Terminology") carries this same mapping table as the translation reference; keep the two in step.
+3. `docs/design.md` ("Terminology") carries the mapping table as the translation reference; keep the two in step.
 4. Two boundary tokens remain, named here as the contract: the on-disk key store file names `identities.txt` (X25519 private keys) and `recipients.txt` (X25519 public keys) are format constants, and the upstream `age` crate's type names (`age::x25519::Identity`, `age::x25519::Recipient`) appear at the single import site in `src/age_crypto.rs`, aliased to `X25519PrivateKey` / `X25519PublicKey`. New identifiers use the crypto column from birth.
+
+## Writing law (all documentation)
+
+Documentation - README.md, everything under `docs/`, and CLI help text - is
+plain UK English in the GOV.UK style, the way GOV.UK wrote in the mid-2010s.
+Write like a person. If a sentence sounds like a press release, rewrite it.
+
+- Short sentences. One idea per sentence. Aim for under 20 words.
+- Active voice. "You run `git-veil hide`", not "`git-veil hide` can be run".
+- Common words. "use", not "utilise" or "leverage". "help", not "facilitate".
+- Front-load the point. The first sentence of a section says what the section
+  is about.
+- UK spelling: behaviour, colour, centre, defence, licence (noun), catalogue,
+  grey, programme, travelling, labelled, modelling.
+- Banned outright: em-dashes (use a comma, a colon, or " - "), exclamation
+  marks in prose, rhetorical questions, and every AI-slop marker. The banned
+  list: delve, seamless, robust, leverage, streamline, harness, elevate,
+  holistic, cutting-edge, state-of-the-art, game-changer, unlock, journey,
+  myriad, plethora, testament, tapestry, landscape as a metaphor, crucial,
+  vital, essential, facilitate, utilise, commence, furthermore, moreover,
+  additionally, "important to note", "worth noting", "dive in", "dive deep",
+  "let's", "in this guide", "in conclusion", "fast-paced", "navigate the
+  complexities", empower, foster, realm, beacon, cornerstone, takeaway,
+  synergy, "welcome to". Filler marketing words are banned too: "modern",
+  "powerful", "simple", "easy" when they only pad the sentence.
+- Do not bold every other word. Bold a term once, if it helps.
+- Explain jargon in plain words the first time it appears.

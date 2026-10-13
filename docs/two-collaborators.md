@@ -7,20 +7,20 @@ ID `demo+example@github.com`. Each person has their own machine, their own
 refers to the open source `age` encryption tooling, which may be installed
 separately to securely create and maintain cryptographic keys outside of the
 git repo; the `git-veil` software uses the Rust `rage` library to work with
-the keys. git-veil generates **no**
-keys: each person creates their own X25519 private key (`age` identity) with
-`age-keygen` or `rage-keygen`, and the owner additionally creates an
-Ed25519 signing key (`openssl`) - see step 1 of
-[docs/solo.md](solo.md). Exporting public keys needs no external tool:
-each person runs `git-veil export <public-key> --output <file>` from
-their own key store.
+the keys. git-veil generates no keys. Each person creates their own X25519
+private key (`age` identity) with `age-keygen` or `rage-keygen`. The owner
+also creates an Ed25519 signing key. That key is not an `age` key, and no
+`age` tool makes it. The owner makes it with `openssl`. See step 1 of
+[solo.md](solo.md). Exporting public keys needs no external tool. Each
+person runs `git-veil export <public-key> --output <file>` from their own
+key store.
 
 ## Part 1 - the owner sets the repository up
 
-Steps 1–5 of [docs/solo.md](solo.md) cover this in detail; the shape is:
+Steps 1–5 of [solo.md](solo.md) cover this in detail. The shape is:
 
 ```sh
-# one-time key creation (back the private halves up):
+# One-time key creation. Back up the private halves.
 age-keygen -o my-age-identity.txt
 umask 077
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
@@ -31,7 +31,7 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 
 git-veil init
 git-veil import my-age-identity.txt
-git-veil trust demo+example@github.com  # possession proof: seed matches owner.verifying
+git-veil trust demo+example@github.com  # possession proof. The seed must match owner.verifying
 git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
 git-veil add .env && git-veil hide
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
@@ -41,37 +41,36 @@ git push
 ## Part 2 - the key handoff (the only manual exchange)
 
 Public keys travel as plain text files over any channel you
-both trust. **Alice** creates her X25519 private key (`age` identity)
-exactly as in step 1 of [docs/solo.md](solo.md), imports it into her key
+both trust. Alice creates her X25519 private key (`age` identity)
+exactly as in step 1 of [solo.md](solo.md), imports it into her key
 store, and sends the public key encoding to the owner:
 
 ```sh
-age-keygen -o alice-age-identity.txt      # prints: # public key: age1...
+age-keygen -o alice-age-identity.txt      # prints the age1... public key line
 git-veil import alice-age-identity.txt
-git-veil export age1... --output alice.pub   # or just send `age-keygen`'s printed public key line
+git-veil export age1... --output alice.pub   # or just send the printed public key line
 ```
 
-**The owner** verifies out of band that `alice.pub` really is Alice's key
-(read the public key encoding or its fingerprint to her over a voice call,
-or use any channel an attacker cannot rewrite), then adds her to the
-keyring:
+The owner verifies out of band that `alice.pub` really is Alice's key.
+Read the public key encoding or its fingerprint to her over a voice call,
+or use any channel an attacker cannot rewrite. Then the owner adds her to
+the keyring:
 
 ```sh
 $ git-veil tell alice@example.com alice.pub
 ✓ Added alice@example.com to keyring
 ```
 
-What just happened: the keyring signature was verified against the pinned
-owner key before the change; a canary was test-encrypted to `alice.pub` so
-a key that cannot encrypt is never signed in; the keyring was re-signed
-with the owner's Ed25519 key. Telling the same email twice updates the
-entry instead of duplicating it.
+What happened. The keyring signature was verified against the pinned owner
+key before the change. A canary was test-encrypted to `alice.pub`, so a key
+that cannot encrypt is never signed in. The keyring was re-signed with the
+owner's Ed25519 key. Telling the same email twice updates the entry instead
+of duplicating it.
 
-**Important:** telling Alice does not change ciphertext that already
-exists. Files hidden before she was told were encrypted only to the
-owner's key. To bring her in, the owner re-hides (hide only encrypts
-plaintexts present on disk, so reveal first if everything is currently
-hidden):
+Important. Telling Alice does not change ciphertext that already exists.
+Files hidden before she was told were encrypted only to the owner's key. To
+bring her in, the owner re-hides. hide only encrypts plaintexts present on
+disk, so reveal first if everything is currently hidden:
 
 ```sh
 git-veil reveal && git-veil hide
@@ -80,7 +79,7 @@ git commit -m "Add alice to keyring and re-hide"
 git push
 ```
 
-The owner also exports the repository's pin-file for Alice - she holds no
+The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
 
 ```sh
@@ -90,11 +89,11 @@ owner key fingerprint: 22fb3bcb…
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 ```
 
-The owner transfers `/tmp/demo.pin` to Alice OUT OF BAND (e.g. `scp`)  - 
-never committed to the repository - and reads her the printed
-fingerprint so she can compare it with the one recorded in the committed
-`.git-veil/trust.json` before importing. She does **not** need any
-private key of the owner's.
+The owner transfers `/tmp/demo.pin` to Alice out of band, for example with
+`scp`. The pin-file is never committed to the repository. The owner reads
+her the printed fingerprint so she can compare it with the one recorded in
+the committed `.git-veil/trust.json` before importing. She does not need
+any private key of the owner's.
 
 ## Part 3 - Alice clones and decrypts
 
@@ -107,10 +106,9 @@ $ git-veil import alice-age-identity.txt
 Summary: 1 imported, 0 skipped
 ```
 
-She imports only her OWN X25519 private key into her local key store
-(exit code 21 tells anyone missing one exactly how to create and back it
-up). Then
-she pins the owner key - this is per machine, and her machine holds no
+She imports only her own X25519 private key into her local key store. Exit
+code 21 tells anyone missing one exactly how to create and back it up. Then
+she pins the owner key. Pinning is per machine, and her machine holds no
 signing key, so she imports the pin-file the owner sent her:
 
 ```sh
@@ -119,14 +117,14 @@ $ git-veil trust --import ~/demo.pin
 ✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
 ```
 
-What just happened: `trust --import` checked that the pin-file's
-repository ID matches her remote, that its verifying key exactly matches
-the repository's committed `owner.verifying`, and that its fingerprint
-matches the owner fingerprint recorded in the committed
-`.git-veil/trust.json` - three channels, all mandatory. The pin lives in
-her `$HOME/.git-veil`, outside the repository; the committed
-`.git-veil/trust.json` is attacker-writable, so her local pin is the real
-anchor. A pin-file path inside the repository is refused outright.
+What happened. `trust --import` checked three things, and all three are
+mandatory. The pin-file's repository ID matches her remote. Its verifying
+key exactly matches the repository's committed `owner.verifying`. Its
+fingerprint matches the owner fingerprint recorded in the committed
+`.git-veil/trust.json`. The pin lives in her `$HOME/.git-veil`, outside the
+repository. The committed `.git-veil/trust.json` is attacker-writable, so
+her local pin is the real anchor. A pin-file path inside the repository is
+refused outright.
 
 Now she can decrypt:
 
@@ -138,13 +136,13 @@ Repository ID: demo+example@github.com
 Keys in keyring: 2
 Decrypted: .env
 ✓ Files revealed
-$ git-veil cat .env        # peek to stdout; touches no disk state
+$ git-veil cat .env        # peek to stdout. Touches no disk state.
 ```
 
 ## Who can decrypt what
 
-- Every `hide` produces ONE ciphertext carrying one stanza for
-  every key in the signed keyring - any keyring member can reveal.
+- Every `hide` produces one ciphertext. It carries one stanza for every
+   key in the signed keyring. Any keyring member can reveal.
 - The keyring (`.git-veil/keyring`, committed) is signed by the owner's
   key. Every gated command verifies that signature against the local pin
   before touching anything, so a keyring edited by a non-owner fails
