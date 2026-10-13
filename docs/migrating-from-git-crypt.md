@@ -231,7 +231,7 @@ belong in circulation.
 | `git-crypt migrate-key` | deliberately no equivalent | Migrates a shared symmetric key; git-veil has no shared symmetric key. |
 | Key rotation / off-boarding | `git-veil removeperson` + re-`hide` | git-crypt explicitly supports neither ("no del-gpg-user command… no support for rotating the key" — [README](https://github.com/AGWA/git-crypt/blob/master/README.md)); git-veil's forward-looking procedure and its honest history limits are in [docs/departing.md](departing.md). |
 | `diff=git-crypt` transparent plaintext diffs | deliberately no equivalent; `git-veil changes` | No smudge/clean filter exists, so git and forges see `.secret` ciphertext, never plaintext diffs. `changes` diffs your on-disk plaintext against the last hidden version, locally. |
-| GPG web-of-trust (`--trusted` opt-out) | `git-veil trust` per-machine pin | git-crypt delegates trust to whatever `gpg` says; git-veil verifies the owner-signed keyring against a pin you establish out of band on each machine and fails closed without it. |
+| GPG web-of-trust (`--trusted` opt-out) | `git-veil trust` per-machine pin | git-crypt delegates trust to whatever `gpg` says; git-veil verifies the owner-signed keyring against a pin you establish on each machine — a possession proof on a signing-key machine, or an out-of-band pin-file import elsewhere — and fails closed without it. |
 | `.git-crypt/keys/*/*.gpg` committed wrapped keys | `.git-veil/keyring` (owner-signed) | The keyring carries each collaborator's public key, signed by the owner; its signature is verified before any crypto operation. |
 
 ### unlock/reveal and lock/hide are not the same shape

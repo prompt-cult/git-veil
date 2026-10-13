@@ -88,9 +88,10 @@ Summary: 1 imported, 0 skipped
 What just happened: your age identity (the `AGE-SECRET-KEY-1...` line)
 sits in the per-machine key store `$HOME/.git-veil/identities.txt` (never
 committed, mode 0600). Import ONLY your own key; the owner's public half
-arrives as the `owner.verifying` file. If you have not created an identity
-yet, exit code 21 prints the `age-keygen` recipe — and back the identity
-up; without it the ciphertexts are unrecoverable.
+arrives with the clone as the committed `owner.verifying` file — the
+pin-file from the team (step 4) is what lets you pin it. If you have not
+created an identity yet, exit code 21 prints the `age-keygen` recipe —
+and back the identity up; without it the ciphertexts are unrecoverable.
 
 ### 3. Print the repository ID
 

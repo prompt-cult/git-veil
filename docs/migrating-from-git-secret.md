@@ -56,12 +56,15 @@ habits, so they are stated up front:
    as soon as your `~/.gnupg` had a matching private key — the trust
    anchor was implicit in your keychain. In git-veil the trust anchor is
    an explicit pin of the owner's signing key, stored in your local key
-   store and never committed. Every collaborator runs `git-veil trust` on
-   every machine after cloning. This is the single biggest new habit.
+   store and never committed. Machines holding the signing key pin with
+   `git-veil trust <repo-id>` (a possession proof); every other machine
+   imports a pin-file exported by one (`git-veil trust --import`), which
+   travels out of band. This is the single biggest new habit.
 4. **Keys are proven at the door.** `tell` test-encrypts an in-memory
    canary to a new collaborator's key before signing it into the ring — a
-   key that cannot encrypt never enters the keyring — and `trust` parses
-   the owner's Ed25519 verifying key before pinning it. (git-secret's
+   key that cannot encrypt never enters the keyring — and `trust` proves
+   possession of the seed matching the committed `owner.verifying` before
+   pinning it. (git-secret's
    `tell` warns about invalid keys since 0.3.2 but the keyring itself is
    not authenticated.)
 5. **hide/reveal keep both sides by default.** `hide` encrypts and KEEPS
