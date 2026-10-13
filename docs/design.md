@@ -262,6 +262,19 @@ read from `<key store>/signing-keys.txt`, one 64-hex-character seed per line
 (`#` comments and blank lines skipped). `tell` and `removeperson` — the two
 keyring-curating commands — select a key as follows:
 
+With several signing keys present, `--signing-key` names one explicitly by
+its 16-hex-character verifying-key fingerprint
+(`discover_signing_key_explicit`): the fingerprint is public (printed by
+`verify-keyring`, stored in every pin file) and stable under reordering
+because it is derived from the key itself, not its position. The only other
+selection forms that ever existed are removed: a 1-based index is positional
+and silently names a different key after the file is reordered or a key is
+inserted, and a full 64-hex seed puts the private key on the command line,
+where it lands in shell history, `ps` output, scrollback and agent
+transcripts. An explicit fingerprint matching no store key refuses with code
+20; matching more than one (a degenerate duplicated store) refuses with
+code 70 rather than silently picking one.
+
 1. The TRUSTED key is used — the one whose verifying-key
    fingerprint equals the fingerprint pinned for this repository. The keyring
    must be signed with exactly the key the pin names (that is what

@@ -90,6 +90,7 @@ _arguments "${_arguments_options[@]}" : \
 (tell)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
+'--signing-key=[Signing key to use\: its 16-hex verifying-key fingerprint (default\: the key matching the pinned fingerprint)]:FINGERPRINT:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -101,6 +102,7 @@ _arguments "${_arguments_options[@]}" : \
 (removeperson)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
+'--signing-key=[Signing key to use\: its 16-hex verifying-key fingerprint (default\: the key matching the pinned fingerprint)]:FINGERPRINT:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \

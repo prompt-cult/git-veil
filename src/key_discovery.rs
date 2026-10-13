@@ -102,6 +102,51 @@ pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: &str) -> Resul
     ))
 }
 
+/// Explicit signing-key selection by verifying-key fingerprint.
+///
+/// The ONLY selection form: a 16-hex-character fingerprint as printed by
+/// `verify-keyring` and stored in every pin file. The 1-based index into
+/// signing-keys.txt was removed (reordering the file silently renamed what
+/// an index selected) and the full 64-hex seed was removed (the private
+/// key must never appear on a command line, where it lands in shell
+/// history, `ps` output, scrollback and agent transcripts).
+///
+/// Zero matches → exit code 20. More than one match (a degenerate
+/// duplicated store) → exit code 70; silently picking one is not
+/// acceptable.
+pub fn discover_signing_key_explicit(
+    key_store: &Path,
+    fingerprint: &str,
+) -> Result<SigningKey> {
+    let keys = load_signing_keys(key_store)?;
+    let wanted = fingerprint.trim().to_lowercase();
+    let matches: Vec<&SigningKey> = keys
+        .iter()
+        .filter(|k| fingerprint_for_verifying_key(&k.verifying_key()) == wanted)
+        .collect();
+    match matches.as_slice() {
+        [key] => Ok((*key).clone()),
+        [] => Err(coded(
+            ExitCode::NoSigningKey,
+            format!(
+                "no signing key in {}/signing-keys.txt has verifying-key fingerprint {}; add the matching seed to signing-keys.txt\n\n{}",
+                key_store.display(),
+                wanted,
+                signing_key_recipe(key_store)
+            ),
+        )),
+        _ => Err(coded(
+            ExitCode::Refused,
+            format!(
+                "{} signing keys in {}/signing-keys.txt share verifying-key fingerprint {}; the store is degenerate and must be deduplicated",
+                matches.len(),
+                key_store.display(),
+                wanted
+            ),
+        )),
+    }
+}
+
 /// Finds the age identity for `recipient_str` in the key store, exiting
 /// with code 21 and the creation recipe when it is absent.
 ///

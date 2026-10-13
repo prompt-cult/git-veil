@@ -77,10 +77,12 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l key-sto
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l remote -d 'Git remote name' -r
+complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l signing-key -d 'Signing key to use: its 16-hex verifying-key fingerprint (default: the key matching the pinned fingerprint)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand tell" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l remote -d 'Git remote name' -r
+complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l signing-key -d 'Signing key to use: its 16-hex verifying-key fingerprint (default: the key matching the pinned fingerprint)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l key-store -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand removeperson" -s h -l help -d 'Print help (see more with \'--help\')'

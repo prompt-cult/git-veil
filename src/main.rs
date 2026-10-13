@@ -161,6 +161,7 @@ fn run() -> Result<()> {
             email,
             public_key,
             remote,
+            signing_key,
             key_store: opt,
         } => {
             cmd_tell(
@@ -169,11 +170,13 @@ fn run() -> Result<()> {
                 &public_key,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
+                signing_key.as_deref(),
             )?;
         }
         Commands::RemovePerson {
             email,
             remote,
+            signing_key,
             key_store: opt,
         } => {
             cmd_removeperson(
@@ -181,6 +184,7 @@ fn run() -> Result<()> {
                 &email,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
+                signing_key.as_deref(),
             )?;
         }
         Commands::Add { files, remote } => cmd_add(

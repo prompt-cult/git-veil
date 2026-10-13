@@ -867,13 +867,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__removeperson)
-            opts="-h --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --signing-key)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -933,13 +937,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__tell)
-            opts="-h --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --signing-key)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

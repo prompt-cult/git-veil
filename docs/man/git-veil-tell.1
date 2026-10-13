@@ -4,13 +4,16 @@
 .SH NAME
 git\-veil\-tell \- Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
+\fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
 .SH DESCRIPTION
 Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
+.TP
+\fB\-\-signing\-key\fR \fI<FINGERPRINT>\fR
+Signing key to use: its 16\-hex verifying\-key fingerprint (default: the key matching the pinned fingerprint)
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
@@ -33,8 +36,9 @@ cannot encrypt is never signed into the ring.
 The keyring is signed with the TRUSTED key — the one whose verifying\-key
 fingerprint is pinned for this repository. signing\-keys.txt must contain
 that seed; git\-veil never generates it (docs/solo.md step 1 has the
-recipe). A missing signing key exits with code 20 and the
-create\-and\-back\-up recipe.
+recipe). With several signing keys present, \-\-signing\-key names one by
+its 16\-hex\-character verifying\-key fingerprint. A missing signing key
+exits with code 20 and the create\-and\-back\-up recipe.
 
 Requires init, an established trust pin (trust) for this repository on
 this machine, and the signing key in the local key store. Next steps:
