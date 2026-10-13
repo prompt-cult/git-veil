@@ -323,9 +323,19 @@ pub fn cmd_trust_import(
                 ));
             }
             let _recorded = &trust_store.owner_fingerprints;
+            let recorded_ids: Vec<&str> = trust_store
+                .owner_fingerprints
+                .keys()
+                .map(String::as_str)
+                .collect();
             return Err(coded(
                 ExitCode::Refused,
-                "the committed trust metadata names a different repository identity than this repository derives. This looks like a rename or a remote change based on the existing trust record.".to_string(),
+                format!(
+                    "the committed trust metadata names {} but this repository derives {} from remote {}. This looks like a rename or a remote change based on the existing trust record.",
+                    recorded_ids.join(", "),
+                    repo_id,
+                    remote_name
+                ),
             ));
         }
     };

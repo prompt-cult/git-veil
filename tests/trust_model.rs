@@ -860,6 +860,10 @@ fn test_rename_suspicion_no_remedy_on_gated_commands() {
         "the error must state the rename suspicion: {message}"
     );
     assert!(
+        message.contains(TEST_REPO_ID) && message.contains("fara-moved+owner@github.com"),
+        "public repository facts are named as the clue: {message}"
+    );
+    assert!(
         !message.contains("git-veil trust"),
         "the error must NOT hand out the remedy: {message}"
     );
@@ -900,6 +904,10 @@ fn test_rename_suspicion_no_remedy_on_import() {
     assert!(
         message.contains("This looks like a rename or a remote change"),
         "the error must state the rename suspicion: {message}"
+    );
+    assert!(
+        message.contains(TEST_REPO_ID) && message.contains(new_repo_id),
+        "public repository facts are named as the clue: {message}"
     );
     assert!(
         !message.contains("git-veil trust"),
