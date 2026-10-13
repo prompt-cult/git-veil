@@ -313,15 +313,34 @@ pub fn cmd_trust_import(
     // be refreshed by the owner.
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
-    let recorded = trust_store.get_owner_fingerprint(&repo_id).ok_or_else(|| {
-        coded(
-            ExitCode::Refused,
-            format!(
-                ".git-veil/trust.json records no owner verifying-key fingerprint for {}; the owner must re-run git-veil trust {} on a machine holding the signing key and commit the updated metadata",
-                repo_id, repo_id
-            ),
-        )
-    })?;
+    let recorded = match trust_store.get_owner_fingerprint(&repo_id) {
+        Some(fingerprint) => fingerprint,
+        None => {
+            if trust_store.owner_fingerprints.is_empty() {
+                return Err(coded(
+                    ExitCode::Refused,
+                    format!(
+                        ".git-veil/trust.json records no owner verifying-key fingerprint for {}; the owner must re-run git-veil trust {} on a machine holding the signing key and commit the updated metadata",
+                        repo_id, repo_id
+                    ),
+                ));
+            }
+            let recorded_ids: Vec<&str> = trust_store
+                .owner_fingerprints
+                .keys()
+                .map(String::as_str)
+                .collect();
+            return Err(coded(
+                ExitCode::Refused,
+                format!(
+                    ".git-veil/trust.json records an owner fingerprint for {} but this repository derives {} (from remote '{}'); this looks like a rename or a remote change based on the repository's existing trust record",
+                    recorded_ids.join(", "),
+                    repo_id,
+                    remote_name
+                ),
+            ));
+        }
+    };
     let pin_fingerprint = pin_file.owner_fingerprint();
     if !pin_fingerprint.eq_ignore_ascii_case(recorded) {
         return Err(coded(

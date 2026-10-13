@@ -147,9 +147,17 @@ fingerprint is the token for human out-of-band verification (read it over
 the phone and compare with the committed `owner_fingerprints` value).
 
 **Repo renames** change the repo_id (it is derived from the remote push
-URL), so a new pin is required; the recovery path is the possession proof
-on a machine holding the signing key, which also refreshes the stale
-committed metadata for the new repo_id.
+URL), so a new pin is required. When the committed `trust.json` records
+trust for a repo_id that differs from the one the current remote derives,
+the gated commands refuse with a stated suspicion — `this looks like a
+rename or a remote change based on the repository's existing trust record`
+(exit code 10 on the verify path, 70 on the import path) — naming the
+recorded and derived repo-ids and **nothing else**. No remedy is printed:
+handing an operator a one-line fix for a trust-anchor change is exactly
+what an attacker staging a repo move wants them to run without thinking.
+The operator reads the docs, satisfies themselves the rename is theirs,
+and fixes it with the possession proof (or a fresh pin-file export) on a
+machine holding the signing key.
 
 Every gated command verifies the keyring signature through
 `verify_keyring_against_trust` (src/commands/verify_keyring.rs), which:
