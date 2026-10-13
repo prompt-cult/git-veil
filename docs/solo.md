@@ -11,12 +11,18 @@ the tool made is a key you never backed up, and when your disk dies your
 ciphertext dies with it. You create the keys, you own the keys, you back
 up the keys.
 
+In the following, `age` refers to the open source `age` encryption tooling,
+which may be installed separately to securely create and maintain
+cryptographic keys outside of the git repo; the `git-veil` software uses the
+Rust `rage` library to work with the keys.
+
 The examples use the remote `git@github.com:example/demo.git`; substitute
 your own remote and emails throughout.
 
 ## 1. Create your keys and back them up
 
-Two keys, two jobs: an **X25519 private key** (age identity - encrypts
+Two keys, two jobs: an **X25519 private key** (an `age` identity, created
+with the `age` tooling - encrypts
 and decrypts secrets) and an **Ed25519 signing key** (signs the keyring
 so a rewritten keyring is caught on this machine). Neither private half
 is ever committed.

@@ -3,8 +3,12 @@
 The owner (`example@github.com`) shares a repository with a collaborator
 (`alice@example.com`), remote `git@github.com:example/demo.git`, repository
 ID `demo+example@github.com`. Each person has their own machine, their own
-`$HOME/.git-veil` key store, and their own keys. git-veil generates **no**
-keys: each person creates their own X25519 private key (age identity) with
+`$HOME/.git-veil` key store, and their own keys. In the following, `age`
+refers to the open source `age` encryption tooling, which may be installed
+separately to securely create and maintain cryptographic keys outside of the
+git repo; the `git-veil` software uses the Rust `rage` library to work with
+the keys. git-veil generates **no**
+keys: each person creates their own X25519 private key (`age` identity) with
 `age-keygen` or `rage-keygen`, and the owner additionally creates an
 Ed25519 signing key (`openssl`) - see step 1 of
 [docs/solo.md](solo.md). Exporting public keys needs no external tool:
@@ -37,14 +41,14 @@ git push
 ## Part 2 - the key handoff (the only manual exchange)
 
 Public keys travel as plain text files over any channel you
-both trust. **Alice** creates her X25519 private key (age identity)
+both trust. **Alice** creates her X25519 private key (`age` identity)
 exactly as in step 1 of [docs/solo.md](solo.md), imports it into her key
 store, and sends the public key encoding to the owner:
 
 ```sh
 age-keygen -o alice-age-identity.txt      # prints: # public key: age1...
 git-veil import alice-age-identity.txt
-git-veil export age1... --output alice.pub   # or just send age-keygen's printed public key line
+git-veil export age1... --output alice.pub   # or just send `age-keygen`'s printed public key line
 ```
 
 **The owner** verifies out of band that `alice.pub` really is Alice's key

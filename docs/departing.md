@@ -1,8 +1,11 @@
 # Departing: removing a collaborator
 
 A collaborator (`bob@example.com`) leaves the team. The owner removes him
-from the keyring with `removeperson`. Understand the semantics BEFORE you
-rely on them:
+from the keyring with `removeperson`. In the following, `age` refers to the
+open source `age` encryption tooling, which may be installed separately to
+securely create and maintain cryptographic keys outside of the git repo; the
+`git-veil` software uses the Rust `rage` library to work with the keys.
+Understand the semantics BEFORE you rely on them:
 
 - `removeperson` deletes bob's entry from the signed keyring and re-signs
   it. It is **forward-looking only**.
@@ -103,7 +106,7 @@ member can still decrypt the fresh ciphertext.
 
 ## 4. Demonstrating (to yourself) why revocation is forward-looking
 
-This was verified against the real binary and the reference age CLI: a
+This was verified against the real binary and the reference `age` CLI: a
 removed collaborator, holding only what he already had (his X25519
 private key plus an old ciphertext copied out of git history), decrypts
 it with plain `age`:

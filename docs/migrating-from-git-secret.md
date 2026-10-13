@@ -10,7 +10,7 @@ To be plain about it:
 
 - The ciphertext differs. git-secret's `filename.secret` files are OpenPGP
   messages produced by whatever `gpg` binary it shells out to. git-veil's
-  `.secret` files are age messages (age-encryption.org/v1) produced by the
+  `.secret` files are `age` messages (age-encryption.org/v1) produced by the
   pure-Rust [`age` crate][age] in process. A git-veil user cannot reveal a
   git-secret-produced file and vice versa.
 - The state directory differs: git-secret uses `.gitsecret/`, git-veil
@@ -24,6 +24,11 @@ To be plain about it:
    per-machine trust pin before every operation.
 
 [age]: https://crates.io/crates/age
+
+In the following, `age` refers to the open source `age` encryption tooling,
+which may be installed separately to securely create and maintain
+cryptographic keys outside of the git repo; the `git-veil` software uses the
+Rust `rage` library to work with the keys.
 
 So there is no in-place upgrade: the path is *reveal everything, tear down
 git-secret, re-key with git-veil, re-hide*. Everything stays plain files
@@ -40,7 +45,7 @@ habits, so they are stated up front:
    operation, so keys live in (and move through) the GnuPG keychain:
    collaborators `gpg --import` each other's public keys, and git-secret
    finds them there when you run `tell`. git-veil has no gpg step at
-   runtime: keys are X25519 private keys (age identities) created with
+   runtime: keys are X25519 private keys (`age` identities) created with
    `age-keygen` (or `rage-keygen`) and moved as plain text files, with
    `import` (your own private key, per machine) and `export` (the public
    key, to hand to the owner). Your existing OpenPGP keys do NOT carry
@@ -130,10 +135,10 @@ deletes every file ending in `.secret` in the repo - tracked or not  -
 which is fine here only because step 1 already put plaintexts on disk, but
 it is a habit that destroys the only copy of a secret in normal use.
 
-### 3. Re-key: create age keys, import, tell
+### 3. Re-key: create `age` keys, import, tell
 
 git-veil never generates keys, and your existing OpenPGP keys do not carry
-over: encryption is age (X25519) and keyring signing is raw Ed25519, so
+over: encryption is `age` (X25519) and keyring signing is raw Ed25519, so
 this step creates fresh key material with `age-keygen` and `openssl`.
 See [docs/solo.md](solo.md) step 1 for the details - and back the private
 halves up.
@@ -164,7 +169,7 @@ $ git-veil trust demo+example@github.com
 ```
 
 Each collaborator, on their machine, creates their own X25519 private key
-(age identity) and sends the owner the printed public key:
+(`age` identity) and sends the owner the printed public key:
 
 ```sh
 $ age-keygen -o alice-age-identity.txt
@@ -184,7 +189,9 @@ What just happened: this is the git-secret `tell` split into two steps
 (key hand-off, then ring membership). The reason is difference #1: there
 is no shared gpg keychain for `tell` to look keys up in, so the public
 key arrives as an explicit file, and the owner's `tell` signs it into
-the keyring. Collaborators who want a head start can already `import`
+the keyring. In this section `age` is the open source `age` encryption
+tooling (installed separately; `git-veil` uses the Rust `rage` library to
+work with the keys). Collaborators who want a head start can already `import`
 their own private key (step 5 uses it).
 
 ### 4. Track the files and hide

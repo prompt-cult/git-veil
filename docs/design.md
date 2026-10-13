@@ -17,18 +17,23 @@ render here in LaTeX math blocks and on the project GitHub Pages site.
 ## Terminology: crypto terms in the core, ageisms at the boundary
 
 git-veil's core and code speak RFC-standard cryptography only. The words
-the age ecosystem uses as its marketing names for key material, the
+the `age` ecosystem uses as its marketing names for key material, the
 **ageisms**, appear only at the
 user surface, and only where the documentation advises the operator how to
-do something in age (run an age command, interoperate with age/rage
+do something in `age` (run an `age` command, interoperate with `age`/`rage`
 tooling). Where both vocabularies must span, the form is the crypto term
-followed by the ageism in brackets: "X25519 private key (age identity)".
+followed by the ageism in brackets: "X25519 private key (`age` identity)".
 
-| Crypto term (git-veil core and code) | ageism (age marketing vocabulary) |
+In the following, `age` refers to the open source `age` encryption tooling,
+which may be installed separately to securely create and maintain
+cryptographic keys outside of the git repo; the `git-veil` software uses the
+Rust `rage` library to work with the keys.
+
+| Crypto term (git-veil core and code) | ageism (`age` marketing vocabulary) |
 |--------------------------------------|-----------------------------------|
-| X25519 public key - bech32-encoded per the age spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
-| X25519 private key - bech32-encoded per the age spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
-| principal - the keyring label (a collaborator's email) | - (age has no word for it) |
+| X25519 public key - bech32-encoded per the `age` spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
+| X25519 private key - bech32-encoded per the `age` spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
+| principal - the keyring label (a collaborator's email) | - (`age` has no word for it) |
 | Ed25519 verifying key - the public half of the keyring signing key | - (already standard vocabulary) |
 | Ed25519 signing key - the private seed | - (already standard vocabulary) |
 
@@ -41,7 +46,7 @@ The law:
    that and fails the build.
 2. **The user surface** (CLI help text, operator docs) uses the crypto
    column too, EXCEPT where the documentation advises the operator how to
-   do something in age; only there may the ageism appear, in the bracketed
+   do something in `age`; only there may the ageism appear, in the bracketed
    spanning form.
 3. **This table is the translation reference** for any reader spanning
    both vocabularies; AGENTS.md carries the same law verbatim.
@@ -291,13 +296,13 @@ printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256
 Use `printf`, never `echo` (echo appends a newline and hashes different
 bytes). Exactly one colon separates label and key. The digest is lowercase
 hex. `owner.verifying` line 1 is the verifying key; `head -n 1` selects it
-because the file may carry the owner's X25519 public key (age recipient)
+because the file may carry the owner's X25519 public key (`age` recipient)
 on line 2.
 
 **Golden vectors.** These (label, public key encoding, fingerprint)
 triples are produced by the one-liners above and asserted against the Rust
 implementation (tests/fingerprint.rs) - code equals coreutils for every
-key type. The first public key is a real age-keygen X25519 public key; the
+key type. The first public key is a real `age-keygen` X25519 public key; the
 second is a real openssl-generated Ed25519 verifying key:
 
 | label | public key encoding | fingerprint |
@@ -430,7 +435,7 @@ $$
 resolve their keyring entry by principal, then look up the matching X25519
 private key in `<key store>/identities.txt`. No matching private key → exit
 code 21 after printing the `age-keygen`/`rage-keygen` creation recipe for
-the private key (age identity), the `git-veil import` step, and the backup
+the private key (an `age` identity), the `git-veil import` step, and the backup
 instruction. A user whose principal is not in the signed keyring at all
 fails earlier, with exit code 22.
 

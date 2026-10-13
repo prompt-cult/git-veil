@@ -1,18 +1,23 @@
 # git-veil
 
 A tool for storing encrypted secrets in a git repository, written in Rust.
-It uses [age] encryption (via the pure-Rust [`age` crate][age-crate]) for
+It uses [`age`][age] encryption (via the pure-Rust [`age` crate][age-crate]) for
 secrecy and [Ed25519][ed25519] signing (via [`ed25519-dalek`][dalek]) for
 keyring integrity - no PGP, no GPG, no external crypto process. All
 cryptographic operations happen in-process.
+
+In the following, `age` refers to the open source `age` encryption tooling,
+which may be installed separately to securely create and maintain
+cryptographic keys outside of the git repo; the `git-veil` software uses the
+Rust `rage` library to work with the keys.
 
 [age]: https://age-encryption.org
 [age-crate]: https://crates.io/crates/age
 [ed25519]: https://en.wikipedia.org/wiki/EdDSA#Ed25519
 [dalek]: https://crates.io/crates/ed25519-dalek
 
-The age format is a modern, RFC-track encryption format designed by Filippo
-Valsorda. git-veil's ciphertexts are standard age files: any compliant age
+The `age` format is a modern, RFC-track encryption format designed by Filippo
+Valsorda. git-veil's ciphertexts are standard `age` files: any compliant `age`
 implementation can decrypt them, including the reference [`age`][age-cli] CLI
 and the Rust [`rage`][rage] CLI.
 
@@ -68,7 +73,8 @@ prints the full table with names and meanings; the specification is in
 ## Quick start (solo)
 
 Prerequisite: your own keys (see [Key setup](#key-setup) below) - an
-X25519 private key (age identity) and an Ed25519 signing key. git-veil
+X25519 private key (an `age` identity, created with the separate `age`
+tooling) and an Ed25519 signing key. git-veil
 generates no keys: it only ever reads keys you created and own, and every
 command that needs a missing key tells you how to make one and back it up
 instead.
@@ -87,14 +93,14 @@ git commit -m "Add encrypted secrets"
 git-veil reveal                                 # decrypt back when you need the plaintext
 ```
 
-The `.secret` ciphertext files are standard age-encrypted blobs. You can
-verify interoperability with any age-compatible tool:
+The `.secret` ciphertext files are standard `age`-encrypted blobs. You can
+verify interoperability with any `age`-compatible tool:
 
 ```sh
-# git-veil encrypted, age CLI decrypts:
+# git-veil encrypted, the `age` CLI decrypts:
 age -d -i my-age-identity.txt .env.secret
 
-# age CLI encrypted, git-veil decrypts (via reveal/cat):
+# `age` CLI encrypted, git-veil decrypts (via reveal/cat):
 echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 ```
 
@@ -137,15 +143,15 @@ cp docs/man/*.1 /usr/local/share/man/man1/
 
 ## Key setup
 
-git-veil uses [age] X25519 keys for encryption and a separate Ed25519 key for
+git-veil uses [`age`][age] X25519 keys for encryption and a separate Ed25519 key for
 keyring signing. You need both, and git-veil generates **neither**: keys the
 tool created would be keys you never backed up. Create them once with standard
 tools, then back the private halves up (a password-manager note is enough).
 
 ### Create an X25519 private key (for encryption/decryption)
 
-Use any age key generator - `age-keygen` (from the [age CLI][age-cli]) or
-`rage-keygen` (from [rage]):
+Use any `age` key generator - `age-keygen` (from the [`age`][age-cli] CLI) or
+`rage-keygen` (from [`rage`][rage]):
 
 ```sh
 umask 077
@@ -155,13 +161,13 @@ age-keygen -o my-age-identity.txt
 #   AGE-SECRET-KEY-1...       (your X25519 private key - keep this secret, BACK IT UP)
 ```
 
-The **X25519 public key** (age recipient) - the `age1...` line - is safe to
-share with collaborators. The **X25519 private key** (age identity) - the
+The **X25519 public key** (`age` recipient) - the `age1...` line - is safe to
+share with collaborators. The **X25519 private key** (`age` identity) - the
 `AGE-SECRET-KEY-1...` line - is never committed; without a backup of it,
 ciphertexts are unrecoverable.
 `git-veil import my-age-identity.txt` copies it into the local key store
 (accepts any file containing an `AGE-SECRET-KEY-1...` line; `#` comment lines
-like age-keygen's are skipped).
+like `age-keygen`'s are skipped).
 
 ### Create an Ed25519 signing key (for keyring signing)
 
@@ -248,9 +254,9 @@ The specification of the underlying mechanisms (repository identity, trust
 anchoring, key validity, crash safety, path safety) is in
 [docs/design.md](docs/design.md).
 
-## Compatibility with age and rage
+## Compatibility with `age` and `rage`
 
-git-veil's `.secret` ciphertext files are standard age-encrypted blobs
+git-veil's `.secret` ciphertext files are standard `age`-encrypted blobs
 (age-encryption.org/v1). They are fully interoperable with the reference
 [`age`][age-cli] CLI and the Rust [`rage`][rage] CLI:
 

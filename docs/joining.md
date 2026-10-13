@@ -17,6 +17,10 @@ email `newcomer@example.com`, owner key `example@github.com`.
 That is all. The repository ID you print yourself after cloning (step 3).
 Your own X25519 private key you create yourself (step 2) - git-veil
 generates no keys, and a key it made would be a key you never backed up.
+In the following, `age` refers to the open source `age` encryption tooling,
+which may be installed separately to securely create and maintain
+cryptographic keys outside of the git repo; the `git-veil` software uses the
+Rust `rage` library to work with the keys.
 
 ## What the owner must do FIRST (not you)
 
@@ -34,7 +38,7 @@ $ git-veil tell newcomer@example.com newcomer.pub
 ```
 
 (You send them your X25519 public key first: create an X25519 private key
-(age identity) as in step 1 of [docs/solo.md](solo.md) with any key
+(`age` identity) as in step 1 of [docs/solo.md](solo.md) with any key
 generator - git-veil has **no** key generation - import it with
 `git-veil import newcomer-age-identity.txt`, and send the `age1...`
 public key line it printed, or `git-veil export age1... --output

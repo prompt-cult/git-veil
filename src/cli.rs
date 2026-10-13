@@ -22,7 +22,7 @@ fn verifying_key_selection(s: &str) -> Result<String, String> {
 
 #[derive(Debug, Parser)]
 #[command(name = "git-veil")]
-#[command(about = "Git secret management using age encryption")]
+#[command(about = "Git secret management using \"age\" encryption")]
 #[command(version)]
 pub struct Cli {
     /// Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)
@@ -57,7 +57,7 @@ EXAMPLES
 
     /// Import your X25519 private key into the git-veil key store
     #[command(after_long_help = "\
-Imports X25519 private keys (age identities - the AGE-SECRET-KEY-1...
+Imports X25519 private keys (\"age\" identities - the AGE-SECRET-KEY-1...
 lines produced by age-keygen) into your per-machine key store
 ($GIT_VEIL_HOME or $HOME/.git-veil). This is where reveal/cat/unhide/
 changes find the private key matching your keyring entry. The key store
@@ -66,6 +66,11 @@ imports their own private key. The store is written mode 0600 regardless
 of umask. git-veil never generates keys - create yours with age-keygen
 (or rage-keygen) and back the AGE-SECRET-KEY-1... line up; without it,
 ciphertexts encrypted to you are unrecoverable.
+
+Here \"age\" refers to the open source age encryption tooling, which may
+be installed separately to securely create and maintain cryptographic
+keys outside of the git repo; the git-veil software uses the Rust \"rage\"
+library to work with the keys.
 
 A private key whose X25519 public key is already present in the key store
 is not duplicated.
@@ -86,7 +91,7 @@ EXAMPLES
 
     /// Export an X25519 public key from the local key store
     #[command(after_long_help = "\
-Prints - or with --output writes - the X25519 public key (age
+Prints - or with --output writes - the X25519 public key (\"age\"
 recipient), bech32-encoded (age1...), for the given key, read from the
 local key store on this machine ($GIT_VEIL_HOME or $HOME/.git-veil). This
 is the key handoff between collaborators without any external tool: the
@@ -94,7 +99,9 @@ local store only holds keys THIS machine knows about (your imported
 private key and any public key trust has pinned), so each collaborator
 runs export on their OWN machine and sends the public key encoding to the
 owner, who adds it to the keyring with tell. It cannot export a
-collaborator's key for them.
+collaborator's key for them. Here \"age\" refers to the open source age
+encryption tooling, installed separately; git-veil uses the Rust \"rage\"
+library to work with the keys.
 
 The output never contains private key material - even when the match is
 your imported private key, export always emits the public half.

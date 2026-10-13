@@ -9,7 +9,7 @@ a cheat-sheet for translating between the two tools afterwards.
 
 **No format compatibility.** git-crypt encrypts files in place - the
 committed blob at the original path is an AES-256-CTR stream produced by
-git's smudge/clean filter machinery. git-veil writes age-encrypted
+git's smudge/clean filter machinery. git-veil writes `age`-encrypted
 (age-encryption.org/v1) blobs into sibling `<name>.secret` files beside
 where the plaintext was. Neither tool
 can read the other's ciphertext - the same one-tool-per-repo rule stated in
@@ -17,6 +17,11 @@ can read the other's ciphertext - the same one-tool-per-repo rule stated in
 applies to git-crypt. Migration therefore means, literally:
 
 > decrypt everything with git-crypt, then re-encrypt everything with git-veil.
+
+In the following, `age` refers to the open source `age` encryption tooling,
+which may be installed separately to securely create and maintain
+cryptographic keys outside of the git repo; the `git-veil` software uses the
+Rust `rage` library to work with the keys.
 
 **History does not migrate.** Every old commit in the repository contains
 git-crypt-encrypted blobs, and no command in either tool converts them.
@@ -145,7 +150,7 @@ commit or stash first.
 
 Full walkthroughs live in [docs/solo.md](solo.md) (one person) and
 [docs/two-collaborators.md](two-collaborators.md) (owner + collaborators);
-this is the shape. You need an X25519 private key (age identity) per
+this is the shape. You need an X25519 private key (`age` identity) per
 person (created with `age-keygen` or `rage-keygen`) and, for the owner,
 an Ed25519 signing key (`openssl`) - git-veil generates no keys.
 
@@ -261,7 +266,7 @@ commit. git-crypt wins when secrets are edited constantly and nobody
 should ever have to think; git-veil wins when the collaborator roster
 changes, when you want committed state that is verifiably ciphertext (no
 mis-set attribute can silently commit plaintext through a filter that
-does not exist), and when you want cryptography that needs no gpg - age
+does not exist), and when you want cryptography that needs no gpg - `age`
 keys are plain text files and the only one-time tooling is `age-keygen`
 (or `rage-keygen`) plus `openssl` for the owner's signing key. If your
 team cannot live with the
