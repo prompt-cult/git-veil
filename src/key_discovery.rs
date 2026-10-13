@@ -63,42 +63,14 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
 
 /// Selects the Ed25519 signing key for keyring curation (tell/removeperson).
 ///
-/// Selection order:
+/// The TRUSTED key is used — the one whose verifying-key
+/// fingerprint equals `pinned_fingerprint`. The keyring must be signed
+/// with exactly the key the pin names (that is what verify_keyring
+/// checks against), so the pin, not list order, selects the key.
 ///
-/// 1. An explicit `--signing-key` value wins: a 1-based index into
-///    signing-keys.txt, or a full 64-hex-character seed.
-/// 2. Otherwise the TRUSTED key is used — the one whose verifying-key
-///    fingerprint equals `pinned_fingerprint`. The keyring must be signed
-///    with exactly the key the pin names (that is what verify_keyring
-///    checks against), so the pin, not list order, selects the key.
-/// 3. No usable key → exit code 20 with the create-and-back-up recipe.
-pub fn discover_signing_key(
-    key_store: &Path,
-    explicit: Option<&str>,
-    pinned_fingerprint: Option<&str>,
-) -> Result<SigningKey> {
+/// No usable key → exit code 20 with the create-and-back-up recipe.
+pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: Option<&str>) -> Result<SigningKey> {
     let keys = load_signing_keys(key_store)?;
-
-    if let Some(selection) = explicit.map(str::trim).filter(|s| !s.is_empty()) {
-        // A 64-char hex string is a seed, never an index (a numeric seed
-        // would otherwise be misread as a position).
-        if selection.len() == 64 && hex::decode(selection).is_ok() {
-            return parse_signing_key(selection);
-        }
-        let index: usize = selection.parse().context(
-            "--signing-key must be a 1-based index into signing-keys.txt or a 64-hex-character seed",
-        )?;
-        if index == 0 {
-            anyhow::bail!("--signing-key index is 1-based; got 0");
-        }
-        return keys.get(index - 1).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "signing-keys.txt holds {} key(s); no key at index {}",
-                keys.len(),
-                index
-            )
-        });
-    }
 
     if keys.is_empty() {
         return Err(coded(

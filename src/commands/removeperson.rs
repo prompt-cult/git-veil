@@ -16,7 +16,6 @@ pub fn cmd_removeperson(
     email_to_remove: &str,
     remote_name: &str,
     key_store: &Path,
-    signing_key_selection: Option<&str>,
 ) -> Result<()> {
     // Verify trust is established AND the existing keyring signature
     // against the trusted key BEFORE any mutation. An unsigned keyring is
@@ -60,8 +59,7 @@ pub fn cmd_removeperson(
     // like tell does, so it must sign with the key verify_keyring checks
     // against, never with any collaborator's key. Discovery selects the
     // signing key whose verifying key matches the pinned fingerprint.
-    let signing_key =
-        discover_signing_key(key_store, signing_key_selection, Some(&trusted_fingerprint))?;
+    let signing_key = discover_signing_key(key_store, Some(&trusted_fingerprint))?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of

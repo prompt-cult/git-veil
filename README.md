@@ -182,8 +182,7 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 
 The signing-key file format is one 64-hex-character Ed25519 seed per line in
 `<key store>/signing-keys.txt`. tell/removeperson sign with the key whose
-verifying fingerprint is pinned for the repository; with several keys
-present, `--signing-key <index-or-seed>` picks explicitly. Commands that
+verifying fingerprint is pinned for the repository. Commands that
 need a missing key exit with a documented code (`git-veil error-codes`)
 after printing how to create and back it up.
 

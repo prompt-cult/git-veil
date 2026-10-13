@@ -262,15 +262,13 @@ read from `<key store>/signing-keys.txt`, one 64-hex-character seed per line
 (`#` comments and blank lines skipped). `tell` and `removeperson` — the two
 keyring-curating commands — select a key as follows:
 
-1. An explicit `--signing-key <index-or-seed>` wins: a 1-based index into the
-   file, or a full seed matched hex-insensitively.
-2. Otherwise the TRUSTED key is used — the one whose verifying-key
+1. The TRUSTED key is used — the one whose verifying-key
    fingerprint equals the fingerprint pinned for this repository. The keyring
    must be signed with exactly the key the pin names (that is what
    verify_keyring checks against), so the pin, not list order, selects the
    key. Selection is therefore deterministic — no interactive menu is
    needed. (Where no pin applies, the fallback is the first key in the file.)
-3. No usable key → the command exits with code 20 after printing, to stderr,
+2. No usable key → the command exits with code 20 after printing, to stderr,
    the `openssl` recipe that creates the key (the last 32 bytes of the Ed25519
    DER encoding are the seed) and the instruction to **back it up**. A
    present-but-garbage line in signing-keys.txt is a parse error, never

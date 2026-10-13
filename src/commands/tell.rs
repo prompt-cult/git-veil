@@ -24,7 +24,6 @@ pub fn cmd_tell(
     collaborator_key_path: &str,
     remote_name: &str,
     key_store: &Path,
-    signing_key_selection: Option<&str>,
 ) -> Result<()> {
     // Verify trust is established AND the existing keyring signature
     // against the trusted key BEFORE any mutation. An unsigned keyring is
@@ -83,8 +82,7 @@ pub fn cmd_tell(
     // checks against), never with the collaborator's key. Discovery selects
     // the signing key whose verifying key matches the pinned fingerprint;
     // git-veil never generates one — a missing key fails with the recipe.
-    let signing_key =
-        discover_signing_key(key_store, signing_key_selection, Some(&trusted_fingerprint))?;
+    let signing_key = discover_signing_key(key_store, Some(&trusted_fingerprint))?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract (everything up to and including the END marker, excluding the

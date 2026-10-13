@@ -1,7 +1,6 @@
 //! Key discovery tests: git-veil never generates keys — a missing key
 //! fails with a documented exit code and the create-and-back-up recipe;
-//! selection honours the pinned fingerprint, an explicit --signing-key,
-//! and the first-key default.
+//! selection honours the pinned fingerprint and the first-key default.
 
 use git_veil::{
     discover_identity, discover_signing_key, exit_code_of, fingerprint_for_verifying_key,
@@ -50,7 +49,7 @@ fn write_signing_keys(store: &TempDir, seeds: &[String]) {
 #[test]
 fn test_missing_signing_key_fails_with_code_20_and_recipe() {
     let store = TempDir::new("nosigning");
-    let err = discover_signing_key(&store.path, None, None).unwrap_err();
+    let err = discover_signing_key(&store.path, None).unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), 20);
     assert!(
@@ -85,7 +84,7 @@ fn test_single_key_used_without_explicit_selection() {
     assert_eq!(loaded.len(), 1);
 
     // No pin, no explicit selection: the single key is used
-    let selected = discover_signing_key(&store.path, None, None).unwrap();
+    let selected = discover_signing_key(&store.path, None).unwrap();
     assert_eq!(
         selected.to_bytes(),
         key.to_bytes(),
@@ -107,35 +106,12 @@ fn test_pinned_fingerprint_selects_the_trusted_key() {
     );
 
     let pinned = fingerprint_for_verifying_key(&second.verifying_key());
-    let selected = discover_signing_key(&store.path, None, Some(&pinned)).unwrap();
+    let selected = discover_signing_key(&store.path, Some(&pinned)).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 
     // A pin no stored key matches: code 20, never a wrong-key signature
-    let err = discover_signing_key(&store.path, None, Some(&"0".repeat(64))).unwrap_err();
+    let err = discover_signing_key(&store.path, Some(&"0".repeat(64))).unwrap_err();
     assert_eq!(code_of(err), 20);
-}
-
-#[test]
-fn test_explicit_signing_key_selection_by_index_and_seed() {
-    let store = TempDir::new("explicit");
-    let (first, _) = generate_signing_keypair();
-    let (second, _) = generate_signing_keypair();
-    let first_hex = hex::encode(first.to_bytes());
-    let second_hex = hex::encode(second.to_bytes());
-    write_signing_keys(&store, &[first_hex.clone(), second_hex.clone()]);
-
-    // 1-based index
-    let by_index = discover_signing_key(&store.path, Some("2"), None).unwrap();
-    assert_eq!(by_index.to_bytes(), second.to_bytes());
-
-    // Full seed (case-insensitive hex)
-    let by_seed =
-        discover_signing_key(&store.path, Some(&second_hex.to_uppercase()), None).unwrap();
-    assert_eq!(by_seed.to_bytes(), second.to_bytes());
-
-    // Out-of-range index fails without falling back to a default
-    assert!(discover_signing_key(&store.path, Some("9"), None).is_err());
-    assert!(discover_signing_key(&store.path, Some("0"), None).is_err());
 }
 
 #[test]
