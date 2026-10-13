@@ -164,9 +164,11 @@ the last hidden version.
 Run `git-veil error-codes` for the full table; the ones you will actually
 meet as a newcomer:
 
-- `no trust pin exists on this machine. See the trust documentation.`
-  (exit code 11) — you have not pinned on this machine: import the
-  owner's pin-file (step 4).
+- `no trust pin exists on this machine for repository identity … derived
+  from remote …. See the trust documentation.` (exit code 11) — you have
+  not pinned this repository (the message names its derived identity and
+  the remote it came from) on this machine: import the owner's pin-file
+  (step 4).
 - `user not found in the keyring. Check the identity, or ask the owner to
   add it` (exit code 22) — the owner has not run `tell` (or has not pushed
   the updated keyring; `git pull` first).

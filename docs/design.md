@@ -166,17 +166,25 @@ Every gated command verifies the keyring signature through
 
 1. reads the fingerprint `trust.json` claims for the repo id;
 2. reads the local pin and **fails closed** on any disagreement. Every
-   refusal below is a plain ASCII statement that names no repository
-   identity, no fingerprint, no path and no command line; the remedy is
-   this document, which the operator reads deliberately:
+   refusal below is a plain ASCII statement that prints no command line;
+   the remedy is this document, which the operator reads deliberately.
+   The message policy distinguishes secret material from public repository
+   facts: plaintext contents, key material and anything derivable only by
+   decryption are never printed, while facts readable in the committed
+   tree — tracked paths, committed ciphertext paths, principal labels,
+   repository identities — may be named, since refusing to name them buys
+   no security and costs the operator the ability to act:
    - committed record missing → `no trust record for this repository. See
      the trust documentation.` (exit code 10);
    - committed record present but naming a different repository identity →
      `the committed trust record names a different repository identity
      than this repository derives. This looks like a rename or a remote
      change based on the existing trust record.` (exit code 10);
-   - pin missing → `no trust pin exists on this machine. See the trust
-     documentation.` (exit code 11);
+   - pin missing → `no trust pin exists on this machine for repository
+     identity <repo-id> derived from remote <remote>. See the trust
+     documentation.` (exit code 11) — names the derived repository
+     identity and the remote it came from, the facts that explain every
+     rename/move failure;
    - pin or committed record in the retired 16 hex character fingerprint
      format → `a trust pin or record in the retired 16 hex character
      fingerprint format was found. The fingerprint derivation changed to

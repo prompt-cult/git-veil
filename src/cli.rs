@@ -614,11 +614,11 @@ EXAMPLES
         remote: String,
     },
 
-    /// Show the identity and key store git-veil will use
+    /// Show the identity git-veil will use for you
     #[command(after_long_help = "\
-Prints the identity git-veil will use for you — git config user.email, or
-the --email override — plus the local key store path where your private
-key must be imported (git-veil import). Use it to check which key
+Prints the identity git-veil will use for you: git config user.email, or
+the --email override. The principal label is committed in the public
+keyring, so naming it leaks nothing. Use it to check which key
 reveal/cat/unhide will look up before they fail on a missing identity.
 
 EXAMPLES

@@ -621,11 +621,22 @@ fn test_no_pin_fails_closed() {
         .unwrap();
 
     let result = cmd_verify_keyring(&repo.path, "origin", &key_store.path);
-    assert!(result.is_err(), "should fail without local pin");
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("no trust pin exists on this machine"));
+    let err = result.expect_err("should fail without local pin");
+    let message = err.to_string();
+    assert!(
+        message.contains("no trust pin exists on this machine"),
+        "the error states the missing pin: {message}"
+    );
+    // Public repository facts (issue #42): the refusal names the derived
+    // repository identity and the remote it came from.
+    assert!(
+        message.contains(TEST_REPO_ID),
+        "the error names the derived repository identity: {message}"
+    );
+    assert!(
+        message.contains("origin"),
+        "the error names the remote the identity derived from: {message}"
+    );
 }
 
 #[test]
@@ -688,7 +699,9 @@ fn test_empty_keyring_no_signature_ok() {
 }
 
 // ---------------------------------------------------------------------------
-// reveal's no-pin error names exactly the two pin-creation paths
+// reveal's no-pin error: states the missing pin and names the public facts
+// (the derived repository identity and the remote it came from), but prints
+// no command line and names no removed path
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -712,12 +725,16 @@ fn test_reveal_no_pin_error_names_both_paths() {
         "the error must state the missing pin: {message}"
     );
     assert!(
-        !message.contains("git-veil trust"),
-        "the error must not print a command line: {message}"
+        message.contains(TEST_REPO_ID),
+        "the error names the derived repository identity: {message}"
     );
     assert!(
-        !message.contains(TEST_REPO_ID),
-        "the error must not name the repository identity: {message}"
+        message.contains("origin"),
+        "the error names the remote the identity derived from: {message}"
+    );
+    assert!(
+        !message.contains("git-veil trust"),
+        "the error must not print a command line: {message}"
     );
     assert!(
         !message.to_lowercase().contains("keyfile"),
@@ -833,7 +850,6 @@ fn rename_remote(repo: &Path, new_url: &str) {
 fn test_rename_suspicion_no_remedy_on_gated_commands() {
     let f = Fixture::new("rename-verify");
     rename_remote(&f.repo.path, "git@github.com:owner/fara-moved.git");
-    let new_repo_id = "fara-moved+owner@github.com";
 
     let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("a renamed repo must not verify against the old trust record");
@@ -842,10 +858,6 @@ fn test_rename_suspicion_no_remedy_on_gated_commands() {
     assert!(
         message.contains("This looks like a rename or a remote change"),
         "the error must state the rename suspicion: {message}"
-    );
-    assert!(
-        !message.contains(TEST_REPO_ID) && !message.contains(new_repo_id),
-        "the error must leak no repository identity: {message}"
     );
     assert!(
         !message.contains("git-veil trust"),

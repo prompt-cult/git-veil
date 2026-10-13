@@ -373,6 +373,12 @@ fn fix_nominated_path_refused_at_hide() {
         72,
         "nomination must exit with the documented code 72"
     );
+    // The tracked path is committed in tracked.json — a public repository
+    // fact — so the refusal names it (issue #42).
+    assert!(
+        err.to_string().contains("prod-credentials"),
+        "exit 72 names the offending tracked path: {err}"
+    );
     assert!(
         !f.repo.join("prod-credentials.secret").exists(),
         "no ciphertext may be written for a nominated path"
@@ -609,6 +615,12 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
         exit_code_of(&err),
         42,
         "orphaned ciphertext must exit with the documented code 42"
+    );
+    // The committed ciphertext path lives in the git index — a public
+    // repository fact — so the refusal names it (issue #42).
+    assert!(
+        err.to_string().contains("api.key.secret"),
+        "exit 42 names the offending committed ciphertext path: {err}"
     );
 
     // REMEDY (de-tracking was intentional): delete the stale ciphertext…

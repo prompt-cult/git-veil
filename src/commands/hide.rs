@@ -179,10 +179,13 @@ pub fn cmd_hide(
     if !orphans.is_empty() {
         return Err(coded(
             ExitCode::OrphanedCiphertext,
-            "refusing to hide: committed ciphertext paths are not tracked with error code 42. \
-             Rotation would silently leave them decryptable by removed collaborators. \
-             Re-track the paths, or delete the stale ciphertext. See the rotation documentation"
-                .to_string(),
+            format!(
+                "refusing to hide: committed ciphertext paths are not tracked with error code 42. \
+                 Rotation would silently leave them decryptable by removed collaborators. \
+                 Re-track the paths, or delete the stale ciphertext. See the rotation documentation. \
+                 The offending committed ciphertext paths:\n  {}",
+                orphans.join("\n  ")
+            ),
         ));
     }
 
@@ -210,11 +213,14 @@ pub fn cmd_hide(
     if !unintended.is_empty() {
         return Err(coded(
             ExitCode::UnintendedEncryption,
-            "refusing to hide: paths are tracked but were never added on this \
-             machine and their ciphertext was never established. tracked.json was likely \
-             modified by someone else. Add the paths deliberately if the tracking is \
-             wanted, or restore tracked.json if it is not. Error code 72. See the encryption intent documentation"
-                .to_string(),
+            format!(
+                "refusing to hide: paths are tracked but were never added on this \
+                 machine and their ciphertext was never established. tracked.json was likely \
+                 modified by someone else. Add the paths deliberately if the tracking is \
+                 wanted, or restore tracked.json if it is not. Error code 72. See the \
+                 encryption intent documentation. The offending tracked paths:\n  {}",
+                unintended.join("\n  ")
+            ),
         ));
     }
 

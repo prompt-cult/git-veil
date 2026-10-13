@@ -424,7 +424,7 @@ _git-veil_commands() {
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity and key store git-veil will use' \
+'whoami:Show the identity git-veil will use for you' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \
@@ -502,7 +502,7 @@ _git-veil__subcmd__help_commands() {
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity and key store git-veil will use' \
+'whoami:Show the identity git-veil will use for you' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \

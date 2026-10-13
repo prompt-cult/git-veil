@@ -65,7 +65,6 @@ Remote: origin
 Push URL: git@github.com:example/demo.git
 $ git-veil whoami
 Your identity: example@github.com
-Key store: /home/you/.git-veil
 ```
 
 What just happened: `.git-veil/` now holds `keyring`, `trust.json` and

@@ -815,6 +815,33 @@ fn test_whoami() {
     cmd_whoami(&fixture.repo.path, None, &fixture.key_store.path).expect("whoami");
 }
 
+/// The principal label is committed in the public keyring — a public
+/// repository fact — so whoami prints it (issue #42). Drives the built
+/// binary because the label is asserted on stdout.
+#[test]
+fn test_whoami_prints_the_principal_label() {
+    let key_store = TempDir::new("whoami-principal-ks");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .arg("whoami")
+        .arg("--email")
+        .arg("alice@example.com")
+        .arg("--key-store")
+        .arg(&key_store.path)
+        .env("GIT_VEIL_SKIP_PERMISSIONS", "1")
+        .output()
+        .expect("run git-veil whoami");
+    assert!(
+        output.status.success(),
+        "whoami failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(
+        stdout.contains("alice@example.com"),
+        "whoami prints the principal label: {stdout}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // export
 // ---------------------------------------------------------------------------

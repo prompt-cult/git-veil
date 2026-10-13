@@ -112,7 +112,10 @@ pub fn verify_keyring_against_trust(
         None => {
             return Err(coded(
                 ExitCode::NoTrustPin,
-                "no trust pin exists on this machine. See the trust documentation.".to_string(),
+                format!(
+                    "no trust pin exists on this machine for repository identity {repo_id} \
+                     derived from remote {remote_name}. See the trust documentation."
+                ),
             ))
         }
     };
