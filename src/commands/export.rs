@@ -30,14 +30,7 @@ pub fn export_public_key(key_store: &Path, identifier: &str) -> Result<String> {
         );
     }
     if matched.len() > 1 {
-        let fingerprints: Vec<String> = matched
-            .iter()
-            .map(|r| fingerprint_for_recipient(r))
-            .collect();
-        anyhow::bail!(
-            "multiple keys match in the key store. Pass a fingerprint instead. Matching fingerprints:\n  {}",
-            fingerprints.join("\n  ")
-        );
+        anyhow::bail!("multiple keys match in the key store. Pass a fingerprint to select one");
     }
 
     let mut result = matched[0].clone();

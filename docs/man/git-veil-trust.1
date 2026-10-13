@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-trust \- Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
 .SH SYNOPSIS
-\fBgit\-veil trust\fR [\fB\-\-import\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIREPO_ID\fR] 
+\fBgit\-veil trust\fR [\fB\-\-import\fR] [\fB\-\-remote\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIREPO_ID\fR] 
 .SH DESCRIPTION
 Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
 .SH OPTIONS
@@ -14,6 +14,9 @@ Import a pin\-file produced by git\-veil export\-pin on a machine holding the si
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
+.TP
+\fB\-\-suppress\-codeowners\fR
+Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it

@@ -22,6 +22,9 @@ use ed25519_dalek::VerifyingKey;
 use std::fs;
 use std::path::Path;
 
+use crate::codeowners::{
+    covers_trust_critical_paths, is_suppressed, record_suppression, warning_text,
+};
 use crate::exit_codes::{coded, ExitCode};
 use crate::key_discovery::load_signing_keys;
 use crate::pin_file::load_pin_file;
@@ -234,6 +237,7 @@ pub fn cmd_trust(
     repo_id: &str,
     remote_name: &str,
     key_store: &Path,
+    suppress_codeowners: bool,
 ) -> Result<()> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let computed_repo_id = derive_repo_id(&push_url)?;
@@ -258,7 +262,8 @@ pub fn cmd_trust(
         &verifying_key_hex,
         recipient,
         true,
-    )
+    )?;
+    codeowners_notice(repo_root, key_store, repo_id, suppress_codeowners)
 }
 
 /// `git-veil trust --import <pin-file>`: pin from a pin-file exported by a
@@ -270,6 +275,7 @@ pub fn cmd_trust_import(
     pin_file_path: &Path,
     remote_name: &str,
     key_store: &Path,
+    suppress_codeowners: bool,
 ) -> Result<()> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
@@ -339,5 +345,30 @@ pub fn cmd_trust_import(
         &verifying_key_hex,
         recipient,
         false,
-    )
+    )?;
+    codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners)
+}
+
+/// The non-blocking CODEOWNERS notice after a successful pin (issue #27):
+/// suppress the warning when asked (the suppression lives beside the pin in
+/// the key store, recorded only by this possession-proofed command), warn
+/// when no CODEOWNERS file covers the trust-critical paths, stay silent
+/// otherwise. Never refuses, never alters the exit code.
+fn codeowners_notice(
+    repo_root: &Path,
+    key_store: &Path,
+    repo_id: &str,
+    suppress: bool,
+) -> Result<()> {
+    if suppress {
+        record_suppression(key_store, repo_id)?;
+        return Ok(());
+    }
+    if is_suppressed(key_store, repo_id) {
+        return Ok(());
+    }
+    if !covers_trust_critical_paths(repo_root) {
+        println!("{}", warning_text());
+    }
+    Ok(())
 }

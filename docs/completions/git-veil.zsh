@@ -31,6 +31,8 @@ _git-veil() {
         case $line[1] in
             (init)
 _arguments "${_arguments_options[@]}" : \
+'-q[Suppress the CODEOWNERS suggestion and other non-error output]' \
+'--quiet[Suppress the CODEOWNERS suggestion and other non-error output]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -70,6 +72,7 @@ _arguments "${_arguments_options[@]}" : \
 '()--import=[Import a pin-file produced by git-veil export-pin on a machine holding the signing key]:PIN_FILE:_files' \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
+'--suppress-codeowners[Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \

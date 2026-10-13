@@ -88,9 +88,9 @@ impl Fixture {
         )
         .unwrap();
 
-        cmd_init(&repo.path).expect("init");
+        cmd_init(&repo.path, false).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self { repo, key_store }
     }
@@ -507,8 +507,8 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
         "hide must refuse with code 40"
     );
     assert!(
-        message.contains(".tmp/x.txt.secret"),
-        "names the path: {message}"
+        message.contains("git-ignored"),
+        "states the problem: {message}"
     );
     assert!(
         !f.repo.join(".tmp/x.txt.secret").exists(),

@@ -94,9 +94,9 @@ impl Fixture {
         )
         .unwrap();
 
-        cmd_init(&repo.path).expect("init");
+        cmd_init(&repo.path, false).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self { repo, key_store }
     }
@@ -231,7 +231,14 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
 
     // RECOVERY: a genuinely intended rollback is re-anchored with trust,
     // which resets the freshness baseline along with the pin.
-    cmd_trust(&f.repo.path, TEST_REPO_ID, "origin", &f.key_store.path).expect("re-trust");
+    cmd_trust(
+        &f.repo.path,
+        TEST_REPO_ID,
+        "origin",
+        &f.key_store.path,
+        false,
+    )
+    .expect("re-trust");
     cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify succeeds after the re-trust reset the baseline");
     let _ = carol;
@@ -409,7 +416,7 @@ fn fix_established_ciphertext_needs_no_intent() {
         &f.key_store.path,
     )
     .expect("export-pin");
-    cmd_trust_import(&f.repo.path, &pin_file, "origin", &fresh_store.path).expect("import");
+    cmd_trust_import(&f.repo.path, &pin_file, "origin", &fresh_store.path, false).expect("import");
 
     let err = cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
         .expect_err("a machine with no baseline and no intent must refuse first-encryption");
@@ -480,7 +487,7 @@ fn fix_dummy_ciphertext_in_one_commit_no_longer_established() {
         &f.key_store.path,
     )
     .expect("export-pin");
-    cmd_trust_import(&f.repo.path, &pin_file, "origin", &victim_store.path).expect("import");
+    cmd_trust_import(&f.repo.path, &pin_file, "origin", &victim_store.path, false).expect("import");
 
     let err = cmd_hide(&f.repo.path, "origin", &victim_store.path, true)
         .expect_err("hide must refuse: the dummy does not predate the manifest entry");
@@ -519,7 +526,7 @@ fn happen_before_passes_when_ciphertext_predates_the_readd() {
         &f.key_store.path,
     )
     .expect("export-pin");
-    cmd_trust_import(&f.repo.path, &pin_file, "origin", &other_store.path).expect("import");
+    cmd_trust_import(&f.repo.path, &pin_file, "origin", &other_store.path, false).expect("import");
 
     // The path is re-added on the OWNER machine in a third commit. The
     // re-added entry's introducing commit has the ciphertext in its parent

@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
+use crate::codeowners::{covers_trust_critical_paths, suggestion_text};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::{Keyring, TrackedFiles, TrustStore};
@@ -13,7 +14,7 @@ use crate::{Keyring, TrackedFiles, TrustStore};
 /// stored in place beside the plaintext as `<name>.secret`, and those files
 /// are meant to be COMMITTED, so gitignoring them would defeat the
 /// fresh-clone decryptability contract.
-pub fn cmd_init(repo_root: &Path) -> Result<()> {
+pub fn cmd_init(repo_root: &Path, quiet: bool) -> Result<()> {
     let git_veil_dir = repo_root.join(".git-veil");
 
     // Fresh init only: a re-init over an established trust anchor would
@@ -56,5 +57,11 @@ pub fn cmd_init(repo_root: &Path) -> Result<()> {
         .context("Failed to create tracked.json")?;
 
     println!("git-veil initialized");
+
+    // Issue #27: suggest CODEOWNERS coverage for the trust-critical paths —
+    // once, in plain text, opt-out via -q, never a prompt, never a block.
+    if !quiet && !covers_trust_critical_paths(repo_root) {
+        println!("{}", suggestion_text());
+    }
     Ok(())
 }

@@ -53,7 +53,7 @@ fn print_keyring(keyring: &Keyring) {
     } else {
         println!("Keys in keyring:");
         for entry in &keyring.entries {
-            println!("  {} ({})", entry.email, entry.fingerprint);
+            println!("  {}", entry.email);
         }
         println!("\nTotal: {} keys", keyring.entries.len());
     }

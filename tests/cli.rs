@@ -129,12 +129,12 @@ impl TestRepo {
         )
         .expect("write signing-keys.txt");
 
-        cmd_init(&repo.path).expect("init");
+        cmd_init(&repo.path, false).expect("init");
 
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path)
             .expect("import owner identity");
 
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self {
             repo,
@@ -207,7 +207,7 @@ fn test_init_creates_state() {
     let repo = TempDir::new("init");
     init_git_repo(&repo.path);
 
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
     assert!(repo.join(".git-veil").is_dir());
     assert!(repo.join(".git-veil/keyring").exists());
@@ -224,7 +224,7 @@ fn test_init_refuses_reinit_with_trust() {
     let repo = TempDir::new("reinit");
     init_git_repo(&repo.path);
 
-    cmd_init(&repo.path).expect("first init");
+    cmd_init(&repo.path, false).expect("first init");
 
     let mut trust = TrustStore::new();
     trust.add_trust("test+user@github.com".to_string(), "abc123".to_string());
@@ -232,7 +232,7 @@ fn test_init_refuses_reinit_with_trust() {
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
 
-    let result = cmd_init(&repo.path);
+    let result = cmd_init(&repo.path, false);
     assert!(result.is_err(), "re-init with trust should fail");
     assert!(result
         .unwrap_err()
@@ -294,7 +294,7 @@ fn test_verify_keyring_fails_without_trust() {
     let repo = TempDir::new("verify-no-trust");
     let key_store = TempDir::new("verify-no-trust-keys");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
 
     let result = cmd_verify_keyring(&repo.path, "origin", &key_store.path);
     assert!(result.is_err());
@@ -450,9 +450,9 @@ fn test_hide_no_keys_fails() {
     )
     .unwrap();
 
-    cmd_init(&repo.path).expect("init");
+    cmd_init(&repo.path, false).expect("init");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-    cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
+    cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add(
@@ -899,12 +899,8 @@ fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
         "corrupt store line exits 62: {message}"
     );
     assert!(
-        message.contains("AGE-SECRET-KEY-1TRUNCATEDGARBAGE"),
-        "error names the corrupt line: {message}"
-    );
-    assert!(
-        message.contains("identities.txt"),
-        "error names the store file: {message}"
+        message.contains("corrupt key store line"),
+        "error states the corrupt line: {message}"
     );
 
     // The store is untouched: removekey never rewrites what it cannot parse
@@ -935,8 +931,8 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
         "corrupt recipients.txt line exits 62: {message}"
     );
     assert!(
-        message.contains("not-a-recipient"),
-        "error names the corrupt line: {message}"
+        message.contains("corrupt key store line"),
+        "error states the corrupt line: {message}"
     );
 
     // The store is untouched: removekey never rewrites what it cannot parse

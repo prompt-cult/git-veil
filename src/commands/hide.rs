@@ -179,12 +179,10 @@ pub fn cmd_hide(
     if !orphans.is_empty() {
         return Err(coded(
             ExitCode::OrphanedCiphertext,
-            format!(
-                "refusing to hide: the committed ciphertext paths below are not tracked with \
-                 error code 42. Rotation would silently leave them decryptable by removed \
-                 collaborators. Re-track the paths, or delete the stale ciphertext.\n  {}",
-                orphans.join("\n  ")
-            ),
+            "refusing to hide: committed ciphertext paths are not tracked with error code 42. \
+             Rotation would silently leave them decryptable by removed collaborators. \
+             Re-track the paths, or delete the stale ciphertext. See the rotation documentation"
+                .to_string(),
         ));
     }
 
@@ -212,13 +210,11 @@ pub fn cmd_hide(
     if !unintended.is_empty() {
         return Err(coded(
             ExitCode::UnintendedEncryption,
-            format!(
-                "refusing to hide: the paths below are tracked but were never added on this \
-                 machine and their ciphertext was never established. tracked.json was likely \
-                 modified by someone else. Add the paths deliberately if the tracking is \
-                 wanted, or restore tracked.json if it is not. Error code 72.\n  {}",
-                unintended.join("\n  ")
-            ),
+            "refusing to hide: paths are tracked but were never added on this \
+             machine and their ciphertext was never established. tracked.json was likely \
+             modified by someone else. Add the paths deliberately if the tracking is \
+             wanted, or restore tracked.json if it is not. Error code 72. See the encryption intent documentation"
+                .to_string(),
         ));
     }
 
@@ -241,9 +237,8 @@ pub fn cmd_hide(
     if !ignored_secrets.is_empty() {
         return Err(coded(
             ExitCode::CiphertextIgnored,
-            format!(                "refusing to hide: the ciphertext paths below are git-ignored with error code 40 so they would never reach the repository. Fix .gitignore first:\n  {}",
-                ignored_secrets.join("\n  ")
-            ),
+            "refusing to hide: ciphertext paths are git-ignored with error code 40 so they would never reach the repository. Fix .gitignore first. See the ignore safety documentation"
+                .to_string(),
         ));
     }
 

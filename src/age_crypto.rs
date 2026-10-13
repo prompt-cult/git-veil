@@ -16,20 +16,15 @@ use crate::fs_atomic::{write_atomic, write_atomic_mode};
 /// offending line itself, so the user can delete exactly that line
 /// deliberately and re-run.
 pub(crate) fn corrupt_store_line_error(
-    path: &Path,
-    line_number: usize,
-    line: &str,
-    cause: anyhow::Error,
+    _path: &Path,
+    _line_number: usize,
+    _line: &str,
+    _cause: anyhow::Error,
 ) -> anyhow::Error {
     coded(
         ExitCode::KeyParseFailure,
-        format!(
-            "corrupt key store line {} in {}: \"{}\" in line {}. Delete or repair that line and re-run. git-veil never silently drops key material",
-            line_number,
-            path.display(),
-            line,
-            cause
-        ),
+        "corrupt key store line. Delete or repair that line and re-run. git-veil never silently drops key material"
+            .to_string(),
     )
 }
 

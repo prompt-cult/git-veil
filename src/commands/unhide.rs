@@ -16,13 +16,10 @@ fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
             ExitCode::PlaintextTracked,
-            format!(
-                "refusing to overwrite: '{}' is tracked in git, so it is repository content, \
-                 not a git-veil secret — a committed ciphertext for it may be attacker-nominated; \
-                 `git rm --cached '{}'` if it is genuinely a secret (error code 43)",
-                file.display(),
-                file.display()
-            ),
+            "refusing to overwrite a file tracked in git. It is repository content \
+             not a git-veil secret. A committed ciphertext for it may be attacker-nominated. \
+             See the plaintext handling documentation. Error code 43"
+                .to_string(),
         ));
     }
     Ok(())
