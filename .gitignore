@@ -18,3 +18,4 @@ Thumbs.db
 
 # git-veil secrets (never commit encrypted files)
 .git-veil/secrets
+.env
