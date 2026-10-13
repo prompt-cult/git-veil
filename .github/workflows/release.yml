@@ -37,6 +37,14 @@ jobs:
           - os: blacksmith-6vcpu-macos-15
             target: aarch64-apple-darwin
             asset_name: git-veil-macos-aarch64
+          # Windows lane (issue #38), prior art:
+          # lua-lunet/lunet .github/workflows/build.yml proves Rust builds
+          # on the Blacksmith Windows runner (blacksmith-4vcpu-windows-2025,
+          # bash steps via Git Bash). No strip on MSVC: the binary ships
+          # unstripped, the checksum pins it.
+          - os: blacksmith-4vcpu-windows-2025
+            target: x86_64-pc-windows-msvc
+            asset_name: git-veil-windows-x86_64
 
     steps:
       - name: Checkout code
@@ -74,12 +82,18 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Strip binary
+      - name: Strip binary (Unix)
+        if: runner.os != 'Windows'
         run: strip target/${{ matrix.target }}/release/git-veil
 
       - name: Rename binary
+        shell: bash
         run: |
-          cp target/${{ matrix.target }}/release/git-veil ${{ matrix.asset_name }}
+          case "$RUNNER_OS" in
+            Windows) BIN=target/${{ matrix.target }}/release/git-veil.exe ;;
+            *)       BIN=target/${{ matrix.target }}/release/git-veil ;;
+          esac
+          cp "$BIN" ${{ matrix.asset_name }}
 
       - name: Generate checksum
         run: |
@@ -173,6 +187,7 @@ jobs:
             - Linux (x86_64): `git-veil-linux-x86_64`
             - macOS (x86_64): `git-veil-macos-x86_64`
             - macOS (Apple Silicon): `git-veil-macos-aarch64`
+            - Windows (x86_64): `git-veil-windows-x86_64`
             - Man pages: `git-veil-man-pages.tar.gz`
 
             SHA-256 checksums are provided for every asset (`*.sha256`).

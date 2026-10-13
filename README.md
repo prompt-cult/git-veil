@@ -102,7 +102,8 @@ echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 Prebuilt binaries are attached to every [GitHub release](https://github.com/prompt-cult/git-veil/releases):
 
 ```sh
-# Linux x86_64 example; macOS binaries (x86_64 / Apple Silicon) sit beside it
+# Linux x86_64 example; macOS (x86_64 / Apple Silicon) and Windows x86_64
+# binaries sit beside it (the Windows asset ships as git-veil-windows-x86_64)
 curl -sLO https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64
 echo "$(curl -sL https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64.sha256)  git-veil-linux-x86_64" | sha256sum -c -
 chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
