@@ -7,6 +7,7 @@ pub mod cli;
 mod commands;
 mod exit_codes;
 mod fs_atomic;
+mod happen_before;
 mod intent;
 mod key_discovery;
 mod keyring;
@@ -47,6 +48,10 @@ pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_tr
 pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
 pub use fs_atomic::{write_atomic, write_atomic_mode};
+pub use happen_before::{
+    baseline_path, ciphertext_predates_manifest_entry, manifest_digest, read_baseline,
+    record_baseline,
+};
 pub use intent::LocalAdds;
 pub use key_discovery::{
     discover_identity, discover_signing_key, discover_signing_key_explicit, load_signing_keys,

@@ -501,24 +501,49 @@ surface — so intent is bound to the **victim's own action** instead:
   permission-checked, so repo writers cannot write or poison it, and a
   `pull` cannot alter it.
 - **`hide` requires intent for first encryption.** For each tracked path
-  whose ciphertext is not yet in the git index and whose plaintext exists on
+  whose ciphertext is not established and whose plaintext exists on
   disk (a path with no plaintext has nothing to exfiltrate — see "Plaintext
-  lifecycle"), `hide` consults the intent log; a path with neither a
-  committed ciphertext nor recorded intent is refused with exit code 72
-  (UnintendedEncryption), naming the paths and the remedies: run
-  `git-veil add <path>` if the tracking is wanted, or `git-veil remove
-  <path>` / restore `tracked.json` if it is not. An established ciphertext
-  (already in the index) needs no intent — re-encryption on rotation and
-  fresh-clone reveals are unaffected, so ordinary collaboration and CI
-  flows do not change.
+  lifecycle"), `hide` consults the intent log; a path with neither an
+  established ciphertext nor recorded intent is refused with exit code 72
+  (UnintendedEncryption), naming the paths; the remedy — deliberate `add`
+  on this machine when the tracking is wanted, or restoring `tracked.json`
+  when it is not — is this document, not the error text.
+- **Established means the ciphertext predates the manifest entry (issue
+  #19).** The git index is attacker-writable, so a committed ciphertext
+  alone proves nothing: a repo writer can commit the `tracked.json`
+  nomination and a dummy `<path>.secret` together and the victim's next
+  `hide` would treat the path as established. A committed ciphertext is
+  therefore established only when a git-history happen-before check holds:
+  find the commit that introduced the `tracked.json` entry naming the path
+  and require the ciphertext path to already exist in that commit's parent
+  tree. A nomination and a dummy landing in one commit fail the check and
+  the intent gate runs.
+- **The happen-before result is cached per manifest version.** The check
+  walks git history, so its result is cached in the machine-local key
+  store at `<key store>/baselines/<sanitized repo id>/<sha-256 of
+  tracked.json content>` (one proven repo-relative path per line;
+  src/happen_before.rs). The key store either holds a baseline for that
+  manifest hash or it does not — there is no clone-versus-update
+  distinction anywhere in the logic. Any manifest change (add, remove,
+  reorder) changes the hash, which selects a fresh cache entry, so a
+  remove-and-readd is re-checked against the re-add commit with no
+  invalidation logic and no garbage collection. A path that fails the
+  check is never cached: every `hide` re-runs the check and refuses again.
+- **Honest residual (issue #19).** The happen-before check raises the
+  attacker's cost from one visible change to a crafted history: a dummy
+  ciphertext committed BEFORE the nomination still predates the manifest
+  entry and passes the check. The intent log remains the real anchor —
+  every machine that wants to first-encrypt a path must have run `add`
+  for it — and the check only removes the free ride a same-commit dummy
+  otherwise gets. A stricter rule (for example binding the manifest hash
+  into the signed keyring payload) is the follow-up direction.
 
 Stated honestly, the residual trade-offs: the intent log is machine-local,
 so an owner who re-hides from a machine whose key store was restored must
-re-run `add` for any not-yet-committed ciphertext (the committed-ciphertext
-path needs nothing); and a malicious collaborator can still make `hide`
-refuse (availability) by nominating junk paths — that is fail-closed by
-design, the same posture as the code-40 gate, and each refusal names the
-offending paths and the commit that nominated them.
+re-run `add` for any path without an established ciphertext; and a
+malicious collaborator can still make `hide` refuse (availability) by
+nominating junk paths — that is fail-closed by design, the same posture as
+the code-40 gate, and each refusal names the offending paths.
 
 ## Path safety
 

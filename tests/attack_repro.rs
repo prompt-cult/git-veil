@@ -151,6 +151,18 @@ impl Fixture {
             .expect("git add");
         assert!(s.success());
     }
+
+    /// Commits the staged state, so the git history exists for the
+    /// happen-before check (issue #19).
+    fn commit_all(&self, message: &str) {
+        self.stage_all();
+        let s = std::process::Command::new("git")
+            .current_dir(&self.repo.path)
+            .args(["commit", "--quiet", "-m", message])
+            .status()
+            .expect("git commit");
+        assert!(s.success());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -373,19 +385,20 @@ fn fix_nominated_path_refused_at_hide() {
 
 #[test]
 fn fix_established_ciphertext_needs_no_intent() {
-    // Rotation/fresh-clone flow: a committed ciphertext re-encrypts on this
-    // machine without a local add — ordinary collaboration and CI are
-    // unaffected by the intent gate.
+    // Rotation flow under the happen-before rule (issue #19): the manifest
+    // entry and the ciphertext land in ONE commit, so a machine without a
+    // baseline for this manifest version must record its own intent via a
+    // deliberate add before hide first-encrypts. Fail-closed.
     let f = Fixture::new("established-ciphertext");
 
     let _carol = f.add_collab("carol@example.com");
     f.add_file("secrets.env", b"TOKEN=v1\n");
     f.hide();
-    f.stage_all(); // the owner commits: ciphertext is now in the index
+    f.commit_all("owner commits manifest and ciphertext together");
 
-    // Simulate a fresh clone's state: a new machine, new key store with no
-    // intent log and NO signing key — a store-less machine, which can only
-    // import a pin-file exported by a machine holding the signing key.
+    // Simulate another machine: a new key store with no intent log and no
+    // baseline for this manifest version. The ciphertext is committed, but
+    // it does NOT predate the manifest entry, so hide refuses with 72.
     let fresh_store = TempDir::new("established-fresh-ks");
     let pin_file = fresh_store.join("fara.pin");
     cmd_export_pin(
@@ -398,10 +411,141 @@ fn fix_established_ciphertext_needs_no_intent() {
     .expect("export-pin");
     cmd_trust_import(&f.repo.path, &pin_file, "origin", &fresh_store.path).expect("import");
 
-    // No intent was ever recorded in fresh_store, but secrets.env.secret is
-    // committed, so hide proceeds.
+    let err = cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
+        .expect_err("a machine with no baseline and no intent must refuse first-encryption");
+    assert_eq!(
+        exit_code_of(&err),
+        72,
+        "the intent gate must fire when the ciphertext does not predate the manifest entry"
+    );
+    // The committed ciphertext is untouched; hide simply did not proceed.
+
+    // The remedy is deliberate: the machine records its own intent via add,
+    // and hide then proceeds.
+    cmd_add(
+        &f.repo.path,
+        vec!["secrets.env".to_string()],
+        "origin",
+        &fresh_store.path,
+    )
+    .expect("deliberate add on the second machine");
     cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
-        .expect("committed ciphertext re-encrypts without local intent");
+        .expect("hide proceeds after the machine binds its own intent");
+}
+
+// ---------------------------------------------------------------------------
+// Regression — the hungry hippo attack (issue #19, FIXED)
+//
+// Previously: the git index is attacker-writable, so a repo writer committed
+// the tracked.json nomination and a dummy <path>.secret in ONE commit; the
+// victim's next hide treated the path as established and encrypted the
+// victim's real plaintext to the whole ring, attacker included.
+//
+// Now: a committed ciphertext is established only when it predates the
+// manifest entry naming it. A nomination and a dummy in one commit fail the
+// happen-before check, the intent gate runs, and the victim refuses with 72.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fix_dummy_ciphertext_in_one_commit_no_longer_established() {
+    let f = Fixture::new("hungry-hippo");
+
+    let _mallory = f.add_collab("mallory@example.com");
+
+    // Victim's private file: gitignored, NEVER passed to add on this machine.
+    let secret_plaintext = b"AWS_SECRET_ACCESS_KEY=AKIA...\n";
+    fs::write(f.repo.join("prod-credentials"), secret_plaintext).unwrap();
+    fs::write(f.repo.join(".gitignore"), "prod-credentials\n").unwrap();
+
+    // ATTACK: one commit carries the nomination AND a valid dummy ciphertext.
+    // A real age ciphertext to the ring (mallory is a ring member, so any
+    // decrypt-with-mallory repair would pass too).
+    let dummy = b"dummy ciphertext bytes\n";
+    fs::write(f.repo.join("prod-credentials.secret"), dummy).unwrap();
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        "{\n  \"files\": [\n    \"prod-credentials\"\n  ]\n}",
+    )
+    .unwrap();
+    f.commit_all("attacker commits nomination and dummy together");
+
+    // The victim's store: no intent, no baseline for this manifest version.
+    let victim_store = TempDir::new("hungry-hippo-victim-ks");
+    let pin_file = victim_store.join("fara.pin");
+    cmd_export_pin(
+        &f.repo.path,
+        TEST_REPO_ID,
+        &pin_file,
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("export-pin");
+    cmd_trust_import(&f.repo.path, &pin_file, "origin", &victim_store.path).expect("import");
+
+    let err = cmd_hide(&f.repo.path, "origin", &victim_store.path, true)
+        .expect_err("hide must refuse: the dummy does not predate the manifest entry");
+    assert_eq!(exit_code_of(&err), 72);
+    assert_eq!(
+        fs::read(f.repo.join("prod-credentials")).unwrap(),
+        secret_plaintext,
+        "the plaintext must be untouched"
+    );
+}
+
+#[test]
+fn happen_before_passes_when_ciphertext_predates_the_readd() {
+    let f = Fixture::new("happen-before-readd");
+    let _carol = f.add_collab("carol@example.com");
+
+    // Owner tracks and hides a file; the ciphertext is committed in one
+    // commit with the manifest entry.
+    f.add_file("secrets.env", b"TOKEN=v1\n");
+    f.hide();
+    f.commit_all("commit one: manifest entry and ciphertext together");
+
+    // The path is removed from the manifest in a second commit; the
+    // committed ciphertext stays.
+    cmd_remove(&f.repo.path, vec!["secrets.env".to_string()], true).expect("remove");
+    f.commit_all("commit two: entry removed, ciphertext stays");
+
+    // A machine with its own store, no intent, imports the pin.
+    let other_store = TempDir::new("happen-before-readd-ks");
+    let pin_file = other_store.join("fara.pin");
+    cmd_export_pin(
+        &f.repo.path,
+        TEST_REPO_ID,
+        &pin_file,
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("export-pin");
+    cmd_trust_import(&f.repo.path, &pin_file, "origin", &other_store.path).expect("import");
+
+    // The path is re-added on the OWNER machine in a third commit. The
+    // re-added entry's introducing commit has the ciphertext in its parent
+    // tree, so the happen-before check holds.
+    f.add_file("secrets.env", b"TOKEN=v2\n");
+    f.commit_all("commit three: entry re-added, ciphertext predates it");
+
+    // On the OTHER machine: no intent was ever recorded here, yet the
+    // ciphertext predates the re-added manifest entry, so the path is
+    // established and hide re-encrypts without local intent.
+    cmd_hide(&f.repo.path, "origin", &other_store.path, true)
+        .expect("the ciphertext predates the re-added entry, so hide proceeds");
+
+    // The machine-local baseline now records the proven path for this
+    // manifest version, and a second hide takes the fast path.
+    let manifest_content = fs::read_to_string(f.repo.join(".git-veil/tracked.json")).unwrap();
+    let digest = git_veil::manifest_digest(&manifest_content);
+    let baseline = git_veil::baseline_path(&other_store.path, TEST_REPO_ID, &digest);
+    assert!(
+        baseline.exists(),
+        "the happen-before result must be cached per manifest version"
+    );
+    let recorded = fs::read_to_string(&baseline).unwrap();
+    assert_eq!(recorded.trim(), "secrets.env");
+    cmd_hide(&f.repo.path, "origin", &other_store.path, true)
+        .expect("second hide takes the cached fast path");
 }
 
 // ---------------------------------------------------------------------------
