@@ -333,7 +333,7 @@ pub fn cmd_trust_import(
             return Err(coded(
                 ExitCode::Refused,
                 format!(
-                    ".git-veil/trust.json records an owner fingerprint for {} but this repository derives {} (from remote '{}'); this looks like a rename or a remote change based on the repository's existing trust record",
+                    "trust.json records an owner fingerprint for {} but this repository derives {} from remote {}. this looks like a rename or a remote change based on the existing trust record",
                     recorded_ids.join(", "),
                     repo_id,
                     remote_name

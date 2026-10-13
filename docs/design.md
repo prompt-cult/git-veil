@@ -150,13 +150,15 @@ the phone and compare with the committed `owner_fingerprints` value).
 URL), so a new pin is required. When the committed `trust.json` records
 trust for a repo_id that differs from the one the current remote derives,
 the gated commands refuse with a stated suspicion — `this looks like a
-rename or a remote change based on the repository's existing trust record`
-(exit code 10 on the verify path, 70 on the import path) — naming the
-recorded and derived repo-ids and **nothing else**. No remedy is printed:
-handing an operator a one-line fix for a trust-anchor change is exactly
-what an attacker staging a repo move wants them to run without thinking.
-The operator reads the docs, satisfies themselves the rename is theirs,
-and fixes it with the possession proof (or a fresh pin-file export) on a
+rename or a remote change based on the existing trust record` (exit
+code 10 on the verify path, 70 on the import path) — naming the recorded
+and derived repo-ids as the clue and **nothing else**. Error text is
+plain ASCII: no quoting marks, no parentheses, no path echoes, nothing
+that trips a log parser or a terminal. No remedy is printed: handing an
+operator a one-line fix for a trust-anchor change is exactly what an
+attacker staging a repo move wants them to run without thinking. The
+operator reads the docs, satisfies themselves the rename is theirs, and
+fixes it with the possession proof (or a fresh pin-file export) on a
 machine holding the signing key.
 
 Every gated command verifies the keyring signature through
