@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>git-veil design specification</title>
+<title>git-veil — getting started</title>
 <script>
 window.MathJax = {
   tex: { displayMath: [['$$','$$']], inlineMath: [] },
@@ -14,8 +14,10 @@ window.MathJax = {
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-  body { max-width: 64rem; margin: 2rem auto; padding: 0 1.25rem; font-family: system-ui, sans-serif; line-height: 1.5; color: #1b1f24; }
-  h1, h2, h3 { line-height: 1.2; border-bottom: 1px solid #d0d7de; padding-bottom: .25em; }
+  body { max-width: 60rem; margin: 2rem auto; padding: 0 1.25rem; font-family: system-ui, sans-serif; line-height: 1.55; color: #1b1f24; }
+  nav { border-bottom: 1px solid #d0d7de; padding-bottom: .6rem; margin-bottom: 1.4rem; }
+  nav a { margin-right: 1.1rem; }
+  h1, h2, h3 { line-height: 1.2; }
   table { border-collapse: collapse; margin: 1rem 0; }
   td, th { border: 1px solid #d0d7de; padding: .35rem .6rem; }
   pre { background: #f6f8fa; padding: .75rem; overflow-x: auto; border-radius: 6px; }
@@ -25,37 +27,81 @@ window.MathJax = {
 </style>
 </head>
 <body>
-<div id="content"><p>Loading docs/design.md from the default branch…</p></div>
+<nav>
+  <a href="index.html">Getting started</a>
+  <a href="solo.html">Solo</a>
+  <a href="team.html">Team</a>
+  <a href="design.html">Design specification</a>
+</nav>
+<div id="content"></div>
 <script>
-// Render the real docs/design.md from the default branch: markdown via marked,
-// display math ($$...$$) via MathJax. Math segments are split out BEFORE the
-// markdown pass so marked never touches LaTeX escapes; MathJax inline math is
-// disabled, so the shell one-liners with $ inside code fences stay untouched.
-(function () {
-  var src = 'https://raw.githubusercontent.com/prompt-cult/git-veil/HEAD/docs/design.md';
-  fetch(src, { headers: { 'Accept': 'text/plain' } })
-    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
-    .then(function (md) {
-      var parts = md.split('$$');
-      var html = '';
-      for (var i = 0; i < parts.length; i++) {
-        if (i % 2 === 0) {
-          html += marked.parse(parts[i]);
-        } else {
-          var math = parts[i]
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          html += '<div class="math-block">$$' + math + '$$</div>';
-        }
-      }
-      document.getElementById('content').innerHTML = html;
-      return window.MathJax.startup.promise;
-    })
-    .then(function () { return window.MathJax.typesetPromise(); })
-    .catch(function (e) {
-      document.getElementById('content').innerHTML =
-        '<p>Failed to load or render docs/design.md: ' + e + '</p>';
-    });
-})();
+// Landing page: curated, deliberately short. The tool's own help is the
+// reference; this page only walks the first mile. Full guides are fetched
+// from the default branch so the site cannot fall behind the docs.
+document.getElementById('content').innerHTML = marked.parse(String.raw`
+# git-veil
+
+Secret management for git repositories: files are encrypted in place with
+`age`-family X25519 encryption, the keyring that names who can decrypt is
+Ed25519-signed, and trust is pinned per machine by a possession proof.
+
+> In the following, \`age\` refers to the open source \`age\` encryption
+> tooling, which may be installed separately to securely create and maintain
+> cryptographic keys outside of the git repo. The \`git-veil\` software uses
+> the Rust \`rage\` library to work with the keys.
+
+**Run \`git-veil --help\` first.** Every command documents its own workflow,
+examples and failure codes; this page only walks the first mile.
+
+## 1. Install
+
+Grab a release binary from the
+[releases page](https://github.com/prompt-cult/git-veil/releases), verify its
+\`.sha256\`, put it on your \`PATH\`. Man pages ship in every release as
+\`git-veil-man-pages.tar.gz\`.
+
+## 2. Secure a first file (the obvious one: \`.env\`)
+
+\`\`\`
+git-veil init                                   # creates .git-veil/ state in the repo
+git-veil import private-key.txt                 # your X25519 private key (age identity), made by age-keygen
+git-veil trust <repo-id>                        # possession proof on the machine holding the signing key
+git-veil add .env                               # tracks it, records intent, gitignores it
+git-veil hide                                   # encrypts; deletes the plaintext by default
+git-veil reveal                                 # brings it back when you need to edit
+\`\`\`
+
+Your keys never live in the repository. \`git-veil init\` refuses to reset an
+already-trusted repo; \`git-veil trust\` refuses a typo'd repo id.
+
+## 3. Running solo
+
+The loop is \`reveal\` → edit → \`hide\`. Hidden state is boring on purpose:
+\`git-veil list-keys\`, \`git-veil changes\`, \`git-veil verify-keyring\` and
+\`git-veil show-repo-id\` tell you what is in the ring, what changed, and who
+the repo claims to be.
+
+## 4. Working as a team
+
+\`\`\`
+git-veil tell alice@example.com alice.recipient   # add a collaborator, re-sign the keyring
+git-veil removeperson alice@example.com           # remove them, re-sign
+git-veil hide                                     # re-encrypt to the new ring (rotation)
+\`\`\`
+
+A machine without the signing key pins trust by importing a pin-file:
+\`git-veil export-pin <repo-id> --output pin\` on the signing machine, move it
+out of band, \`git-veil trust --import pin\` on the target. See the
+[Solo](solo.html) and [Team](team.html) guides.
+
+## 5. Where the details live
+
+The tool, not this page: \`git-veil <command> --help\` for every command, the
+man pages in each release, the full [Solo](solo.html) and [Team](team.html)
+guides, and the [design specification](design.html) for what the code
+actually enforces. Less is more here; the help never falls behind the
+binary you are running.
+`);
 </script>
 </body>
 </html>
