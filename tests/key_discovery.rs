@@ -1,11 +1,11 @@
 //! Key discovery tests: git-veil never generates keys — a missing key
 //! fails with a documented exit code and the create-and-back-up recipe;
-//! selection honours the pinned fingerprint, an explicit --signing-key,
-//! and the first-key default.
+//! selection honours the pinned fingerprint and the first-key default.
 
 use git_veil::{
-    discover_identity, discover_signing_key, exit_code_of, fingerprint_for_verifying_key,
-    generate_signing_keypair, load_signing_keys, parse_signing_key, ExitCode,
+    discover_identity, discover_signing_key, discover_signing_key_explicit, exit_code_of,
+    fingerprint_for_verifying_key, generate_signing_keypair, load_signing_keys, parse_signing_key,
+    ExitCode,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -50,7 +50,7 @@ fn write_signing_keys(store: &TempDir, seeds: &[String]) {
 #[test]
 fn test_missing_signing_key_fails_with_code_20_and_recipe() {
     let store = TempDir::new("nosigning");
-    let err = discover_signing_key(&store.path, None, None).unwrap_err();
+    let err = discover_signing_key(&store.path, "0000000000000000").unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), 20);
     assert!(
@@ -76,24 +76,6 @@ fn test_garbage_signing_keys_file_is_an_error_not_a_missing_key() {
 }
 
 #[test]
-fn test_single_key_used_without_explicit_selection() {
-    let store = TempDir::new("single");
-    let (key, _) = generate_signing_keypair();
-    write_signing_keys(&store, &[hex::encode(key.to_bytes())]);
-
-    let loaded = load_signing_keys(&store.path).unwrap();
-    assert_eq!(loaded.len(), 1);
-
-    // No pin, no explicit selection: the single key is used
-    let selected = discover_signing_key(&store.path, None, None).unwrap();
-    assert_eq!(
-        selected.to_bytes(),
-        key.to_bytes(),
-        "the only key is selected"
-    );
-}
-
-#[test]
 fn test_pinned_fingerprint_selects_the_trusted_key() {
     let store = TempDir::new("pinned");
     let (first, _) = generate_signing_keypair();
@@ -107,35 +89,79 @@ fn test_pinned_fingerprint_selects_the_trusted_key() {
     );
 
     let pinned = fingerprint_for_verifying_key(&second.verifying_key());
-    let selected = discover_signing_key(&store.path, None, Some(&pinned)).unwrap();
+    let selected = discover_signing_key(&store.path, &pinned).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 
     // A pin no stored key matches: code 20, never a wrong-key signature
-    let err = discover_signing_key(&store.path, None, Some(&"0".repeat(64))).unwrap_err();
+    let err = discover_signing_key(&store.path, &"0".repeat(64)).unwrap_err();
     assert_eq!(code_of(err), 20);
 }
 
 #[test]
-fn test_explicit_signing_key_selection_by_index_and_seed() {
-    let store = TempDir::new("explicit");
+fn test_explicit_fingerprint_selects_the_named_key() {
+    let store = TempDir::new("explicit-fp");
+    let (first, _) = generate_signing_keypair();
+    let (second, _) = generate_signing_keypair();
+    write_signing_keys(
+        &store,
+        &[
+            hex::encode(first.to_bytes()),
+            hex::encode(second.to_bytes()),
+        ],
+    );
+
+    let wanted = fingerprint_for_verifying_key(&second.verifying_key());
+    let selected = discover_signing_key_explicit(&store.path, &wanted).unwrap();
+    assert_eq!(selected.to_bytes(), second.to_bytes());
+}
+
+#[test]
+fn test_explicit_fingerprint_is_reorder_invariant() {
+    let store = TempDir::new("explicit-fp-reorder");
     let (first, _) = generate_signing_keypair();
     let (second, _) = generate_signing_keypair();
     let first_hex = hex::encode(first.to_bytes());
     let second_hex = hex::encode(second.to_bytes());
     write_signing_keys(&store, &[first_hex.clone(), second_hex.clone()]);
 
-    // 1-based index
-    let by_index = discover_signing_key(&store.path, Some("2"), None).unwrap();
-    assert_eq!(by_index.to_bytes(), second.to_bytes());
+    let wanted = fingerprint_for_verifying_key(&second.verifying_key());
+    let before = discover_signing_key_explicit(&store.path, &wanted).unwrap();
 
-    // Full seed (case-insensitive hex)
-    let by_seed =
-        discover_signing_key(&store.path, Some(&second_hex.to_uppercase()), None).unwrap();
-    assert_eq!(by_seed.to_bytes(), second.to_bytes());
+    fs::write(
+        store.join("signing-keys.txt"),
+        format!("{}\n{}\n", second_hex, first_hex),
+    )
+    .unwrap();
+    let after = discover_signing_key_explicit(&store.path, &wanted).unwrap();
 
-    // Out-of-range index fails without falling back to a default
-    assert!(discover_signing_key(&store.path, Some("9"), None).is_err());
-    assert!(discover_signing_key(&store.path, Some("0"), None).is_err());
+    assert_eq!(
+        before.to_bytes(),
+        after.to_bytes(),
+        "reordering signing-keys.txt must not change what a fingerprint selects"
+    );
+    assert_eq!(after.to_bytes(), second.to_bytes());
+}
+
+#[test]
+fn test_explicit_fingerprint_no_match_refuses_code_20() {
+    let store = TempDir::new("explicit-fp-miss");
+    let (key, _) = generate_signing_keypair();
+    write_signing_keys(&store, &[hex::encode(key.to_bytes())]);
+
+    let err = discover_signing_key_explicit(&store.path, "0123456789abcdef").unwrap_err();
+    assert_eq!(code_of(err), 20);
+}
+
+#[test]
+fn test_explicit_fingerprint_ambiguous_refuses_code_70() {
+    let store = TempDir::new("explicit-fp-dup");
+    let (key, _) = generate_signing_keypair();
+    let seed_hex = hex::encode(key.to_bytes());
+    write_signing_keys(&store, &[seed_hex.clone(), seed_hex]);
+
+    let wanted = fingerprint_for_verifying_key(&key.verifying_key());
+    let err = discover_signing_key_explicit(&store.path, &wanted).unwrap_err();
+    assert_eq!(code_of(err), ExitCode::Refused as i32);
 }
 
 #[test]

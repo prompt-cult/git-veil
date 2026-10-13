@@ -6,6 +6,8 @@
 //! signing keys. No PGP, no external key servers, no passphrases.
 
 use age::secrecy::ExposeSecret;
+use clap::Parser as _;
+use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
     cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
@@ -679,6 +681,101 @@ fn test_removeperson_re_signs_keyring() {
 
     cmd_verify_keyring(&fixture.repo.path, "origin", &fixture.key_store.path)
         .expect("verify after removeperson");
+}
+
+// ---------------------------------------------------------------------------
+// --signing-key parse shape: fingerprint only (issues #29, #30)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_tell_signing_key_index_form_is_a_parse_error() {
+    let err = Cli::try_parse_from([
+        "git-veil",
+        "tell",
+        "alice@example.com",
+        "alice.pub",
+        "--signing-key",
+        "1",
+    ])
+    .unwrap_err();
+    assert!(err.use_stderr(), "the index form must be rejected");
+}
+
+#[test]
+fn test_tell_signing_key_seed_form_is_a_parse_error() {
+    let err = Cli::try_parse_from([
+        "git-veil",
+        "tell",
+        "alice@example.com",
+        "alice.pub",
+        "--signing-key",
+        &"a".repeat(64),
+    ])
+    .unwrap_err();
+    assert!(err.use_stderr(), "the full-key form must be rejected");
+}
+
+#[test]
+fn test_tell_signing_key_fingerprint_form_parses_normalized() {
+    let cli = Cli::try_parse_from([
+        "git-veil",
+        "tell",
+        "alice@example.com",
+        "alice.pub",
+        "--signing-key",
+        "ABCDEF0123456789",
+    ])
+    .expect("the fingerprint form parses");
+    match cli.command {
+        Commands::Tell { signing_key, .. } => {
+            assert_eq!(signing_key.as_deref(), Some("abcdef0123456789"));
+        }
+        _ => panic!("expected the Tell subcommand"),
+    }
+}
+
+#[test]
+fn test_removeperson_signing_key_index_form_is_a_parse_error() {
+    let err = Cli::try_parse_from([
+        "git-veil",
+        "removeperson",
+        "alice@example.com",
+        "--signing-key",
+        "2",
+    ])
+    .unwrap_err();
+    assert!(err.use_stderr(), "the index form must be rejected");
+}
+
+#[test]
+fn test_removeperson_signing_key_seed_form_is_a_parse_error() {
+    let err = Cli::try_parse_from([
+        "git-veil",
+        "removeperson",
+        "alice@example.com",
+        "--signing-key",
+        &"b".repeat(64),
+    ])
+    .unwrap_err();
+    assert!(err.use_stderr(), "the full-key form must be rejected");
+}
+
+#[test]
+fn test_removeperson_signing_key_fingerprint_form_parses() {
+    let cli = Cli::try_parse_from([
+        "git-veil",
+        "removeperson",
+        "alice@example.com",
+        "--signing-key",
+        "0123456789abcdef",
+    ])
+    .expect("the fingerprint form parses");
+    match cli.command {
+        Commands::RemovePerson { signing_key, .. } => {
+            assert_eq!(signing_key.as_deref(), Some("0123456789abcdef"));
+        }
+        _ => panic!("expected the RemovePerson subcommand"),
+    }
 }
 
 // ---------------------------------------------------------------------------

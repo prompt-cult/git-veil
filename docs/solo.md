@@ -111,8 +111,7 @@ $ git-veil tell example@github.com my-age-identity.txt
 What just happened: `hide` encrypts to every key in the signed keyring,
 so even solo you must be in it. `tell` found your signing key in the key
 store (`signing-keys.txt`; the key whose verifying fingerprint matches
-the pin `trust` wrote is used — with several keys present you can pick
-explicitly with `--signing-key <index-or-seed>`), verified the existing
+the pin `trust` wrote is used), verified the existing
 keyring signature against your pin, test-encrypted an in-memory canary
 to the new key, and signed the updated keyring. The keyring at `.git-veil/keyring`
 is committed.

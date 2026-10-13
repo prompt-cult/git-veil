@@ -9,6 +9,17 @@ use anyhow::{Context as _, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
+fn fingerprint_selection(s: &str) -> Result<String, String> {
+    let trimmed = s.trim().to_lowercase();
+    if trimmed.len() == 16 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+        Ok(trimmed)
+    } else {
+        Err(
+            "--signing-key takes a 16-hex-character verifying-key fingerprint (printed by git-veil verify-keyring and stored in every pin file); the 1-based index form and the full-key form are removed".to_string(),
+        )
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "git-veil")]
 #[command(about = "Git secret management using age encryption")]
@@ -253,10 +264,9 @@ cannot encrypt is never signed into the ring.
 The keyring is signed with the TRUSTED key — the one whose verifying-key
 fingerprint is pinned for this repository. signing-keys.txt must contain
 that seed; git-veil never generates it (docs/solo.md step 1 has the
-recipe). With several signing keys present, --signing-key selects one by
-1-based index or full 64-hex-character seed; otherwise the key matching
-the pin is used. A missing signing key exits with code 20 and the
-create-and-back-up recipe.
+recipe). With several signing keys present, --signing-key names one by
+its 16-hex-character verifying-key fingerprint. A missing signing key
+exits with code 20 and the create-and-back-up recipe.
 
 Requires init, an established trust pin (trust) for this repository on
 this machine, and the signing key in the local key store. Next steps:
@@ -264,7 +274,6 @@ add files, then hide.
 
 EXAMPLES
   $ git-veil tell alice@example.com alice.pub
-  $ git-veil tell alice@example.com alice.pub --signing-key 2
 ")]
     Tell {
         /// Collaborator's email
@@ -274,8 +283,8 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Which signing key to use: 1-based index into signing-keys.txt, or a 64-hex-character seed (default: the key matching the pinned fingerprint)
-        #[arg(long, value_name = "SELECTION")]
+        /// Signing key to use: its 16-hex verifying-key fingerprint (default: the key matching the pinned fingerprint)
+        #[arg(long, value_name = "FINGERPRINT", value_parser = fingerprint_selection)]
         signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
@@ -293,16 +302,16 @@ hidden while they were a member were encrypted to their key, so rotate
 the underlying secrets if that matters.
 
 The keyring is signed with the TRUSTED key — the one whose verifying-key
-fingerprint is pinned for this repository; --signing-key selects among
-several seeds in signing-keys.txt by 1-based index or full seed. A
-missing signing key exits with code 20 and the create-and-back-up recipe.
+fingerprint is pinned for this repository. With several signing keys
+present, --signing-key names one by its 16-hex-character verifying-key
+fingerprint. A missing signing key exits with code 20 and the
+create-and-back-up recipe.
 
 Requires init, an established trust pin (trust), and the signing key in
 the local key store.
 
 EXAMPLES
   $ git-veil removeperson alice@example.com
-  $ git-veil removeperson alice@example.com --signing-key 2
 ")]
     RemovePerson {
         /// Email of the collaborator to remove
@@ -310,8 +319,8 @@ EXAMPLES
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
-        /// Which signing key to use: 1-based index into signing-keys.txt, or a 64-hex-character seed (default: the key matching the pinned fingerprint)
-        #[arg(long, value_name = "SELECTION")]
+        /// Signing key to use: its 16-hex verifying-key fingerprint (default: the key matching the pinned fingerprint)
+        #[arg(long, value_name = "FINGERPRINT", value_parser = fingerprint_selection)]
         signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]

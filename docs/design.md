@@ -79,7 +79,7 @@ so the name can never escape the pin directory (`TrustPinStore::sanitize_repo_id
 The pin is written only by the two pin-creation paths below; a
 fresh clone has no pin, which is why trust must be re-established per machine.
 
-### Pin creation (possession proof only — issue #28)
+### Pin creation (possession proof only)
 
 A repository can never supply its own trust anchor: there is no keyfile
 argument, no compatibility mode, no feature flag. Exactly two paths create a
@@ -262,15 +262,26 @@ read from `<key store>/signing-keys.txt`, one 64-hex-character seed per line
 (`#` comments and blank lines skipped). `tell` and `removeperson` — the two
 keyring-curating commands — select a key as follows:
 
-1. An explicit `--signing-key <index-or-seed>` wins: a 1-based index into the
-   file, or a full seed matched hex-insensitively.
-2. Otherwise the TRUSTED key is used — the one whose verifying-key
+With several signing keys present, `--signing-key` names one explicitly by
+its 16-hex-character verifying-key fingerprint
+(`discover_signing_key_explicit`): the fingerprint is public (printed by
+`verify-keyring`, stored in every pin file) and stable under reordering
+because it is derived from the key itself, not its position. The only other
+selection forms that ever existed are removed: a 1-based index is positional
+and silently names a different key after the file is reordered or a key is
+inserted, and a full 64-hex seed puts the private key on the command line,
+where it lands in shell history, `ps` output, scrollback and agent
+transcripts. An explicit fingerprint matching no store key refuses with code
+20; matching more than one (a degenerate duplicated store) refuses with
+code 70 rather than silently picking one.
+
+1. The TRUSTED key is used — the one whose verifying-key
    fingerprint equals the fingerprint pinned for this repository. The keyring
    must be signed with exactly the key the pin names (that is what
    verify_keyring checks against), so the pin, not list order, selects the
-   key. Selection is therefore deterministic — no interactive menu is
-   needed. (Where no pin applies, the fallback is the first key in the file.)
-3. No usable key → the command exits with code 20 after printing, to stderr,
+   key. Selection is deterministic and the pin is mandatory — no
+   interactive menu is needed.
+2. No usable key → the command exits with code 20 after printing, to stderr,
    the `openssl` recipe that creates the key (the last 32 bytes of the Ed25519
    DER encoding are the seed) and the instruction to **back it up**. A
    present-but-garbage line in signing-keys.txt is a parse error, never

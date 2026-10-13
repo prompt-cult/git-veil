@@ -63,42 +63,14 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
 
 /// Selects the Ed25519 signing key for keyring curation (tell/removeperson).
 ///
-/// Selection order:
+/// The TRUSTED key is used — the one whose verifying-key
+/// fingerprint equals `pinned_fingerprint`. The keyring must be signed
+/// with exactly the key the pin names (that is what verify_keyring
+/// checks against), so the pin, not list order, selects the key.
 ///
-/// 1. An explicit `--signing-key` value wins: a 1-based index into
-///    signing-keys.txt, or a full 64-hex-character seed.
-/// 2. Otherwise the TRUSTED key is used — the one whose verifying-key
-///    fingerprint equals `pinned_fingerprint`. The keyring must be signed
-///    with exactly the key the pin names (that is what verify_keyring
-///    checks against), so the pin, not list order, selects the key.
-/// 3. No usable key → exit code 20 with the create-and-back-up recipe.
-pub fn discover_signing_key(
-    key_store: &Path,
-    explicit: Option<&str>,
-    pinned_fingerprint: Option<&str>,
-) -> Result<SigningKey> {
+/// No usable key → exit code 20 with the create-and-back-up recipe.
+pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: &str) -> Result<SigningKey> {
     let keys = load_signing_keys(key_store)?;
-
-    if let Some(selection) = explicit.map(str::trim).filter(|s| !s.is_empty()) {
-        // A 64-char hex string is a seed, never an index (a numeric seed
-        // would otherwise be misread as a position).
-        if selection.len() == 64 && hex::decode(selection).is_ok() {
-            return parse_signing_key(selection);
-        }
-        let index: usize = selection.parse().context(
-            "--signing-key must be a 1-based index into signing-keys.txt or a 64-hex-character seed",
-        )?;
-        if index == 0 {
-            anyhow::bail!("--signing-key index is 1-based; got 0");
-        }
-        return keys.get(index - 1).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "signing-keys.txt holds {} key(s); no key at index {}",
-                keys.len(),
-                index
-            )
-        });
-    }
 
     if keys.is_empty() {
         return Err(coded(
@@ -111,32 +83,65 @@ pub fn discover_signing_key(
         ));
     }
 
-    if let Some(fingerprint) = pinned_fingerprint.map(str::trim).filter(|s| !s.is_empty()) {
-        let wanted = fingerprint.to_lowercase();
-        if let Some(key) = keys
-            .iter()
-            .find(|k| fingerprint_for_verifying_key(&k.verifying_key()) == wanted)
-        {
-            return Ok(key.clone());
-        }
-        return Err(coded(
+    let wanted = pinned_fingerprint.trim().to_lowercase();
+    if let Some(key) = keys
+        .iter()
+        .find(|k| fingerprint_for_verifying_key(&k.verifying_key()) == wanted)
+    {
+        return Ok(key.clone());
+    }
+    Err(coded(
+        ExitCode::NoSigningKey,
+        format!(
+            "the key store {} holds {} signing key(s), but none matches the trusted fingerprint {} pinned for this repository; add the matching seed to signing-keys.txt, or re-pin with git-veil trust\n\n{}",
+            key_store.display(),
+            keys.len(),
+            wanted,
+            signing_key_recipe(key_store)
+        ),
+    ))
+}
+
+/// Explicit signing-key selection by verifying-key fingerprint.
+///
+/// The ONLY selection form: a 16-hex-character fingerprint as printed by
+/// `verify-keyring` and stored in every pin file. The 1-based index into
+/// signing-keys.txt was removed (reordering the file silently renamed what
+/// an index selected) and the full 64-hex seed was removed (the private
+/// key must never appear on a command line, where it lands in shell
+/// history, `ps` output, scrollback and agent transcripts).
+///
+/// Zero matches → exit code 20. More than one match (a degenerate
+/// duplicated store) → exit code 70; silently picking one is not
+/// acceptable.
+pub fn discover_signing_key_explicit(key_store: &Path, fingerprint: &str) -> Result<SigningKey> {
+    let keys = load_signing_keys(key_store)?;
+    let wanted = fingerprint.trim().to_lowercase();
+    let matches: Vec<&SigningKey> = keys
+        .iter()
+        .filter(|k| fingerprint_for_verifying_key(&k.verifying_key()) == wanted)
+        .collect();
+    match matches.as_slice() {
+        [key] => Ok((*key).clone()),
+        [] => Err(coded(
             ExitCode::NoSigningKey,
             format!(
-                "the key store {} holds {} signing key(s), but none matches the trusted fingerprint {} pinned for this repository; add the matching seed to signing-keys.txt, or re-pin with git-veil trust\n\n{}",
+                "no signing key in {}/signing-keys.txt has verifying-key fingerprint {}; add the matching seed to signing-keys.txt\n\n{}",
                 key_store.display(),
-                keys.len(),
                 wanted,
                 signing_key_recipe(key_store)
             ),
-        ));
+        )),
+        _ => Err(coded(
+            ExitCode::Refused,
+            format!(
+                "{} signing keys in {}/signing-keys.txt share verifying-key fingerprint {}; the store is degenerate and must be deduplicated",
+                matches.len(),
+                key_store.display(),
+                wanted
+            ),
+        )),
     }
-
-    // No pin to honour (callers that verify trust first never reach this
-    // arm): fall back to the first key.
-    Ok(keys
-        .into_iter()
-        .next()
-        .expect("non-empty keys checked above"))
 }
 
 /// Finds the age identity for `recipient_str` in the key store, exiting
