@@ -49,50 +49,135 @@ wrong identity.
 
 ## The trust record (`trust.json`) and the per-machine pin
 
-`trust.json` lives at `.git-veil/trust.json` and holds one JSON object:
-`{"trusted_keys": { "<repo_id>": "<fingerprint>" }}` — a map of repository id
-to the fingerprint of the key the owner pinned for it
-(`TrustStore`, src/trust_store.rs). It is written pretty-printed and atomically
+`trust.json` lives at `.git-veil/trust.json` and holds one JSON object with
+two maps (`TrustStore`, src/trust_store.rs):
+
+- `trusted_keys`: `{ "<repo_id>": "<fingerprint>" }` — the internal-derivation
+  fingerprint of the key pinned for the repository, compared against the
+  local pin by every gated command;
+- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` — the
+  FIXED-derivation fingerprint of the repository's committed owner
+  verifying key (`owner.verifying`), used by pin-file import and by humans
+  verifying out of band.
+
+Both fields default to absent when missing (pre-0.6 files parse cleanly);
+the file is written pretty-printed and atomically
 (`TrustStore::save_to_file`); a missing file reads as an empty store
 (`TrustStore::load_from_file`).
 
 Its role is **team visibility, not trust**. It is committed so every
 collaborator can see which key the repository claims as its owner, and so a
 changed claim is visible in git history. Because it is committed, it is
-attacker-writable by anyone with write access to the repository — the docs are
-explicit that it is never the anchor.
+attacker-writable by anyone with write access to the repository — the docs
+are explicit that it is never the anchor.
 
 The actual anchor is the **per-machine pin**: a file at
 `<key store>/trust-pins/<sanitized repo_id>` holding the fingerprint the user
 chose on *this machine* (`TrustPinStore`, src/trust_store.rs). Pin filenames are
 derived deterministically: bytes outside `[A-Za-z0-9._-]` are percent-encoded,
 so the name can never escape the pin directory (`TrustPinStore::sanitize_repo_id`).
-The pin is written only by `git-veil trust` (`TrustPinStore::write_pin`); a
+The pin is written only by the two pin-creation paths below; a
 fresh clone has no pin, which is why trust must be re-established per machine.
+
+### Pin creation (possession proof only — issue #28)
+
+A repository can never supply its own trust anchor: there is no keyfile
+argument, no compatibility mode, no feature flag. Exactly two paths create a
+pin:
+
+1. **Possession proof** — `git-veil trust <repo_id>`
+   (`cmd_trust`, src/commands/trust.rs). The candidate is the repository's
+   committed `owner.verifying` (64-hex Ed25519 verifying key on line 1; the
+   owner's age recipient may follow on line 2). The proof is an exact match
+   between that candidate and the verifying key derived from a seed in
+   `<key store>/signing-keys.txt` (`prove_possession`): every seed is
+   iterated, a unique match pins, zero matches refuse with
+   `no local signing key matches this repository's owner key` (exit code 20),
+   and more than one (a degenerate duplicated store) refuses on ambiguity
+   (exit code 70). On success the verifying key is appended to
+   `verifying-keys.txt`, the pin and the committed record are written, and
+   the fixed-derivation owner fingerprint is recorded in
+   `owner_fingerprints` (the owner commits the updated `trust.json`
+   alongside `owner.verifying`).
+
+2. **Pin-file import** — `git-veil trust --import <pin-file>`
+   (`cmd_trust_import`, src/commands/trust.rs). The pin-file is produced by
+   `git-veil export-pin <repo_id> --output <pin-file>`
+   (`cmd_export_pin`, src/commands/export_pin.rs) on a machine that passed
+   the SAME possession proof — a machine without the matching seed cannot
+   export at all (exit code 20), so pins originate only from machines
+   holding the signing key; store-less machines are consumers, never
+   producers. The pin-file format is exactly two lines
+   (`PinFile`, src/pin_file.rs):
+
+   ```
+   repo-id: <repo_id>
+   verifying-key: <64-hex Ed25519 verifying key>
+   ```
+
+   Import runs three mandatory consistency checks, all of which must pass:
+   (a) the pin-file's repo-id matches the repository being pinned (derived
+   from the live remote); (b) the pin-file's verifying key exactly matches
+   the repository's committed `owner.verifying`; (c) the pin-file's
+   verifying-key fingerprint exactly matches the owner fingerprint recorded
+   in `trust.json`'s `owner_fingerprints` — an absent field is a refusal
+   (the owner must re-run `trust` on a seed-holding machine and commit the
+   updated metadata). Any mismatch refuses with
+   `pin-file does not match this repository's committed owner key; one of
+   the two channels is compromised` (exit code 70). The pin-file is the
+   anchor; the repository's committed key and fingerprint are the witnesses.
+
+**The owner fingerprint derivation is fixed and documented** so any
+implementation can compute it (`owner_fingerprint_for_verifying_key`,
+src/signing.rs): SHA-256 of the 32 raw verifying-key bytes, hex-encoded
+(64 characters). It is never computed over the seed, only the public half.
+This is distinct from the internal pin fingerprint
+(`fingerprint_for_verifying_key`), which exists only to be written and
+compared by git-veil itself.
+
+**Pin-files travel out of band, never through the repository.** Both
+`export-pin --output` and `trust --import <pin-file>` refuse any path that
+resolves inside the repository worktree (`ensure_path_outside_repo`, exit
+code 71): an attacker with repo write access could otherwise commit a bogus
+pin-file and have the victim import it, and since without a pin the tool
+refuses all other operations, the pin cannot travel through git-veil's own
+tracked-file mechanism either. Pin-file integrity rides the transport —
+the same model as `known_hosts` provisioning — and the printed owner
+fingerprint is the token for human out-of-band verification (read it over
+the phone and compare with the committed `owner_fingerprints` value).
+
+**Repo renames** change the repo_id (it is derived from the remote push
+URL), so a new pin is required; the recovery path is the possession proof
+on a machine holding the signing key, which also refreshes the stale
+committed metadata for the new repo_id.
 
 Every gated command verifies the keyring signature through
 `verify_keyring_against_trust` (src/commands/verify_keyring.rs), which:
 
 1. reads the fingerprint `trust.json` claims for the repo id;
 2. reads the local pin and **fails closed** on any disagreement:
-   - committed record missing → `no trust established for <repo_id> … run git-veil trust <repo_id>`
+   - committed record missing → `no trust established for <repo_id> … pin this repository's key on this machine with git-veil trust <repo_id> or git-veil trust --import <pin-file>`
      (exit code 10),
-   - pin missing → `no local pin for <repo_id> …` (exit code 11),
+   - pin missing → `no local pin for <repo_id> … pin this repository with git-veil trust <repo_id> or git-veil trust --import <pin-file>`
+     (exit code 11) — the error names exactly the two pin-creation paths
+     and nothing else,
    - pin present but different (case-insensitively) from the committed
-     fingerprint → `trust for <repo_id> … changed on this machine's record (<pinned> → <committed>); …`
+     fingerprint → `trust for <repo_id> … changed on this machine's record (<pinned> → <committed>); … re-pin with git-veil trust <repo_id> or git-veil trust --import <pin-file>`
      (exit code 12);
 3. loads the pinned key from the key store (`load_verifying_key_by_fingerprint`,
    src/commands/verify_keyring.rs) and verifies the keyring signature against
    it (`verify_keyring_signature`, src/signing.rs); a keyring with entries but
    no signature is refused (exit code 63).
 
-So an attacker who rewrites `trust.json` achieves nothing on a machine that has
-a pin: the committed fingerprint no longer matches the pin and every gated
-command refuses until the user explicitly re-pins. Writing trust.json *before*
-the pin in `cmd_trust` (src/commands/trust.rs) keeps the crash direction
-fail-closed: a death between the two writes leaves a mismatch, never a silently
-accepted changed anchor. Re-pinning over a different existing fingerprint prints
-a loud `replacing the previously pinned fingerprint …` notice.
+So an attacker who rewrites `trust.json` — or commits a self-consistent
+`owner.verifying`, signed keyring, metadata fingerprint and bogus pin-file —
+achieves nothing on a machine that holds the real seed: the proof fails, and
+an in-repo pin-file is refused by the path gate. Writing trust.json *before*
+the pin in the pin-creation paths (src/commands/trust.rs) keeps the crash
+direction fail-closed: a death between the two writes leaves a mismatch,
+never a silently accepted changed anchor. Re-pinning over a different
+existing fingerprint prints a loud `replacing the previously pinned
+fingerprint …` notice.
 
 ## Keyring format and freshness (rollback refusal)
 

@@ -155,6 +155,7 @@ On the owner's machine:
 git-veil init                                # create .git-veil/ state
 git-veil import my-age-identity.txt          # owner's age identity into the local key store
 git-veil show-repo-id                        # print the repository ID, e.g. demo+example@github.com
+git-veil trust demo+example@github.com        # possession proof: pin the owner key
 git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
 git-veil tell alice@example.com alice-age-identity.txt  # once per collaborator
 ```
@@ -198,6 +199,7 @@ git clone git@github.com:example/demo.git && cd demo
 git config user.email alice@example.com
 git-veil import alice-age-identity.txt     # their OWN age identity only
 git-veil show-repo-id
+git-veil trust --import ~/demo.pin         # pin-file exported by the owner, out of band
 git-veil verify-keyring                    # exit 0 = signature matches the pin
 git-veil list-keys                         # who can decrypt, after verification
 git-veil reveal

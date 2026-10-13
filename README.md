@@ -23,19 +23,28 @@ and the Rust [`rage`][rage] CLI.
 
 Each repository is identified by a repository ID derived from its git remote
 push URL, e.g. `git@github.com:example/demo.git` gives `demo+example@github.com`
-(run `git-veil show-repo-id` to print it). The repository owner's signing key is
-verified and pinned per machine with `git-veil trust`; the pin lives in the
+(run `git-veil show-repo-id` to print it). The repository owner's signing key
+is pinned per machine, and a repository can never supply its own trust
+anchor: the only direct pin-creation mode is a possession proof —
+`git-veil trust <repo-id>` matches the repository's committed `owner.verifying`
+against the verifying key derived from a seed in the local signing key store,
+and refuses when no seed matches. Machines without the signing key
+(unattended boxes) receive their pin by import: a seed-holding machine runs
+`git-veil export-pin <repo-id> --output <pin-file>`, the file travels out of
+band (never through the repository), and the box runs
+`git-veil trust --import <pin-file>` — three consistency checks tie the
+pin-file to the repository's committed key and metadata. The pin lives in the
 local key store outside the repository and is never committed, so every
-collaborator (including the owner on a fresh clone) must run `trust`
-themselves. The keyring of collaborator public keys in `.git-veil/keyring` is
-signed by that trusted key, and the signature is verified before any
-encryption, decryption or keyring mutation. Every gated command fails closed:
-without a pin, or with a signature that does not verify, nothing is touched.
-The key store and its pins are the trust boundary for every repository that
-uses that store, so sharing one store across mutually distrusting repositories
-is not advised. Set `GIT_VEIL_HOME` to isolate a project's keys from your
-default `$HOME/.git-veil` (e.g. `GIT_VEIL_HOME=~/keys/project-a`); `--key-store`
-overrides both for ad-hoc use.
+machine pins for itself. The keyring of collaborator public keys in
+`.git-veil/keyring` is signed by that trusted key, and the signature is
+verified before any encryption, decryption or keyring mutation. Every gated
+command fails closed: without a pin, or with a signature that does not
+verify, nothing is touched. The key store and its pins are the trust boundary
+for every repository that uses that store, so sharing one store across
+mutually distrusting repositories is not advised. Set `GIT_VEIL_HOME` to
+isolate a project's keys from your default `$HOME/.git-veil`
+(e.g. `GIT_VEIL_HOME=~/keys/project-a`); `--key-store` overrides both for
+ad-hoc use.
 
 ## Key store permissions
 
@@ -67,6 +76,7 @@ missing key tells you how to make one and back it up instead.
 git-veil init                                   # create .git-veil/ state
 git-veil import my-age-identity.txt             # import your age identity into the local key store
 git-veil show-repo-id                           # print the repository ID
+git-veil trust demo+example@github.com          # pin the owner key by possession proof
 git-veil tell example@github.com my-age-identity.txt    # add yourself to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add .env                               # track the file (gitignores the plaintext name)
@@ -165,7 +175,7 @@ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key (public — this file is what `git-veil trust` pins):
+# The verifying key (public — commit this file; trust proves your seed matches it):
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > owner.verifying
 ```
@@ -176,6 +186,11 @@ verifying fingerprint is pinned for the repository; with several keys
 present, `--signing-key <index-or-seed>` picks explicitly. Commands that
 need a missing key exit with a documented code (`git-veil error-codes`)
 after printing how to create and back it up.
+
+`owner.verifying` (the 64-hex public half) is committed to the repository:
+it is the candidate `git-veil trust` proves your seed against, and the
+witness `trust --import` cross-checks. Committing it is safe — it is public
+material, and it can never pin anything by itself.
 
 ## Commands
 
@@ -190,7 +205,8 @@ ergonomics that differ — such as a smaller final binary size.
 | `import`         | Import your age identity file(s) into the git-veil key store             |
 | `export`         | Export an age recipient string from the local key store                 |
 | `removekey`      | Remove a key from the local key store (destructive, local-only)         |
-| `trust`          | Verify and pin the repository owner's signing key (per machine)         |
+| `trust`          | Pin the repository owner's key by possession proof, or import a pin-file (per machine) |
+| `export-pin`     | Export this repository's pin-file for import on a machine without the signing key |
 | `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
 | `removeperson`   | Remove a collaborator from the keyring and re-sign it                   |
 | `add`            | Track files for encryption (auto-gitignores plaintext names)           |

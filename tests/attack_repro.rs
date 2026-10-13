@@ -6,9 +6,10 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson, cmd_reveal, cmd_tell,
-    cmd_unhide, cmd_verify_keyring, decrypt_with_identity, exit_code_of,
-    generate_identity, generate_signing_keypair, recipient_from_identity, TrackedFiles,
+    cmd_add, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson,
+    cmd_reveal, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide, cmd_verify_keyring,
+    decrypt_with_identity, exit_code_of, generate_identity, generate_signing_keypair,
+    recipient_from_identity, TrackedFiles,
 };
 
 use std::fs;
@@ -83,6 +84,11 @@ impl Fixture {
         )
         .unwrap();
         fs::write(
+            repo.join("owner.verifying"),
+            format!("{}\n{}\n", verifying_hex, recipient),
+        )
+        .unwrap();
+        fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
         )
@@ -90,6 +96,7 @@ impl Fixture {
 
         cmd_init(&repo.path).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
 
         Self { repo, key_store }
     }
@@ -210,6 +217,11 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     // what she always could, but no NEW secret can flow to her — hide
     // refused. That refusal is the fix.
 
+    // RECOVERY: a genuinely intended rollback is re-anchored with trust,
+    // which resets the freshness baseline along with the pin.
+    cmd_trust(&f.repo.path, TEST_REPO_ID, "origin", &f.key_store.path).expect("re-trust");
+    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect("verify succeeds after the re-trust reset the baseline");
     let _ = carol;
 }
 
@@ -372,16 +384,19 @@ fn fix_established_ciphertext_needs_no_intent() {
     f.stage_all(); // the owner commits: ciphertext is now in the index
 
     // Simulate a fresh clone's state: a new machine, new key store with no
-    // intent log, pinning the SAME owner verifying key (delivered out of
-    // band or as the committed owner.verifying).
+    // intent log and NO signing key — a store-less machine, which can only
+    // import a pin-file exported by a machine holding the signing key.
     let fresh_store = TempDir::new("established-fresh-ks");
-    fs::write(
-        fresh_store.join("signing-keys.txt"),
-        // The fresh store's signing key need not match the owner's — hide
-        // only encrypts; what matters is the PIN matching the ring's signer.
-        "0000000000000000000000000000000000000000000000000000000000000000\n",
+    let pin_file = fresh_store.join("fara.pin");
+    cmd_export_pin(
+        &f.repo.path,
+        TEST_REPO_ID,
+        &pin_file,
+        "origin",
+        &f.key_store.path,
     )
-    .unwrap();
+    .expect("export-pin");
+    cmd_trust_import(&f.repo.path, &pin_file, "origin", &fresh_store.path).expect("import");
 
     // No intent was ever recorded in fresh_store, but secrets.env.secret is
     // committed, so hide proceeds.
@@ -616,7 +631,10 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     let f = Fixture::new("reveal-normal");
     let _carol = f.add_collab("carol@example.com");
     // The owner must be in the keyring too for the reveal below (their
-    // identity IS in the key store; the recipient is owner.signing line 2).
+    // identity IS in the key store; the recipient is owner.verifying line 2).
+    let owner_verifying = fs::read_to_string(f.repo.join("owner.verifying")).unwrap();
+    let owner_recipient = owner_verifying.lines().nth(1).unwrap().trim();
+    fs::write(f.repo.join("owner.recipient"), owner_recipient).unwrap();
     cmd_tell(
         &f.repo.path,
         "owner@example.com",

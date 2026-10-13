@@ -35,7 +35,7 @@ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key (public half of the signing key — what `trust` pins):
+# The verifying key (public half of the signing key — commit this file):
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > owner.verifying
 ```
@@ -48,7 +48,8 @@ the `AGE-SECRET-KEY-1...` line from `my-age-identity.txt` and
 password-manager note holding the strings is a complete backup. Lose the
 age identity and every ciphertext is unrecoverable; lose the signing key
 and you cannot re-sign the keyring (re-key from scratch).
-`owner.verifying` is public: commit it, email it, print it.
+`owner.verifying` is public: commit it — it is the candidate `trust`
+proves your seed against.
 
 ## 2. Initialize, import, identify
 
@@ -75,6 +76,30 @@ look their key up there. `show-repo-id` prints the exact repo ID `trust`
 wants (it re-derives it from the remote and refuses a mismatch); `whoami`
 shows which email decrypting commands will use — from
 `git config user.email`, or `--email`.
+
+## 3. Trust your own key (possession proof)
+
+```sh
+$ git-veil trust demo+example@github.com
+✓ Trusted key for demo+example@github.com (fingerprint: 1a2b3c4d…)
+✓ Pinned 1a2b3c4d… for demo+example@github.com on this machine
+```
+
+What just happened: there is no keyfile argument — a repository must never
+supply its own trust anchor. `trust` read the committed `owner.verifying`,
+derived the verifying key from every seed in your
+`$HOME/.git-veil/signing-keys.txt`, and found the exact match that proves
+you hold the signing key. The fingerprint was **pinned on this machine**
+in `$HOME/.git-veil/trust-pins/` — outside the repository, never committed
+— and the fixed-derivation owner fingerprint was recorded in
+`.git-veil/trust.json` (commit it alongside `owner.verifying`). Every gated
+command checks the keyring signature against this pin first and fails
+closed without it (see `git-veil error-codes`: a missing pin is exit code
+11, a mismatch between the committed record and your pin is 12). A fresh
+clone (even yours) has no pin until you run `trust` there again — and a
+machine without the signing seed cannot pin directly at all: it imports a
+pin-file you export with `git-veil export-pin` (see
+[docs/joining.md](joining.md) for that flow).
 
 ## 4. Put yourself in the keyring
 
@@ -123,7 +148,7 @@ silently never reach the repository. Commit the ciphertext and state, not
 the plaintext:
 
 ```sh
-git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
+git add .gitignore owner.verifying .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Add encrypted secrets"
 ```
 

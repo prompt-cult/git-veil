@@ -18,6 +18,7 @@ use crate::{
 fn load_verifying_key_by_fingerprint(
     key_store: &Path,
     fingerprint: &str,
+    repo_id_for_hint: &str,
 ) -> Result<ed25519_dalek::VerifyingKey> {
     let verifying_keys_path = key_store.join("verifying-keys.txt");
     let content =
@@ -37,9 +38,10 @@ fn load_verifying_key_by_fingerprint(
         coded(
             ExitCode::NoTrustPin,
             format!(
-                "Trusted key with fingerprint {} not found in {}; re-run git-veil trust <repo_id> <keyfile> on this machine",
+                "Trusted key with fingerprint {} not found in {}; re-run git-veil trust {} on this machine",
                 wanted,
-                verifying_keys_path.display()
+                verifying_keys_path.display(),
+                repo_id_for_hint
             ),
         )
     })
@@ -71,7 +73,7 @@ pub fn verify_keyring_against_trust(
         None => return Err(coded(
             ExitCode::NoTrustRecord,
             format!(
-                "no trust established for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
+                "no trust established for {} (from remote '{}'); pin this repository's key on this machine with git-veil trust {} or git-veil trust --import <pin-file>",
                 repo_id, remote_name, repo_id
             ),
         )),
@@ -85,21 +87,22 @@ pub fn verify_keyring_against_trust(
         Some(pinned) => return Err(coded(
             ExitCode::TrustMismatch,
             format!(
-                "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-run git-veil trust {} <keyfile>",
+                "trust for {} (from remote '{}') changed on this machine's record ({} → {}); if you intended this, re-pin with git-veil trust {} or git-veil trust --import <pin-file>",
                 repo_id, remote_name, pinned, trusted_fingerprint, repo_id
             ),
         )),
         None => return Err(coded(
             ExitCode::NoTrustPin,
             format!(
-                "no local pin for {} (from remote '{}'); run git-veil trust {} <keyfile> to pin this repository's key on this machine",
+                "no local pin for {} (from remote '{}'); pin this repository with git-veil trust {} or git-veil trust --import <pin-file>",
                 repo_id, remote_name, repo_id
             ),
         )),
     }
 
     // Load signing (verifying) public key
-    let verifying_key = load_verifying_key_by_fingerprint(key_store, trusted_fingerprint)?;
+    let verifying_key =
+        load_verifying_key_by_fingerprint(key_store, trusted_fingerprint, &repo_id)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -173,7 +176,7 @@ pub fn verify_keyring_against_trust(
             return Err(coded(
                 ExitCode::KeyringRollback,
                 format!(
-                    "keyring rollback refused for {}: version {} is below this machine's freshness baseline {}; if this rollback is intended, re-run git-veil trust {} <keyfile> to reset it (exit code 14)",
+                    "keyring rollback refused for {}: version {} is below this machine's freshness baseline {}; if this rollback is intended, re-run git-veil trust {} to reset it (exit code 14)",
                     repo_id, observed, bv, repo_id
                 ),
             ));
@@ -184,7 +187,7 @@ pub fn verify_keyring_against_trust(
                     return Err(coded(
                         ExitCode::KeyringRollback,
                         format!(
-                            "keyring fork refused for {}: the version-{} keyring accepted on this machine has different content than the one presented (equal-version substitution); if this is intended, re-run git-veil trust {} <keyfile> to reset the baseline (exit code 14)",
+                            "keyring fork refused for {}: the version-{} keyring accepted on this machine has different content than the one presented (equal-version substitution); if this is intended, re-run git-veil trust {} to reset the baseline (exit code 14)",
                             repo_id, observed, repo_id
                         ),
                     ));

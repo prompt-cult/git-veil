@@ -3,6 +3,7 @@ pub mod cat;
 pub mod changes;
 pub mod clean;
 pub mod export;
+pub mod export_pin;
 pub mod hide;
 pub mod import;
 pub mod init;

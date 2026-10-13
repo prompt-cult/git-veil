@@ -11,6 +11,7 @@ mod intent;
 mod key_discovery;
 mod keyring;
 mod permissions;
+mod pin_file;
 mod repo_identity;
 mod signing;
 mod tracked_files;
@@ -28,6 +29,7 @@ pub use commands::cat::cmd_cat;
 pub use commands::changes::cmd_changes;
 pub use commands::clean::cmd_clean;
 pub use commands::export::{cmd_export, export_public_key};
+pub use commands::export_pin::cmd_export_pin;
 pub use commands::hide::cmd_hide;
 pub use commands::import::cmd_import;
 pub use commands::init::cmd_init;
@@ -39,7 +41,7 @@ pub use commands::removeperson::cmd_removeperson;
 pub use commands::reveal::cmd_reveal;
 pub use commands::show_repo_id::cmd_show_repo_id;
 pub use commands::tell::cmd_tell;
-pub use commands::trust::cmd_trust;
+pub use commands::trust::{cmd_trust, cmd_trust_import};
 pub use commands::unhide::cmd_unhide;
 pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
@@ -52,11 +54,13 @@ pub use permissions::{
     check_key_store_permissions, cmd_trust_permissions, find_unsafe_permissions,
     permissions_check_bypassed_from_env,
 };
+pub use pin_file::{load_pin_file, write_pin_file, PinFile};
 pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};
 pub use signing::{
     create_signature_block, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
     fingerprint_for_verifying_key, generate_signing_keypair, keyring_content_digest,
-    parse_signing_key, parse_verifying_key, sign_keyring_content, verify_keyring_signature,
+    owner_fingerprint_for_verifying_key, parse_signing_key, parse_verifying_key,
+    sign_keyring_content, verify_keyring_signature,
 };
 pub use tracked_files::{get_git_config_email, validate_tracked_path, TrackedFiles};
 pub use trust_store::{TrustPinStore, TrustStore};

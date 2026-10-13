@@ -1,0 +1,61 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-trust 1  "git-veil-trust " 
+.SH NAME
+git\-veil\-trust \- Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
+.SH SYNOPSIS
+\fBgit\-veil trust\fR [\fB\-\-import\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIREPO_ID\fR] 
+.SH DESCRIPTION
+Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
+.SH OPTIONS
+.TP
+\fB\-\-import\fR \fI<PIN_FILE>\fR
+Import a pin\-file produced by git\-veil export\-pin on a machine holding the signing key
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+[\fIREPO_ID\fR]
+Repository ID (e.g., fara+simbo1905@github.com); required unless \-\-import
+.SH EXTRA
+Pin this repository\*(Aqs owner key on this machine. There is no keyfile
+argument: a repository must never supply its own trust anchor. Two
+pin\-creation paths exist, and nothing else:
+
+1. POSSESSION PROOF (default): git\-veil trust <repo_id>. The candidate is
+   the repository\*(Aqs committed owner.verifying (64 hex chars on line 1);
+   the proof is an exact match between that key and the verifying key
+   derived from a seed in <key store>/signing\-keys.txt. Match \-> pin
+   written. No match \-> refusal (exit code 20): pins are created only on
+   machines holding the signing key.
+
+2. IMPORT: git\-veil trust \-\-import <pin\-file>, where the pin\-file was
+   produced by git\-veil export\-pin on a machine that proved possession.
+   Three mandatory consistency checks: the pin\-file\*(Aqs repo\-id must match
+   this repository; its verifying key must exactly match the committed
+   owner.verifying; and its fingerprint must match the owner fingerprint
+   recorded in .git\-veil/trust.json. Any mismatch \-> refusal: one of the
+   two channels is compromised.
+
+Both paths refuse a path inside the repository worktree, so a pin\-file
+always travels out of band (e.g. ssh) — the same model as known_hosts
+provisioning. The pin lives in the key store, never committed; every
+machine (including the owner\*(Aqs fresh clones) pins for itself.
+
+Trust domain: the key store named by \-\-key\-store holds this machine\*(Aqs pins
+for EVERY repository that uses that store, so the store and its pins are
+one trust boundary. Sharing a single store across mutually distrusting
+repositories is not advised; use a separate \-\-key\-store per trust domain.
+
+Requires init first. Typical next step: tell.
+
+EXAMPLES
+  $ git\-veil show\-repo\-id                        # get the repo id to pass here
+  $ git\-veil trust fara+simbo1905@github.com     # possession proof
+  $ git\-veil trust \-\-import /tmp/fara.pin        # pin\-file from export\-pin

@@ -67,13 +67,24 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
+'()--import=[Import a pin-file produced by git-veil export-pin on a machine holding the signing key]:PIN_FILE:_files' \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
+'::repo_id -- Repository ID (e.g., fara+simbo1905@github.com); required unless --import:_default' \
+&& ret=0
+;;
+(export-pin)
+_arguments "${_arguments_options[@]}" : \
+'--output=[Pin-file destination — must be OUTSIDE the repository worktree]:OUTPUT:_files' \
+'--remote=[Git remote name]:REMOTE:_default' \
+'--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
+'--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
 ':repo_id -- Repository ID (e.g., fara+simbo1905@github.com):_default' \
-':verifying_key -- Path to the owner'\''s Ed25519 verifying key file (64 hex chars):_default' \
 && ret=0
 ;;
 (tell)
@@ -283,6 +294,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(export-pin)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (tell)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -379,7 +394,8 @@ _git-veil_commands() {
 'import:Import your age identity (private key) into the git-veil key store' \
 'export:Export a public key (recipient string) from the local key store' \
 'removekey:Remove an age identity from the local key store (destructive, local-only)' \
-'trust:Verify and pin the repository owner'\''s Ed25519 verifying key (per machine)' \
+'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
+'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
@@ -438,6 +454,11 @@ _git-veil__subcmd__export_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil export commands' commands "$@"
 }
+(( $+functions[_git-veil__subcmd__export-pin_commands] )) ||
+_git-veil__subcmd__export-pin_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil export-pin commands' commands "$@"
+}
 (( $+functions[_git-veil__subcmd__help_commands] )) ||
 _git-veil__subcmd__help_commands() {
     local commands; commands=(
@@ -445,7 +466,8 @@ _git-veil__subcmd__help_commands() {
 'import:Import your age identity (private key) into the git-veil key store' \
 'export:Export a public key (recipient string) from the local key store' \
 'removekey:Remove an age identity from the local key store (destructive, local-only)' \
-'trust:Verify and pin the repository owner'\''s Ed25519 verifying key (per machine)' \
+'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
+'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
@@ -503,6 +525,11 @@ _git-veil__subcmd__help__subcmd__error-codes_commands() {
 _git-veil__subcmd__help__subcmd__export_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help export commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__help__subcmd__export-pin_commands] )) ||
+_git-veil__subcmd__help__subcmd__export-pin_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil help export-pin commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__help_commands] )) ||
 _git-veil__subcmd__help__subcmd__help_commands() {

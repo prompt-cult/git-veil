@@ -8,10 +8,10 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
-    cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell,
+    cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
     cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, fingerprint_for_recipient,
     generate_identity, generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles,
-    TrustPinStore, TrustStore,
+    TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -112,6 +112,15 @@ impl TestRepo {
         )
         .expect("write identity file");
 
+        // The committed owner.verifying: verifying key hex on line 1, the
+        // owner's age recipient on line 2. trust proves possession of the
+        // matching seed and pins the key.
+        fs::write(
+            repo.join("owner.verifying"),
+            format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
+        )
+        .expect("write owner.verifying");
+
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(owner_signing_key.to_bytes())),
@@ -122,6 +131,8 @@ impl TestRepo {
 
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path)
             .expect("import owner identity");
+
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
 
         Self {
             repo,
@@ -427,6 +438,11 @@ fn test_hide_no_keys_fails() {
     )
     .unwrap();
     fs::write(
+        repo.join("owner.verifying"),
+        format!("{}\n{}\n", verifying_hex, recipient),
+    )
+    .unwrap();
+    fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
@@ -434,6 +450,7 @@ fn test_hide_no_keys_fails() {
 
     cmd_init(&repo.path).expect("init");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
+    cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
 
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add(

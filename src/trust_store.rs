@@ -10,12 +10,22 @@ use crate::fs_atomic::write_atomic;
 pub struct TrustStore {
     #[serde(default)]
     pub trusted_keys: HashMap<String, String>,
+    /// repo_id -> FIXED-derivation fingerprint (SHA-256 of the raw key
+    /// bytes, hex) of the repository's committed owner verifying key
+    /// (`owner.verifying`). Committed alongside the key so pin-file
+    /// import can cross-check three channels (pin-file, committed key,
+    /// committed fingerprint) and so a human can verify it out of band.
+    /// Distinct from `trusted_keys`, whose fingerprints use the internal
+    /// display derivation and exist to be compared against the local pin.
+    #[serde(default)]
+    pub owner_fingerprints: HashMap<String, String>,
 }
 
 impl TrustStore {
     pub fn new() -> Self {
         Self {
             trusted_keys: HashMap::new(),
+            owner_fingerprints: HashMap::new(),
         }
     }
 
@@ -25,6 +35,19 @@ impl TrustStore {
 
     pub fn get_trusted_fingerprint(&self, repo_id: &str) -> Option<&str> {
         self.trusted_keys.get(repo_id).map(|s| s.as_str())
+    }
+
+    /// Records the fixed-derivation fingerprint of the repository's
+    /// committed owner verifying key.
+    pub fn set_owner_fingerprint(&mut self, repo_id: String, fingerprint: String) {
+        self.owner_fingerprints.insert(repo_id, fingerprint);
+    }
+
+    /// The committed fixed-derivation owner fingerprint for `repo_id`;
+    /// `None` when the metadata predates this field (the owner must
+    /// re-run `trust` on a seed-holding machine and commit the update).
+    pub fn get_owner_fingerprint(&self, repo_id: &str) -> Option<&str> {
+        self.owner_fingerprints.get(repo_id).map(|s| s.as_str())
     }
 
     pub fn serialize(&self) -> Result<String> {

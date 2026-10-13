@@ -10,6 +10,9 @@ email `newcomer@example.com`, owner key `example@github.com`.
 ## What you need from the team
 
 1. The repository URL (so you can clone).
+2. The **pin-file** for this repository, exported by the owner with
+   `git-veil export-pin` on a machine holding the signing key, and sent to
+   you OUT OF BAND (e.g. over ssh) — never committed to the repository.
 
 That is all. The repository ID you print yourself after cloning (step 3).
 Your own age identity you create yourself (step 2) — git-veil generates no
@@ -17,10 +20,15 @@ keys, and a key it made would be a key you never backed up.
 
 ## What the owner must do FIRST (not you)
 
-You can only reveal files that were encrypted after you were added. The
-owner runs, on their machine:
+You can only reveal files that were encrypted after you were added, and
+you can only pin from a pin-file the owner exported. The owner runs, on
+their machine (which holds the signing key):
 
 ```sh
+$ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
+pin-file written to /tmp/demo.pin
+owner verifying-key fingerprint: 22fb3bcb…
+import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com newcomer.pub
 ✓ Added newcomer@example.com to keyring
 ```
@@ -30,6 +38,12 @@ step 1 of [docs/solo.md](solo.md) with any key generator — git-veil has
 **no** key generation — import it with `git-veil import
 newcomer-age-identity.txt`, and send the `age1...` recipient line it
 printed, or `git-veil export age1... --output newcomer.pub`.)
+
+The owner then transfers `/tmp/demo.pin` to you out of band (e.g.
+`scp`), and reads you the printed **owner verifying-key fingerprint** —
+over a voice call is ideal — so you can compare it with the fingerprint
+recorded in the repository's committed `.git-veil/trust.json` before you
+import (step 4).
 
 Then — critical — the owner re-hides, because files hidden before you were
 told do not have you as a recipient:
@@ -91,7 +105,28 @@ What just happened: the ID is derived from the remote push URL, not from
 your own email. `trust` re-derives and cross-checks it, so a typo fails
 loudly. Non-`origin` remotes: add `--remote <name>`.
 
-### 4. Check who is in the keyring
+### 4. Import the pin-file — per machine
+
+```sh
+$ git-veil trust --import ~/demo.pin
+✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
+✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
+```
+
+What just happened: your machine holds no signing key — it never needs
+one. `trust --import` ran three mandatory consistency checks: the
+pin-file's repository ID matches the one derived from your remote; its
+verifying key exactly matches the repository's committed
+`owner.verifying`; and its fingerprint matches the owner fingerprint
+recorded in the committed `.git-veil/trust.json`. All three agreed, so the
+key was pinned in YOUR `$HOME/.git-veil`, outside the repository. Any
+mismatch is a hard refusal — one of the two channels is compromised —
+and the pin-file path must live OUTSIDE the repository (an in-repo
+pin-file is exactly the self-supplied anchor the model refuses). Before
+importing, compare the fingerprint the owner read to you with the one in
+`.git-veil/trust.json`; that human check is the out-of-band anchor.
+
+### 5. Check who is in the keyring
 
 ```sh
 $ git-veil list-keys
@@ -107,7 +142,6 @@ and you are listed. If your entry is missing, the owner has not run `tell`
 yet — nothing on your side can fix that.
 
 ### 6. Reveal
-
 ```sh
 $ git-veil reveal
 ✓ Keyring signature verified
@@ -129,8 +163,8 @@ the last hidden version.
 Run `git-veil error-codes` for the full table; the ones you will actually
 meet as a newcomer:
 
-- `no local pin for …` (exit code 11) — you have not run `trust` on this
-  machine (step 4).
+- `no local pin for …` (exit code 11) — you have not pinned on this
+  machine: import the owner's pin-file (step 4).
 - `user newcomer@example.com not found in keyring; …` (exit code 22) — the
   owner has not run `tell` (or has not pushed the updated keyring;
   `git pull` first).

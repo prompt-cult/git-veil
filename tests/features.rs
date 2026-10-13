@@ -3,7 +3,7 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell,
+    cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
     cmd_unhide, cmd_verify_keyring, exit_code_of, generate_identity, generate_signing_keypair,
     recipient_from_identity, Keyring,
 };
@@ -78,6 +78,11 @@ impl Fixture {
         )
         .unwrap();
         fs::write(
+            repo.join("owner.verifying"),
+            format!("{}\n{}\n", verifying_hex, recipient),
+        )
+        .unwrap();
+        fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
         )
@@ -85,6 +90,7 @@ impl Fixture {
 
         cmd_init(&repo.path).expect("init");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
+        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path).expect("trust");
 
         Self { repo, key_store }
     }

@@ -149,21 +149,31 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Verify and pin the repository owner's Ed25519 verifying key (per machine)
+    /// Pin this repository's owner key on this machine (possession proof, or pin-file import)
     #[command(after_long_help = "\
-Verifies the repository owner's Ed25519 verifying key and pins its
-fingerprint in your local key store, keyed by the repository ID derived
-from the git remote push URL. The pin is per machine: it lives in
-$GIT_VEIL_HOME (or $HOME/.git-veil), is never committed, and every
-collaborator must run trust themselves after a fresh clone. The pinned
-key is the anchor against which every subsequent keyring signature is
-verified — tell, hide, reveal, cat, unhide, changes, removeperson,
-verify-keyring and list-keys all fail closed without it.
+Pin this repository's owner key on this machine. There is no keyfile
+argument: a repository must never supply its own trust anchor. Two
+pin-creation paths exist, and nothing else:
 
-The provided repo_id must match the one computed from the remote push URL
-(see show-repo-id), and the key file must contain a valid Ed25519
-verifying key as 64 hex characters (docs/solo.md step 1 has the openssl
-recipe that produces one from the owner's signing key).
+1. POSSESSION PROOF (default): git-veil trust <repo_id>. The candidate is
+   the repository's committed owner.verifying (64 hex chars on line 1);
+   the proof is an exact match between that key and the verifying key
+   derived from a seed in <key store>/signing-keys.txt. Match -> pin
+   written. No match -> refusal (exit code 20): pins are created only on
+   machines holding the signing key.
+
+2. IMPORT: git-veil trust --import <pin-file>, where the pin-file was
+   produced by git-veil export-pin on a machine that proved possession.
+   Three mandatory consistency checks: the pin-file's repo-id must match
+   this repository; its verifying key must exactly match the committed
+   owner.verifying; and its fingerprint must match the owner fingerprint
+   recorded in .git-veil/trust.json. Any mismatch -> refusal: one of the
+   two channels is compromised.
+
+Both paths refuse a path inside the repository worktree, so a pin-file
+always travels out of band (e.g. ssh) — the same model as known_hosts
+provisioning. The pin lives in the key store, never committed; every
+machine (including the owner's fresh clones) pins for itself.
 
 Trust domain: the key store named by --key-store holds this machine's pins
 for EVERY repository that uses that store, so the store and its pins are
@@ -173,20 +183,61 @@ repositories is not advised; use a separate --key-store per trust domain.
 Requires init first. Typical next step: tell.
 
 EXAMPLES
-  $ git-veil show-repo-id                                   # get the repo id to pass here
-  $ git-veil trust fara+simbo1905@github.com owner.verifying
-  $ git-veil trust fara+simbo1905@github.com owner.verifying --remote upstream
+  $ git-veil show-repo-id                        # get the repo id to pass here
+  $ git-veil trust fara+simbo1905@github.com     # possession proof
+  $ git-veil trust --import /tmp/fara.pin        # pin-file from export-pin
 ")]
     Trust {
-        /// Repository ID (e.g., fara+simbo1905@github.com)
-        repo_id: String,
-        /// Path to the owner's Ed25519 verifying key file (64 hex chars)
-        verifying_key: String,
+        /// Repository ID (e.g., fara+simbo1905@github.com); required unless --import
+        #[arg(required_unless_present = "import")]
+        repo_id: Option<String>,
+        /// Import a pin-file produced by git-veil export-pin on a machine holding the signing key
+        #[arg(long, value_name = "PIN_FILE", conflicts_with = "repo_id")]
+        import: Option<PathBuf>,
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its
         /// pins are the trust boundary for every repository that uses it.
+        #[arg(long)]
+        key_store: Option<PathBuf>,
+    },
+
+    /// Export this repository's pin-file for import on another machine
+    #[command(name = "export-pin")]
+    #[command(after_long_help = "\
+Writes this repository's pin-file for import on a machine WITHOUT the
+signing key (which runs git-veil trust --import <pin-file>). Export
+requires the same possession proof as trust: an exact match between the
+repository's committed owner.verifying and the verifying key derived from
+a seed in <key store>/signing-keys.txt. A machine without the matching
+seed cannot export at all — pins originate only from machines holding the
+signing key; store-less machines are consumers, never producers.
+
+--output must point OUTSIDE the repository worktree: a committed pin-file
+would be exactly the self-supplied anchor the pin model exists to
+prevent. Transfer the file out of band (e.g. ssh); its integrity rides
+the transport, the same model as known_hosts provisioning.
+
+The printed owner verifying-key fingerprint is the human out-of-band
+verification token: read it to the importing machine's operator and have
+them compare it against the repository's committed .git-veil/trust.json.
+
+EXAMPLES
+  $ git-veil export-pin fara+simbo1905@github.com --output /tmp/fara.pin
+  $ scp /tmp/fara.pin box:fara.pin               # out of band
+  $ git-veil trust --import fara.pin            # on the target machine
+")]
+    ExportPin {
+        /// Repository ID (e.g., fara+simbo1905@github.com)
+        repo_id: String,
+        /// Pin-file destination — must be OUTSIDE the repository worktree
+        #[arg(long)]
+        output: PathBuf,
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
     },

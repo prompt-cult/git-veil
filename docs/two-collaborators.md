@@ -26,6 +26,7 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 
 git-veil init
 git-veil import my-age-identity.txt
+git-veil trust demo+example@github.com  # possession proof: seed matches owner.verifying
 git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
 git-veil add .env && git-veil hide
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
@@ -73,6 +74,22 @@ git commit -m "Add alice to keyring and re-hide"
 git push
 ```
 
+The owner also exports the repository's pin-file for Alice — she holds no
+signing key, so the pin-file is the only way she can pin:
+
+```sh
+$ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
+pin-file written to /tmp/demo.pin
+owner verifying-key fingerprint: 22fb3bcb…
+import it on the target machine with: git-veil trust --import /tmp/demo.pin
+```
+
+The owner transfers `/tmp/demo.pin` to Alice OUT OF BAND (e.g. `scp`) —
+never committed to the repository — and reads her the printed
+fingerprint so she can compare it with the one recorded in the committed
+`.git-veil/trust.json` before importing. She does **not** need any
+private key of the owner's.
+
 ## Part 3 — Alice clones and decrypts
 
 ```sh
@@ -85,7 +102,24 @@ Summary: 1 imported, 0 skipped
 ```
 
 She imports only her OWN age identity into her local key store (exit code
-21 tells anyone missing one exactly how to create and back it up).
+21 tells anyone missing one exactly how to create and back it up). Then
+she pins the owner key — this is per machine, and her machine holds no
+signing key, so she imports the pin-file the owner sent her:
+
+```sh
+$ git-veil trust --import ~/demo.pin
+✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
+✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
+```
+
+What just happened: `trust --import` checked that the pin-file's
+repository ID matches her remote, that its verifying key exactly matches
+the repository's committed `owner.verifying`, and that its fingerprint
+matches the owner fingerprint recorded in the committed
+`.git-veil/trust.json` — three channels, all mandatory. The pin lives in
+her `$HOME/.git-veil`, outside the repository; the committed
+`.git-veil/trust.json` is attacker-writable, so her local pin is the real
+anchor. A pin-file path inside the repository is refused outright.
 
 Now she can decrypt:
 
@@ -108,6 +142,9 @@ $ git-veil cat .env        # peek to stdout; touches no disk state
   key. Every gated command verifies that signature against the local pin
   before touching anything, so a keyring edited by a non-owner fails
   closed.
+- Pinning is per machine. A collaborator who gets a new laptop imports a
+  freshly exported pin-file there (the owner runs `export-pin` and
+  transfers it out of band).
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
 - The reveal error `user alice@example.com not found in keyring; check

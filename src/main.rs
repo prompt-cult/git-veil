@@ -6,11 +6,11 @@ use std::process::ExitCode as StdExitCode;
 use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_hide, cmd_import, cmd_init, cmd_list,
-    cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id,
-    cmd_tell, cmd_trust, cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami,
-    default_key_store, exit_code_of, get_git_config_email, permissions_check_bypassed_from_env,
-    ExitCode,
+    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin, cmd_hide, cmd_import,
+    cmd_init, cmd_list, cmd_list_keys, cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal,
+    cmd_show_repo_id, cmd_tell, cmd_trust, cmd_trust_import, cmd_trust_permissions, cmd_unhide,
+    cmd_verify_keyring, cmd_whoami, default_key_store, exit_code_of, get_git_config_email,
+    permissions_check_bypassed_from_env, ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -125,14 +125,34 @@ fn run() -> Result<()> {
         }
         Commands::Trust {
             repo_id,
-            verifying_key,
+            import,
             remote,
             key_store: opt,
         } => {
-            cmd_trust(
+            let key_store = resolve_key_store(opt, skip_permissions_check)?;
+            match (import, repo_id) {
+                (Some(pin_file), None) => {
+                    cmd_trust_import(&repo_root, &pin_file, &remote, &key_store)?;
+                }
+                (None, Some(repo_id)) => {
+                    cmd_trust(&repo_root, &repo_id, &remote, &key_store)?;
+                }
+                // clap's required_unless_present/conflicts_with make both
+                // remaining arms unreachable; keep them total anyway.
+                (Some(_), Some(_)) => anyhow::bail!("--import cannot be combined with a repo_id"),
+                (None, None) => anyhow::bail!("trust requires a repo_id or --import <pin-file>"),
+            }
+        }
+        Commands::ExportPin {
+            repo_id,
+            output,
+            remote,
+            key_store: opt,
+        } => {
+            cmd_export_pin(
                 &repo_root,
                 &repo_id,
-                &verifying_key,
+                &output,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
             )?;

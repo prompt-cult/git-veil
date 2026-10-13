@@ -1,0 +1,47 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-export-pin 1  "git-veil-export-pin " 
+.SH NAME
+git\-veil\-export\-pin \- Export this repository\*(Aqs pin\-file for import on another machine
+.SH SYNOPSIS
+\fBgit\-veil export\-pin\fR <\fB\-\-output\fR> [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> 
+.SH DESCRIPTION
+Export this repository\*(Aqs pin\-file for import on another machine
+.SH OPTIONS
+.TP
+\fB\-\-output\fR \fI<OUTPUT>\fR
+Pin\-file destination — must be OUTSIDE the repository worktree
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIREPO_ID\fR>
+Repository ID (e.g., fara+simbo1905@github.com)
+.SH EXTRA
+Writes this repository\*(Aqs pin\-file for import on a machine WITHOUT the
+signing key (which runs git\-veil trust \-\-import <pin\-file>). Export
+requires the same possession proof as trust: an exact match between the
+repository\*(Aqs committed owner.verifying and the verifying key derived from
+a seed in <key store>/signing\-keys.txt. A machine without the matching
+seed cannot export at all — pins originate only from machines holding the
+signing key; store\-less machines are consumers, never producers.
+
+\-\-output must point OUTSIDE the repository worktree: a committed pin\-file
+would be exactly the self\-supplied anchor the pin model exists to
+prevent. Transfer the file out of band (e.g. ssh); its integrity rides
+the transport, the same model as known_hosts provisioning.
+
+The printed owner verifying\-key fingerprint is the human out\-of\-band
+verification token: read it to the importing machine\*(Aqs operator and have
+them compare it against the repository\*(Aqs committed .git\-veil/trust.json.
+
+EXAMPLES
+  $ git\-veil export\-pin fara+simbo1905@github.com \-\-output /tmp/fara.pin
+  $ scp /tmp/fara.pin box:fara.pin               # out of band
+  $ git\-veil trust \-\-import fara.pin            # on the target machine
