@@ -752,3 +752,88 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     .expect_err("an in-repo pin-file must not be importable");
     assert_eq!(exit_code_of(&err), 71);
 }
+
+// ---------------------------------------------------------------------------
+// Repo rename / remote change: the existing trust record names a different
+// repo-id. The error states the suspicion and STOPS — no remedy is printed,
+// because the remedy is exactly what an attacker would want the operator to
+// run without thinking. The operator reads the docs and fixes it with their
+// brain engaged.
+// ---------------------------------------------------------------------------
+
+/// Changes the fixture's remote URL, as a GitHub rename does, so the
+/// derived repo-id no longer matches the committed trust record.
+fn rename_remote(repo: &Path, new_url: &str) {
+    let s = std::process::Command::new("git")
+        .current_dir(repo)
+        .args(["remote", "set-url", "origin", new_url])
+        .status()
+        .expect("git");
+    assert!(s.success());
+}
+
+#[test]
+fn test_rename_suspicion_no_remedy_on_gated_commands() {
+    let f = Fixture::new("rename-verify");
+    rename_remote(&f.repo.path, "git@github.com:owner/fara-moved.git");
+    let new_repo_id = "fara-moved+owner@github.com";
+
+    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("a renamed repo must not verify against the old trust record");
+    assert_eq!(exit_code_of(&err), 10);
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("this looks like a rename or a remote change"),
+        "the error must state the rename suspicion: {message}"
+    );
+    assert!(
+        message.contains(TEST_REPO_ID) && message.contains(new_repo_id),
+        "the error must name the recorded and derived repo-ids as the clue: {message}"
+    );
+    assert!(
+        !message.contains("git-veil trust"),
+        "the error must NOT hand out the remedy: {message}"
+    );
+}
+
+#[test]
+fn test_rename_suspicion_no_remedy_on_import() {
+    let f = Fixture::new("rename-import");
+    let fresh_store = storeless("rename-import");
+    rename_remote(&f.repo.path, "git@github.com:owner/fara-moved.git");
+    let new_repo_id = "fara-moved+owner@github.com";
+    let elsewhere = TempDir::new("rename-import-out");
+
+    // A pin-file for the RENAMED repo-id, carrying the repository's true
+    // committed key: check (a) passes, but the committed metadata still
+    // records the owner fingerprint under the OLD repo-id.
+    let pin_file_path = elsewhere.join("moved.pin");
+    fs::write(
+        &pin_file_path,
+        PinFile {
+            repo_id: new_repo_id.to_string(),
+            verifying_key: f.signing_key.verifying_key(),
+        }
+        .serialize(),
+    )
+    .unwrap();
+
+    let err = cmd_trust_import(&f.repo.path, &pin_file_path, "origin", &fresh_store.path)
+        .expect_err("import must refuse while the committed metadata names the old repo-id");
+    assert_eq!(exit_code_of(&err), 70);
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("this looks like a rename or a remote change"),
+        "the error must state the rename suspicion: {message}"
+    );
+    assert!(
+        !message.contains("git-veil trust"),
+        "the error must NOT hand out the remedy: {message}"
+    );
+    assert!(
+        TrustPinStore::read_pin(&fresh_store.path, new_repo_id)
+            .unwrap()
+            .is_none(),
+        "no pin may be written on refusal"
+    );
+}

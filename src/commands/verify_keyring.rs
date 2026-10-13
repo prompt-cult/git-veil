@@ -70,13 +70,31 @@ pub fn verify_keyring_against_trust(
     // repo_id and the remote that produced it, plus the remedy.
     let trusted_fingerprint = match trust_store.get_trusted_fingerprint(&repo_id) {
         Some(fingerprint) => fingerprint,
-        None => return Err(coded(
-            ExitCode::NoTrustRecord,
-            format!(
-                "no trust established for {} (from remote '{}'); pin this repository's key on this machine with git-veil trust {} or git-veil trust --import <pin-file>",
-                repo_id, remote_name, repo_id
-            ),
-        )),
+        None => {
+            if trust_store.trusted_keys.is_empty() {
+                return Err(coded(
+                    ExitCode::NoTrustRecord,
+                    format!(
+                        "no trust established for {} (from remote '{}'); pin this repository's key on this machine with git-veil trust {} or git-veil trust --import <pin-file>",
+                        repo_id, remote_name, repo_id
+                    ),
+                ));
+            }
+            let pinned_ids: Vec<&str> = trust_store
+                .trusted_keys
+                .keys()
+                .map(String::as_str)
+                .collect();
+            return Err(coded(
+                ExitCode::NoTrustRecord,
+                format!(
+                    ".git-veil/trust.json records trust for {} but this repository derives {} (from remote '{}'); this looks like a rename or a remote change based on the repository's existing trust record",
+                    pinned_ids.join(", "),
+                    repo_id,
+                    remote_name
+                ),
+            ));
+        }
     };
 
     // trust.json is committed to the repo and therefore attacker-writable;
