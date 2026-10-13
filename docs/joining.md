@@ -10,8 +10,6 @@ email `newcomer@example.com`, owner key `example@github.com`.
 ## What you need from the team
 
 1. The repository URL (so you can clone).
-2. The **owner's verifying key file** (e.g. `owner.verifying` — the hex
-   Ed25519 public key), via a channel where it cannot be silently swapped.
 
 That is all. The repository ID you print yourself after cloning (step 3).
 Your own age identity you create yourself (step 2) — git-veil generates no
@@ -93,22 +91,7 @@ What just happened: the ID is derived from the remote push URL, not from
 your own email. `trust` re-derives and cross-checks it, so a typo fails
 loudly. Non-`origin` remotes: add `--remote <name>`.
 
-### 4. Pin the owner's key — per machine
-
-```sh
-$ git-veil trust demo+example@github.com owner.verifying
-✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
-✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
-```
-
-What just happened: the verifying key was parsed (it must be a valid
-Ed25519 public key, and the repo id must match the one derived from your
-remote) and its fingerprint was pinned in YOUR `$HOME/.git-veil`, outside
-the repository. Every gated command verifies the keyring signature against
-this pin and fails closed without it (exit code 11). A new clone or
-machine has no pin — run `trust` there again.
-
-### 5. Check who is in the keyring
+### 4. Check who is in the keyring
 
 ```sh
 $ git-veil list-keys

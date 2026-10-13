@@ -155,9 +155,6 @@ $ git-veil show-repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
-$ git-veil trust demo+example@github.com owner.verifying
-✓ Trusted key for demo+example@github.com (fingerprint: …)
-✓ Pinned … for demo+example@github.com on this machine
 ```
 
 Each collaborator, on their machine, creates their own age identity and
@@ -223,7 +220,6 @@ $ git config user.email alice@example.com
 $ git-veil import alice-age-identity.txt      # once per machine
 $ git-veil show-repo-id                        # print the ID trust wants
 Repository ID: demo+example@github.com
-$ git-veil trust demo+example@github.com owner.verifying   # once per machine!
 $ git-veil list-keys
 ✓ Keyring signature verified (signed by pinned trusted key)
 Keys in keyring:

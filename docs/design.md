@@ -75,7 +75,7 @@ Every gated command verifies the keyring signature through
 
 1. reads the fingerprint `trust.json` claims for the repo id;
 2. reads the local pin and **fails closed** on any disagreement:
-   - committed record missing → `no trust established for <repo_id> … run git-veil trust <repo_id> <keyfile>`
+   - committed record missing → `no trust established for <repo_id> … run git-veil trust <repo_id>`
      (exit code 10),
    - pin missing → `no local pin for <repo_id> …` (exit code 11),
    - pin present but different (case-insensitively) from the committed

@@ -26,7 +26,6 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 
 git-veil init
 git-veil import my-age-identity.txt
-git-veil trust demo+example@github.com owner.verifying  # pins the owner key on this machine
 git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
 git-veil add .env && git-veil hide
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
@@ -74,9 +73,6 @@ git commit -m "Add alice to keyring and re-hide"
 git push
 ```
 
-The owner also hands `owner.verifying` to Alice (this is the file `trust` will
-pin). She does **not** need any private key of the owner's.
-
 ## Part 3 — Alice clones and decrypts
 
 ```sh
@@ -89,33 +85,7 @@ Summary: 1 imported, 0 skipped
 ```
 
 She imports only her OWN age identity into her local key store (exit code
-21 tells anyone missing one exactly how to create and back it up). Then
-she pins the owner key — this is per machine and the clone cannot carry
-it:
-
-```sh
-$ git-veil reveal
-Error: no local pin for demo+example@github.com (from remote 'origin'); run git-veil trust demo+example@github.com <keyfile> to pin this repository's key on this machine
-```
-
-(That failure is fail-closed working as designed.) Alice runs it
-with the repo ID she gets from `git-veil show-repo-id` and the `owner.verifying`
-file the owner gave her:
-
-```sh
-$ git-veil show-repo-id
-Repository ID: demo+example@github.com
-...
-$ git-veil trust demo+example@github.com owner.verifying
-✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
-✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
-```
-
-What just happened: `trust` re-derived the repo ID from her remote,
-checked it matches the argument, parsed `owner.verifying` as an Ed25519
-verifying key, and pinned the fingerprint in her `$HOME/.git-veil`. The
-committed `.git-veil/trust.json` is attacker-writable; her local pin is the
-real anchor.
+21 tells anyone missing one exactly how to create and back it up).
 
 Now she can decrypt:
 
@@ -138,9 +108,6 @@ $ git-veil cat .env        # peek to stdout; touches no disk state
   key. Every gated command verifies that signature against the local pin
   before touching anything, so a keyring edited by a non-owner fails
   closed.
-- `trust` is per machine. A collaborator who gets a new laptop runs
-  `trust` again there (they need `owner.verifying` — keep a copy with your
-  onboarding notes, or have the owner re-send it).
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
 - The reveal error `user alice@example.com not found in keyring; check

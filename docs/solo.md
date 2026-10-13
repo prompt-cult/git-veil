@@ -76,22 +76,6 @@ wants (it re-derives it from the remote and refuses a mismatch); `whoami`
 shows which email decrypting commands will use — from
 `git config user.email`, or `--email`.
 
-## 3. Trust your own key
-
-```sh
-$ git-veil trust demo+example@github.com owner.verifying
-✓ Trusted key for demo+example@github.com (fingerprint: 1a2b3c4d…)
-✓ Pinned 1a2b3c4d… for demo+example@github.com on this machine
-```
-
-What just happened: the verifying key was parsed, its fingerprint
-computed, and **pinned on this machine** in `$HOME/.git-veil/trust-pins/`
-— outside the repository, never committed. Every gated command checks the
-keyring signature against this pin first and fails closed without it (see
-`git-veil error-codes`: a missing pin is exit code 11, a mismatch between
-the committed record and your pin is 12). A fresh clone (even yours) has
-no pin until you run `trust` there again.
-
 ## 4. Put yourself in the keyring
 
 ```sh

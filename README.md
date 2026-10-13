@@ -67,7 +67,6 @@ missing key tells you how to make one and back it up instead.
 git-veil init                                   # create .git-veil/ state
 git-veil import my-age-identity.txt             # import your age identity into the local key store
 git-veil show-repo-id                           # print the repository ID
-git-veil trust demo+example@github.com owner.verifying   # pin the signing key
 git-veil tell example@github.com my-age-identity.txt    # add yourself to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add .env                               # track the file (gitignores the plaintext name)
