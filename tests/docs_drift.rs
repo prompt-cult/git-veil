@@ -146,6 +146,241 @@ fn test_no_legacy_fingerprint_code_remains_in_src() {
     );
 }
 
+/// Issue #40: the core and the code speak RFC-standard cryptography only.
+/// The ageisms — age's marketing words for key material: `recipient` for
+/// the bech32 X25519 public key, `identity`/`identities` for the bech32
+/// X25519 private key (docs/design.md, "Terminology") — are forbidden in
+/// src/ outside user-surface string literals. This grep test strips string
+/// and char literals from every src/*.rs (the user surface lives in string
+/// literals, where the bracketed `(age ...)` spanning form is allowed when
+/// advising age tooling) and fails on any remaining case-insensitive,
+/// word-boundary occurrence in code or comments.
+///
+/// The boundary tokens below are masked exactly, and naming them here is
+/// the contract: the upstream `age` crate's own type and trait names
+/// (aliased to the crypto terms at the one import site in
+/// src/age_crypto.rs) and the two on-disk key store file names, which are
+/// format constants documented in docs/design.md.
+#[test]
+fn test_no_ageisms_in_src_outside_string_literals() {
+    const MASKED: &[&str] = &[
+        // The upstream age crate's vocabulary: the one import site and the
+        // two trait casts (src/age_crypto.rs).
+        "Identity as X25519PrivateKey",
+        "Recipient as X25519PublicKey",
+        "age::x25519::Identity",
+        "age::x25519::Recipient",
+        "dyn age::Identity",
+        "dyn age::Recipient",
+        // The on-disk key store file names (format constants).
+        "identities.txt",
+        "recipients.txt",
+    ];
+    const FORBIDDEN: &[&str] = &["recipients", "recipient", "identities", "identity"];
+
+    let mut offenders = Vec::new();
+    let mut stack = vec![repo_root().join("src")];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).expect("read src directory") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let content = fs::read_to_string(&path).expect("read source file");
+                let mut skeleton = strip_string_literals(&content);
+                for token in MASKED {
+                    skeleton = skeleton.replace(token, "MASKED");
+                }
+                for word in FORBIDDEN {
+                    for idx in word_boundary_hits(&skeleton, word) {
+                        let line = skeleton[..idx].matches('\n').count() + 1;
+                        offenders.push(format!("{}:{} contains `{}`", path.display(), line, word));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "ageisms must not appear in src/ outside user-surface string literals: {offenders:?}"
+    );
+}
+
+/// Every index at which `word` occurs in `haystack` on a word boundary
+/// (both neighbours non-identifier), case-insensitively.
+fn word_boundary_hits(haystack: &str, word: &str) -> Vec<usize> {
+    let hay = haystack.to_lowercase();
+    let mut hits = Vec::new();
+    let mut start = 0;
+    while let Some(pos) = hay[start..].find(word) {
+        let idx = start + pos;
+        let before_ok = idx == 0 || !is_ident_byte(hay.as_bytes()[idx - 1]);
+        let after = idx + word.len();
+        let after_ok = after >= hay.len() || !is_ident_byte(hay.as_bytes()[after]);
+        if before_ok && after_ok {
+            hits.push(idx);
+        }
+        start = idx + 1;
+    }
+    hits
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// Replaces the contents of every string and char literal in `src` with
+/// spaces, keeping newlines so line numbers stay meaningful. Handles
+/// regular strings with escapes, raw strings (`r"..."`, `r#"..."#`, ...),
+/// byte strings and byte chars. A `'x'` that is not a char literal (a
+/// lifetime such as `'static`) is left alone.
+fn strip_string_literals(src: &str) -> String {
+    let bytes = src.as_bytes();
+    let mut out: Vec<u8> = bytes.to_vec();
+    let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
+        for b in out.iter_mut().take(to).skip(from) {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    };
+    let mut i = 0;
+    while i < bytes.len() {
+        // Raw string: r"...", r#"...", r##"..."##, ... (also br"..." /
+        // br#"..."# byte raw strings).
+        let raw_start = if bytes[i] == b'r' && i + 1 < bytes.len() && bytes[i + 1] == b'"' {
+            Some((i, 0))
+        } else if bytes[i] == b'r' && i + 1 < bytes.len() && bytes[i + 1] == b'#' {
+            let mut hashes = 0;
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j] == b'#' {
+                hashes += 1;
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b'"' {
+                Some((i, hashes))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some((from, hashes)) = raw_start {
+            let open_quote = from + 1 + hashes;
+            let mut j = open_quote + 1;
+            while j < bytes.len() {
+                if bytes[j] == b'"' {
+                    let mut k = 0;
+                    while k < hashes && j + 1 + k < bytes.len() && bytes[j + 1 + k] == b'#' {
+                        k += 1;
+                    }
+                    if k == hashes {
+                        blank(&mut out, from, j + 1 + hashes);
+                        i = j + 1 + hashes;
+                        break;
+                    }
+                }
+                j += 1;
+            }
+            if j >= bytes.len() {
+                blank(&mut out, from, bytes.len());
+                break;
+            }
+            continue;
+        }
+        // Regular or byte string: "..." or b"..." (escapes included).
+        let str_from = if bytes[i] == b'"'
+            || (bytes[i] == b'b' && i + 1 < bytes.len() && bytes[i + 1] == b'"')
+        {
+            Some(i)
+        } else {
+            None
+        };
+        if let Some(from) = str_from {
+            let mut j = if bytes[from] == b'b' {
+                from + 2
+            } else {
+                from + 1
+            };
+            while j < bytes.len() {
+                match bytes[j] {
+                    b'\\' => j += 2,
+                    b'"' => break,
+                    _ => j += 1,
+                }
+            }
+            let to = (j + 1).min(bytes.len());
+            blank(&mut out, from, to);
+            i = to;
+            continue;
+        }
+        // Char or byte char literal: 'x', '\n', '\'', '\u{...}', b'x'.
+        let char_from = if bytes[i] == b'\''
+            || (bytes[i] == b'b' && i + 1 < bytes.len() && bytes[i + 1] == b'\'')
+        {
+            Some(i)
+        } else {
+            None
+        };
+        if let Some(from) = char_from {
+            let quote = if bytes[from] == b'b' { from + 1 } else { from };
+            // A char literal is a quote, then either an escape sequence or
+            // exactly one character, then the closing quote. Anything else
+            // (e.g. the `'static` lifetime) is not a literal.
+            let mut j = quote + 1;
+            let is_char = if j < bytes.len() && bytes[j] == b'\\' {
+                j += 2; // the escaped character
+                j < bytes.len() && bytes[j] == b'\''
+            } else {
+                j += 1;
+                j < bytes.len() && bytes[j] == b'\''
+            };
+            if is_char {
+                blank(&mut out, from, j + 1);
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    String::from_utf8(out).expect("blanking preserves utf8")
+}
+
+/// Issue #40: docs/design.md carries the prominent crypto → ageisms
+/// mapping table, and AGENTS.md carries the terminology law (the ageisms
+/// definition, the boundary, and the table) as law.
+#[test]
+fn test_terminology_law_is_carried() {
+    let design = fs::read_to_string(repo_root().join("docs/design.md")).unwrap();
+    let agents = fs::read_to_string(repo_root().join("AGENTS.md")).unwrap();
+    for needle in [
+        "ageism",
+        "X25519 public key",
+        "X25519 private key",
+        "principal",
+        "verifying key",
+        "recipient",
+        "identity",
+    ] {
+        assert!(
+            design.contains(needle),
+            "docs/design.md terminology mapping table must mention `{needle}`"
+        );
+        assert!(
+            agents.contains(needle),
+            "AGENTS.md terminology law must mention `{needle}`"
+        );
+    }
+    assert!(
+        design.contains("## Terminology"),
+        "docs/design.md carries the prominent terminology section"
+    );
+    assert!(
+        design.contains("Crypto term (git-veil core and code)"),
+        "docs/design.md carries the mapping table header"
+    );
+}
+
 /// Every subcommand's clap definition carries discussion help — a bare
 /// subcommand with no after_long_help is a docs gap a user hits as an empty
 /// help page.

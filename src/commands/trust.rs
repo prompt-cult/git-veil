@@ -31,19 +31,19 @@ use crate::key_discovery::load_signing_keys;
 use crate::pin_file::load_pin_file;
 use crate::signing::parse_verifying_key;
 use crate::{
-    derive_configured_repo_ids, derive_repo_id, get_remote_push_url, import_recipient_to_store,
-    TrustPinStore, TrustStore,
+    derive_configured_repo_ids, derive_repo_id, get_remote_push_url,
+    import_x25519_public_key_to_store, TrustPinStore, TrustStore,
 };
 
 /// The repository's committed owner verifying key: line 1 is the 64-hex
-/// Ed25519 verifying key; line 2, when present, is the owner's age
-/// recipient string (imported into the key store as a convenience).
+/// Ed25519 verifying key; line 2, when present, is the owner's X25519
+/// public key encoding (imported into the key store as a convenience).
 pub(crate) const OWNER_VERIFYING: &str = "owner.verifying";
 
 /// Reads and parses the repository's committed `owner.verifying`.
 ///
-/// Returns the verifying key, its hex form, and the optional age recipient
-/// from the second line.
+/// Returns the verifying key, its hex form, and the optional X25519 public
+/// key encoding from the second line.
 pub(crate) fn read_owner_verifying(
     repo_root: &Path,
 ) -> Result<(VerifyingKey, String, Option<String>)> {
@@ -69,12 +69,12 @@ pub(crate) fn read_owner_verifying(
             )
         })?;
     let verifying_key = parse_verifying_key(verifying_key_hex)?;
-    let recipient = lines
+    let public_key = lines
         .next()
         .map(str::trim)
         .filter(|s| !s.is_empty() && s.starts_with("age1"))
         .map(String::from);
-    Ok((verifying_key, verifying_key_hex.to_string(), recipient))
+    Ok((verifying_key, verifying_key_hex.to_string(), public_key))
 }
 
 /// The possession proof: the signing key store must hold a seed whose
@@ -178,11 +178,11 @@ fn write_pin_state(
     repo_id: &str,
     verifying_key: &VerifyingKey,
     verifying_key_hex: &str,
-    recipient: Option<String>,
+    public_key: Option<String>,
     record_owner_fingerprint: bool,
 ) -> Result<()> {
-    if let Some(recipient_str) = recipient {
-        import_recipient_to_store(key_store, &recipient_str)?;
+    if let Some(public_key_str) = public_key {
+        import_x25519_public_key_to_store(key_store, &public_key_str)?;
     }
 
     append_verifying_key_to_store(key_store, verifying_key_hex)?;
@@ -265,7 +265,7 @@ pub fn cmd_trust(
     // The candidate is the repository's committed owner.verifying — never
     // an argument. The proof: a seed in the signing key store derives to
     // exactly this key.
-    let (verifying_key, verifying_key_hex, recipient) = read_owner_verifying(repo_root)?;
+    let (verifying_key, verifying_key_hex, public_key) = read_owner_verifying(repo_root)?;
     prove_possession(key_store, &verifying_key)?;
 
     write_pin_state(
@@ -274,7 +274,7 @@ pub fn cmd_trust(
         repo_id,
         &verifying_key,
         &verifying_key_hex,
-        recipient,
+        public_key,
         true,
     )?;
     codeowners_notice(repo_root, key_store, repo_id, suppress_codeowners)
@@ -308,7 +308,7 @@ pub fn cmd_trust_import(
 
     // Check (b): the pin-file's verifying key exactly matches the
     // repository's committed owner.verifying.
-    let (committed_key, verifying_key_hex, recipient) = read_owner_verifying(repo_root)?;
+    let (committed_key, verifying_key_hex, public_key) = read_owner_verifying(repo_root)?;
     if pin_file.verifying_key != committed_key {
         return Err(coded(
             ExitCode::Refused,
@@ -368,7 +368,7 @@ pub fn cmd_trust_import(
         &repo_id,
         &pin_file.verifying_key,
         &verifying_key_hex,
-        recipient,
+        public_key,
         false,
     )?;
     codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners)

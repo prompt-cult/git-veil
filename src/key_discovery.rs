@@ -11,7 +11,9 @@ use ed25519_dalek::SigningKey;
 use std::fs;
 use std::path::Path;
 
-use crate::age_crypto::{find_identity_by_recipient, for_each_store_line};
+use crate::age_crypto::{
+    find_x25519_private_key_by_public_key, for_each_store_line, X25519PrivateKey,
+};
 use crate::exit_codes::{coded, exit_code_of, ExitCode};
 use crate::fingerprint::fingerprint_for_public_key;
 use crate::signing::parse_signing_key;
@@ -132,25 +134,29 @@ pub fn discover_signing_key_explicit(
     }
 }
 
-/// Finds the age identity for `recipient_str` in the key store, exiting
-/// with code 21 and the creation recipe when it is absent.
+/// Finds the X25519 private key whose public key encoding is
+/// `public_key_str` in the key store, exiting with code 21 and the
+/// creation recipe when it is absent.
 ///
-/// A corrupt identities.txt is NOT reported as a missing identity: the
+/// A corrupt identities.txt is NOT reported as a missing private key: the
 /// store loader's coded refusal (code 62, naming the corrupt line) passes
 /// through unchanged.
-pub fn discover_identity(key_store: &Path, recipient_str: &str) -> Result<age::x25519::Identity> {
-    find_identity_by_recipient(key_store, recipient_str).map_err(|err| {
+pub fn discover_x25519_private_key(
+    key_store: &Path,
+    public_key_str: &str,
+) -> Result<X25519PrivateKey> {
+    find_x25519_private_key_by_public_key(key_store, public_key_str).map_err(|err| {
         if exit_code_of(&err) != ExitCode::GeneralError as i32 {
             // A specific failure (e.g. a corrupt store line) keeps its code
             return err;
         }
         coded(
-            ExitCode::NoAgeIdentity,
-            "no age identity in the key store matches your keyring entry. git-veil never \
-             generates keys. An identity the tool made would be one you never backed up. \
-             Create your own age identity and back it up, then import it. See the key \
-             creation documentation. Without a backup of your age secret, anything encrypted \
-             to you is unrecoverable."
+            ExitCode::NoX25519PrivateKey,
+            "no X25519 private key in the key store matches your keyring entry. git-veil never \
+             generates keys. A key the tool made would be one you never backed up. \
+             Create your own X25519 private key (age identity) and back it up, then import it. \
+             See the key creation documentation. Without a backup of your X25519 private key, \
+             anything encrypted to you is unrecoverable."
                 .to_string(),
         )
     })

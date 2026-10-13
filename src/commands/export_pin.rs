@@ -25,7 +25,7 @@ pub fn cmd_export_pin(
     derive_and_check_repo_id(repo_root, remote_name, repo_id)?;
 
     // Same possession proof as trust: no matching seed, no export.
-    let (verifying_key, _hex, _recipient) = read_owner_verifying(repo_root)?;
+    let (verifying_key, _hex, _public_key) = read_owner_verifying(repo_root)?;
     prove_possession(key_store, &verifying_key)?;
 
     // The pin-file must not land inside the repository: it would be

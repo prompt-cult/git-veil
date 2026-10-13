@@ -21,11 +21,11 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Decrypts every tracked file back to its plaintext path, using your age
-identity from the local key store. The keyring signature is verified
-against the pinned trusted key before any decryption. Your identity comes
-from git config user.email or \-\-email; a missing identity exits with code
-21 and the create\-and\-back\-up recipe.
+Decrypts every tracked file back to its plaintext path, using your X25519
+private key from the local key store. The keyring signature is verified
+against the pinned trusted key before any decryption. Your principal
+comes from git config user.email or \-\-email; a missing private key exits
+with code 21 and the create\-and\-back\-up recipe.
 
 reveal is the inverse of hide for all files; unhide does one file;
 cat prints one file without touching disk state.

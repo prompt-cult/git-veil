@@ -15,8 +15,8 @@ email `newcomer@example.com`, owner key `example@github.com`.
    you OUT OF BAND (e.g. over ssh) — never committed to the repository.
 
 That is all. The repository ID you print yourself after cloning (step 3).
-Your own age identity you create yourself (step 2) — git-veil generates no
-keys, and a key it made would be a key you never backed up.
+Your own X25519 private key you create yourself (step 2) — git-veil
+generates no keys, and a key it made would be a key you never backed up.
 
 ## What the owner must do FIRST (not you)
 
@@ -33,11 +33,12 @@ $ git-veil tell newcomer@example.com newcomer.pub
 ✓ Added newcomer@example.com to keyring
 ```
 
-(You send them your recipient string first: create an age identity as in
-step 1 of [docs/solo.md](solo.md) with any key generator — git-veil has
-**no** key generation — import it with `git-veil import
-newcomer-age-identity.txt`, and send the `age1...` recipient line it
-printed, or `git-veil export age1... --output newcomer.pub`.)
+(You send them your X25519 public key first: create an X25519 private key
+(age identity) as in step 1 of [docs/solo.md](solo.md) with any key
+generator — git-veil has **no** key generation — import it with
+`git-veil import newcomer-age-identity.txt`, and send the `age1...`
+public key line it printed, or `git-veil export age1... --output
+newcomer.pub`.)
 
 The owner then transfers `/tmp/demo.pin` to you out of band (e.g.
 `scp`), and reads you the printed **owner key fingerprint** —
@@ -46,7 +47,7 @@ recorded in the repository's committed `.git-veil/trust.json` before you
 import (step 4).
 
 Then — critical — the owner re-hides, because files hidden before you were
-told do not have you as a recipient:
+told were not encrypted to your key:
 
 ```sh
 $ git-veil reveal
@@ -61,11 +62,11 @@ $ git push
 ```
 
 If the owner skips the re-hide, your reveal later fails with
-`decryption failed: this ciphertext was not encrypted to your key …`.
+`decryption failed. This ciphertext was not encrypted to your key …`.
 
 ## What YOU run
 
-### 1. Clone and set your git identity
+### 1. Clone and set your principal
 
 ```sh
 $ git clone git@github.com:example/demo.git
@@ -74,10 +75,10 @@ $ git config user.email newcomer@example.com
 ```
 
 What just happened: you cloned ciphertext plus `.git-veil/` (keyring,
-trust.json, tracked.json). Decrypting commands resolve your identity from
-`git config user.email` — or pass `--email` explicitly.
+trust.json, tracked.json). Decrypting commands resolve your principal
+from `git config user.email` — or pass `--email` explicitly.
 
-### 2. Import your own age identity
+### 2. Import your own X25519 private key
 
 ```sh
 $ git-veil import newcomer-age-identity.txt
@@ -85,13 +86,14 @@ $ git-veil import newcomer-age-identity.txt
 Summary: 1 imported, 0 skipped
 ```
 
-What just happened: your age identity (the `AGE-SECRET-KEY-1...` line)
-sits in the per-machine key store `$HOME/.git-veil/identities.txt` (never
-committed, mode 0600). Import ONLY your own key; the owner's public half
-arrives with the clone as the committed `owner.verifying` file — the
-pin-file from the team (step 4) is what lets you pin it. If you have not
-created an identity yet, exit code 21 prints the `age-keygen` recipe —
-and back the identity up; without it the ciphertexts are unrecoverable.
+What just happened: your X25519 private key (the `AGE-SECRET-KEY-1...`
+line) sits in the per-machine key store `$HOME/.git-veil/identities.txt`
+(never committed, mode 0600). Import ONLY your own key; the owner's
+public half arrives with the clone as the committed `owner.verifying`
+file — the pin-file from the team (step 4) is what lets you pin it. If
+you have not created a private key yet, exit code 21 prints the
+`age-keygen` recipe — and back the private key up; without it the
+ciphertexts are unrecoverable.
 
 ### 3. Print the repository ID
 
@@ -166,17 +168,19 @@ meet as a newcomer:
 
 - `no trust pin exists on this machine for repository identity … derived
   from remote …. See the trust documentation.` (exit code 11) — you have
-  not pinned this repository (the message names its derived identity and
-  the remote it came from) on this machine: import the owner's pin-file
-  (step 4).
-- `user not found in the keyring. Check the identity, or ask the owner to
-  add it` (exit code 22) — the owner has not run `tell` (or has not pushed
-  the updated keyring; `git pull` first).
+  not pinned this repository (the message names its derived repository
+  identity and the remote it came from) on this machine: import the
+  owner's pin-file (step 4).
+- `user not found in the keyring. Check the principal, or ask the owner
+  to add it` (exit code 22) — the owner has not run `tell` (or has not
+  pushed the updated keyring; `git pull` first).
 - `decryption failed. This ciphertext was not encrypted to your key and
-  you are not a listed recipient` (exit code 60) — the owner told you but
-  did not re-`hide` (or you are on an old commit; `git pull`).
-- `no age identity …` (exit code 21) — your key store lacks your identity;
-  the message prints the creation and backup recipe. Redo step 2.
+  no stanza in it is addressed to your X25519 public key` (exit code 60)
+  — the owner told you but did not re-`hide` (or you are on an old
+  commit; `git pull`).
+- `no X25519 private key …` (exit code 21) — your key store lacks your
+  private key; the message prints the creation and backup recipe. Redo
+  step 2.
 
 ## Daily use
 

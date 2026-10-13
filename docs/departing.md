@@ -11,8 +11,9 @@ rely on them:
   reference `age` CLI, forever. Removing him changes nothing about the bytes
   already on disk or already in git history.
 - Only a fresh `git-veil hide` of every file produces new ciphertext
-  without bob as a recipient — and even then, **git history still contains
-  every old ciphertext**. Old commits stay decryptable by bob indefinitely.
+  that is not encrypted to bob's key — and even then, **git history still
+  contains every old ciphertext**. Old commits stay decryptable by bob
+  indefinitely.
 - Therefore: if bob ever saw (or could have decrypted) a secret, treat that
   secret as compromised and **rotate it**. Revocation here is bookkeeping,
   not cryptography.
@@ -58,9 +59,9 @@ measure.
 rm -rf ~/work/demo                 # wipe his clone (ciphertext + .git-veil/)
 ```
 
-And his local key store, `$HOME/.git-veil`, holds his PRIVATE age
-identity. He removes it from that store with `removekey`, selected by his
-exact recipient string. The identity is usually the only one in his
+And his local key store, `$HOME/.git-veil`, holds his PRIVATE X25519 key.
+He removes it from that store with `removekey`, selected by his exact
+public key encoding. The private key is usually the only one in his
 store, so `--yes` confirms its removal:
 
 ```sh
@@ -69,8 +70,8 @@ git-veil removekey age1... --yes
 
 This is destructive and local-only: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. If removekey
-refuses (a corrupt store is never deleted; a recipient string matching
-several keys must be disambiguated), the fallback is the same as ever:
+refuses (a corrupt store is never deleted; a public key matching several
+store lines must be disambiguated), the fallback is the same as ever:
 edit the matching line out of `identities.txt` (and `recipients.txt`) by
 hand, or delete the file if it holds nothing else he needs.
 
@@ -103,9 +104,9 @@ member can still decrypt the fresh ciphertext.
 ## 4. Demonstrating (to yourself) why revocation is forward-looking
 
 This was verified against the real binary and the reference age CLI: a
-removed collaborator, holding only what he already had (his age identity
-plus an old ciphertext copied out of git history), decrypts it with plain
-`age`:
+removed collaborator, holding only what he already had (his X25519
+private key plus an old ciphertext copied out of git history), decrypts
+it with plain `age`:
 
 ```sh
 $ git show 5833055:.env.secret > old.env.secret   # any pre-removal commit
@@ -119,7 +120,7 @@ Meanwhile, bob pulling the updated repo finds the tool shuts him out:
 $ git-veil reveal
 ✓ Keyring signature verified
 ...
-Error: user bob@example.com not found in keyring; check --email, or ask the owner to add you with git-veil tell
+Error: user not found in the keyring. Check the principal, or ask the owner to add it
 ```
 
 Both facts at once are the whole story: the tool refuses him on NEW
@@ -131,5 +132,5 @@ keyrings, but no software can un-ring old ciphertext in his possession.
 - [ ] Owner: `reveal` then `hide`, commit `.git-veil/keyring` + re-hidden `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
-- [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up age identity
+- [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up X25519 private key
 - [ ] Optional: rewrite history (`git filter-repo`) and force-push if the ciphertext bytes themselves must vanish

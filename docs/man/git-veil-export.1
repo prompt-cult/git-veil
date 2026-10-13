@@ -2,15 +2,15 @@
 .el .ds Aq '
 .TH git-veil-export 1  "git-veil-export " 
 .SH NAME
-git\-veil\-export \- Export a public key (recipient string) from the local key store
+git\-veil\-export \- Export an X25519 public key from the local key store
 .SH SYNOPSIS
 \fBgit\-veil export\fR [\fB\-\-output\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
-Export a public key (recipient string) from the local key store
+Export an X25519 public key from the local key store
 .SH OPTIONS
 .TP
 \fB\-\-output\fR \fI<OUTPUT>\fR
-Write the recipient string to this file instead of stdout
+Write the public key encoding to this file instead of stdout
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
@@ -19,22 +19,23 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIIDENTIFIER\fR>
-Recipient string (age1...) of the key to export
+X25519 public key encoding (age1...) of the key to export
 .SH EXTRA
-Prints — or with \-\-output writes — the public key (age recipient string,
-age1...) for the given recipient, read from the local key store on this
-machine ($GIT_VEIL_HOME or $HOME/.git\-veil). This is the key handoff
-between collaborators without any external tool: the local store only
-holds keys THIS machine knows about (your imported identity and any
-recipient trust has pinned), so each collaborator runs export on their OWN
-machine and sends the recipient string to the owner, who adds it to the
-keyring with tell. It cannot export a collaborator\*(Aqs key for them.
+Prints — or with \-\-output writes — the X25519 public key (age
+recipient), bech32\-encoded (age1...), for the given key, read from the
+local key store on this machine ($GIT_VEIL_HOME or $HOME/.git\-veil). This
+is the key handoff between collaborators without any external tool: the
+local store only holds keys THIS machine knows about (your imported
+private key and any public key trust has pinned), so each collaborator
+runs export on their OWN machine and sends the public key encoding to the
+owner, who adds it to the keyring with tell. It cannot export a
+collaborator\*(Aqs key for them.
 
 The output never contains private key material — even when the match is
-your imported identity, export always emits the public recipient half.
+your imported private key, export always emits the public half.
 
-Matching is exact: the identifier is the key\*(Aqs recipient string. Keys are
-selected by public key string only; no fingerprint\-as\-identifier mode
+Matching is exact: the identifier is the key\*(Aqs public key encoding. Keys
+are selected by public key string only; no fingerprint\-as\-identifier mode
 remains.
 export does not touch the repository and needs no init or trust state.
 

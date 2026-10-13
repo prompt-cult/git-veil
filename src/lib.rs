@@ -21,10 +21,12 @@ mod tracked_files;
 mod trust_store;
 
 pub use age_crypto::{
-    decrypt_with_identity, default_key_store, encrypt_to_recipient, encrypt_to_recipients,
-    find_identity_by_recipient, generate_identity, import_identity_to_store,
-    import_recipient_to_store, load_identities_from_store, load_recipients_from_store,
-    parse_identity, parse_recipient, recipient_from_identity,
+    decrypt_with_x25519_private_key, default_key_store, encrypt_to_x25519_public_key,
+    encrypt_to_x25519_public_keys, find_x25519_private_key_by_public_key,
+    generate_x25519_private_key, import_x25519_private_key_to_store,
+    import_x25519_public_key_to_store, load_x25519_private_keys_from_store,
+    load_x25519_public_keys_from_store, parse_x25519_private_key, parse_x25519_public_key,
+    x25519_public_key_encoding,
 };
 pub use codeowners::{
     covers_trust_critical_paths, find as find_codeowners, is_suppressed as codeowners_suppressed,
@@ -62,7 +64,8 @@ pub use happen_before::{
 };
 pub use intent::LocalAdds;
 pub use key_discovery::{
-    discover_identity, discover_signing_key, discover_signing_key_explicit, load_signing_keys,
+    discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key,
+    load_signing_keys,
 };
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};
 pub use permissions::{

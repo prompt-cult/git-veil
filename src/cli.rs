@@ -55,19 +55,20 @@ EXAMPLES
         quiet: bool,
     },
 
-    /// Import your age identity (private key) into the git-veil key store
+    /// Import your X25519 private key into the git-veil key store
     #[command(after_long_help = "\
-Imports age identity strings (AGE-SECRET-KEY-1... lines) into your
-per-machine key store ($GIT_VEIL_HOME or $HOME/.git-veil). This is where
-reveal/cat/unhide/changes find the identity matching your email. The key
-store is local to this machine and is never committed; each collaborator
-imports their own identity. The store is written mode 0600 regardless of
-umask. git-veil never generates keys — create yours with age-keygen (or
-rage-keygen) and back the AGE-SECRET-KEY-1... line up; without it,
+Imports X25519 private keys (age identities — the AGE-SECRET-KEY-1...
+lines produced by age-keygen) into your per-machine key store
+($GIT_VEIL_HOME or $HOME/.git-veil). This is where reveal/cat/unhide/
+changes find the private key matching your keyring entry. The key store
+is local to this machine and is never committed; each collaborator
+imports their own private key. The store is written mode 0600 regardless
+of umask. git-veil never generates keys — create yours with age-keygen
+(or rage-keygen) and back the AGE-SECRET-KEY-1... line up; without it,
 ciphertexts encrypted to you are unrecoverable.
 
-Identities whose recipient is already present in the key store are not
-duplicated.
+A private key whose X25519 public key is already present in the key store
+is not duplicated.
 
 EXAMPLES
   $ age-keygen -o my-age-identity.txt      # create + print the recipe
@@ -83,22 +84,23 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Export a public key (recipient string) from the local key store
+    /// Export an X25519 public key from the local key store
     #[command(after_long_help = "\
-Prints — or with --output writes — the public key (age recipient string,
-age1...) for the given recipient, read from the local key store on this
-machine ($GIT_VEIL_HOME or $HOME/.git-veil). This is the key handoff
-between collaborators without any external tool: the local store only
-holds keys THIS machine knows about (your imported identity and any
-recipient trust has pinned), so each collaborator runs export on their OWN
-machine and sends the recipient string to the owner, who adds it to the
-keyring with tell. It cannot export a collaborator's key for them.
+Prints — or with --output writes — the X25519 public key (age
+recipient), bech32-encoded (age1...), for the given key, read from the
+local key store on this machine ($GIT_VEIL_HOME or $HOME/.git-veil). This
+is the key handoff between collaborators without any external tool: the
+local store only holds keys THIS machine knows about (your imported
+private key and any public key trust has pinned), so each collaborator
+runs export on their OWN machine and sends the public key encoding to the
+owner, who adds it to the keyring with tell. It cannot export a
+collaborator's key for them.
 
 The output never contains private key material — even when the match is
-your imported identity, export always emits the public recipient half.
+your imported private key, export always emits the public half.
 
-Matching is exact: the identifier is the key's recipient string. Keys are
-selected by public key string only; no fingerprint-as-identifier mode
+Matching is exact: the identifier is the key's public key encoding. Keys
+are selected by public key string only; no fingerprint-as-identifier mode
 remains.
 export does not touch the repository and needs no init or trust state.
 
@@ -107,9 +109,9 @@ EXAMPLES
   $ git-veil export age1axmf... --output alice.pub  # hand-off file
 ")]
     Export {
-        /// Recipient string (age1...) of the key to export
+        /// X25519 public key encoding (age1...) of the key to export
         identifier: String,
-        /// Write the recipient string to this file instead of stdout
+        /// Write the public key encoding to this file instead of stdout
         #[arg(long)]
         output: Option<PathBuf>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
@@ -117,39 +119,40 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Remove an age identity from the local key store (destructive, local-only)
+    /// Remove a key from the local key store (destructive, local-only)
     #[command(name = "removekey")]
     #[command(after_long_help = "\
-Drops key material from the LOCAL key store: every identity in
-$GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt and every recipient in
-recipients.txt whose recipient string exactly matches the identifier is
-removed. Keys are selected by public key string only; no
-fingerprint-as-identifier mode remains.
+Drops key material from the LOCAL key store: every X25519 private key in
+$GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt and every X25519
+public key in recipients.txt whose public key encoding exactly matches
+the identifier is removed. Keys are selected by public key string only;
+no fingerprint-as-identifier mode remains.
 
 This is destructive and LOCAL-ONLY: it does not touch any repository,
-keyring or trust state, and it does NOT revoke anything. Removing an
-identity from the store does not stop old ciphertext that was encrypted
-to it from being decryptable by whoever holds it. Revoking a departing
-collaborator is removeperson + re-hide (docs/departing.md); removekey is
-the departing user's housekeeping step for their own machine's store.
+keyring or trust state, and it does NOT revoke anything. Removing a
+private key from the store does not stop old ciphertext that was
+encrypted to it from being decryptable by whoever holds it. Revoking a
+departing collaborator is removeperson + re-hide (docs/departing.md);
+removekey is the departing user's housekeeping step for their own
+machine's store.
 
-Danger guard: if the target identity is the only one in identities.txt,
-removekey refuses without --yes — this is your only identity, and without
-it you cannot decrypt anything.
+Danger guard: if the target private key is the only one in
+identities.txt, removekey refuses without --yes — this is your only
+private key, and without it you cannot decrypt anything.
 
 The store rewrite is atomic and lossless for the retained lines. A
 corrupt (e.g. truncated) store is refused untouched — the error names the
 file, the line number, and the corrupt line so you can delete exactly it;
 removekey never rewrites a store it could not fully parse. On success a
-per-store summary prints the recipient strings removed.
+per-store summary prints the public key encodings removed.
 
 EXAMPLES
-  $ git-veil removekey age1axmf...                 # exact recipient string
-  $ git-veil removekey age1axmf... --yes           # confirm only-identity removal
+  $ git-veil removekey age1axmf...                 # exact public key encoding
+  $ git-veil removekey age1axmf... --yes           # confirm only-private-key removal
   $ git-veil removekey age1axmf... --key-store /path/to/store
 ")]
     RemoveKey {
-        /// Exact recipient string (age1...) of the key to remove
+        /// Exact X25519 public key encoding (age1...) of the key to remove
         identifier: String,
         /// Confirm destructive removal: required when the target is the only
         /// private key in the store.
@@ -298,9 +301,9 @@ EXAMPLES
         public_key: String,
     },
 
-    /// Add a collaborator's age recipient key to the keyring and re-sign it
+    /// Add a collaborator's X25519 public key to the keyring and re-sign it
     #[command(after_long_help = "\
-Adds a collaborator's age recipient key to the repository keyring and
+Adds a collaborator's X25519 public key to the repository keyring and
 re-signs the keyring with the owner's Ed25519 signing key. The existing
 keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test-encrypted to the new key so a key that
@@ -324,7 +327,7 @@ EXAMPLES
     Tell {
         /// Collaborator's email
         email: String,
-        /// Path to file containing the collaborator's age recipient string (age1...)
+        /// Path to a file containing the collaborator's X25519 public key encoding (age1...)
         public_key: String,
         /// Git remote name
         #[arg(long, default_value = "origin")]
@@ -447,7 +450,7 @@ a fresh clone carrying only ciphertext stays decryptable by every
 keyring member via reveal.
 
 hide is TWO-PHASE and ALL-OR-NOTHING: phase 1 reads and validates every
-tracked plaintext and encrypts EVERY file to the full recipient set in
+tracked plaintext and encrypts EVERY file to the full public key set in
 memory — if any plaintext is missing, unreadable or cannot be encrypted,
 hide aborts having changed NOTHING on disk. Phase 2 (only after every
 encryption succeeded) writes each .secret atomically.
@@ -488,11 +491,11 @@ EXAMPLES
 
     /// Decrypt all tracked files back to plaintext
     #[command(after_long_help = "\
-Decrypts every tracked file back to its plaintext path, using your age
-identity from the local key store. The keyring signature is verified
-against the pinned trusted key before any decryption. Your identity comes
-from git config user.email or --email; a missing identity exits with code
-21 and the create-and-back-up recipe.
+Decrypts every tracked file back to its plaintext path, using your X25519
+private key from the local key store. The keyring signature is verified
+against the pinned trusted key before any decryption. Your principal
+comes from git config user.email or --email; a missing private key exits
+with code 21 and the create-and-back-up recipe.
 
 reveal is the inverse of hide for all files; unhide does one file;
 cat prints one file without touching disk state.
@@ -614,12 +617,12 @@ EXAMPLES
         remote: String,
     },
 
-    /// Show the identity git-veil will use for you
+    /// Show the principal git-veil will use for you
     #[command(after_long_help = "\
-Prints the identity git-veil will use for you: git config user.email, or
+Prints the principal git-veil will use for you: git config user.email, or
 the --email override. The principal label is committed in the public
-keyring, so naming it leaks nothing. Use it to check which key
-reveal/cat/unhide will look up before they fail on a missing identity.
+keyring, so naming it leaks nothing. Use it to check which keyring entry
+reveal/cat/unhide will look up before they fail on a missing private key.
 
 EXAMPLES
   $ git-veil whoami

@@ -145,15 +145,15 @@ commit or stash first.
 
 Full walkthroughs live in [docs/solo.md](solo.md) (one person) and
 [docs/two-collaborators.md](two-collaborators.md) (owner + collaborators);
-this is the shape. You need an age identity per person (created with
-`age-keygen` or `rage-keygen`) and, for the owner, an Ed25519 signing key
-(`openssl`) — git-veil generates no keys.
+this is the shape. You need an X25519 private key (age identity) per
+person (created with `age-keygen` or `rage-keygen`) and, for the owner,
+an Ed25519 signing key (`openssl`) — git-veil generates no keys.
 
 On the owner's machine:
 
 ```sh
 git-veil init                                # create .git-veil/ state
-git-veil import my-age-identity.txt          # owner's age identity into the local key store
+git-veil import my-age-identity.txt          # owner's X25519 private key into the local key store
 git-veil show-repo-id                        # print the repository ID, e.g. demo+example@github.com
 git-veil trust demo+example@github.com        # possession proof: pin the owner key
 git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
@@ -161,7 +161,7 @@ git-veil tell alice@example.com alice-age-identity.txt  # once per collaborator
 ```
 
 What just happened: `.git-veil/` now holds a signed keyring of
-collaborator recipient keys, the tracked-file list and trust state. `trust`
+collaborator public keys, the tracked-file list and trust state. `trust`
 is **per machine** — every collaborator re-runs it on their own clone
 after step 6's clone; the pin lives in `$HOME/.git-veil`, never in the
 repository. This replaces git-crypt's model of delegating trust to your
@@ -197,7 +197,7 @@ hire will experience):
 ```sh
 git clone git@github.com:example/demo.git && cd demo
 git config user.email alice@example.com
-git-veil import alice-age-identity.txt     # their OWN age identity only
+git-veil import alice-age-identity.txt     # their OWN X25519 private key only
 git-veil show-repo-id
 git-veil trust --import ~/demo.pin         # pin-file exported by the owner, out of band
 git-veil verify-keyring                    # exit 0 = signature matches the pin
@@ -227,7 +227,7 @@ belong in circulation.
 | `git-crypt lock [--force]` | `git-veil hide` | Semantics differ, see below. |
 | `git-crypt status` (`-e`) | `git-veil list` + `git-veil changes` | `list` shows the tracked set (no on-disk state check); `changes` reports where plaintext drifted from the last hidden version. |
 | `git-crypt export-key FILE` | deliberately no equivalent | git-crypt exports the repo-wide **symmetric** key for out-of-band sharing. git-veil has no shared symmetric key to export; `git-veil export` exports a collaborator's **public** key — different purpose entirely. |
-| `git-crypt unlock KEYFILE` (symmetric mode) | deliberately no equivalent | git-veil always decrypts with your age identity from the local key store; there is no shared-key fast path. |
+| `git-crypt unlock KEYFILE` (symmetric mode) | deliberately no equivalent | git-veil always decrypts with your X25519 private key from the local key store; there is no shared-key fast path. |
 | `git-crypt migrate-key` | deliberately no equivalent | Migrates a shared symmetric key; git-veil has no shared symmetric key. |
 | Key rotation / off-boarding | `git-veil removeperson` + re-`hide` | git-crypt explicitly supports neither ("no del-gpg-user command… no support for rotating the key" — [README](https://github.com/AGWA/git-crypt/blob/master/README.md)); git-veil's forward-looking procedure and its honest history limits are in [docs/departing.md](departing.md). |
 | `diff=git-crypt` transparent plaintext diffs | deliberately no equivalent; `git-veil changes` | No smudge/clean filter exists, so git and forges see `.secret` ciphertext, never plaintext diffs. `changes` diffs your on-disk plaintext against the last hidden version, locally. |

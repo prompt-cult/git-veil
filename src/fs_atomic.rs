@@ -5,7 +5,7 @@
 //! restored plaintext) goes through [`write_atomic`]. A plain
 //! `fs::write` truncates the target in place, so a crash mid-write
 //! leaves half-written state — for a secrets tool the worst case is a
-//! torn identity store (bricks ALL decryption access, fail-closed)
+//! torn private key store (bricks ALL decryption access, fail-closed)
 //! or a torn plaintext/ciphertext pair (data loss). The write-temp-then-
 //! rename sequence below is atomic on POSIX and Windows same-volume, so
 //! the target is always either the old content or the new content,

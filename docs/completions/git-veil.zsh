@@ -49,12 +49,12 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
-'--output=[Write the recipient string to this file instead of stdout]:OUTPUT:_files' \
+'--output=[Write the public key encoding to this file instead of stdout]:OUTPUT:_files' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Recipient string (age1...) of the key to export:_default' \
+':identifier -- X25519 public key encoding (age1...) of the key to export:_default' \
 && ret=0
 ;;
 (removekey)
@@ -64,7 +64,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Exact recipient string (age1...) of the key to remove:_default' \
+':identifier -- Exact X25519 public key encoding (age1...) of the key to remove:_default' \
 && ret=0
 ;;
 (trust)
@@ -108,7 +108,7 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Collaborator'\''s email:_default' \
-':public_key -- Path to file containing the collaborator'\''s age recipient string (age1...):_default' \
+':public_key -- Path to a file containing the collaborator'\''s X25519 public key encoding (age1...):_default' \
 && ret=0
 ;;
 (removeperson)
@@ -407,13 +407,13 @@ esac
 _git-veil_commands() {
     local commands; commands=(
 'init:Initialize git-veil state (.git-veil/) in the current repository' \
-'import:Import your age identity (private key) into the git-veil key store' \
-'export:Export a public key (recipient string) from the local key store' \
-'removekey:Remove an age identity from the local key store (destructive, local-only)' \
+'import:Import your X25519 private key into the git-veil key store' \
+'export:Export an X25519 public key from the local key store' \
+'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
-'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
+'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
@@ -424,7 +424,7 @@ _git-veil_commands() {
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity git-veil will use for you' \
+'whoami:Show the principal git-veil will use for you' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \
@@ -485,13 +485,13 @@ _git-veil__subcmd__fingerprint_commands() {
 _git-veil__subcmd__help_commands() {
     local commands; commands=(
 'init:Initialize git-veil state (.git-veil/) in the current repository' \
-'import:Import your age identity (private key) into the git-veil key store' \
-'export:Export a public key (recipient string) from the local key store' \
-'removekey:Remove an age identity from the local key store (destructive, local-only)' \
+'import:Import your X25519 private key into the git-veil key store' \
+'export:Export an X25519 public key from the local key store' \
+'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
-'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
+'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
@@ -502,7 +502,7 @@ _git-veil__subcmd__help_commands() {
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity git-veil will use for you' \
+'whoami:Show the principal git-veil will use for you' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \

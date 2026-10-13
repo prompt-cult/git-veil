@@ -29,10 +29,10 @@ pub enum ExitCode {
     KeyringRollback = 14,
     /// No Ed25519 signing key in the key store.
     NoSigningKey = 20,
-    /// No age identity in the key store matching your keyring entry.
-    NoAgeIdentity = 21,
-    /// Your email is not in the signed keyring.
-    IdentityNotInKeyring = 22,
+    /// No X25519 private key in the key store matching your keyring entry.
+    NoX25519PrivateKey = 21,
+    /// Your principal is not in the signed keyring.
+    PrincipalNotInKeyring = 22,
     /// Key store directory or private key file is group/world accessible.
     UnsafeKeyStorePermissions = 30,
     /// A `.secret` ciphertext path is git-ignored (fatal in `hide`).
@@ -43,7 +43,7 @@ pub enum ExitCode {
     OrphanedCiphertext = 42,
     /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
     PlaintextTracked = 43,
-    /// Ciphertext could not be decrypted with the local identity.
+    /// Ciphertext could not be decrypted with the local private key.
     DecryptionFailed = 60,
     /// Encryption failed.
     EncryptionFailed = 61,
@@ -69,8 +69,8 @@ impl ExitCode {
         ExitCode::TrustRepoIdMismatch,
         ExitCode::KeyringRollback,
         ExitCode::NoSigningKey,
-        ExitCode::NoAgeIdentity,
-        ExitCode::IdentityNotInKeyring,
+        ExitCode::NoX25519PrivateKey,
+        ExitCode::PrincipalNotInKeyring,
         ExitCode::UnsafeKeyStorePermissions,
         ExitCode::CiphertextIgnored,
         ExitCode::PlaintextNotIgnored,
@@ -95,8 +95,8 @@ impl ExitCode {
             ExitCode::TrustRepoIdMismatch => "TrustRepoIdMismatch",
             ExitCode::KeyringRollback => "KeyringRollback",
             ExitCode::NoSigningKey => "NoSigningKey",
-            ExitCode::NoAgeIdentity => "NoAgeIdentity",
-            ExitCode::IdentityNotInKeyring => "IdentityNotInKeyring",
+            ExitCode::NoX25519PrivateKey => "NoX25519PrivateKey",
+            ExitCode::PrincipalNotInKeyring => "PrincipalNotInKeyring",
             ExitCode::UnsafeKeyStorePermissions => "UnsafeKeyStorePermissions",
             ExitCode::CiphertextIgnored => "CiphertextIgnored",
             ExitCode::PlaintextNotIgnored => "PlaintextNotIgnored",
@@ -124,10 +124,10 @@ impl ExitCode {
             }
             ExitCode::KeyringRollback => "Keyring version is below this machine freshness baseline",
             ExitCode::NoSigningKey => "No Ed25519 signing key in the key store",
-            ExitCode::NoAgeIdentity => {
-                "No age identity in the key store matching your keyring entry"
+            ExitCode::NoX25519PrivateKey => {
+                "No X25519 private key in the key store matching your keyring entry"
             }
-            ExitCode::IdentityNotInKeyring => "Your identity is not in the signed keyring",
+            ExitCode::PrincipalNotInKeyring => "Your principal is not in the signed keyring",
             ExitCode::UnsafeKeyStorePermissions => {
                 "Key store directory or private key file is group/world accessible"
             }
@@ -144,7 +144,7 @@ impl ExitCode {
                 "The plaintext is tracked in git which reveal and unhide refuse"
             }
             ExitCode::DecryptionFailed => {
-                "Ciphertext could not be decrypted with the local identity"
+                "Ciphertext could not be decrypted with the local private key"
             }
             ExitCode::EncryptionFailed => "Encryption failed",
             ExitCode::KeyParseFailure => "A key, keyring or signature could not be parsed",

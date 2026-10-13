@@ -7,9 +7,9 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_import, cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring, exit_code_of,
-    fingerprint_for_public_key, generate_identity, generate_signing_keypair, is_legacy_pin_shape,
-    owner_key_fingerprint, parse_verifying_key, recipient_from_identity, ExitCode, TrustPinStore,
-    TrustStore,
+    fingerprint_for_public_key, generate_signing_keypair, generate_x25519_private_key,
+    is_legacy_pin_shape, owner_key_fingerprint, parse_verifying_key, x25519_public_key_encoding,
+    ExitCode, TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -217,8 +217,8 @@ fn trusted_fixture(label: &str) -> (TempDir, TempDir) {
     let key_store = TempDir::new(&format!("{label}-ks"));
     init_git_repo(&repo.path);
 
-    let identity = generate_identity();
-    let recipient = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient = x25519_public_key_encoding(&identity);
     let (signing_key, verifying_hex) = generate_signing_keypair();
 
     fs::write(
@@ -346,8 +346,8 @@ fn test_list_keys_prints_the_binding_fingerprint_per_principal() {
     // Two collaborators with known recipient strings.
     let mut recipients = Vec::new();
     for email in ["alice@example.com", "bob@example.com"] {
-        let identity = generate_identity();
-        let recipient = recipient_from_identity(&identity);
+        let identity = generate_x25519_private_key();
+        let recipient = x25519_public_key_encoding(&identity);
         fs::write(repo.join(&format!("{email}.recipient")), &recipient).unwrap();
         cmd_tell(
             &repo.path,

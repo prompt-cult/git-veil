@@ -6,9 +6,9 @@ use crate::commands::add::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::key_discovery::discover_identity;
+use crate::key_discovery::discover_x25519_private_key;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
-use crate::{decrypt_with_identity, verify_keyring_against_trust, TrackedFiles};
+use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
 /// index — same gate as reveal; see docs/design.md "Ignore safety" gate 4.
@@ -55,15 +55,15 @@ pub fn cmd_unhide(
     // Find user's entry
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
-            ExitCode::IdentityNotInKeyring,
-            "user not found in the keyring. Check the identity, or ask the owner to add it"
+            ExitCode::PrincipalNotInKeyring,
+            "user not found in the keyring. Check the principal, or ask the owner to add it"
                 .to_string(),
         )
     })?;
 
-    // Find user's age identity by recipient string (exit code 21 with the
-    // create-and-back-up recipe when absent)
-    let identity = discover_identity(key_store, &entry.recipient)?;
+    // Find the user's X25519 private key by its public key encoding (exit
+    // code 21 with the create-and-back-up recipe when absent)
+    let private_key = discover_x25519_private_key(key_store, &entry.public_key)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -114,7 +114,7 @@ pub fn cmd_unhide(
     })?;
 
     // Decrypt
-    let plaintext = decrypt_with_identity(&ciphertext, &identity)?;
+    let plaintext = decrypt_with_x25519_private_key(&ciphertext, &private_key)?;
 
     if let Some(parent) = relative.parent() {
         if !parent.as_os_str().is_empty() {

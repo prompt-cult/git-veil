@@ -14,7 +14,8 @@ const VERSION_PREFIX: &str = "version:";
 #[derive(Debug, Clone)]
 pub struct KeyringEntry {
     pub email: String,
-    pub recipient: String,
+    /// The bech32 X25519 public key encoding of the principal's key.
+    pub public_key: String,
 }
 
 #[derive(Debug, Clone)]
@@ -99,7 +100,7 @@ impl Keyring {
             }
             entries.push(KeyringEntry {
                 email: parts[0].to_string(),
-                recipient: parts[1].to_string(),
+                public_key: parts[1].to_string(),
             });
         }
 
@@ -130,7 +131,7 @@ impl Keyring {
             result.push_str(&format!("{}{}\n", VERSION_PREFIX, n));
         }
         for entry in &self.entries {
-            result.push_str(&format!("{}:{}\n", entry.email, entry.recipient));
+            result.push_str(&format!("{}:{}\n", entry.email, entry.public_key));
         }
         result.push_str(END_MARKER);
         result.push('\n');
@@ -148,13 +149,14 @@ impl Keyring {
     ///
     /// # Format constraint
     ///
-    /// The serialized keyring line format is `email:recipient`
-    /// with `:` as the field separator, so the email MUST NOT contain `:`.
-    /// A colon would produce a 3-field line that every subsequent
-    /// [`Keyring::parse`] rejects with "Malformed keyring entry", bricking
-    /// the signed keyring. This is rejected here with an error naming the
-    /// offending email; on rejection nothing is mutated.
-    pub fn add_entry(&mut self, email: String, recipient: String) -> Result<()> {
+    /// The serialized keyring line format is `email:public-key` (the
+    /// bech32 X25519 public key encoding) with `:` as the field separator,
+    /// so the email MUST NOT contain `:`. A colon would produce a 3-field
+    /// line that every subsequent [`Keyring::parse`] rejects with
+    /// "Malformed keyring entry", bricking the signed keyring. This is
+    /// rejected here with an error naming the offending email; on
+    /// rejection nothing is mutated.
+    pub fn add_entry(&mut self, email: String, public_key: String) -> Result<()> {
         if email.contains(':') {
             anyhow::bail!(
                 "Invalid keyring email: emails must not contain a colon \
@@ -166,9 +168,9 @@ impl Keyring {
             .iter_mut()
             .find(|e| e.email.eq_ignore_ascii_case(&email))
         {
-            existing.recipient = recipient;
+            existing.public_key = public_key;
         } else {
-            self.entries.push(KeyringEntry { email, recipient });
+            self.entries.push(KeyringEntry { email, public_key });
         }
         self.signature = None;
         Ok(())
@@ -189,7 +191,7 @@ impl Keyring {
 
     /// Finds the entry whose email matches the given email
     /// case-insensitively, consistent with every other email comparison in
-    /// this codebase (see `check_email_in_identities`).
+    /// this codebase.
     pub fn find_by_email(&self, email: &str) -> Option<&KeyringEntry> {
         self.entries
             .iter()

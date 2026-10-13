@@ -1,7 +1,7 @@
 # Solo developer setup
 
-You keep secrets in a repository only you can read back. One age identity,
-one keyring entry: yours.
+You keep secrets in a repository only you can read back. One X25519
+private key, one keyring entry: yours.
 
 Prerequisite: build the binary (`cargo build --release`; it lands at
 `target/release/git-veil`), plus two standard tools for the one-time key
@@ -16,19 +16,19 @@ your own remote and emails throughout.
 
 ## 1. Create your keys and back them up
 
-Two keys, two jobs: an **age identity** (X25519 — encrypts and decrypts
-secrets) and an **Ed25519 signing key** (signs the keyring so a rewritten
-keyring is caught on this machine). Neither private half is ever
-committed.
+Two keys, two jobs: an **X25519 private key** (age identity — encrypts
+and decrypts secrets) and an **Ed25519 signing key** (signs the keyring
+so a rewritten keyring is caught on this machine). Neither private half
+is ever committed.
 
 ```sh
 umask 077   # everything created below stays private to you
 
-# The age identity (encryption/decryption):
+# The X25519 private key (encryption/decryption):
 age-keygen -o my-age-identity.txt
 # Output includes:
-#   # public key: age1...    (your recipient string — share this)
-#   AGE-SECRET-KEY-1...      (your identity — keep this secret)
+#   # public key: age1...    (your X25519 public key — share this)
+#   AGE-SECRET-KEY-1...      (your X25519 private key — keep this secret)
 
 # The Ed25519 signing key (keyring signing):
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
@@ -46,8 +46,8 @@ holds the matching public key, also as hex. **Back both secrets up now** —
 the `AGE-SECRET-KEY-1...` line from `my-age-identity.txt` and
 `ed25519.pem`/`signing-keys.txt` (the same signing secret in two forms); a
 password-manager note holding the strings is a complete backup. Lose the
-age identity and every ciphertext is unrecoverable; lose the signing key
-and you cannot re-sign the keyring (re-key from scratch).
+X25519 private key and every ciphertext is unrecoverable; lose the signing
+key and you cannot re-sign the keyring (re-key from scratch).
 `owner.verifying` is public: commit it — it is the candidate `trust`
 proves your seed against.
 
@@ -64,16 +64,16 @@ Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
 $ git-veil whoami
-Your identity: example@github.com
+Your principal: example@github.com
 ```
 
 What just happened: `.git-veil/` now holds `keyring`, `trust.json` and
-`tracked.json` (init never touches `.gitignore`); your age identity lives
-in the per-machine key store `$HOME/.git-veil/identities.txt` (created
-mode 0600), never committed — `reveal`, `cat`, `unhide` and `changes`
-look their key up there. `show-repo-id` prints the exact repo ID `trust`
-wants (it re-derives it from the remote and refuses a mismatch); `whoami`
-shows which email decrypting commands will use — from
+`tracked.json` (init never touches `.gitignore`); your X25519 private key
+lives in the per-machine key store `$HOME/.git-veil/identities.txt`
+(created mode 0600), never committed — `reveal`, `cat`, `unhide` and
+`changes` look their key up there. `show-repo-id` prints the exact repo ID
+`trust` wants (it re-derives it from the remote and refuses a mismatch);
+`whoami` shows which principal decrypting commands will use — from
 `git config user.email`, or `--email`.
 
 ## 3. Trust your own key (possession proof)
@@ -136,8 +136,9 @@ $ ls .env .env.secret
 What just happened: `add` gitignored the plaintext name for you
 (git-secret behaviour) and `hide` encrypted `.env` to your key as
 `.env.secret`, **keeping the plaintext** — deletion is opt-in with
-`--keep-plaintext`, and manual deletion is only reversible with your age
-identity. Two guards watch the working tree: if a tracked plaintext is on
+`--keep-plaintext`, and manual deletion is only reversible with your
+X25519 private key. Two guards watch the working tree: if a tracked
+plaintext is on
 disk but not gitignored, `hide` prints a warning (error code 41) because a
 blind `git add -A` would commit it; if a `.secret` path is itself
 gitignored — e.g. swallowed by a parent-directory rule like `.tmp/` —

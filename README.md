@@ -67,14 +67,15 @@ prints the full table with names and meanings; the specification is in
 
 ## Quick start (solo)
 
-Prerequisite: your own keys (see [Key setup](#key-setup) below) — an age
-identity and an Ed25519 signing key. git-veil generates no keys: it only
-ever reads keys you created and own, and every command that needs a
-missing key tells you how to make one and back it up instead.
+Prerequisite: your own keys (see [Key setup](#key-setup) below) — an
+X25519 private key (age identity) and an Ed25519 signing key. git-veil
+generates no keys: it only ever reads keys you created and own, and every
+command that needs a missing key tells you how to make one and back it up
+instead.
 
 ```sh
 git-veil init                                   # create .git-veil/ state
-git-veil import my-age-identity.txt             # import your age identity into the local key store
+git-veil import my-age-identity.txt             # import your X25519 private key into the local key store
 git-veil show-repo-id                           # print the repository ID
 git-veil trust demo+example@github.com          # pin the owner key by possession proof
 git-veil tell example@github.com my-age-identity.txt    # add yourself to the signed keyring
@@ -141,7 +142,7 @@ keyring signing. You need both, and git-veil generates **neither**: keys the
 tool created would be keys you never backed up. Create them once with standard
 tools, then back the private halves up (a password-manager note is enough).
 
-### Create an age identity (for encryption/decryption)
+### Create an X25519 private key (for encryption/decryption)
 
 Use any age key generator — `age-keygen` (from the [age CLI][age-cli]) or
 `rage-keygen` (from [rage]):
@@ -150,13 +151,14 @@ Use any age key generator — `age-keygen` (from the [age CLI][age-cli]) or
 umask 077
 age-keygen -o my-age-identity.txt
 # Output includes:
-#   # public key: age1...    (your recipient string — share this)
-#   AGE-SECRET-KEY-1...       (your identity — keep this secret, BACK IT UP)
+#   # public key: age1...    (your X25519 public key — share this)
+#   AGE-SECRET-KEY-1...       (your X25519 private key — keep this secret, BACK IT UP)
 ```
 
-The **recipient string** (`age1...`) is your public key — safe to share with
-collaborators. The **identity string** (`AGE-SECRET-KEY-1...`) is your private
-key — never commit it; without a backup of it, ciphertexts are unrecoverable.
+The **X25519 public key** (age recipient) — the `age1...` line — is safe to
+share with collaborators. The **X25519 private key** (age identity) — the
+`AGE-SECRET-KEY-1...` line — is never committed; without a backup of it,
+ciphertexts are unrecoverable.
 `git-veil import my-age-identity.txt` copies it into the local key store
 (accepts any file containing an `AGE-SECRET-KEY-1...` line; `#` comment lines
 like age-keygen's are skipped).
@@ -201,8 +203,8 @@ ergonomics that differ — such as a smaller final binary size.
 | Command          | Purpose                                                                 |
 |------------------|-------------------------------------------------------------------------|
 | `init`           | Initialize git-veil state (`.git-veil/`) in the current repository        |
-| `import`         | Import your age identity file(s) into the git-veil key store             |
-| `export`         | Export an age recipient string from the local key store                 |
+| `import`         | Import your X25519 private key file(s) into the git-veil key store       |
+| `export`         | Export an X25519 public key from the local key store                    |
 | `removekey`      | Remove a key from the local key store (destructive, local-only)         |
 | `trust`          | Pin the repository owner's key by possession proof, or import a pin-file (per machine) |
 | `export-pin`     | Export this repository's pin-file for import on a machine without the signing key |
@@ -217,7 +219,7 @@ ergonomics that differ — such as a smaller final binary size.
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
 | `changes`        | Report where plaintext differs from the last hidden version             |
 | `show-repo-id`   | Show the repository ID derived from the git remote push URL             |
-| `whoami`         | Show the identity and key store git-veil will use                        |
+| `whoami`         | Show the principal git-veil will use                        |
 | `verify-keyring` | Verify the keyring signature against the pinned trusted key             |
 | `list-keys`      | List keyring keys after verifying the keyring signature                 |
 | `clean`          | Remove the `.git-veil` state directory (`--yes` required when data would be lost) |
@@ -252,8 +254,8 @@ git-veil's `.secret` ciphertext files are standard age-encrypted blobs
 (age-encryption.org/v1). They are fully interoperable with the reference
 [`age`][age-cli] CLI and the Rust [`rage`][rage] CLI:
 
-- A file encrypted by git-veil can be decrypted by `age -d -i identity.txt file.secret`
-- A file encrypted by `age -r recipient file` can be decrypted by `git-veil reveal`
+- A file encrypted by git-veil can be decrypted by `age -d -i private-key.txt file.secret`
+- A file encrypted by `age -r age1... file` can be decrypted by `git-veil reveal`
 - Keys generated by `age-keygen` or `rage-keygen` can be imported with `git-veil import`
 - Keys generated by git-veil can be used by `age` and `rage` directly
 

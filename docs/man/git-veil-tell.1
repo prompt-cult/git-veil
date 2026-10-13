@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-veil-tell 1  "git-veil-tell " 
 .SH NAME
-git\-veil\-tell \- Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
+git\-veil\-tell \- Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
 .SH SYNOPSIS
 \fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
 .SH DESCRIPTION
-Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
+Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
 .SH OPTIONS
 .TP
 \fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
@@ -25,9 +25,9 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 Collaborator\*(Aqs email
 .TP
 <\fIPUBLIC_KEY\fR>
-Path to file containing the collaborator\*(Aqs age recipient string (age1...)
+Path to a file containing the collaborator\*(Aqs X25519 public key encoding (age1...)
 .SH EXTRA
-Adds a collaborator\*(Aqs age recipient key to the repository keyring and
+Adds a collaborator\*(Aqs X25519 public key to the repository keyring and
 re\-signs the keyring with the owner\*(Aqs Ed25519 signing key. The existing
 keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test\-encrypted to the new key so a key that

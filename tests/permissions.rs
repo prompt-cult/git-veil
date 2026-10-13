@@ -8,7 +8,7 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     check_key_store_permissions, cmd_import, cmd_trust_permissions, exit_code_of,
-    generate_identity, permissions_check_bypassed_from_env, ExitCode,
+    generate_x25519_private_key, permissions_check_bypassed_from_env, ExitCode,
 };
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -90,7 +90,7 @@ fn test_group_writable_dir_fails_with_code_30() {
 }
 
 #[test]
-fn test_world_readable_identity_fails_with_code_30() {
+fn test_world_readable_private_key_fails_with_code_30() {
     let store = TempDir::new("file644");
     fs::create_dir_all(store.join("ks")).unwrap();
     let ks = TempDir {
@@ -176,7 +176,7 @@ fn test_import_writes_identities_0600() {
         path: store.join("ks"),
     };
 
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     fs::write(
         repo.join("my.age"),
         format!("{}\n", identity.to_string().expose_secret()),

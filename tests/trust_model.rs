@@ -7,8 +7,8 @@ use age::secrecy::ExposeSecret;
 use git_veil::cli::Cli;
 use git_veil::{
     cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
-    cmd_trust_import, cmd_verify_keyring, exit_code_of, generate_identity,
-    generate_signing_keypair, owner_key_fingerprint, recipient_from_identity, PinFile,
+    cmd_trust_import, cmd_verify_keyring, exit_code_of, generate_signing_keypair,
+    generate_x25519_private_key, owner_key_fingerprint, x25519_public_key_encoding, PinFile,
     TrustPinStore, TrustStore,
 };
 use std::fs;
@@ -74,8 +74,8 @@ impl Fixture {
         let key_store = TempDir::new(&format!("{}-ks", label));
         init_git_repo(&repo.path);
 
-        let identity = generate_identity();
-        let recipient = recipient_from_identity(&identity);
+        let identity = generate_x25519_private_key();
+        let recipient = x25519_public_key_encoding(&identity);
         let (signing_key, verifying_hex) = generate_signing_keypair();
 
         fs::write(
@@ -662,8 +662,8 @@ fn test_hide_and_tell_fail_without_trust() {
         "hide should fail without trust"
     );
 
-    let id = generate_identity();
-    let r = recipient_from_identity(&id);
+    let id = generate_x25519_private_key();
+    let r = x25519_public_key_encoding(&id);
     fs::write(repo.join("alice.recipient"), &r).unwrap();
     assert!(
         cmd_tell(

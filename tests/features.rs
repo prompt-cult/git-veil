@@ -4,8 +4,8 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
-    cmd_unhide, cmd_verify_keyring, exit_code_of, generate_identity, generate_signing_keypair,
-    recipient_from_identity, Keyring,
+    cmd_unhide, cmd_verify_keyring, exit_code_of, generate_signing_keypair,
+    generate_x25519_private_key, x25519_public_key_encoding, Keyring,
 };
 use std::fs;
 use std::path::Path;
@@ -68,8 +68,8 @@ impl Fixture {
         let key_store = TempDir::new(&format!("{}-ks", label));
         init_git_repo(&repo.path);
 
-        let identity = generate_identity();
-        let recipient = recipient_from_identity(&identity);
+        let identity = generate_x25519_private_key();
+        let recipient = x25519_public_key_encoding(&identity);
         let (signing_key, verifying_hex) = generate_signing_keypair();
 
         fs::write(
@@ -96,8 +96,8 @@ impl Fixture {
     }
 
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
-        let id = generate_identity();
-        let r = recipient_from_identity(&id);
+        let id = generate_x25519_private_key();
+        let r = x25519_public_key_encoding(&id);
         let fname = format!("{}.recipient", email);
         fs::write(self.repo.join(&fname), &r).unwrap();
         cmd_tell(
@@ -419,8 +419,8 @@ fn test_tell_updates_existing_email() {
     let _id1 = f.add_collab("alice@example.com");
 
     // Tell again with a new key for the same email
-    let id2 = generate_identity();
-    let r2 = recipient_from_identity(&id2);
+    let id2 = generate_x25519_private_key();
+    let r2 = x25519_public_key_encoding(&id2);
     fs::write(f.repo.join("alice2.recipient"), &r2).unwrap();
     cmd_tell(
         &f.repo.path,
@@ -436,7 +436,7 @@ fn test_tell_updates_existing_email() {
     let keyring = Keyring::parse(&keyring_text).expect("parse");
     assert_eq!(keyring.entries.len(), 1, "should still have one entry");
     assert_eq!(
-        keyring.entries[0].recipient, r2,
+        keyring.entries[0].public_key, r2,
         "recipient should be updated"
     );
 }
@@ -547,8 +547,8 @@ fn test_tell_fails_with_code_20_when_signing_key_missing() {
     // The fixture wrote signing-keys.txt; simulate the fresh-machine case
     fs::remove_file(f.key_store.join("signing-keys.txt")).unwrap();
 
-    let id = git_veil::generate_identity();
-    let r = git_veil::recipient_from_identity(&id);
+    let id = git_veil::generate_x25519_private_key();
+    let r = git_veil::x25519_public_key_encoding(&id);
     fs::write(f.repo.join("bob.recipient"), &r).unwrap();
 
     let err = cmd_tell(

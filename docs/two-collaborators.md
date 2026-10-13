@@ -4,11 +4,12 @@ The owner (`example@github.com`) shares a repository with a collaborator
 (`alice@example.com`), remote `git@github.com:example/demo.git`, repository
 ID `demo+example@github.com`. Each person has their own machine, their own
 `$HOME/.git-veil` key store, and their own keys. git-veil generates **no**
-keys: each person creates their own age identity (`age-keygen` or
-`rage-keygen`) and the owner additionally creates an Ed25519 signing key
-(`openssl`) — see step 1 of [docs/solo.md](solo.md). Exporting recipient
-strings needs no external tool: each person runs `git-veil export
-<recipient> --output <file>` from their own key store.
+keys: each person creates their own X25519 private key (age identity) with
+`age-keygen` or `rage-keygen`, and the owner additionally creates an
+Ed25519 signing key (`openssl`) — see step 1 of
+[docs/solo.md](solo.md). Exporting public keys needs no external tool:
+each person runs `git-veil export <public-key> --output <file>` from
+their own key store.
 
 ## Part 1 — the owner sets the repository up
 
@@ -35,20 +36,21 @@ git push
 
 ## Part 2 — the key handoff (the only manual exchange)
 
-Public keys travel as plain recipient-string files over any channel you
-both trust. **Alice** creates her age identity exactly as in step 1 of
-[docs/solo.md](solo.md), imports it into her key store, and sends the
-recipient string to the owner:
+Public keys travel as plain text files over any channel you
+both trust. **Alice** creates her X25519 private key (age identity)
+exactly as in step 1 of [docs/solo.md](solo.md), imports it into her key
+store, and sends the public key encoding to the owner:
 
 ```sh
 age-keygen -o alice-age-identity.txt      # prints: # public key: age1...
 git-veil import alice-age-identity.txt
-git-veil export age1... --output alice.pub   # or just send age-keygen's printed recipient line
+git-veil export age1... --output alice.pub   # or just send age-keygen's printed public key line
 ```
 
 **The owner** verifies out of band that `alice.pub` really is Alice's key
-(read the recipient string or its fingerprint to her over a voice call, or
-use any channel an attacker cannot rewrite), then adds her to the keyring:
+(read the public key encoding or its fingerprint to her over a voice call,
+or use any channel an attacker cannot rewrite), then adds her to the
+keyring:
 
 ```sh
 $ git-veil tell alice@example.com alice.pub
@@ -101,8 +103,9 @@ $ git-veil import alice-age-identity.txt
 Summary: 1 imported, 0 skipped
 ```
 
-She imports only her OWN age identity into her local key store (exit code
-21 tells anyone missing one exactly how to create and back it up). Then
+She imports only her OWN X25519 private key into her local key store
+(exit code 21 tells anyone missing one exactly how to create and back it
+up). Then
 she pins the owner key — this is per machine, and her machine holds no
 signing key, so she imports the pin-file the owner sent her:
 
@@ -136,7 +139,7 @@ $ git-veil cat .env        # peek to stdout; touches no disk state
 
 ## Who can decrypt what
 
-- Every `hide` produces ONE ciphertext carrying a recipient packet for
+- Every `hide` produces ONE ciphertext carrying one stanza for
   every key in the signed keyring — any keyring member can reveal.
 - The keyring (`.git-veil/keyring`, committed) is signed by the owner's
   key. Every gated command verifies that signature against the local pin
@@ -147,14 +150,14 @@ $ git-veil cat .env        # peek to stdout; touches no disk state
   transfers it out of band).
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
-- The reveal error `user alice@example.com not found in keyring; check
-  --email, or ask the owner to add you with git-veil tell` means the owner
+- The reveal error `user not found in the keyring. Check the principal,
+  or ask the owner to add it` means the owner
   has not yet done Part 2's re-hide-and-push.
 
 ## Handy checks on either side
 
 ```sh
 git-veil list-keys        # who is in the keyring right now
-git-veil whoami           # which email/key store this machine resolves to
+git-veil whoami           # which principal this machine resolves to
 git-veil changes          # which tracked files differ from last hide
 ```

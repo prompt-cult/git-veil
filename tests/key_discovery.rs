@@ -4,7 +4,7 @@
 //! key form.
 
 use git_veil::{
-    discover_identity, discover_signing_key, discover_signing_key_explicit, exit_code_of,
+    discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key, exit_code_of,
     fingerprint_for_public_key, generate_signing_keypair, load_signing_keys, parse_signing_key,
     ExitCode,
 };
@@ -198,16 +198,16 @@ fn test_comments_and_blank_lines_skipped() {
 }
 
 #[test]
-fn test_missing_identity_fails_with_code_21_and_recipe() {
+fn test_missing_private_key_fails_with_code_21_and_recipe() {
     let store = TempDir::new("noidentity");
-    let err = match discover_identity(&store.path, "age1qqnotpresent") {
-        Ok(_) => panic!("identity discovery must fail for an absent identity"),
+    let err = match discover_x25519_private_key(&store.path, "age1qqnotpresent") {
+        Ok(_) => panic!("private key discovery must fail for an absent private key"),
         Err(err) => err,
     };
     let message = format!("{:#}", err);
-    assert_eq!(code_of(err), ExitCode::NoAgeIdentity as i32);
+    assert_eq!(code_of(err), ExitCode::NoX25519PrivateKey as i32);
     assert!(
-        message.contains("Create your own age identity and back it up"),
+        message.contains("Create your own X25519 private key (age identity) and back it up"),
         "guidance printed: {message}"
     );
     assert!(
@@ -221,7 +221,7 @@ fn test_missing_identity_fails_with_code_21_and_recipe() {
 }
 
 #[test]
-fn test_corrupt_identity_store_line_refused_with_code_62_not_21() {
+fn test_corrupt_private_key_store_line_refused_with_code_62_not_21() {
     let store = TempDir::new("corruptidentities");
     fs::write(
         store.join("identities.txt"),
@@ -229,10 +229,11 @@ fn test_corrupt_identity_store_line_refused_with_code_62_not_21() {
     )
     .unwrap();
 
-    // A corrupt store is NOT reported as a missing identity (21 + recipe):
-    // it is a parse refusal (62) naming the corrupt line to delete.
-    let err = match discover_identity(&store.path, "age1qqnotpresent") {
-        Ok(_) => panic!("a corrupt identity line must fail discovery"),
+    // A corrupt store is NOT reported as a missing private key (21 +
+    // recipe): it is a parse refusal (62) naming the corrupt line to
+    // delete.
+    let err = match discover_x25519_private_key(&store.path, "age1qqnotpresent") {
+        Ok(_) => panic!("a corrupt private key line must fail discovery"),
         Err(err) => err,
     };
     let message = format!("{:#}", err);

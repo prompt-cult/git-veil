@@ -11,8 +11,8 @@ use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
     cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
-    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, generate_identity,
-    generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles, TrustStore,
+    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, generate_signing_keypair,
+    generate_x25519_private_key, x25519_public_key_encoding, Keyring, TrackedFiles, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -101,8 +101,8 @@ impl TestRepo {
 
         init_git_repo(&repo.path);
 
-        let owner_identity = generate_identity();
-        let owner_recipient = recipient_from_identity(&owner_identity);
+        let owner_identity = generate_x25519_private_key();
+        let owner_recipient = x25519_public_key_encoding(&owner_identity);
 
         let (owner_signing_key, owner_verifying_key_hex) = generate_signing_keypair();
 
@@ -148,8 +148,8 @@ impl TestRepo {
     /// Generates a collaborator identity, writes their recipient to a file,
     /// and runs tell to add them to the keyring.
     fn add_collaborator(&self, email: &str) -> (age::x25519::Identity, String) {
-        let collab_identity = generate_identity();
-        let collab_recipient = recipient_from_identity(&collab_identity);
+        let collab_identity = generate_x25519_private_key();
+        let collab_recipient = x25519_public_key_encoding(&collab_identity);
 
         let key_file = self.repo.join(&format!("{}.recipient", email));
         fs::write(&key_file, &collab_recipient).expect("write collab recipient file");
@@ -253,7 +253,7 @@ fn test_tell_adds_collaborator() {
     let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
     assert_eq!(keyring.entries.len(), 1);
     assert_eq!(keyring.entries[0].email, "alice@example.com");
-    assert_eq!(keyring.entries[0].recipient, recipient);
+    assert_eq!(keyring.entries[0].public_key, recipient);
     assert!(keyring.signature.is_some(), "keyring should be signed");
 }
 
@@ -429,8 +429,8 @@ fn test_hide_no_keys_fails() {
     let key_store = TempDir::new("hide-no-keys-keys");
     init_git_repo(&repo.path);
 
-    let identity = generate_identity();
-    let recipient = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient = x25519_public_key_encoding(&identity);
     let (signing_key, verifying_hex) = generate_signing_keypair();
 
     fs::write(
@@ -853,7 +853,7 @@ fn test_export_by_recipient() {
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
 
     // Import the collaborator's recipient to the key store so export can find it
-    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+    git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
     let exported = export_public_key(&fixture.key_store.path, &recipient).unwrap();
     assert_eq!(exported.trim(), recipient);
@@ -868,7 +868,7 @@ fn test_export_by_fingerprint_is_not_an_identifier() {
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
     let fingerprint = git_veil::fingerprint_for_public_key("alice@example.com", &recipient);
 
-    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+    git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
     let result = export_public_key(&fixture.key_store.path, &fingerprint);
     assert!(
@@ -899,8 +899,9 @@ fn test_removekey_by_recipient() {
     cmd_removekey(&fixture.key_store.path, &recipient, false).expect("removekey");
 
     // The collaborator's identity should be gone; the owner's identity remains
-    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
-    let collab_recipient = recipient_from_identity(&collab_identity);
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
+    let collab_recipient = x25519_public_key_encoding(&collab_identity);
     let found = identities.iter().any(|(_, r)| *r == collab_recipient);
     assert!(!found, "collaborator identity should be removed");
 }
@@ -922,8 +923,9 @@ fn test_removekey_by_fingerprint_is_not_an_identifier() {
     );
 
     // Nothing was removed.
-    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
-    let collab_recipient = recipient_from_identity(&collab_identity);
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
+    let collab_recipient = x25519_public_key_encoding(&collab_identity);
     assert!(identities.iter().any(|(_, r)| *r == collab_recipient));
 }
 
@@ -964,7 +966,7 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
     let fixture = TestRepo::new("removekey-corrupt-recipients");
 
     let (_identity, recipient) = fixture.add_collaborator("alice@example.com");
-    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+    git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
     // Corrupt the recipients store with a line that is not a parseable
     // age1... recipient
@@ -991,22 +993,23 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
 }
 
 #[test]
-fn test_removekey_only_identity_refuses_without_yes() {
+fn test_removekey_only_private_key_refuses_without_yes() {
     let fixture = TestRepo::new("removekey-only");
 
     let result = cmd_removekey(&fixture.key_store.path, &fixture.owner_recipient, false);
-    assert!(result.is_err(), "should refuse to remove only identity");
-    assert!(result.unwrap_err().to_string().contains("only identity"));
+    assert!(result.is_err(), "should refuse to remove only private key");
+    assert!(result.unwrap_err().to_string().contains("only private key"));
 }
 
 #[test]
-fn test_removekey_only_identity_with_yes() {
+fn test_removekey_only_private_key_with_yes() {
     let fixture = TestRepo::new("removekey-only-yes");
 
     cmd_removekey(&fixture.key_store.path, &fixture.owner_recipient, true)
         .expect("removekey with --yes");
 
-    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
     assert!(identities.is_empty());
 }
 

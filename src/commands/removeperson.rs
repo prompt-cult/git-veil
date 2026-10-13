@@ -36,8 +36,8 @@ pub fn cmd_removeperson(
     // Find the entry by exact email
     if keyring.find_by_email(email_to_remove).is_none() {
         return Err(coded(
-            ExitCode::IdentityNotInKeyring,
-            "that identity is not in the keyring. Check the email against the keyring listing.",
+            ExitCode::PrincipalNotInKeyring,
+            "that principal is not in the keyring. Check the email against the keyring listing.",
         ));
     }
 

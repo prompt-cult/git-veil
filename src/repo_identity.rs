@@ -10,7 +10,7 @@ use std::sync::LazyLock;
 /// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The user,
 /// host and owner/repo groups additionally exclude `@` and `:` (where shape
 /// permits) so credential-shaped material can never land in the derived
-/// identity (fails closed instead).
+/// repository id (fails closed instead).
 static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[^@/]+@([^:/@]+):([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
         .expect("valid SCP-style SSH URL regex")
@@ -18,9 +18,9 @@ static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Scheme URL shared shape: `scheme://[user[:pass]@]host[:port]/owner/repo`.
 /// The optional userinfo (`user[:pass]@`) is a login credential and is
-/// stripped — it never becomes part of the identity. The owner/repo groups
-/// exclude `@` and `:` so credential-shaped material can never land in the
-/// derived identity (fails closed instead).
+/// stripped — it never becomes part of the repository id. The owner/repo
+/// groups exclude `@` and `:` so credential-shaped material can never land
+/// in the derived repository id (fails closed instead).
 static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/@:]+)/([^/@:]+?)(?:\.git)?/?$",
@@ -29,7 +29,7 @@ static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Lowercases service, owner and repo so that `GitHub.com/Owner/Repo` and
-/// `github.com/owner/repo` are the same repository identity.
+/// `github.com/owner/repo` derive the same repository id.
 fn normalize(repo: &str, owner: &str, service: &str) -> (String, String, String) {
     (
         repo.to_lowercase(),
@@ -50,7 +50,7 @@ fn normalize(repo: &str, owner: &str, service: &str) -> (String, String, String)
 /// - GitHub HTTPS: `https://github.com/user/repo.git`
 /// - HTTPS with embedded credentials: `https://user@github.com/user/repo.git`,
 ///   `https://user:pass@github.com/user/repo.git` (credentials stripped,
-///   never part of the identity, never logged)
+///   never part of the repository id, never logged)
 /// - GitLab SSH: `git@gitlab.com:org/project.git`
 /// - GitLab HTTPS: `https://gitlab.com/org/project.git`
 /// - Codeberg SSH: `ssh://git@codeberg.org/user/repo.git`
@@ -114,9 +114,9 @@ pub fn derive_repo_id(push_url: &str) -> Result<String> {
 }
 
 /// Derives the repository id of every configured remote's push URL
-/// (`git remote --verbose`): the set of repository identities this
-/// checkout currently points at — one id per remote, so a multi-remote
-/// repository contributes one entry per remote.
+/// (`git remote --verbose`): the set of repository ids this checkout
+/// currently points at — one id per remote, so a multi-remote repository
+/// contributes one entry per remote.
 ///
 /// The `(push)` lines carry the effective push URLs (the pushurl when
 /// set, url rewriting applied). A remote with no fetch URL also prints a

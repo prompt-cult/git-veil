@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-veil-whoami 1  "git-veil-whoami " 
 .SH NAME
-git\-veil\-whoami \- Show the identity git\-veil will use for you
+git\-veil\-whoami \- Show the principal git\-veil will use for you
 .SH SYNOPSIS
 \fBgit\-veil whoami\fR [\fB\-\-email\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Show the identity git\-veil will use for you
+Show the principal git\-veil will use for you
 .SH OPTIONS
 .TP
 \fB\-\-email\fR \fI<EMAIL>\fR
@@ -18,10 +18,10 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Prints the identity git\-veil will use for you: git config user.email, or
+Prints the principal git\-veil will use for you: git config user.email, or
 the \-\-email override. The principal label is committed in the public
-keyring, so naming it leaks nothing. Use it to check which key
-reveal/cat/unhide will look up before they fail on a missing identity.
+keyring, so naming it leaks nothing. Use it to check which keyring entry
+reveal/cat/unhide will look up before they fail on a missing private key.
 
 EXAMPLES
   $ git\-veil whoami

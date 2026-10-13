@@ -13,7 +13,10 @@ use crate::happen_before::{
 };
 use crate::intent::LocalAdds;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{encrypt_to_recipients, parse_recipient, verify_keyring_against_trust, TrackedFiles};
+use crate::{
+    encrypt_to_x25519_public_keys, parse_x25519_public_key, verify_keyring_against_trust,
+    TrackedFiles,
+};
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
@@ -74,11 +77,11 @@ pub fn cmd_hide(
         anyhow::bail!("no keys in the keyring. Add a collaborator first.");
     }
 
-    // Parse all recipient strings
-    let recipients: Vec<_> = keyring
+    // Parse all X25519 public key encodings
+    let public_keys: Vec<_> = keyring
         .entries
         .iter()
-        .map(|e| parse_recipient(&e.recipient))
+        .map(|e| parse_x25519_public_key(&e.public_key))
         .collect::<Result<Vec<_>>>()?;
 
     // Load tracked files
@@ -264,7 +267,7 @@ pub fn cmd_hide(
 
     // Two-phase, all-or-nothing hide (compute-then-commit). PHASE 1 reads and
     // validates every tracked plaintext and encrypts EVERY file to the full
-    // recipient set, holding all ciphertexts in memory; ANY failure here
+    // public key set, holding all ciphertexts in memory; ANY failure here
     // aborts with nothing changed on disk — no mixed state where some files
     // are hidden and others remain plaintext. Memory trade: secrets are
     // small config-scale files, so holding every ciphertext in memory is
@@ -303,8 +306,8 @@ pub fn cmd_hide(
 
         // Encrypt to EVERY key in the keyring: the collaboration promise is
         // that any collaborator can reveal, so the one ciphertext carries a
-        // PKESK per recipient.
-        let ciphertext = encrypt_to_recipients(&plaintext, &recipients)?;
+        // stanza per public key.
+        let ciphertext = encrypt_to_x25519_public_keys(&plaintext, &public_keys)?;
 
         // Compute encrypted path
         let encrypted_path = encrypted_path_for(repo_root, file);

@@ -60,7 +60,7 @@ fn print_keyring(keyring: &Keyring) {
             println!(
                 "  {} {}",
                 entry.email,
-                fingerprint_for_public_key(&entry.email, &entry.recipient)
+                fingerprint_for_public_key(&entry.email, &entry.public_key)
             );
         }
         println!("\nTotal: {} keys", keyring.entries.len());

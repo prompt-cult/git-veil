@@ -1,53 +1,54 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    create_signature_block, decrypt_with_identity, encrypt_to_recipient, encrypt_to_recipients,
-    extract_content_to_verify_from_keyring, extract_signature_from_keyring, generate_identity,
-    generate_signing_keypair, parse_identity, parse_recipient, parse_signing_key,
-    parse_verifying_key, recipient_from_identity, verify_keyring_signature,
+    create_signature_block, decrypt_with_x25519_private_key, encrypt_to_x25519_public_key,
+    encrypt_to_x25519_public_keys, extract_content_to_verify_from_keyring,
+    extract_signature_from_keyring, generate_signing_keypair, generate_x25519_private_key,
+    parse_signing_key, parse_verifying_key, parse_x25519_private_key, parse_x25519_public_key,
+    verify_keyring_signature, x25519_public_key_encoding,
 };
 
 #[test]
 fn test_age_encrypt_decrypt_roundtrip() {
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
-    let recipient = parse_recipient(&recipient_str).unwrap();
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
+    let recipient = parse_x25519_public_key(&recipient_str).unwrap();
 
     let plaintext = b"Hello, age encryption!";
-    let ciphertext = encrypt_to_recipient(plaintext, &recipient).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let ciphertext = encrypt_to_x25519_public_key(plaintext, &recipient).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
 
     assert_eq!(decrypted, plaintext);
 }
 
 #[test]
 fn test_age_multi_recipient_roundtrip() {
-    let id1 = generate_identity();
-    let id2 = generate_identity();
-    let r1 = parse_recipient(&recipient_from_identity(&id1)).unwrap();
-    let r2 = parse_recipient(&recipient_from_identity(&id2)).unwrap();
+    let id1 = generate_x25519_private_key();
+    let id2 = generate_x25519_private_key();
+    let r1 = parse_x25519_public_key(&x25519_public_key_encoding(&id1)).unwrap();
+    let r2 = parse_x25519_public_key(&x25519_public_key_encoding(&id2)).unwrap();
 
     let plaintext = b"Multi-recipient secret";
     let recipients = vec![r1, r2];
-    let ciphertext = encrypt_to_recipients(plaintext, &recipients).unwrap();
+    let ciphertext = encrypt_to_x25519_public_keys(plaintext, &recipients).unwrap();
 
     // Both identities can decrypt
-    let d1 = decrypt_with_identity(&ciphertext, &id1).unwrap();
-    let d2 = decrypt_with_identity(&ciphertext, &id2).unwrap();
+    let d1 = decrypt_with_x25519_private_key(&ciphertext, &id1).unwrap();
+    let d2 = decrypt_with_x25519_private_key(&ciphertext, &id2).unwrap();
     assert_eq!(d1, plaintext);
     assert_eq!(d2, plaintext);
 }
 
 #[test]
 fn test_age_decrypt_with_wrong_key_fails() {
-    let id1 = generate_identity();
-    let id2 = generate_identity();
-    let r1 = parse_recipient(&recipient_from_identity(&id1)).unwrap();
+    let id1 = generate_x25519_private_key();
+    let id2 = generate_x25519_private_key();
+    let r1 = parse_x25519_public_key(&x25519_public_key_encoding(&id1)).unwrap();
 
     let plaintext = b"Secret for id1 only";
-    let ciphertext = encrypt_to_recipient(plaintext, &r1).unwrap();
+    let ciphertext = encrypt_to_x25519_public_key(plaintext, &r1).unwrap();
 
     // id2 cannot decrypt
-    let result = decrypt_with_identity(&ciphertext, &id2);
+    let result = decrypt_with_x25519_private_key(&ciphertext, &id2);
     assert!(result.is_err());
 }
 
@@ -103,18 +104,18 @@ fn test_ed25519_verify_wrong_key_fails() {
 }
 
 #[test]
-fn test_parse_identity_and_recipient() {
-    let identity = generate_identity();
-    let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+fn test_parse_x25519_private_and_public_key() {
+    let private_key = generate_x25519_private_key();
+    let private_key_str = private_key.to_string().expose_secret().to_string();
+    let public_key_str = x25519_public_key_encoding(&private_key);
 
-    // Round-trip: parse identity, get recipient
-    let parsed_identity = parse_identity(&identity_str).unwrap();
-    let parsed_recipient_str = recipient_from_identity(&parsed_identity);
-    assert_eq!(parsed_recipient_str, recipient_str);
+    // Round-trip: parse the private key, derive the public key encoding
+    let parsed_private_key = parse_x25519_private_key(&private_key_str).unwrap();
+    let parsed_public_key_str = x25519_public_key_encoding(&parsed_private_key);
+    assert_eq!(parsed_public_key_str, public_key_str);
 
-    // Parse recipient
-    let _parsed_recipient = parse_recipient(&recipient_str).unwrap();
+    // Parse the public key encoding
+    let _parsed_public_key = parse_x25519_public_key(&public_key_str).unwrap();
 }
 
 #[test]

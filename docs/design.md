@@ -7,6 +7,45 @@ when prose elsewhere disagrees with this document or with the code, this
 document should be corrected first, then the prose. Each claim names the
 enforcing function; the named function, not any line number, is the contract.
 
+## Terminology: crypto terms in the core, ageisms at the boundary
+
+git-veil's core and code speak RFC-standard cryptography only. The words
+the age ecosystem uses as its marketing names for key material — the
+**ageisms** (the not-insulting name chosen for them) — appear only at the
+user surface, and only where the documentation advises the operator how to
+do something in age (run an age command, interoperate with age/rage
+tooling). Where both vocabularies must span, the form is the crypto term
+followed by the ageism in brackets: "X25519 private key (age identity)".
+
+| Crypto term (git-veil core and code) | ageism (age marketing vocabulary) |
+|--------------------------------------|-----------------------------------|
+| X25519 public key — bech32-encoded per the age spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
+| X25519 private key — bech32-encoded per the age spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
+| principal — the keyring label (a collaborator's email) | — (age has no word for it) |
+| Ed25519 verifying key — the public half of the keyring signing key | — (already standard vocabulary) |
+| Ed25519 signing key — the private seed | — (already standard vocabulary) |
+
+The law:
+
+1. **Core and code** (src/, internals, comments, error messages, commit
+   messages) use the crypto column only. An ageism in src/ outside a
+   user-surface string literal is a defect; `tests/docs_drift.rs`
+   (`test_no_ageisms_in_src_outside_string_literals`) greps for exactly
+   that and fails the build.
+2. **The user surface** (CLI help text, operator docs) uses the crypto
+   column too, EXCEPT where the documentation advises the operator how to
+   do something in age; only there may the ageism appear, in the bracketed
+   spanning form.
+3. **This table is the translation reference** for any reader spanning
+   both vocabularies; AGENTS.md carries the same law verbatim.
+4. **Two boundary tokens remain, named here as the contract**: the on-disk
+   key store file names `identities.txt` (X25519 private keys) and
+   `recipients.txt` (X25519 public keys) predate this rule and remain as
+   format constants, and the upstream `age` crate's type names
+   (`age::x25519::Identity`, `age::x25519::Recipient`) appear at the single
+   import site in `src/age_crypto.rs`, where they are aliased to
+   `X25519PrivateKey` / `X25519PublicKey`.
+
 ## Repository identity
 
 Every repository is identified by a `repo_id` derived from its git remote push
@@ -89,7 +128,8 @@ pin:
 1. **Possession proof** — `git-veil trust <repo_id>`
    (`cmd_trust`, src/commands/trust.rs). The candidate is the repository's
    committed `owner.verifying` (64-hex Ed25519 verifying key on line 1; the
-   owner's age recipient may follow on line 2). The proof is an exact match
+   owner's X25519 public key (age recipient) may follow on line 2). The
+   proof is an exact match
    between that candidate and the verifying key derived from a seed in
    `<key store>/signing-keys.txt` (`prove_possession`): every seed is
    iterated, a unique match pins, zero matches refuse with
@@ -243,14 +283,15 @@ key store, no pin, no network. A user on a clean host reproduces the exact
 value with stock OS tools:
 
 ```sh
-printf '%s:%s' 'alice@example.com' "$(age-keygen -y identity.txt)" | sha256sum
+printf '%s:%s' 'alice@example.com' "$(age-keygen -y private-key.txt)" | sha256sum
 printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
 ```
 
 Use `printf`, never `echo` (echo appends a newline and hashes different
 bytes). Exactly one colon separates label and key. The digest is lowercase
 hex. `owner.verifying` line 1 is the verifying key; `head -n 1` selects it
-because the file may carry the owner's age recipient on line 2.
+because the file may carry the owner's X25519 public key (age recipient)
+on line 2.
 
 **Golden vectors.** These (label, public key encoding, fingerprint)
 triples are produced by the one-liners above and asserted against the Rust
@@ -293,16 +334,16 @@ The keyring file is an armored block:
 ```
 -----BEGIN GIT-VEIL KEYRING-----
 version:<n>
-<email>:<age-recipient>
+<email>:<X25519-public-key>
 ...
 -----END GIT-VEIL KEYRING-----
 -----BEGIN GIT-VEIL SIGNATURE-----
 <base64 Ed25519 signature over everything above, markers included>
------END GIT-VEIL SIGNATURE-----
 ```
 
 Keyring format v2 (issue #41): exactly two fields per entry — the
-principal and the public key — with the signature over the pair.
+principal (email) and the bech32 X25519 public key — with the signature
+over the pair.
 Fingerprints are computed on demand (see "Fingerprints") and NEVER stored;
 a legacy three-field entry carrying a stored fingerprint is a parse
 refusal (exit code 62), never a silent migration.
@@ -317,7 +358,7 @@ clock, so there is no drift to reason about.
 **Rollback refusal.** The signature alone proves "the owner signed this at
 some point", not "this is current": a plain `git revert` of a removeperson
 commit restores an old, still-validly-signed keyring, silently returning a
-revoked collaborator to the recipient set. The defence is a per-machine
+revoked collaborator to the keyring. The defence is a per-machine
 **freshness baseline**: the highest keyring version this machine has ever
 accepted for this repo id, stored OUTSIDE the repository next to the pin
 (`<key store>/trust-pins/<sanitized repo id>.ring-version`,
@@ -401,12 +442,13 @@ duplicated store) refuses with code 70 rather than silently picking one.
    present-but-garbage line in signing-keys.txt is a parse error, never
    silently treated as "no keys".
 
-**Age identities** (`discover_identity`): decrypting commands resolve their
-keyring entry by email, then look up the matching age identity in
-`<key store>/identities.txt`. No matching identity → exit code 21 after
-printing the `age-keygen`/`rage-keygen` recipe, the `git-veil import` step,
-and the backup instruction. A user whose email is not in the signed keyring at
-all fails earlier, with exit code 22.
+**X25519 private keys** (`discover_x25519_private_key`): decrypting commands
+resolve their keyring entry by principal, then look up the matching X25519
+private key in `<key store>/identities.txt`. No matching private key → exit
+code 21 after printing the `age-keygen`/`rage-keygen` creation recipe for
+the private key (age identity), the `git-veil import` step, and the backup
+instruction. A user whose principal is not in the signed keyring at all
+fails earlier, with exit code 22.
 
 ## Key store permissions
 
@@ -434,7 +476,7 @@ again. The check is bypassed entirely by the global
 environment variable.
 
 Files git-veil itself creates that hold private key material —
-`identities.txt` (via `import` and `import_identity_to_store`) and the
+`identities.txt` (via `import` and `import_x25519_private_key_to_store`) and the
 acknowledgment file — are created mode 0600 at write time
 (`write_atomic_mode`, src/fs_atomic.rs), independent of the process umask.
 Repo working-tree files (revealed plaintext, `.secret` ciphertext) are
@@ -452,9 +494,10 @@ either the old content or the new content, never a mix. `write_atomic_mode` is
 the same sequence with an explicit creation mode for private key material.
 Covered writes: the keyring (`cmd_init`, `cmd_tell`, `cmd_removeperson`),
 tracked.json (`TrackedFiles::save`), trust.json and pins (`TrustStore`,
-`TrustPinStore`), the identity/recipient/verifying-key stores
-(`cmd_import`, `import_identity_to_store`, `import_recipient_to_store`,
-`cmd_trust`), ciphertext (`cmd_hide`), restored plaintext (`cmd_reveal`,
+`TrustPinStore`), the private-key/public-key/verifying-key stores
+(`cmd_import`, `import_x25519_private_key_to_store`,
+`import_x25519_public_key_to_store`, `cmd_trust`), ciphertext (`cmd_hide`),
+restored plaintext (`cmd_reveal`,
 `cmd_unhide`), export output (`cmd_export`), the removekey rewrite
 (`cmd_removekey`), and the permissions acknowledgment
 (`cmd_trust_permissions`). Key-store appends are implemented as read-existing
@@ -463,7 +506,7 @@ so a torn private-key store (which would brick all decryption) is impossible.
 
 **Two-phase hide/reveal.** `hide` is compute-then-commit: phase 1 reads and
 validates every tracked plaintext and encrypts all of them to the full
-recipient set in memory; any failure aborts with nothing changed on disk
+public key set in memory; any failure aborts with nothing changed on disk
 (`cmd_hide`, src/commands/hide.rs). Phase 2 writes each `.secret` atomically;
 a part-way write failure is reported with written/total counts and exits
 non-zero. **The plaintext is deleted by default** once every ciphertext is
@@ -528,9 +571,9 @@ invariants true (`src/commands/add.rs`, `src/commands/hide.rs`):
    (git-veil plaintexts are gitignored by construction; a tracked plaintext
    is exactly the state the code-41 warning flags). If `reveal` or `unhide`
    refused nothing there, a repo writer could nominate a source file — say
-   `ci/deploy.sh` — in the unsigned `tracked.json` and commit a payload
-   ciphertext encrypted to the ring's public recipient keys (no signing key
-   needed, the keyring is untouched); the victim's `reveal` would overwrite
+    `ci/deploy.sh` — in the unsigned `tracked.json` and commit a payload
+    ciphertext encrypted to the ring's public keys (no signing key
+    needed, the keyring is untouched); the victim's `reveal` would overwrite
    the source file and the CI would execute it. `reveal` and `unhide`
    therefore refuse with exit code 43 (PlaintextTracked) when the target
    plaintext path is tracked in the git index, naming the path and the
@@ -745,14 +788,14 @@ codes are never renumbered, only appended.
 | 13   | TrustRepoIdMismatch          | repo_id argument does not match the one derived from the remote |
 | 14   | KeyringRollback              | Keyring version is below this machine's freshness baseline; re-`trust` if the rollback is intended |
 | 20   | NoSigningKey                 | No Ed25519 signing key in the key store; create one and back it up |
-| 21   | NoAgeIdentity                | No age identity in the key store matching your keyring entry; create and import one |
-| 22   | IdentityNotInKeyring         | Your email is not in the signed keyring; ask the owner to `tell` you |
+| 21   | NoX25519PrivateKey           | No X25519 private key in the key store matching your keyring entry; create and import one |
+| 22   | PrincipalNotInKeyring        | Your principal is not in the signed keyring; ask the owner to `tell` you |
 | 30   | UnsafeKeyStorePermissions    | Key store directory or private key file is group/world accessible |
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
 | 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `hide` refuses (see "Orphaned ciphertext") |
 | 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`/`unhide`; see "Ignore safety" gate 4) |
-| 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local identity |
+| 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local private key |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
 | 63   | SignatureVerificationFailed  | Keyring signature missing or invalid |

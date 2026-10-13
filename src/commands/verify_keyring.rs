@@ -177,7 +177,7 @@ pub fn verify_keyring_against_trust(
     // Freshness check (see "Keyring format and freshness" in docs/design.md):
     // a valid signature proves the owner signed this keyring at some point,
     // not that it is current. A `git revert` of a removeperson commit would
-    // otherwise silently return a revoked collaborator to the recipient set.
+    // otherwise silently return a revoked collaborator to the keyring.
     // The per-machine baseline (highest version ever accepted here, stored
     // outside the repo beside the pin) turns any version regression —
     // including a versionless pre-freshness keyring, which counts as 0 —

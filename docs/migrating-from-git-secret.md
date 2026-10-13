@@ -17,11 +17,11 @@ To be plain about it:
   uses `.git-veil/`.
 - The keyring machinery differs. git-secret stores a gpg keyring of public
   keys in `.gitsecret/keys/` and answers "who can read this repo" from it
-  (`git secret whoknows`); decryption uses your personal `~/.gnupg`
-  keyring. git-veil stores a keyring that is *signed* by the repository
-  owner's Ed25519 key, keeps your age identity in a git-veil key store
-  (`$HOME/.git-veil`), and verifies the keyring signature against a
-  per-machine trust pin before every operation.
+   (`git secret whoknows`); decryption uses your personal `~/.gnupg`
+   keyring. git-veil stores a keyring that is *signed* by the repository
+   owner's Ed25519 key, keeps your X25519 private key in a git-veil key
+   store (`$HOME/.git-veil`), and verifies the keyring signature against a
+   per-machine trust pin before every operation.
 
 [age]: https://crates.io/crates/age
 
@@ -40,11 +40,11 @@ habits, so they are stated up front:
    operation, so keys live in (and move through) the GnuPG keychain:
    collaborators `gpg --import` each other's public keys, and git-secret
    finds them there when you run `tell`. git-veil has no gpg step at
-   runtime: keys are age identities created with `age-keygen` (or
-   `rage-keygen`) and moved as plain text files, with `import` (your own
-   identity, per machine) and `export` (the recipient string, to hand to
-   the owner). Your existing OpenPGP keys do NOT carry over — the
-   migration includes creating fresh age keys.
+   runtime: keys are X25519 private keys (age identities) created with
+   `age-keygen` (or `rage-keygen`) and moved as plain text files, with
+   `import` (your own private key, per machine) and `export` (the public
+   key, to hand to the owner). Your existing OpenPGP keys do NOT carry
+   over — the migration includes creating fresh X25519 keys.
 2. **The keyring is signed and tamper-evident.** git-secret's
    `.gitsecret/keys/` keyring is an ordinary gpg keyring; nothing in
    git-secret detects it being edited in place. git-veil's keyring file
@@ -163,8 +163,8 @@ $ git-veil trust demo+example@github.com
 ✓ Pinned … for demo+example@github.com on this machine
 ```
 
-Each collaborator, on their machine, creates their own age identity and
-sends the owner the printed recipient string:
+Each collaborator, on their machine, creates their own X25519 private key
+(age identity) and sends the owner the printed public key:
 
 ```sh
 $ age-keygen -o alice-age-identity.txt
@@ -172,8 +172,8 @@ $ age-keygen -o alice-age-identity.txt
 $ git-veil import alice-age-identity.txt
 ```
 
-The owner then adds each one (any file whose first line is the recipient
-string works):
+The owner then adds each one (any file whose first line is the public key
+encoding works):
 
 ```sh
 $ git-veil tell alice@example.com alice-age-identity.txt
@@ -182,10 +182,10 @@ $ git-veil tell alice@example.com alice-age-identity.txt
 
 What just happened: this is the git-secret `tell` split into two steps
 (key hand-off, then ring membership). The reason is difference #1: there
-is no shared gpg keychain for `tell` to look keys up in, so the recipient
-string arrives as an explicit file, and the owner's `tell` signs it into
+is no shared gpg keychain for `tell` to look keys up in, so the public
+key arrives as an explicit file, and the owner's `tell` signs it into
 the keyring. Collaborators who want a head start can already `import`
-their own identity (step 5 uses it).
+their own private key (step 5 uses it).
 
 ### 4. Track the files and hide
 
@@ -265,7 +265,7 @@ Checklist:
 | git-secret                              | git-veil                        | Notes |
 |-----------------------------------------|---------------------------------|-------|
 | `git secret init`                       | `git-veil init` + `git-veil trust` | Setup splits in two: `init` creates `.git-veil/`, `trust` pins the owner's key per machine (git-secret had no pin step) |
-| `git secret tell`                       | `git-veil import` + `git-veil tell` | Two steps, because there is no gpg keychain for `tell` to find keys in — recipient strings arrive as files; `import` is for *your own* age identity (per machine) |
+| `git secret tell`                       | `git-veil import` + `git-veil tell` | Two steps, because there is no gpg keychain for `tell` to find keys in — public keys arrive as files; `import` is for *your own* X25519 private key (per machine) |
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
 | `git secret add`                        | `git-veil add`                  | Both append the plaintext name to `.gitignore` when not already ignored; git-veil additionally warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove`               | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
@@ -280,7 +280,7 @@ Checklist:
 | `git secret clean`                      | *(no bulk equivalent)*          | git-secret `clean` deletes all `*.secret` files repo-wide; git-veil deletes one file's ciphertext with `unhide <file>` — there is no repo-wide ciphertext deletion |
 | `git secret usage`                      | `git-veil help`                 | Also `git-veil help <command>` for a workflow discussion, `git-veil <command> --help` for flags |
 | *(none — verify-keyring)*               | `git-veil verify-keyring`       | No git-secret counterpart: git-secret's keyring is an unsigned gpg keyring, so there is nothing to verify. (git-secret has no `warnings` command — its invalid-key notices come from `tell`/`whoknows` output) |
-| *(none)*                                | `git-veil trust`, `import`, `export`, `unhide`, `whoami`, `show-repo-id` | The rest of the machinery: per-machine trust pin, key hand-off without a gpg keychain, single-file reveal, identity/store introspection |
+| *(none)*                                | `git-veil trust`, `import`, `export`, `unhide`, `whoami`, `show-repo-id` | The rest of the machinery: per-machine trust pin, key hand-off without a gpg keychain, single-file reveal, principal/store introspection |
 
 ## Sources
 

@@ -16,7 +16,7 @@
 //! with stock OS tools (see docs/design.md, "Fingerprints"):
 //!
 //! ```text
-//! printf '%s:%s' 'principal-label' "$(age-keygen -y identity.txt)" | sha256sum
+//! printf '%s:%s' 'principal-label' "$(age-keygen -y private-key.txt)" | sha256sum
 //! printf '%s:%s' 'repo-id' "$(head -n 1 owner.verifying)" | sha256sum
 //! ```
 //!

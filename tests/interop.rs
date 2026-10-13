@@ -4,10 +4,11 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    decrypt_with_identity, encrypt_to_recipient, encrypt_to_recipients, export_public_key,
-    find_identity_by_recipient, generate_identity, import_identity_to_store,
-    import_recipient_to_store, load_identities_from_store, load_recipients_from_store,
-    parse_identity, parse_recipient, recipient_from_identity, Keyring,
+    decrypt_with_x25519_private_key, encrypt_to_x25519_public_key, encrypt_to_x25519_public_keys,
+    export_public_key, find_x25519_private_key_by_public_key, generate_x25519_private_key,
+    import_x25519_private_key_to_store, import_x25519_public_key_to_store,
+    load_x25519_private_keys_from_store, load_x25519_public_keys_from_store,
+    parse_x25519_private_key, parse_x25519_public_key, x25519_public_key_encoding, Keyring,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -54,43 +55,43 @@ fn has_tool(name: &str) -> bool {
 
 #[test]
 fn test_identity_recipient_roundtrip() {
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
-    let parsed = parse_identity(&identity_str).expect("parse identity");
-    let parsed_recipient = recipient_from_identity(&parsed);
+    let parsed = parse_x25519_private_key(&identity_str).expect("parse identity");
+    let parsed_recipient = x25519_public_key_encoding(&parsed);
     assert_eq!(parsed_recipient, recipient_str);
 
-    let _recipient = parse_recipient(&recipient_str).expect("parse recipient");
+    let _recipient = parse_x25519_public_key(&recipient_str).expect("parse recipient");
 }
 
 #[test]
 fn test_encrypt_recipient_decrypt_identity() {
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
-    let recipient = parse_recipient(&recipient_str).unwrap();
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
+    let recipient = parse_x25519_public_key(&recipient_str).unwrap();
 
     let plaintext = b"interop test\n";
-    let ciphertext = encrypt_to_recipient(plaintext, &recipient).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let ciphertext = encrypt_to_x25519_public_key(plaintext, &recipient).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
 
     assert_eq!(decrypted, plaintext);
 }
 
 #[test]
 fn test_multi_recipient_all_decrypt() {
-    let ids: Vec<_> = (0..3).map(|_| generate_identity()).collect();
+    let ids: Vec<_> = (0..3).map(|_| generate_x25519_private_key()).collect();
     let recipients: Vec<_> = ids
         .iter()
-        .map(|id| parse_recipient(&recipient_from_identity(id)).unwrap())
+        .map(|id| parse_x25519_public_key(&x25519_public_key_encoding(id)).unwrap())
         .collect();
 
     let plaintext = b"multi\n";
-    let ciphertext = encrypt_to_recipients(plaintext, &recipients).unwrap();
+    let ciphertext = encrypt_to_x25519_public_keys(plaintext, &recipients).unwrap();
 
     for id in &ids {
-        let decrypted = decrypt_with_identity(&ciphertext, id).unwrap();
+        let decrypted = decrypt_with_x25519_private_key(&ciphertext, id).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 }
@@ -98,13 +99,13 @@ fn test_multi_recipient_all_decrypt() {
 #[test]
 fn test_key_store_import_load_identity() {
     let store = TempDir::new("ks-id");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
-    import_identity_to_store(&store.path, &identity_str).unwrap();
+    import_x25519_private_key_to_store(&store.path, &identity_str).unwrap();
 
-    let loaded = load_identities_from_store(&store.path).unwrap();
+    let loaded = load_x25519_private_keys_from_store(&store.path).unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].1, recipient_str);
 }
@@ -112,37 +113,37 @@ fn test_key_store_import_load_identity() {
 #[test]
 fn test_key_store_import_load_recipient() {
     let store = TempDir::new("ks-rcpt");
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
 
-    import_recipient_to_store(&store.path, &recipient_str).unwrap();
+    import_x25519_public_key_to_store(&store.path, &recipient_str).unwrap();
 
-    let loaded = load_recipients_from_store(&store.path).unwrap();
+    let loaded = load_x25519_public_keys_from_store(&store.path).unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].1, recipient_str);
 }
 
 #[test]
-fn test_find_identity_by_recipient() {
+fn test_find_x25519_private_key_by_public_key() {
     let store = TempDir::new("ks-find-rcpt");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
-    import_identity_to_store(&store.path, &identity_str).unwrap();
+    import_x25519_private_key_to_store(&store.path, &identity_str).unwrap();
 
-    let found = find_identity_by_recipient(&store.path, &recipient_str).unwrap();
-    let found_recipient = recipient_from_identity(&found);
+    let found = find_x25519_private_key_by_public_key(&store.path, &recipient_str).unwrap();
+    let found_recipient = x25519_public_key_encoding(&found);
     assert_eq!(found_recipient, recipient_str);
 }
 
 #[test]
 fn test_export_by_recipient_str() {
     let store = TempDir::new("ks-export");
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
 
-    import_recipient_to_store(&store.path, &recipient_str).unwrap();
+    import_x25519_public_key_to_store(&store.path, &recipient_str).unwrap();
 
     let exported = export_public_key(&store.path, &recipient_str).unwrap();
     assert_eq!(exported.trim(), recipient_str);
@@ -150,8 +151,8 @@ fn test_export_by_recipient_str() {
 
 #[test]
 fn test_keyring_serialize_parse_roundtrip() {
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     let mut keyring = Keyring::new();
     keyring
@@ -163,15 +164,15 @@ fn test_keyring_serialize_parse_roundtrip() {
 
     assert_eq!(parsed.entries.len(), 1);
     assert_eq!(parsed.entries[0].email, "alice@example.com");
-    assert_eq!(parsed.entries[0].recipient, recipient_str);
+    assert_eq!(parsed.entries[0].public_key, recipient_str);
 }
 
 #[test]
 fn test_keyring_v2_two_field_format() {
     // Keyring format v2 (issue #41): exactly two fields per entry,
     // principal and public key; fingerprints are computed, never stored.
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     let mut keyring = Keyring::new();
     keyring
@@ -203,8 +204,8 @@ fn test_keyring_v2_two_field_format() {
 
 #[test]
 fn test_keyring_with_signature_roundtrip() {
-    let identity = generate_identity();
-    let recipient_str = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     let mut keyring = Keyring::new();
     keyring
@@ -326,17 +327,19 @@ fn test_age_keygen_identity_works_with_git_veil() {
     let (identity_str, recipient_str) = age_keygen(&dir, "key.txt");
 
     // git-veil can parse the identity
-    let identity = parse_identity(&identity_str).expect("git-veil parse age-keygen identity");
+    let identity =
+        parse_x25519_private_key(&identity_str).expect("git-veil parse age-keygen identity");
 
     // git-veil can derive the same recipient
-    let derived = recipient_from_identity(&identity);
+    let derived = x25519_public_key_encoding(&identity);
     assert_eq!(
         derived, recipient_str,
         "git-veil recipient should match age-keygen recipient"
     );
 
     // git-veil can parse the recipient
-    let _recipient = parse_recipient(&recipient_str).expect("git-veil parse age-keygen recipient");
+    let _recipient =
+        parse_x25519_public_key(&recipient_str).expect("git-veil parse age-keygen recipient");
 }
 
 #[test]
@@ -349,14 +352,16 @@ fn test_rage_keygen_identity_works_with_git_veil() {
     let dir = TempDir::new("rage-keygen");
     let (identity_str, recipient_str) = rage_keygen(&dir, "key.txt");
 
-    let identity = parse_identity(&identity_str).expect("git-veil parse rage-keygen identity");
-    let derived = recipient_from_identity(&identity);
+    let identity =
+        parse_x25519_private_key(&identity_str).expect("git-veil parse rage-keygen identity");
+    let derived = x25519_public_key_encoding(&identity);
     assert_eq!(
         derived, recipient_str,
         "git-veil recipient should match rage-keygen recipient"
     );
 
-    let _recipient = parse_recipient(&recipient_str).expect("git-veil parse rage-keygen recipient");
+    let _recipient =
+        parse_x25519_public_key(&recipient_str).expect("git-veil parse rage-keygen recipient");
 }
 
 #[test]
@@ -370,13 +375,13 @@ fn test_git_veil_identity_works_with_age_keygen_recipient() {
     let (identity_str, recipient_str) = age_keygen(&dir, "key.txt");
 
     // git-veil encrypts with the age-keygen recipient
-    let recipient = parse_recipient(&recipient_str).unwrap();
+    let recipient = parse_x25519_public_key(&recipient_str).unwrap();
     let plaintext = b"encrypted by git-veil, key from age-keygen\n";
-    let ciphertext = encrypt_to_recipient(plaintext, &recipient).unwrap();
+    let ciphertext = encrypt_to_x25519_public_key(plaintext, &recipient).unwrap();
 
     // git-veil decrypts with the age-keygen identity
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -411,14 +416,14 @@ fn test_git_veil_encrypts_age_cli_decrypts() {
     }
 
     let dir = TempDir::new("gv-enc-age-dec");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     // git-veil encrypts
-    let recipient = parse_recipient(&recipient_str).unwrap();
+    let recipient = parse_x25519_public_key(&recipient_str).unwrap();
     let plaintext = b"git-veil encrypted, age CLI decrypted\n";
-    let ciphertext = encrypt_to_recipient(plaintext, &recipient).unwrap();
+    let ciphertext = encrypt_to_x25519_public_key(plaintext, &recipient).unwrap();
 
     // Write ciphertext to file
     let ct_path = dir.join("ciphertext.bin");
@@ -451,13 +456,13 @@ fn test_git_veil_encrypts_rage_cli_decrypts() {
     }
 
     let dir = TempDir::new("gv-enc-rage-dec");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
-    let recipient = parse_recipient(&recipient_str).unwrap();
+    let recipient = parse_x25519_public_key(&recipient_str).unwrap();
     let plaintext = b"git-veil encrypted, rage CLI decrypted\n";
-    let ciphertext = encrypt_to_recipient(plaintext, &recipient).unwrap();
+    let ciphertext = encrypt_to_x25519_public_key(plaintext, &recipient).unwrap();
 
     let ct_path = dir.join("ciphertext.bin");
     fs::write(&ct_path, &ciphertext).unwrap();
@@ -491,9 +496,9 @@ fn test_age_cli_encrypts_git_veil_decrypts() {
     }
 
     let dir = TempDir::new("age-enc-gv-dec");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     // Write plaintext
     let pt_path = dir.join("plaintext.txt");
@@ -514,8 +519,8 @@ fn test_age_cli_encrypts_git_veil_decrypts() {
 
     // git-veil decrypts
     let ciphertext = fs::read(&ct_path).unwrap();
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -527,9 +532,9 @@ fn test_rage_cli_encrypts_git_veil_decrypts() {
     }
 
     let dir = TempDir::new("rage-enc-gv-dec");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     let pt_path = dir.join("plaintext.txt");
     let plaintext = b"rage CLI encrypted, git-veil decrypted\n";
@@ -547,8 +552,8 @@ fn test_rage_cli_encrypts_git_veil_decrypts() {
     assert!(status.success(), "rage encrypt failed");
 
     let ciphertext = fs::read(&ct_path).unwrap();
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -582,8 +587,8 @@ fn test_age_keygen_rage_encrypt_git_veil_decrypt() {
     assert!(status.success(), "rage encrypt failed");
 
     let ciphertext = fs::read(&ct_path).unwrap();
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -617,8 +622,8 @@ fn test_rage_keygen_age_encrypt_git_veil_decrypt() {
     assert!(status.success(), "age encrypt failed");
 
     let ciphertext = fs::read(&ct_path).unwrap();
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -634,9 +639,9 @@ fn test_git_veil_key_age_cli_encrypts_and_decrypts() {
     }
 
     let dir = TempDir::new("gv-key-age-cli");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     // Write identity file in age CLI format
     let id_path = write_identity_file(&dir, "identity.txt", &identity_str, &recipient_str);
@@ -674,8 +679,8 @@ fn test_git_veil_key_age_cli_encrypts_and_decrypts() {
 
     // git-veil also decrypts the age-CLI-encrypted file
     let ciphertext = fs::read(&ct_path).unwrap();
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -691,9 +696,9 @@ fn test_git_veil_key_rage_cli_encrypts_and_decrypts() {
     }
 
     let dir = TempDir::new("gv-key-rage-cli");
-    let identity = generate_identity();
+    let identity = generate_x25519_private_key();
     let identity_str = identity.to_string().expose_secret().to_string();
-    let recipient_str = recipient_from_identity(&identity);
+    let recipient_str = x25519_public_key_encoding(&identity);
 
     let id_path = write_identity_file(&dir, "identity.txt", &identity_str, &recipient_str);
 
@@ -728,8 +733,8 @@ fn test_git_veil_key_rage_cli_encrypts_and_decrypts() {
 
     // git-veil also decrypts the rage-CLI-encrypted file
     let ciphertext = fs::read(&ct_path).unwrap();
-    let identity = parse_identity(&identity_str).unwrap();
-    let decrypted = decrypt_with_identity(&ciphertext, &identity).unwrap();
+    let identity = parse_x25519_private_key(&identity_str).unwrap();
+    let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
 }
 
@@ -745,17 +750,17 @@ fn test_git_veil_multi_recipient_age_cli_decrypts() {
     }
 
     let dir = TempDir::new("gv-multi-age");
-    let id1 = generate_identity();
-    let id2 = generate_identity();
+    let id1 = generate_x25519_private_key();
+    let id2 = generate_x25519_private_key();
     let id1_str = id1.to_string().expose_secret().to_string();
-    let r1_str = recipient_from_identity(&id1);
-    let r2_str = recipient_from_identity(&id2);
+    let r1_str = x25519_public_key_encoding(&id1);
+    let r2_str = x25519_public_key_encoding(&id2);
 
-    let r1 = parse_recipient(&r1_str).unwrap();
-    let r2 = parse_recipient(&r2_str).unwrap();
+    let r1 = parse_x25519_public_key(&r1_str).unwrap();
+    let r2 = parse_x25519_public_key(&r2_str).unwrap();
 
     let plaintext = b"multi-recipient git-veil encrypted, age CLI decrypted\n";
-    let ciphertext = encrypt_to_recipients(plaintext, &[r1, r2]).unwrap();
+    let ciphertext = encrypt_to_x25519_public_keys(plaintext, &[r1, r2]).unwrap();
 
     let ct_path = dir.join("ciphertext.bin");
     fs::write(&ct_path, &ciphertext).unwrap();
@@ -807,12 +812,13 @@ fn test_age_keygen_file_importable_by_git_veil() {
     let dir = TempDir::new("agk-import");
     let (identity_str, recipient_str) = age_keygen(&dir, "key.txt");
 
-    // git-veil's import_identity_to_store should accept the identity string
+    // git-veil's import_x25519_private_key_to_store should accept the
+    // age-keygen private key encoding
     let store = TempDir::new("agk-import-store");
-    import_identity_to_store(&store.path, &identity_str).unwrap();
+    import_x25519_private_key_to_store(&store.path, &identity_str).unwrap();
 
     // Verify it loads back
-    let loaded = load_identities_from_store(&store.path).unwrap();
+    let loaded = load_x25519_private_keys_from_store(&store.path).unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].1, recipient_str);
 }
@@ -828,9 +834,9 @@ fn test_rage_keygen_file_importable_by_git_veil() {
     let (identity_str, recipient_str) = rage_keygen(&dir, "key.txt");
 
     let store = TempDir::new("rgk-import-store");
-    import_identity_to_store(&store.path, &identity_str).unwrap();
+    import_x25519_private_key_to_store(&store.path, &identity_str).unwrap();
 
-    let loaded = load_identities_from_store(&store.path).unwrap();
+    let loaded = load_x25519_private_keys_from_store(&store.path).unwrap();
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].1, recipient_str);
 }

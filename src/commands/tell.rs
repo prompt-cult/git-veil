@@ -7,8 +7,8 @@ use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
 use crate::{
-    create_signature_block, encrypt_to_recipient, extract_content_to_verify_from_keyring,
-    parse_recipient, verify_keyring_against_trust, Keyring, TrackedFiles,
+    create_signature_block, encrypt_to_x25519_public_key, extract_content_to_verify_from_keyring,
+    parse_x25519_public_key, verify_keyring_against_trust, Keyring, TrackedFiles,
 };
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
@@ -35,16 +35,16 @@ pub fn cmd_tell(
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Read and parse collaborator key (relative paths resolve against repo_root)
-    // The key file contains the age recipient string on the first line.
+    // The key file contains the X25519 public key encoding on the first line.
     let key_content = fs::read_to_string(repo_root.join(collaborator_key_path))
         .with_context(|| "failed to read the collaborator key file".to_string())?;
-    let recipient_str = key_content.lines().next().unwrap_or("").trim();
-    let collaborator_recipient = parse_recipient(recipient_str)?;
+    let public_key_str = key_content.lines().next().unwrap_or("").trim();
+    let collaborator_public_key = parse_x25519_public_key(public_key_str)?;
 
     // Test-encrypt a canary to the collaborator key to verify it can actually
     // encrypt, BEFORE any keyring mutation: a malformed-but-parseable key
     // must never be signed into the committed keyring. The canary is in-memory only.
-    if encrypt_to_recipient(TELL_CANARY, &collaborator_recipient).is_err() {
+    if encrypt_to_x25519_public_key(TELL_CANARY, &collaborator_public_key).is_err() {
         return Err(coded(
             ExitCode::EncryptionFailed,
             "collaborator key cannot encrypt. The public key may be invalid. See the tell documentation"
@@ -58,9 +58,9 @@ pub fn cmd_tell(
         fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
     let mut keyring = Keyring::parse(&keyring_content)?;
 
-    // Add the two-field entry (principal, public key). The binding
+    // Add the two-field entry (principal, X25519 public key). The binding
     // fingerprint is computed on demand, never stored (issue #41).
-    keyring.add_entry(email.to_string(), recipient_str.to_string())?;
+    keyring.add_entry(email.to_string(), public_key_str.to_string())?;
 
     // Bump the monotonic freshness counter BEFORE signing, so the counter is
     // covered by the new signature (see docs/design.md "Keyring format and
