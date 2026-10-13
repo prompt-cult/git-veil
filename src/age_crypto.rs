@@ -103,18 +103,6 @@ pub fn generate_identity() -> Identity {
     Identity::generate()
 }
 
-/// Derives a fingerprint from an age recipient string.
-///
-/// The recipient string itself is a unique identifier, but we hash it to
-/// produce a compact fingerprint for display and trust-pin matching.
-pub fn fingerprint_for_recipient(recipient_str: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    recipient_str.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
-}
-
 /// Encrypts plaintext to ALL the given recipients as ONE age message.
 ///
 /// Each recipient gets its own stanza wrapping the same file key, so every
@@ -279,26 +267,4 @@ pub fn find_identity_by_recipient(key_store: &Path, recipient_str: &str) -> Resu
         .find(|(_, recipient)| recipient == wanted)
         .map(|(identity, _)| identity)
         .ok_or_else(|| anyhow::anyhow!("No age identity found for recipient: {}", recipient_str))
-}
-
-/// Finds an age identity by fingerprint (derived from recipient string).
-pub fn find_identity_by_fingerprint(key_store: &Path, fingerprint: &str) -> Result<Identity> {
-    let identities = load_identities_from_store(key_store)?;
-    let wanted = fingerprint.trim().to_lowercase();
-    identities
-        .into_iter()
-        .find(|(_, recipient)| fingerprint_for_recipient(recipient) == wanted)
-        .map(|(identity, _)| identity)
-        .ok_or_else(|| anyhow::anyhow!("No age identity found for fingerprint: {}", fingerprint))
-}
-
-/// Finds a recipient string by fingerprint in the key store.
-pub fn find_recipient_by_fingerprint(key_store: &Path, fingerprint: &str) -> Result<String> {
-    let recipients = load_recipients_from_store(key_store)?;
-    let wanted = fingerprint.trim().to_lowercase();
-    recipients
-        .into_iter()
-        .find(|(_, recipient_str)| fingerprint_for_recipient(recipient_str) == wanted)
-        .map(|(_, recipient_str)| recipient_str)
-        .ok_or_else(|| anyhow::anyhow!("No recipient found for fingerprint: {}", fingerprint))
 }

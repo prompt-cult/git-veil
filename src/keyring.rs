@@ -15,7 +15,6 @@ const VERSION_PREFIX: &str = "version:";
 pub struct KeyringEntry {
     pub email: String,
     pub recipient: String,
-    pub fingerprint: String,
 }
 
 #[derive(Debug, Clone)]
@@ -92,7 +91,7 @@ impl Keyring {
                 continue;
             }
             let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() != 3 {
+            if parts.len() != 2 {
                 return Err(coded(
                     ExitCode::KeyParseFailure,
                     format!("Malformed keyring entry: {}", line),
@@ -101,7 +100,6 @@ impl Keyring {
             entries.push(KeyringEntry {
                 email: parts[0].to_string(),
                 recipient: parts[1].to_string(),
-                fingerprint: parts[2].to_string(),
             });
         }
 
@@ -132,10 +130,7 @@ impl Keyring {
             result.push_str(&format!("{}{}\n", VERSION_PREFIX, n));
         }
         for entry in &self.entries {
-            result.push_str(&format!(
-                "{}:{}:{}\n",
-                entry.email, entry.recipient, entry.fingerprint
-            ));
+            result.push_str(&format!("{}:{}\n", entry.email, entry.recipient));
         }
         result.push_str(END_MARKER);
         result.push('\n');
@@ -153,18 +148,13 @@ impl Keyring {
     ///
     /// # Format constraint
     ///
-    /// The serialized keyring line format is `email:recipient:fingerprint`
+    /// The serialized keyring line format is `email:recipient`
     /// with `:` as the field separator, so the email MUST NOT contain `:`.
-    /// A colon would produce a 4-field line that every subsequent
+    /// A colon would produce a 3-field line that every subsequent
     /// [`Keyring::parse`] rejects with "Malformed keyring entry", bricking
     /// the signed keyring. This is rejected here with an error naming the
     /// offending email; on rejection nothing is mutated.
-    pub fn add_entry(
-        &mut self,
-        email: String,
-        recipient: String,
-        fingerprint: String,
-    ) -> Result<()> {
+    pub fn add_entry(&mut self, email: String, recipient: String) -> Result<()> {
         if email.contains(':') {
             anyhow::bail!(
                 "Invalid keyring email: emails must not contain a colon \
@@ -177,13 +167,8 @@ impl Keyring {
             .find(|e| e.email.eq_ignore_ascii_case(&email))
         {
             existing.recipient = recipient;
-            existing.fingerprint = fingerprint;
         } else {
-            self.entries.push(KeyringEntry {
-                email,
-                recipient,
-                fingerprint,
-            });
+            self.entries.push(KeyringEntry { email, recipient });
         }
         self.signature = None;
         Ok(())
@@ -229,10 +214,4 @@ impl Keyring {
         self.entries.iter().map(|e| e.email.as_str()).collect()
     }
 
-    pub fn extract_fingerprints(&self) -> Vec<&str> {
-        self.entries
-            .iter()
-            .map(|e| e.fingerprint.as_str())
-            .collect()
-    }
 }
