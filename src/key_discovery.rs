@@ -69,7 +69,7 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
 /// checks against), so the pin, not list order, selects the key.
 ///
 /// No usable key → exit code 20 with the create-and-back-up recipe.
-pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: Option<&str>) -> Result<SigningKey> {
+pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: &str) -> Result<SigningKey> {
     let keys = load_signing_keys(key_store)?;
 
     if keys.is_empty() {
@@ -83,32 +83,23 @@ pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: Option<&str>) 
         ));
     }
 
-    if let Some(fingerprint) = pinned_fingerprint.map(str::trim).filter(|s| !s.is_empty()) {
-        let wanted = fingerprint.to_lowercase();
-        if let Some(key) = keys
-            .iter()
-            .find(|k| fingerprint_for_verifying_key(&k.verifying_key()) == wanted)
-        {
-            return Ok(key.clone());
-        }
-        return Err(coded(
-            ExitCode::NoSigningKey,
-            format!(
-                "the key store {} holds {} signing key(s), but none matches the trusted fingerprint {} pinned for this repository; add the matching seed to signing-keys.txt, or re-pin with git-veil trust\n\n{}",
-                key_store.display(),
-                keys.len(),
-                wanted,
-                signing_key_recipe(key_store)
-            ),
-        ));
+    let wanted = pinned_fingerprint.trim().to_lowercase();
+    if let Some(key) = keys
+        .iter()
+        .find(|k| fingerprint_for_verifying_key(&k.verifying_key()) == wanted)
+    {
+        return Ok(key.clone());
     }
-
-    // No pin to honour (callers that verify trust first never reach this
-    // arm): fall back to the first key.
-    Ok(keys
-        .into_iter()
-        .next()
-        .expect("non-empty keys checked above"))
+    Err(coded(
+        ExitCode::NoSigningKey,
+        format!(
+            "the key store {} holds {} signing key(s), but none matches the trusted fingerprint {} pinned for this repository; add the matching seed to signing-keys.txt, or re-pin with git-veil trust\n\n{}",
+            key_store.display(),
+            keys.len(),
+            wanted,
+            signing_key_recipe(key_store)
+        ),
+    ))
 }
 
 /// Finds the age identity for `recipient_str` in the key store, exiting

@@ -82,7 +82,7 @@ pub fn cmd_tell(
     // checks against), never with the collaborator's key. Discovery selects
     // the signing key whose verifying key matches the pinned fingerprint;
     // git-veil never generates one — a missing key fails with the recipe.
-    let signing_key = discover_signing_key(key_store, Some(&trusted_fingerprint))?;
+    let signing_key = discover_signing_key(key_store, &trusted_fingerprint)?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract (everything up to and including the END marker, excluding the

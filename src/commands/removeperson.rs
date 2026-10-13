@@ -59,7 +59,7 @@ pub fn cmd_removeperson(
     // like tell does, so it must sign with the key verify_keyring checks
     // against, never with any collaborator's key. Discovery selects the
     // signing key whose verifying key matches the pinned fingerprint.
-    let signing_key = discover_signing_key(key_store, Some(&trusted_fingerprint))?;
+    let signing_key = discover_signing_key(key_store, &trusted_fingerprint)?;
 
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of

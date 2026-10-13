@@ -49,7 +49,7 @@ fn write_signing_keys(store: &TempDir, seeds: &[String]) {
 #[test]
 fn test_missing_signing_key_fails_with_code_20_and_recipe() {
     let store = TempDir::new("nosigning");
-    let err = discover_signing_key(&store.path, None).unwrap_err();
+    let err = discover_signing_key(&store.path, "0000000000000000").unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), 20);
     assert!(
@@ -75,24 +75,6 @@ fn test_garbage_signing_keys_file_is_an_error_not_a_missing_key() {
 }
 
 #[test]
-fn test_single_key_used_without_explicit_selection() {
-    let store = TempDir::new("single");
-    let (key, _) = generate_signing_keypair();
-    write_signing_keys(&store, &[hex::encode(key.to_bytes())]);
-
-    let loaded = load_signing_keys(&store.path).unwrap();
-    assert_eq!(loaded.len(), 1);
-
-    // No pin, no explicit selection: the single key is used
-    let selected = discover_signing_key(&store.path, None).unwrap();
-    assert_eq!(
-        selected.to_bytes(),
-        key.to_bytes(),
-        "the only key is selected"
-    );
-}
-
-#[test]
 fn test_pinned_fingerprint_selects_the_trusted_key() {
     let store = TempDir::new("pinned");
     let (first, _) = generate_signing_keypair();
@@ -106,11 +88,11 @@ fn test_pinned_fingerprint_selects_the_trusted_key() {
     );
 
     let pinned = fingerprint_for_verifying_key(&second.verifying_key());
-    let selected = discover_signing_key(&store.path, Some(&pinned)).unwrap();
+    let selected = discover_signing_key(&store.path, &pinned).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 
     // A pin no stored key matches: code 20, never a wrong-key signature
-    let err = discover_signing_key(&store.path, Some(&"0".repeat(64))).unwrap_err();
+    let err = discover_signing_key(&store.path, &"0".repeat(64)).unwrap_err();
     assert_eq!(code_of(err), 20);
 }
 

@@ -266,8 +266,8 @@ keyring-curating commands — select a key as follows:
    fingerprint equals the fingerprint pinned for this repository. The keyring
    must be signed with exactly the key the pin names (that is what
    verify_keyring checks against), so the pin, not list order, selects the
-   key. Selection is therefore deterministic — no interactive menu is
-   needed. (Where no pin applies, the fallback is the first key in the file.)
+   key. Selection is deterministic and the pin is mandatory — no
+   interactive menu is needed.
 2. No usable key → the command exits with code 20 after printing, to stderr,
    the `openssl` recipe that creates the key (the last 32 bytes of the Ed25519
    DER encoding are the seed) and the instruction to **back it up**. A
