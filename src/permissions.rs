@@ -129,7 +129,7 @@ pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
     let mut message = String::from("unsafe permissions on git-veil key store material:\n\n");
     for finding in &unacked {
         message.push_str(&format!(
-            "  {} (mode {:04o})\n",
+            "  {} with mode {:04o}\n",
             finding.path.display(),
             finding.mode
         ));
@@ -155,10 +155,7 @@ pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
 pub fn cmd_trust_permissions(key_store: &Path) -> Result<()> {
     let findings = find_unsafe_permissions(key_store)?;
     if findings.is_empty() {
-        println!(
-            "No unsafe permissions found in {}; nothing to acknowledge",
-            key_store.display()
-        );
+        println!("No unsafe permissions found in the key store. Nothing to acknowledge.");
         return Ok(());
     }
 
@@ -175,12 +172,9 @@ pub fn cmd_trust_permissions(key_store: &Path) -> Result<()> {
     crate::fs_atomic::write_atomic_mode(&ack_path(key_store), json.as_bytes(), 0o600)
         .context("Failed to write permissions-ack.json")?;
 
-    println!(
-        "Acknowledged the current permissions as trusted (recorded in {}):",
-        ack_path(key_store).display()
-    );
+    println!("Acknowledged the current permissions as trusted. Recorded in the key store.");
     for entry in &entries {
-        println!("  {} (mode {:04o})", entry.path, entry.mode);
+        println!("  {} with mode {:04o}", entry.path, entry.mode);
     }
     println!("If any of these change again, git-veil will refuse until you re-acknowledge.");
     Ok(())

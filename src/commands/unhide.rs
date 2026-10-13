@@ -59,10 +59,8 @@ pub fn cmd_unhide(
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
             ExitCode::IdentityNotInKeyring,
-            format!(
-                "user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell",
-                email
-            ),
+            "user not found in the keyring. Check the identity, or ask the owner to add it"
+                .to_string(),
         )
     })?;
 
@@ -83,11 +81,7 @@ pub fn cmd_unhide(
     )?;
 
     if !tracked.files.contains(&relative) {
-        anyhow::bail!(
-            "file not tracked: {}; run git-veil add '{}' to track it",
-            file,
-            file
-        );
+        anyhow::bail!("file not tracked: {}. Add it before unhiding it", file);
     }
 
     // Lstat gate: writing the plaintext through a committed symlink would
@@ -109,7 +103,7 @@ pub fn cmd_unhide(
     // Check encrypted file exists
     if !encrypted_path.exists() {
         anyhow::bail!(
-            "Encrypted file not found: {}; run git-veil hide to create it",
+            "encrypted file not found: {}. Hide it first to create it",
             encrypted_path.display()
         );
     }
@@ -134,6 +128,6 @@ pub fn cmd_unhide(
         .with_context(|| format!("Failed to write decrypted file: {}", relative.display()))?;
 
     println!("Decrypted: {}", relative.display());
-    println!("✓ File unhidden");
+    println!("file unhidden");
     Ok(())
 }

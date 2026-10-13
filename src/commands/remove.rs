@@ -38,11 +38,7 @@ pub fn cmd_remove(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -
         )?;
 
         if !tracked.files.contains(&relative) {
-            anyhow::bail!(
-                "file not tracked: {}; run git-veil add '{}' to track it",
-                file,
-                file
-            );
+            anyhow::bail!("file not tracked: {}. Add it before removing it", file);
         }
         tracked.remove(&relative);
         count += 1;
@@ -54,7 +50,7 @@ pub fn cmd_remove(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -
                     format!("Failed to delete ciphertext: {}", ciphertext.display())
                 })?;
                 println!(
-                    "Deleted ciphertext: {} (committed copies stay recoverable via git history)",
+                    "deleted ciphertext {}. Committed copies stay recoverable in git history",
                     ciphertext.display()
                 );
             }
@@ -62,6 +58,6 @@ pub fn cmd_remove(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -
     }
 
     tracked.save(&tracked_path)?;
-    println!("Removed {} file(s)", count);
+    println!("removed {} files", count);
     Ok(())
 }

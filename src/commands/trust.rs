@@ -47,10 +47,7 @@ pub(crate) fn read_owner_verifying(
     let content = fs::read_to_string(&path).map_err(|_| {
         coded(
             ExitCode::Refused,
-            format!(
-                "this repository has no {} file; the owner must create and commit it (see docs/solo.md)",
-                OWNER_VERIFYING
-            ),
+            "this repository has no committed owner verifying key file. The owner must create and commit it. See the setup documentation.".to_string(),
         )
     })?;
     let mut lines = content.lines();
@@ -61,7 +58,10 @@ pub(crate) fn read_owner_verifying(
         .ok_or_else(|| {
             coded(
                 ExitCode::KeyParseFailure,
-                format!("{} is empty", OWNER_VERIFYING),
+                format!(
+                    "the committed owner verifying key file {} is empty",
+                    OWNER_VERIFYING
+                ),
             )
         })?;
     let verifying_key = parse_verifying_key(verifying_key_hex)?;
@@ -88,15 +88,14 @@ pub(crate) fn prove_possession(key_store: &Path, candidate: &VerifyingKey) -> Re
     match matches.len() {
         0 => Err(coded(
             ExitCode::NoSigningKey,
-            "no local signing key matches this repository's owner key; pins are created only on machines holding the signing key — import a pin-file (git-veil trust --import) elsewhere",
+            "no local signing key matches this repository owner key. Pins are created only on machines holding the signing key. See the trust documentation.",
         )),
         1 => Ok(()),
         _ => Err(coded(
             ExitCode::Refused,
             format!(
-                "{} signing keys in {} match this repository's owner key; the match is ambiguous — remove the duplicate seeds",
-                matches.len(),
-                key_store.display()
+                "{} signing keys match this repository owner key. The match is ambiguous. Remove the duplicate seeds from the key store.",
+                matches.len()
             ),
         )),
     }
@@ -158,10 +157,7 @@ pub(crate) fn ensure_path_outside_repo(repo_root: &Path, path: &Path) -> Result<
     if resolved.starts_with(&repo_canonical) {
         return Err(coded(
             ExitCode::UnsafePath,
-            format!(
-                "refusing a pin-file path inside the repository ({}); pin-files must travel out of band — e.g. ssh — never through the repository itself",
-                resolved.display()
-            ),
+            "refusing a pin file path inside the repository. Pin files must travel out of band and never through the repository itself.".to_string(),
         ));
     }
     Ok(())
@@ -226,8 +222,8 @@ fn write_pin_state(
     TrustPinStore::clear_ring_version(key_store, repo_id)
         .context("Failed to reset keyring freshness baseline")?;
 
-    println!("Trusted key for {} (fingerprint: {})", repo_id, fingerprint);
-    println!("Pinned {} for {} on this machine", fingerprint, repo_id);
+    println!("trusted the repository owner key");
+    println!("pinned this repository owner key on this machine");
     Ok(())
 }
 
@@ -244,10 +240,7 @@ pub fn cmd_trust(
     if repo_id != computed_repo_id {
         return Err(coded(
             ExitCode::TrustRepoIdMismatch,
-            format!(
-                "Repository ID mismatch: provided '{}' does not match computed '{}'",
-                repo_id, computed_repo_id
-            ),
+            "the provided repository id does not match the one derived from the remote. See the trust documentation.".to_string(),
         ));
     }
 
@@ -289,10 +282,7 @@ pub fn cmd_trust_import(
     if pin_file.repo_id != repo_id {
         return Err(coded(
             ExitCode::Refused,
-            format!(
-                "pin-file is for repository '{}' but this repository is '{}'; pin-file does not match this repository's committed owner key; one of the two channels is compromised",
-                pin_file.repo_id, repo_id
-            ),
+            "the pin file is for a different repository identity than this repository derives. The pin file does not match this repository committed owner key. One of the two channels is compromised.".to_string(),
         ));
     }
 
@@ -302,7 +292,7 @@ pub fn cmd_trust_import(
     if pin_file.verifying_key != committed_key {
         return Err(coded(
             ExitCode::Refused,
-            "pin-file does not match this repository's committed owner key; one of the two channels is compromised",
+            "the pin file does not match this repository committed owner key. One of the two channels is compromised.",
         ));
     }
 
@@ -319,25 +309,13 @@ pub fn cmd_trust_import(
             if trust_store.owner_fingerprints.is_empty() {
                 return Err(coded(
                     ExitCode::Refused,
-                    format!(
-                        ".git-veil/trust.json records no owner verifying-key fingerprint for {}; the owner must re-run git-veil trust {} on a machine holding the signing key and commit the updated metadata",
-                        repo_id, repo_id
-                    ),
+                    "the committed trust metadata records no owner key fingerprint. The owner must refresh the trust metadata on a machine holding the signing key and commit the update.".to_string(),
                 ));
             }
-            let recorded_ids: Vec<&str> = trust_store
-                .owner_fingerprints
-                .keys()
-                .map(String::as_str)
-                .collect();
+            let _recorded = &trust_store.owner_fingerprints;
             return Err(coded(
                 ExitCode::Refused,
-                format!(
-                    "trust.json records an owner fingerprint for {} but this repository derives {} from remote {}. this looks like a rename or a remote change based on the existing trust record",
-                    recorded_ids.join(", "),
-                    repo_id,
-                    remote_name
-                ),
+                "the committed trust metadata names a different repository identity than this repository derives. This looks like a rename or a remote change based on the existing trust record.".to_string(),
             ));
         }
     };
@@ -345,10 +323,7 @@ pub fn cmd_trust_import(
     if !pin_fingerprint.eq_ignore_ascii_case(recorded) {
         return Err(coded(
             ExitCode::Refused,
-            format!(
-                "pin-file owner fingerprint {} does not match the fingerprint {} recorded in .git-veil/trust.json; pin-file does not match this repository's committed owner key; one of the two channels is compromised",
-                pin_fingerprint, recorded
-            ),
+            "the pin file owner fingerprint does not match the fingerprint recorded in the committed trust metadata. The pin file does not match this repository committed owner key. One of the two channels is compromised.".to_string(),
         ));
     }
 

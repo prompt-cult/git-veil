@@ -52,10 +52,8 @@ pub fn cmd_reveal(
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
             ExitCode::IdentityNotInKeyring,
-            format!(
-                "user {} not found in keyring; check --email, or ask the owner to add you with git-veil tell",
-                email
-            ),
+            "user not found in the keyring. Check the identity, or ask the owner to add it"
+                .to_string(),
         )
     })?;
 
@@ -108,7 +106,7 @@ pub fn cmd_reveal(
         // Check encrypted file exists
         if !encrypted_path.exists() {
             anyhow::bail!(
-                "Encrypted file not found: {}; run git-veil hide to create it",
+                "encrypted file not found: {}. Hide it first to create it",
                 encrypted_path.display()
             );
         }
@@ -153,12 +151,12 @@ pub fn cmd_reveal(
 
     if let Some(err) = first_error {
         return Err(err.context(format!(
-            "reveal failed: {} of {} plaintext(s) written",
+            "reveal failed: {} of {} plaintexts written",
             written.len(),
             prepared.len()
         )));
     }
 
-    println!("✓ Files revealed");
+    println!("files revealed");
     Ok(())
 }

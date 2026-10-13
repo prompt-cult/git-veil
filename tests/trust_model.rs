@@ -194,7 +194,7 @@ fn test_trust_without_matching_seed_refuses() {
     assert_eq!(exit_code_of(&err), 20);
     assert!(
         err.to_string()
-            .contains("no local signing key matches this repository's owner key"),
+            .contains("no local signing key matches this repository owner key"),
         "the refusal must name the proof failure: {err}"
     );
     assert!(
@@ -446,7 +446,7 @@ fn test_import_repo_id_mismatch_refuses() {
     assert_eq!(exit_code_of(&err), 70);
     assert!(
         err.to_string()
-            .contains("one of the two channels is compromised"),
+            .contains("One of the two channels is compromised"),
         "the refusal must name the compromise: {err}"
     );
     assert!(
@@ -482,7 +482,7 @@ fn test_import_key_mismatch_refuses() {
     assert_eq!(exit_code_of(&err), 70);
     assert!(err
         .to_string()
-        .contains("one of the two channels is compromised"));
+        .contains("One of the two channels is compromised"));
     assert!(TrustPinStore::read_pin(&fresh_store.path, TEST_REPO_ID)
         .unwrap()
         .is_none());
@@ -517,7 +517,7 @@ fn test_import_fingerprint_mismatch_refuses() {
     assert_eq!(exit_code_of(&err), 70);
     assert!(err
         .to_string()
-        .contains("one of the two channels is compromised"));
+        .contains("One of the two channels is compromised"));
     assert!(TrustPinStore::read_pin(&fresh_store.path, TEST_REPO_ID)
         .unwrap()
         .is_none());
@@ -579,7 +579,10 @@ fn test_no_pin_fails_closed() {
 
     let result = cmd_verify_keyring(&repo.path, "origin", &key_store.path);
     assert!(result.is_err(), "should fail without local pin");
-    assert!(result.unwrap_err().to_string().contains("no local pin"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("no trust pin exists on this machine"));
 }
 
 #[test]
@@ -662,16 +665,20 @@ fn test_reveal_no_pin_error_names_both_paths() {
         .expect_err("reveal without a pin must fail");
     let message = err.to_string();
     assert!(
-        message.contains(&format!("git-veil trust {TEST_REPO_ID}")),
-        "the error must name the proof path: {message}"
+        message.contains("no trust pin exists on this machine"),
+        "the error must state the missing pin: {message}"
     );
     assert!(
-        message.contains("git-veil trust --import"),
-        "the error must name the import path: {message}"
+        !message.contains("git-veil trust"),
+        "the error must not print a command line: {message}"
+    );
+    assert!(
+        !message.contains(TEST_REPO_ID),
+        "the error must not name the repository identity: {message}"
     );
     assert!(
         !message.to_lowercase().contains("keyfile"),
-        "the error must not name any other path: {message}"
+        "the error must not name any removed path: {message}"
     );
 }
 
@@ -733,7 +740,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     assert_eq!(exit_code_of(&err), 20);
     assert!(err
         .to_string()
-        .contains("no local signing key matches this repository's owner key"));
+        .contains("no local signing key matches this repository owner key"));
     assert!(
         TrustPinStore::read_pin(&real_store.path, TEST_REPO_ID)
             .unwrap()
@@ -783,12 +790,12 @@ fn test_rename_suspicion_no_remedy_on_gated_commands() {
     assert_eq!(exit_code_of(&err), 10);
     let message = format!("{:#}", err);
     assert!(
-        message.contains("this looks like a rename or a remote change"),
+        message.contains("This looks like a rename or a remote change"),
         "the error must state the rename suspicion: {message}"
     );
     assert!(
-        message.contains(TEST_REPO_ID) && message.contains(new_repo_id),
-        "the error must name the recorded and derived repo-ids as the clue: {message}"
+        !message.contains(TEST_REPO_ID) && !message.contains(new_repo_id),
+        "the error must leak no repository identity: {message}"
     );
     assert!(
         !message.contains("git-veil trust"),
@@ -823,7 +830,7 @@ fn test_rename_suspicion_no_remedy_on_import() {
     assert_eq!(exit_code_of(&err), 70);
     let message = format!("{:#}", err);
     assert!(
-        message.contains("this looks like a rename or a remote change"),
+        message.contains("This looks like a rename or a remote change"),
         "the error must state the rename suspicion: {message}"
     );
     assert!(

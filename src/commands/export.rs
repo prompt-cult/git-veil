@@ -26,9 +26,7 @@ pub fn export_public_key(key_store: &Path, identifier: &str) -> Result<String> {
 
     if matched.is_empty() {
         anyhow::bail!(
-            "No key matching '{}' found in the key store {}; export only finds keys this machine knows",
-            identifier,
-            key_store.display()
+            "no matching key found in the key store. Export only finds keys this machine knows"
         );
     }
     if matched.len() > 1 {
@@ -37,9 +35,7 @@ pub fn export_public_key(key_store: &Path, identifier: &str) -> Result<String> {
             .map(|r| fingerprint_for_recipient(r))
             .collect();
         anyhow::bail!(
-            "Multiple keys match '{}' in the key store {}; pass a fingerprint instead. Matching fingerprints:\n  {}",
-            identifier,
-            key_store.display(),
+            "multiple keys match in the key store. Pass a fingerprint instead. Matching fingerprints:\n  {}",
             fingerprints.join("\n  ")
         );
     }

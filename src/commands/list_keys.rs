@@ -17,12 +17,12 @@ use crate::{verify_keyring_against_trust, Keyring};
 pub fn cmd_list_keys(repo_root: &Path, remote_name: &str, key_store: &Path) -> Result<()> {
     match verify_keyring_against_trust(repo_root, remote_name, key_store) {
         Ok((_repo_id, _fingerprint, keyring)) => {
-            println!("✓ Keyring signature verified (signed by pinned trusted key)");
+            println!("keyring signature verified and made by the pinned trusted key");
             print_keyring(&keyring);
             Ok(())
         }
         Err(verification_error) => {
-            println!("⚠ KEYRING SIGNATURE INVALID — listing unverified content");
+            println!("WARNING: keyring signature invalid. Listing unverified content.");
             println!("Verification failure: {}", verification_error);
 
             let keyring_path = repo_root.join(".git-veil/keyring");

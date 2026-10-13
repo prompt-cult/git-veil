@@ -15,29 +15,14 @@ use crate::age_crypto::{find_identity_by_recipient, for_each_store_line};
 use crate::exit_codes::{coded, exit_code_of, ExitCode};
 use crate::signing::{fingerprint_for_verifying_key, parse_signing_key};
 
-/// The recipe printed when no signing key exists (formatted with the
-/// actual key store path by [`discover_signing_key`]).
-fn signing_key_recipe(key_store: &Path) -> String {
-    format!(
-        "git-veil never generates keys: a key the tool made would be a key you never\n\
-         backed up. Create an Ed25519 signing key yourself, and BACK IT UP:\n\
-         \n\
-         \x20 umask 077\n\
-         \x20 mkdir -p \"{store}\"\n\
-         \x20 openssl genpkey -algorithm ED25519 -out \"{store}/ed25519.pem\"\n\
-         \x20 openssl pkey -in \"{store}/ed25519.pem\" -outform DER \\\n\
-         \x20   | tail -c 32 | xxd -p -c 32 > \"{store}/signing-keys.txt\"\n\
-         \n\
-         signing-keys.txt holds one 64-hex-character Ed25519 seed per line (the\n\
-         last 32 bytes of the key's DER encoding). The matching verifying key,\n\
-         for pinning with git-veil trust:\n\
-         \n\
-         \x20 openssl pkey -in \"{store}/ed25519.pem\" -pubout -outform DER \\\n\
-         \x20   | tail -c 32 | xxd -p -c 32 > owner.verifying\n\
-         \n\
-         Lose the seed and you can no longer re-sign the keyring; back it up now.",
-        store = key_store.display()
-    )
+/// The guidance printed when no signing key exists.
+fn signing_key_recipe(_key_store: &Path) -> String {
+    "git-veil never generates keys. A key the tool made would be a key you never \
+     backed up. Create an Ed25519 signing key yourself and back it up. See the \
+     key creation documentation. The seed goes into signing-keys.txt as one 64 \
+     hex character line and the matching verifying key goes into the committed \
+     owner.verifying file. Without the seed you cannot re-sign the keyring."
+        .to_string()
 }
 
 /// Loads every signing key seed from `<key_store>/signing-keys.txt`.
@@ -76,8 +61,7 @@ pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: &str) -> Resul
         return Err(coded(
             ExitCode::NoSigningKey,
             format!(
-                "no Ed25519 signing key found in {}/signing-keys.txt\n\n{}",
-                key_store.display(),
+                "no Ed25519 signing key found in signing-keys.txt\n\n{}",
                 signing_key_recipe(key_store)
             ),
         ));
@@ -93,10 +77,8 @@ pub fn discover_signing_key(key_store: &Path, pinned_fingerprint: &str) -> Resul
     Err(coded(
         ExitCode::NoSigningKey,
         format!(
-            "the key store {} holds {} signing key(s), but none matches the trusted fingerprint {} pinned for this repository; add the matching seed to signing-keys.txt, or re-pin with git-veil trust\n\n{}",
-            key_store.display(),
+            "the key store holds {} signing keys but none matches the trusted key fingerprint pinned for this repository. Add the matching seed to signing-keys.txt. See the trust documentation.\n\n{}",
             keys.len(),
-            wanted,
             signing_key_recipe(key_store)
         ),
     ))
@@ -126,19 +108,15 @@ pub fn discover_signing_key_explicit(key_store: &Path, fingerprint: &str) -> Res
         [] => Err(coded(
             ExitCode::NoSigningKey,
             format!(
-                "no signing key in {}/signing-keys.txt has verifying-key fingerprint {}; add the matching seed to signing-keys.txt\n\n{}",
-                key_store.display(),
-                wanted,
+                "no signing key in signing-keys.txt has the requested verifying key fingerprint. Add the matching seed to signing-keys.txt. See the trust documentation.\n\n{}",
                 signing_key_recipe(key_store)
             ),
         )),
         _ => Err(coded(
             ExitCode::Refused,
             format!(
-                "{} signing keys in {}/signing-keys.txt share verifying-key fingerprint {}; the store is degenerate and must be deduplicated",
-                matches.len(),
-                key_store.display(),
-                wanted
+                "{} signing keys in signing-keys.txt share one verifying key fingerprint. The key store is degenerate and must be deduplicated.",
+                matches.len()
             ),
         )),
     }
@@ -151,28 +129,19 @@ pub fn discover_signing_key_explicit(key_store: &Path, fingerprint: &str) -> Res
 /// store loader's coded refusal (code 62, naming the corrupt line) passes
 /// through unchanged.
 pub fn discover_identity(key_store: &Path, recipient_str: &str) -> Result<age::x25519::Identity> {
-    let key_store = key_store.to_path_buf();
-    find_identity_by_recipient(&key_store, recipient_str).map_err(|err| {
+    find_identity_by_recipient(key_store, recipient_str).map_err(|err| {
         if exit_code_of(&err) != ExitCode::GeneralError as i32 {
             // A specific failure (e.g. a corrupt store line) keeps its code
             return err;
         }
         coded(
             ExitCode::NoAgeIdentity,
-            format!(
-                "no age identity for your keyring entry ({}) found in {}/identities.txt\n\n\
-                 git-veil never generates keys: an identity the tool made would be one you\n\
-                 never backed up. Create your own age identity and BACK IT UP:\n\
-                 \n\
-                 \x20 umask 077\n\
-                 \x20 age-keygen -o my-age-identity.txt    # or: rage-keygen\n\
-                 \x20 git-veil import my-age-identity.txt\n\
-                 \n\
-                 Without a backup of the AGE-SECRET-KEY-1... line, ciphertexts encrypted to\n\
-                 you are unrecoverable.",
-                recipient_str,
-                key_store.display()
-            ),
+            "no age identity in the key store matches your keyring entry. git-veil never \
+             generates keys. An identity the tool made would be one you never backed up. \
+             Create your own age identity and back it up, then import it. See the key \
+             creation documentation. Without a backup of your age secret, anything encrypted \
+             to you is unrecoverable."
+                .to_string(),
         )
     })
 }

@@ -167,7 +167,7 @@ impl Keyring {
     ) -> Result<()> {
         if email.contains(':') {
             anyhow::bail!(
-                "Invalid keyring email '{}': emails must not contain ':' \
+                "Invalid keyring email {}: emails must not contain a colon \
                  because it is the keyring line field separator",
                 email
             );
@@ -197,9 +197,7 @@ impl Keyring {
     /// ring (issue #22) must produce a clean refusal, never a panic.
     pub fn bump_version(&mut self) -> Result<()> {
         let next = self.version.unwrap_or(0).checked_add(1).ok_or_else(|| {
-            anyhow::anyhow!(
-                "keyring version exhausted (u64::MAX); re-sign at a lower version is required"
-            )
+            anyhow::anyhow!("keyring version exhausted. Re-sign at a lower version is required.")
         })?;
         self.version = Some(next);
         Ok(())

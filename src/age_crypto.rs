@@ -24,7 +24,7 @@ pub(crate) fn corrupt_store_line_error(
     coded(
         ExitCode::KeyParseFailure,
         format!(
-            "corrupt key store line {} in {}: \"{}\" ({}); delete or repair that line and re-run — git-veil never silently drops key material",
+            "corrupt key store line {} in {}: \"{}\" in line {}. Delete or repair that line and re-run. git-veil never silently drops key material",
             line_number,
             path.display(),
             line,
@@ -73,7 +73,9 @@ pub fn default_key_store() -> Result<PathBuf> {
                 .filter(|s| !s.is_empty())
                 .map(|home| PathBuf::from(home).join(".git-veil"))
         })
-        .ok_or_else(|| anyhow::anyhow!("Neither GIT_VEIL_HOME nor HOME is set; pass --key-store"))
+        .ok_or_else(|| {
+            anyhow::anyhow!("Neither GIT_VEIL_HOME nor HOME is set. Pass the key store path.")
+        })
 }
 
 /// Parses an age recipient string (`age1...`) into a Recipient.
@@ -125,7 +127,7 @@ pub fn fingerprint_for_recipient(recipient_str: &str) -> String {
 /// for text-safe storage in `<name>.secret` files.
 pub fn encrypt_to_recipients(plaintext: &[u8], recipients: &[Recipient]) -> Result<Vec<u8>> {
     let encryptor = Encryptor::with_recipients(recipients.iter().map(|r| r as &dyn age::Recipient))
-        .context("Failed to create age encryptor (no recipients?)")?;
+        .context("Failed to create age encryptor. The keyring has no recipients")?;
 
     let mut encrypted = Vec::new();
     let mut writer = encryptor
@@ -154,7 +156,7 @@ pub fn decrypt_with_identity(ciphertext: &[u8], identity: &Identity) -> Result<V
     let mut reader = decryptor.decrypt(std::iter::once(identity as &dyn age::Identity))
         .map_err(|_| coded(
             ExitCode::DecryptionFailed,
-            "decryption failed: this ciphertext was not encrypted to your key (it is not a listed recipient)"
+            "decryption failed. This ciphertext was not encrypted to your key and you are not a listed recipient"
         ))?;
     reader
         .read_to_end(&mut decrypted)

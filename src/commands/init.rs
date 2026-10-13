@@ -55,6 +55,6 @@ pub fn cmd_init(repo_root: &Path) -> Result<()> {
         .save(&git_veil_dir.join("tracked.json"))
         .context("Failed to create tracked.json")?;
 
-    println!("✓ git-veil initialized");
+    println!("git-veil initialized");
     Ok(())
 }

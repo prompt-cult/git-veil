@@ -89,7 +89,7 @@ pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
         return Err(coded(
             ExitCode::UnsafePath,
             format!(
-                "tracked path is a symlink; refusing to read — remove the link and re-add the real file: {}",
+                "tracked path is a symlink. Refusing to read. Remove the link and re-add the real file: {}",
                 file.display()
             ),
         ));
@@ -194,7 +194,7 @@ pub(crate) fn resolve_repo_relative_input(
                     coded(
                         ExitCode::UnsafePath,
                         format!(
-                            "File is outside the repository: {} (resolves to {})",
+                            "File is outside the repository: {} resolving to {}",
                             user_path,
                             canonical.display()
                         ),
@@ -250,7 +250,7 @@ pub(crate) fn resolve_repo_relative_input(
                         coded(
                             ExitCode::UnsafePath,
                             format!(
-                                "File is outside the repository: {} (resolves to {})",
+                                "File is outside the repository: {} resolving to {}",
                                 user_path,
                                 canonical.display()
                             ),
