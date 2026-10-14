@@ -390,11 +390,6 @@ repo-relative). Nothing is encrypted yet - hide does that. Files must
 exist, and a symlink must resolve inside the repository, so hide can
 never be tricked into reading or deleting a file outside the repo.
 
-Each added path is recorded in the machine-local intent log in your key
-store: hide refuses to first-encrypt a tracked path that was never added
-on this machine (exit code 72), so a tracked.json modified by someone
-else cannot silently nominate your files for encryption.
-
 Typical flow: init -> trust -> tell (once per collaborator) -> add -> hide.
 
 EXAMPLES
@@ -405,9 +400,6 @@ EXAMPLES
         /// File(s) to add
         #[arg(required = true)]
         files: Vec<String>,
-        /// Git remote name (derives the repository id for the intent log)
-        #[arg(long, default_value = "origin")]
-        remote: String,
     },
 
     /// Untrack files (deletes the sibling .secret unless --keep-ciphertext)
@@ -439,9 +431,9 @@ EXAMPLES
 
     /// List all tracked files
     #[command(after_long_help = "\
-Prints every file tracked in .git-veil/tracked.json. Tracking records
-intent only: whether the plaintext or its .secret ciphertext currently
-exists on disk is not checked.
+Prints every file tracked in .git-veil/tracked.json. Whether the
+plaintext or its .secret ciphertext currently exists on disk is not
+checked.
 
 EXAMPLES
   $ git-veil list

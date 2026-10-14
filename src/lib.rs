@@ -9,8 +9,6 @@ mod commands;
 mod exit_codes;
 mod fingerprint;
 mod fs_atomic;
-mod happen_before;
-mod intent;
 mod key_discovery;
 mod keyring;
 mod permissions;
@@ -58,11 +56,6 @@ pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
 pub use fingerprint::{fingerprint_for_public_key, is_legacy_pin_shape, owner_key_fingerprint};
 pub use fs_atomic::{write_atomic, write_atomic_mode};
-pub use happen_before::{
-    baseline_path, ciphertext_predates_manifest_entry, manifest_digest, read_baseline,
-    record_baseline,
-};
-pub use intent::LocalAdds;
 pub use key_discovery::{
     discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key,
     load_signing_keys,

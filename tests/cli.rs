@@ -188,13 +188,7 @@ impl TestRepo {
             fs::create_dir_all(parent).expect("create parent dir");
         }
         fs::write(&path, content).expect("write plaintext file");
-        cmd_add(
-            &self.repo.path,
-            vec![name.to_string()],
-            "origin",
-            &self.key_store.path,
-        )
-        .expect("add file");
+        cmd_add(&self.repo.path, vec![name.to_string()]).expect("add file");
     }
 }
 
@@ -309,22 +303,10 @@ fn test_add_and_list_files() {
     let fixture = TestRepo::new("add-list");
 
     fs::write(fixture.repo.join(".env"), "SECRET=hello\n").unwrap();
-    cmd_add(
-        &fixture.repo.path,
-        vec![".env".to_string()],
-        "origin",
-        &fixture.key_store.path,
-    )
-    .expect("add .env");
+    cmd_add(&fixture.repo.path, vec![".env".to_string()]).expect("add .env");
 
     fs::write(fixture.repo.join("config.yml"), "key: value\n").unwrap();
-    cmd_add(
-        &fixture.repo.path,
-        vec!["config.yml".to_string()],
-        "origin",
-        &fixture.key_store.path,
-    )
-    .expect("add config.yml");
+    cmd_add(&fixture.repo.path, vec!["config.yml".to_string()]).expect("add config.yml");
 
     let tracked = TrackedFiles::load(&fixture.repo.join(".git-veil/tracked.json")).unwrap();
     assert_eq!(tracked.files.len(), 2);
@@ -337,13 +319,7 @@ fn test_remove_untracks_file() {
     let fixture = TestRepo::new("remove");
 
     fs::write(fixture.repo.join(".env"), "SECRET=hello\n").unwrap();
-    cmd_add(
-        &fixture.repo.path,
-        vec![".env".to_string()],
-        "origin",
-        &fixture.key_store.path,
-    )
-    .expect("add");
+    cmd_add(&fixture.repo.path, vec![".env".to_string()]).expect("add");
 
     cmd_remove(&fixture.repo.path, vec![".env".to_string()], false).expect("remove");
 
@@ -457,13 +433,7 @@ fn test_hide_no_keys_fails() {
     cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
-    cmd_add(
-        &repo.path,
-        vec![".env".to_string()],
-        "origin",
-        &key_store.path,
-    )
-    .expect("add");
+    cmd_add(&repo.path, vec![".env".to_string()]).expect("add");
 
     let result = cmd_hide(&repo.path, "origin", &key_store.path, true);
     assert!(result.is_err(), "hide with no keys should fail");
@@ -1318,13 +1288,7 @@ fn test_add_auto_gitignores_file() {
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
     assert!(!gitignore.contains("newsecret.txt"));
 
-    cmd_add(
-        &fixture.repo.path,
-        vec!["newsecret.txt".to_string()],
-        "origin",
-        &fixture.key_store.path,
-    )
-    .expect("add");
+    cmd_add(&fixture.repo.path, vec!["newsecret.txt".to_string()]).expect("add");
 
     // git-secret auto-adds the file to .gitignore. git-veil must match.
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();

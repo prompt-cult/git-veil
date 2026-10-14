@@ -7,11 +7,6 @@ use std::process::Command;
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::happen_before::{
-    baseline_path, ciphertext_predates_manifest_entry, manifest_digest, read_baseline,
-    record_baseline,
-};
-use crate::intent::LocalAdds;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
 use crate::{
     encrypt_to_x25519_public_keys, parse_x25519_public_key, verify_keyring_against_trust,
@@ -67,8 +62,8 @@ pub fn cmd_hide(
     keep_plaintext: bool,
 ) -> Result<()> {
     // Verify the keyring signature first. The same call yields the repo id
-    // the intent gate needs and the keyring hide encrypts with.
-    let (repo_id, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
+    // and the keyring hide encrypts with.
+    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     let _ = &keyring;
 
@@ -121,21 +116,6 @@ pub fn cmd_hide(
         );
     }
     let mut orphans: Vec<String> = Vec::new();
-    // Plaintext paths whose ciphertext is already committed. They are
-    // established, so no intent is needed to re-encrypt them.
-    // A committed ciphertext is established only when it predates the
-    // manifest entry naming it. The index is attacker-writable, so mere
-    // presence proves nothing. A nomination and a dummy `<path>.secret`
-    // landing in one commit would otherwise mark the path established and
-    // ride past the intent gate. The happen-before result is cached per
-    // manifest content hash in the machine-local key store. The key store
-    // either holds a baseline for this manifest version or it does not.
-    let manifest_rel = ".git-veil/tracked.json";
-    let manifest_content = fs::read_to_string(repo_root.join(manifest_rel)).unwrap_or_default();
-    let digest = manifest_digest(&manifest_content);
-    let baseline = baseline_path(key_store, &repo_id, &digest);
-    let cached_safe = read_baseline(&baseline);
-    let mut committed_pairs: Vec<(PathBuf, String)> = Vec::new();
     for raw in ls.stdout.split(|b| *b == 0) {
         if raw.is_empty() {
             continue;
@@ -162,20 +142,6 @@ pub fn cmd_hide(
             .join(stem);
         if !tracked_set.contains(&plaintext) {
             orphans.push(line);
-        } else {
-            committed_pairs.push((plaintext, line));
-        }
-    }
-    let mut established: HashSet<PathBuf> = HashSet::new();
-    for (plaintext, ciphertext_rel) in &committed_pairs {
-        let relative = plaintext.to_string_lossy().to_string();
-        if cached_safe.contains(&relative) {
-            established.insert(plaintext.clone());
-            continue;
-        }
-        if ciphertext_predates_manifest_entry(repo_root, manifest_rel, &relative, ciphertext_rel)? {
-            record_baseline(&baseline, &relative)?;
-            established.insert(plaintext.clone());
         }
     }
     if !orphans.is_empty() {
@@ -187,41 +153,6 @@ pub fn cmd_hide(
                  Re-track the paths, or delete the stale ciphertext. See the rotation documentation. \
                  The offending committed ciphertext paths:\n  {}",
                 orphans.join("\n  ")
-            ),
-        ));
-    }
-
-    // Encryption-intent gate (exit 72, see "Encryption intent" in
-    // docs/design.md). tracked.json is committed and unsigned, so a repo
-    // writer can nominate a path. A tracked path whose ciphertext is not
-    // in the index must have been added on this machine, or hide refuses.
-    // The intent log lives in the key store, outside any repo writer's
-    // reach. First-encrypting an attacker-nominated path is exactly the
-    // exfiltration channel, and the gitignored-plaintext case would
-    // otherwise be silent.
-    let mut unintended: Vec<String> = Vec::new();
-    for file in &tracked.files {
-        // Only paths that have a plaintext can be first-encrypted. A path
-        // with no plaintext has nothing to exfiltrate and is handled by the
-        // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
-        // lifecycle").
-        if !established.contains(file)
-            && repo_root.join(file).exists()
-            && !LocalAdds::has_intent(key_store, &repo_id, file)
-        {
-            unintended.push(file.to_string_lossy().to_string());
-        }
-    }
-    if !unintended.is_empty() {
-        return Err(coded(
-            ExitCode::UnintendedEncryption,
-            format!(
-                "refusing to hide: paths are tracked but were never added on this \
-                 machine and their ciphertext was never established. tracked.json was likely \
-                 modified by someone else. Add the paths deliberately if the tracking is \
-                 wanted, or restore tracked.json if it is not. Error code 72. See the \
-                 encryption intent documentation. The offending tracked paths:\n  {}",
-                unintended.join("\n  ")
             ),
         ));
     }
@@ -290,7 +221,7 @@ pub fn cmd_hide(
         // encrypt and nothing to exfiltrate, so the path is skipped.
         if !repo_root.join(file).exists() {
             let state =
-                if encrypted_path_for(repo_root, file).exists() || established.contains(file) {
+                if encrypted_path_for(repo_root, file).exists() {
                     "already hidden because the plaintext is absent"
                 } else {
                     "never hidden because there is no plaintext and no ciphertext"
