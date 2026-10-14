@@ -3,10 +3,11 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_unhide, cmd_verify_keyring, encrypt_to_x25519_public_keys, exit_code_of,
-    generate_signing_keypair, generate_x25519_private_key, parse_x25519_public_key,
-    x25519_public_key_encoding, Keyring,
+    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_hide_all, cmd_import, cmd_init,
+    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    encrypt_to_x25519_public_keys, exit_code_of, extract_content_to_verify_from_keyring,
+    generate_signing_keypair, generate_x25519_private_key, keyring_content_digest,
+    parse_x25519_public_key, x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
 };
 use std::fs;
 use std::path::Path;
@@ -136,6 +137,18 @@ impl Fixture {
         )
         .expect("add");
     }
+
+    /// The tracked file names, as the required-form hide and reveal calls
+    /// name them. Tests that act on the whole tracked set name the whole
+    /// tracked set explicitly: the bare form is gone (issue 50).
+    fn tracked_names(&self) -> Vec<String> {
+        TrackedFiles::load(&self.repo.path.join(".git-veil/tracked.json"))
+            .unwrap()
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -143,8 +156,8 @@ impl Fixture {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_hide_all_or_nothing_missing_plaintext() {
-    let f = Fixture::new("aon-missing");
+fn test_hide_refuses_a_name_whose_plaintext_is_absent() {
+    let f = Fixture::new("hide-name-absent");
 
     let id = f.add_collab("alice@example.com");
     f.import_id(&id, "alice.age");
@@ -152,26 +165,36 @@ fn test_hide_all_or_nothing_missing_plaintext() {
     f.add_file(".env", b"secret\n");
     f.add_file("config.yml", b"config\n");
 
-    // Delete one plaintext before hide
+    // Delete one plaintext before hide. The name must exist when you name
+    // it (hide resolves paths the way add does), so the invocation refuses
+    // before anything is encrypted.
     fs::remove_file(f.repo.join(".env")).unwrap();
 
-    // A missing plaintext is a skip-and-report, not an error. The file
-    // with a plaintext is encrypted, and by default its plaintext is
-    // deleted after the ciphertext is durable.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false, Vec::new())
-        .expect("hide succeeds with skip");
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect_err("an absent plaintext does not resolve");
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains(".env"),
+        "the refusal names the unresolvable path: {message}"
+    );
 
     assert!(
-        !f.repo.join(".env").exists() && !f.repo.join(".env.secret").exists(),
-        "missing-plaintext file: skipped, neither copy created"
+        !f.repo.join(".env.secret").exists(),
+        "nothing is encrypted when the named set refuses"
     );
     assert!(
-        !f.repo.join("config.yml").exists(),
-        "config.yml plaintext deleted by default after successful hide"
+        f.repo.join("config.yml").exists(),
+        "an un-named plaintext is untouched"
     );
     assert!(
-        f.repo.join("config.yml.secret").exists(),
-        "config.yml encrypted normally"
+        !f.repo.join("config.yml.secret").exists(),
+        "an un-named file is never encrypted by a refused invocation"
     );
 }
 
@@ -189,7 +212,14 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
     f.add_file(".env", b"secret\n");
     f.add_file("config.yml", b"config\n");
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     // Delete one ciphertext before reveal
     fs::remove_file(f.repo.join(".env.secret")).unwrap();
@@ -199,7 +229,7 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     );
     assert!(
         result.is_err(),
@@ -235,7 +265,14 @@ fn test_multi_recipient_both_can_decrypt() {
     let plaintext = b"shared\n";
     f.add_file(".env", plaintext);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     // Alice reveals
     cmd_reveal(
@@ -243,19 +280,26 @@ fn test_multi_recipient_both_can_decrypt() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     )
     .expect("alice reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
     // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("re-hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("re-hide");
     cmd_reveal(
         &f.repo.path,
         "bob@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     )
     .expect("bob reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
@@ -296,7 +340,14 @@ fn test_subdirectory_hide_reveal() {
     let plaintext = b"nested secret\n";
     f.add_file("config/secrets.yml", plaintext);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     // Both copies exist, matching git-secret, which does not delete the
     // plaintext by default.
@@ -308,7 +359,7 @@ fn test_subdirectory_hide_reveal() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     )
     .expect("reveal");
 
@@ -333,7 +384,14 @@ fn test_cat_preserves_disk_state() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"cat test\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     let _ = cmd_cat(
         &f.repo.path,
@@ -369,7 +427,14 @@ fn test_unhide_isolates_single_file() {
     f.add_file(".env", b"first\n");
     f.add_file("config.yml", b"second\n");
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     cmd_unhide(
         &f.repo.path,
@@ -406,7 +471,14 @@ fn test_changes_binary_file() {
     let binary = vec![0u8, 1, 2, 3, 0, 255, 254];
     f.add_file("data.bin", &binary);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     // Write different binary
     fs::write(f.repo.join("data.bin"), vec![0u8, 1, 2, 3, 0, 255, 253]).unwrap();
@@ -514,7 +586,14 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     .expect("add");
 
     // Hide fails closed before encrypting anything. Exit code 40.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).unwrap_err();
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(
         exit_code_of(&err),
@@ -533,8 +612,14 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     // Removing the broad rule makes hide succeed (the appended plaintext
     // ignore line .tmp/x.txt keeps protecting the plaintext)
     fs::write(f.repo.join(".gitignore"), ".tmp/x.txt\n").unwrap();
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect("hide after fixing .gitignore");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide after fixing .gitignore");
     assert!(f.repo.join(".tmp/x.txt.secret").exists());
 }
 
@@ -546,14 +631,27 @@ fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"API_KEY=1\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     // Simulate .gitignore drift. The tracked plaintext is no longer ignored.
     fs::write(f.repo.join(".gitignore"), "").unwrap();
 
     // A warning (error code 41), not a refusal. Hide proceeds.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect("hide still succeeds");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide still succeeds");
     assert!(f.repo.join(".env.secret").exists());
 }
 
@@ -631,13 +729,6 @@ fn test_positional_hide_hides_only_named_files() {
     assert!(
         !f.repo.join("config.yml.secret").exists(),
         "an unnamed file is never encrypted by a scoped hide"
-    );
-
-    // Bare hide keeps the whole-manifest behaviour.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("bare hide");
-    assert!(
-        f.repo.join("config.yml.secret").exists(),
-        "bare hide encrypts the remaining tracked files"
     );
 }
 
@@ -760,12 +851,6 @@ fn test_positional_hide_allow_gate_is_scoped_to_named_set() {
         !f.repo.join("prod-credentials.secret").exists(),
         "the un-named nominated path is never encrypted"
     );
-
-    // Bare hide still refuses on the remaining un-allowed nomination: the
-    // scoped remedy did not silently widen the consent.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect_err("bare hide still gates on the whole manifest");
-    assert_eq!(exit_code_of(&err), 72, "bare hide keeps its own gate");
 }
 
 // ---------------------------------------------------------------------------
@@ -783,8 +868,16 @@ fn test_positional_reveal_reveals_only_named_files() {
     f.add_file(".env", b"API_KEY=1\n");
     f.add_file("config.yml", b"config\n");
 
-    // Hide everything. The default deletes both plaintexts.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false, Vec::new()).expect("bare hide");
+    // Hide everything. The default deletes both plaintexts. The test names
+    // the whole tracked set explicitly: the bare form is gone (issue 50).
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        f.tracked_names(),
+    )
+    .expect("hide");
     assert!(!f.repo.join(".env").exists() && !f.repo.join("config.yml").exists());
 
     // Scoped reveal restores exactly the named file. The plaintext is
@@ -810,17 +903,6 @@ fn test_positional_reveal_reveals_only_named_files() {
         f.repo.join(".env.secret").exists() && f.repo.join("config.yml.secret").exists(),
         "reveal never deletes ciphertexts"
     );
-
-    // Bare reveal keeps the whole-manifest behaviour.
-    cmd_reveal(
-        &f.repo.path,
-        "alice@example.com",
-        "origin",
-        &f.key_store.path,
-        Vec::new(),
-    )
-    .expect("bare reveal");
-    assert_eq!(fs::read(f.repo.join("config.yml")).unwrap(), b"config\n");
 }
 
 #[test]
@@ -831,7 +913,14 @@ fn test_positional_reveal_refuses_untracked_name_with_code_71() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"API_KEY=1\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false, Vec::new()).expect("hide");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        f.tracked_names(),
+    )
+    .expect("hide");
 
     // On disk or not, a name outside the manifest refuses with the
     // path-safety code.
@@ -914,4 +1003,213 @@ fn test_positional_reveal_is_never_allowance_gated() {
         fs::read(f.repo.join("nominated")).unwrap(),
         b"nominated plaintext\n"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The ring-change ceremony: tell/removeperson stamp the pass; hide --all
+// runs the whole-manifest re-encrypt once against the stamped ring.
+// ---------------------------------------------------------------------------
+
+/// The stamp holds the keyring version and the signed-content digest, and
+/// tell/removeperson re-stamp it on every ring change.
+#[test]
+fn test_tell_and_removeperson_stamp_the_ring_change() {
+    let f = Fixture::new("ring-pass-stamp");
+
+    f.add_collab("alice@example.com");
+
+    let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let signed = extract_content_to_verify_from_keyring(&keyring_text).unwrap();
+    let version = Keyring::parse(&keyring_text).unwrap().version.unwrap();
+    let stamp = RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .expect("tell stamps the ring-change pass");
+    assert_eq!(
+        stamp,
+        (version, keyring_content_digest(&signed)),
+        "the stamp names the ring tell signed"
+    );
+
+    // removeperson re-signs at the next version and re-stamps.
+    cmd_removeperson(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .expect("removeperson");
+    let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let signed = extract_content_to_verify_from_keyring(&keyring_text).unwrap();
+    let version = Keyring::parse(&keyring_text).unwrap().version.unwrap();
+    let stamp = RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .expect("removeperson stamps the ring-change pass");
+    assert_eq!(
+        stamp,
+        (version, keyring_content_digest(&signed)),
+        "the stamp names the ring removeperson signed"
+    );
+}
+
+#[test]
+fn test_hide_all_runs_once_then_refuses() {
+    let f = Fixture::new("hide-all-once");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false).expect("the ceremony pass");
+    assert!(f.repo.join(".env.secret").exists());
+    assert!(f.repo.join("config.yml.secret").exists());
+    assert!(
+        !f.repo.join(".env").exists() && !f.repo.join("config.yml").exists(),
+        "the pass deletes plaintexts by default, like any hide"
+    );
+    assert!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+            .unwrap()
+            .is_none(),
+        "one pass consumes the stamp"
+    );
+
+    // The stamp is spent, so a second pass refuses with the policy code.
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("a consumed pass refuses");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::Refused as i32,
+        "the stamp gate refuses with the policy code 70"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains(TEST_REPO_ID),
+        "the refusal names the repository id: {message}"
+    );
+}
+
+#[test]
+fn test_hide_all_refuses_without_a_due_stamp() {
+    let f = Fixture::new("hide-all-nostamp");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+
+    // No stamp at all: the ring changed on this machine, but the record is
+    // gone. The pass refuses before anything is encrypted.
+    RingPassStore::clear(&f.key_store.path, TEST_REPO_ID).unwrap();
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("a pass with no stamp refuses");
+    assert_eq!(exit_code_of(&err), git_veil::ExitCode::Refused as i32);
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains(TEST_REPO_ID),
+        "the refusal names the repository id: {message}"
+    );
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is encrypted on refusal"
+    );
+
+    // A stamp that does not match the committed ring refuses too: the
+    // stamp says which ring the pass may rotate, and the committed ring
+    // moved on.
+    RingPassStore::write(&f.key_store.path, TEST_REPO_ID, 999, &"a".repeat(64)).unwrap();
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("a pass against a ring the stamp does not name refuses");
+    assert_eq!(exit_code_of(&err), git_veil::ExitCode::Refused as i32);
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is encrypted on refusal"
+    );
+}
+
+#[test]
+fn test_the_ceremony_re_encrypts_every_tracked_secret() {
+    let f = Fixture::new("hide-all-reencrypt");
+
+    let alice = f.add_collab("alice@example.com");
+    f.import_id(&alice, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    // Hide to the ring as it stands, keeping plaintexts so the pass has
+    // something to rotate (rotation is reveal -> ring change -> pass).
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
+    let old_ciphertext = fs::read(f.repo.join(".env.secret")).unwrap();
+
+    // Rotate the ring: bob joins. The pass is stamped as due.
+    let bob = f.add_collab("bob@example.com");
+    f.import_id(&bob, "bob.age");
+
+    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false).expect("the ceremony pass");
+
+    // Every tracked ciphertext was re-encrypted to the current ring: fresh
+    // bytes, and bob - who was never in the old ring - can reveal.
+    assert_ne!(
+        fs::read(f.repo.join(".env.secret")).unwrap(),
+        old_ciphertext,
+        "the pass rewrote the ciphertext to the new ring"
+    );
+    cmd_reveal(
+        &f.repo.path,
+        "bob@example.com",
+        "origin",
+        &f.key_store.path,
+        vec![".env".to_string(), "config.yml".to_string()],
+    )
+    .expect("the new collaborator decrypts the passed ciphertexts");
+    assert_eq!(fs::read(f.repo.join(".env")).unwrap(), b"API_KEY=1\n");
+    assert_eq!(fs::read(f.repo.join("config.yml")).unwrap(), b"config\n");
+}
+
+#[test]
+fn test_a_scoped_hide_needs_no_stamp_and_consumes_none() {
+    let f = Fixture::new("scoped-hide-stamp");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    // The pass is due (tell stamped it), and the scoped hide ignores the
+    // stamp both ways: it runs, and it leaves the pass armed.
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("scoped hide");
+    assert!(f.repo.join(".env.secret").exists());
+    assert!(
+        !f.repo.join("config.yml.secret").exists(),
+        "the scoped hide covers exactly the named file"
+    );
+    assert!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+            .unwrap()
+            .is_some(),
+        "the scoped hide never consumes the stamp"
+    );
+
+    // And the ceremony still runs afterwards against the same stamp.
+    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect("the pass runs after a scoped hide");
+    assert!(f.repo.join("config.yml.secret").exists());
 }

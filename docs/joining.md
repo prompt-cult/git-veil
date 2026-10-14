@@ -36,7 +36,7 @@ owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c1
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com newcomer.pub
 added newcomer@example.com to the keyring
-note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
+note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
 
 Send the owner your X25519 public key first. Create an X25519 private key
@@ -50,32 +50,37 @@ with `scp`. The owner reads you the printed owner key fingerprint. A voice
 call is ideal. Compare it with the fingerprint recorded in the repository's
 committed `.git-veil/trust.json` before you import (step 4).
 
-Then, and this is critical, the owner re-hides. Files hidden before you
-were told were not encrypted to your key:
+Then, and this is critical, the owner delivers the ring-change pass. The
+ring changed, so every tracked ciphertext still carries ciphertext
+encrypted to the old ring:
 
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env deploy.env
 keyring signature verified
 keys in keyring: 3
 Decrypted: .env
 Decrypted: deploy.env
 files revealed
-$ git-veil hide
+$ git-veil hide --all
 Encrypted: .env
 Encrypted: deploy.env
 Deleted plaintext: .env
 Deleted plaintext: deploy.env
 files hidden
+ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
 $ git add .git-veil/keyring .env.secret deploy.env.secret
-$ git commit -m "Add newcomer to keyring and re-hide"
+$ git commit -m "Add newcomer to keyring and re-encrypt"
 $ git push
 ```
 
-This re-encrypts every tracked file, which is what a rotation is for. For
-day-to-day work the owner names files instead; see
-[two-collaborators.md](two-collaborators.md).
+The pass re-encrypts every tracked file that has a plaintext on disk,
+which is what a rotation is for: `reveal` restores the plaintexts, and
+the pass deletes them again. One pass consumes the stamp `tell` wrote.
+Run it twice and the second run refuses with exit code 70, because the
+change was already delivered. For day-to-day work the owner names files
+instead; see [two-collaborators.md](two-collaborators.md).
 
-If the owner skips the re-hide, your reveal later fails with
+If the owner skips the ring-change pass, your reveal later fails with
 `decryption failed. This ciphertext was not encrypted to your key …`.
 
 ## What YOU run
@@ -164,7 +169,7 @@ Nothing on your side can fix that.
 
 ### 6. Reveal
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env deploy.env
 keyring signature verified
 keys in keyring: 3
 Decrypted: .env
@@ -193,7 +198,8 @@ meet as a newcomer:
    pushed the updated keyring. Run `git pull` first.
 - `decryption failed. This ciphertext was not encrypted to your key and
    no stanza in it is addressed to your X25519 public key` (exit code 60).
-   The owner told you but did not re-hide, or you are on an old commit.
+   The owner told you but did not deliver the ring-change pass, or you
+   are on an old commit.
    Run `git pull`.
 - `no X25519 private key …` (exit code 21). Your key store lacks your
    private key. The message prints the creation and backup recipe. Redo
@@ -203,8 +209,8 @@ meet as a newcomer:
 
 Identical to any other member. See [solo.md](solo.md) section 6 for the
 edit, `changes`, `hide`, commit, `reveal` cycle, and name the files you
-work with: `git-veil hide .env` churns one ciphertext, while a bare
-`hide` re-encrypts every tracked file and churns them all.
+work with: `git-veil hide .env` churns one ciphertext instead of the
+whole manifest.
 
 `hide` asks one question before it first-encrypts a path you did not add
 on this machine: exit code 72, naming the path. Answer it with

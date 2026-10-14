@@ -29,9 +29,10 @@ which may be installed separately to securely create and maintain
 cryptographic keys outside of the git repo; the `git-veil` software uses the
 Rust `rage` library to work with the keys.
 
-So there is no in-place upgrade. The path is reveal everything, tear down
-git-secret, re-key with git-veil, re-hide. Everything stays plain files
-in between. Plan a moment when nobody else is pushing.
+So there is no in-place upgrade. The path is reveal everything (name
+the files), tear down git-secret, re-key with git-veil, re-encrypt.
+Everything stays plain files in between. Plan a moment when nobody else
+is pushing.
 
 ## What git-veil deliberately does differently
 
@@ -186,7 +187,7 @@ it with `git-veil export`:
 ```sh
 $ git-veil tell alice@example.com alice.pub
 added alice@example.com to the keyring
-note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
+note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
 
 What happened. This is the git-secret `tell` split into two steps.
@@ -206,7 +207,7 @@ Back to the file list captured in step 1:
 $ git-veil add .env
 file not in .gitignore, adding: .env
 added 1 files
-$ git-veil hide
+$ git-veil hide .env
 Encrypted: .env
 Deleted plaintext: .env
 files hidden
@@ -215,8 +216,8 @@ $ git commit -m "feat: re-key secrets with git-veil"
 $ git push
 ```
 
-What happened. `hide` encrypts every tracked file to the whole
-current keyring and deletes the plaintext. Pass `--keep-plaintext` to keep
+What happened. `hide .env` encrypts `.env` to the whole current keyring
+and deletes the plaintext. Pass `--keep-plaintext` to keep
 it, as git-secret does by default. The committed
 set matches git-secret's philosophy of check in the state and the
 ciphertext. That is `.git-veil/keyring`, signed, plus `tracked.json`,
@@ -249,7 +250,7 @@ Keys in keyring:
   alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
 
 Total: 2 keys
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env
@@ -270,11 +271,12 @@ Checklist:
 - [ ] Post-reveal state matches git-secret's: plaintexts on disk, the
       `.secret` files still in place and still tracked by git
 - [ ] If someone was added to the old keyring but is missing here: the
-      owner runs `git-veil tell` for them and re-hides (see
-      [docs/joining.md](joining.md))
-- [ ] Anyone leaving the team: `removeperson` + re-hide, and rotate the
-      secrets they ever saw - the same forward-looking-revocation rules as
-      git-secret apply (see [docs/departing.md](departing.md))
+      owner runs `git-veil tell` for them, then delivers the ring-change
+      pass, `git-veil hide --all` (see [docs/joining.md](joining.md))
+- [ ] Anyone leaving the team: `removeperson` + `git-veil hide --all`,
+      and rotate the secrets they ever saw - the same
+      forward-looking-revocation rules as git-secret apply (see
+      [docs/departing.md](departing.md))
 
 ## Cheat-sheet: git-secret → git-veil
 
@@ -285,8 +287,8 @@ Checklist:
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
 | `git secret add`                        | `git-veil add`                  | Both append the plaintext name to `.gitignore` when not already ignored; git-veil additionally warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove`               | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
-| `git secret hide`                       | `git-veil hide`                 | Diverged default. git-veil deletes the plaintext, git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
-| `git secret reveal`                     | `git-veil reveal`               | Same default: both leave the `.secret` ciphertext in place |
+| `git secret hide`                       | `git-veil hide`                 | Diverged shape and default. git-veil `hide` names its files, and the whole-manifest pass is the gated ceremony, `git-veil hide --all`. git-veil deletes the plaintext, git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
+| `git secret reveal`                     | `git-veil reveal`               | Same ciphertext behaviour: both leave the `.secret` in place. git-veil `reveal` names its files |
 | `git secret cat`                        | `git-veil cat`                  | Both print one file to stdout without touching disk state |
 | `git secret changes`                    | `git-veil changes`              | Both compare on-disk plaintext with the last hidden version |
 | `git secret list`                       | `git-veil list`                 | git-secret reads `.gitsecret/paths/mapping.cfg`; git-veil reads `.git-veil/tracked.json` |

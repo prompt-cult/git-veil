@@ -13,7 +13,7 @@ Understand the semantics before you rely on them:
   decrypt every one of them he can obtain, with this tool or with the
   reference `age` CLI, forever. Removing him changes nothing about the bytes
   already on disk or already in git history.
-- Only a fresh `git-veil hide` of every file produces new ciphertext
+- Only the ring-change pass, `git-veil hide --all`, produces new ciphertext
   that is not encrypted to bob's key. Even then, git history still contains
   every old ciphertext. Old commits stay decryptable by bob indefinitely.
 - Therefore, if bob ever saw or could have decrypted a secret, treat that
@@ -22,33 +22,40 @@ Understand the semantics before you rely on them:
 
 ## 1. What the owner runs
 
-Remove bob and re-hide (hide only encrypts plaintexts present on disk, so
-reveal first if everything is currently hidden):
+Remove bob, then deliver the ring-change pass. `removeperson` stamps a
+pass as due on this machine when it re-signs the keyring, and one `hide
+--all` consumes the stamp. The pass re-encrypts only tracked files with
+a plaintext on disk, so reveal the files first (name them):
 
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
-$ git-veil reveal
+note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env
 files revealed
-$ git-veil hide
+$ git-veil hide --all
 Encrypted: .env
 Deleted plaintext: .env
 files hidden
+ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
 $ git add .git-veil/keyring .env.secret
-$ git commit -m "Remove bob from keyring and re-hide"
+$ git commit -m "Remove bob from keyring and re-encrypt"
 $ git push
 ```
 
 What happened. The keyring signature was verified against the pinned owner
 key before the change. removeperson fails closed on a tampered or unsigned
-keyring, and on an email that is not in the ring. Bob's entry was dropped
-and the ring re-signed with the owner's key. From this hide onward, new
+keyring, and on an email that is not in the ring. Bob's entry was dropped,
+the ring re-signed with the owner's key, and a due pass stamped in the
+owner's key store. `hide --all` checked the stamp against the committed
+ring, re-encrypted every tracked file that had a plaintext on disk, and
+consumed the stamp: one pass per ring change. From this pass onward, new
 ciphertext does not include bob.
 
-The re-hide replaces ciphertext only for files whose plaintext was on
+The pass replaces ciphertext only for files whose plaintext was on
 disk. It does not scrub git history. Every previous version of
 `.env.secret` remains in old commits, encrypted to bob's key. If the
 secrets must truly be gone from bob's reach, rotate them. See step 3.
@@ -79,8 +86,9 @@ delete the file if it holds nothing else bob needs.
 
 ## 3. Verify the rotation actually happened
 
-Rotate the secret values first. Then remove and re-hide, so bob's last
-readable ciphertext contains an already dead value. After the owner's
+Rotate the secret values first. Then remove bob and deliver the
+ring-change pass, so bob's last readable ciphertext contains an already
+dead value. After the owner's
 push, verify from a remaining member's chair. Here that is the owner, and
 alice is analogous:
 
@@ -92,7 +100,7 @@ Keys in keyring:
   alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
 
 Total: 2 keys
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env
@@ -119,7 +127,7 @@ DB_PASSWORD=correct-horse
 Meanwhile, bob pulling the updated repo finds the tool shuts him out:
 
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 error: user not found in the keyring. Check the principal, or ask the owner to add it
@@ -132,7 +140,7 @@ unreadable.
 ## Checklist
 
 - [ ] Owner: `removeperson <email>`. It fails if the email is not in the ring
-- [ ] Owner: `reveal` then `hide`, commit `.git-veil/keyring` and the re-hidden `.secret` files, push
+- [ ] Owner: `reveal` the files, then `hide --all`, commit `.git-veil/keyring` and the re-encrypted `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
 - [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up X25519 private key

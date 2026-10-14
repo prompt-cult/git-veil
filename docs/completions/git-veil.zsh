@@ -161,10 +161,11 @@ _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--keep-plaintext[Leave plaintext files beside their ciphertexts instead of deleting them]' \
+'()--all[Run the ring-change pass\: re-encrypt every tracked file to the current keyring. Gated on the ring-change stamp that tell and removeperson write on this machine]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-'*::files -- Tracked files to hide; no paths means every tracked file:_default' \
+'*::files -- Tracked files to hide:_default' \
 && ret=0
 ;;
 (reveal)
@@ -175,7 +176,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-'*::files -- Tracked files to reveal; no paths means every tracked file:_default' \
+'*::files -- Tracked files to reveal:_default' \
 && ret=0
 ;;
 (cat)
@@ -434,8 +435,8 @@ _git-veil_commands() {
 'allow:Allow files for encryption on this machine' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
-'hide:Encrypt tracked files to the keyring' \
-'reveal:Decrypt tracked files back to plaintext' \
+'hide:Encrypt named tracked files to the keyring' \
+'reveal:Decrypt named tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
@@ -518,8 +519,8 @@ _git-veil__subcmd__help_commands() {
 'allow:Allow files for encryption on this machine' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
-'hide:Encrypt tracked files to the keyring' \
-'reveal:Decrypt tracked files back to plaintext' \
+'hide:Encrypt named tracked files to the keyring' \
+'reveal:Decrypt named tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \

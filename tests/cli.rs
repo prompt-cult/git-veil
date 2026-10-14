@@ -196,6 +196,18 @@ impl TestRepo {
         )
         .expect("add");
     }
+
+    /// The tracked file names, as the required-form hide and reveal calls
+    /// name them. Tests that act on the whole tracked set name the whole
+    /// tracked set explicitly: the bare form is gone (issue 50).
+    fn tracked_names(&self) -> Vec<String> {
+        TrackedFiles::load(&self.repo.path.join(".git-veil/tracked.json"))
+            .unwrap()
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +408,7 @@ fn test_add_implies_allow_hide_does_not_refuse() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide must not refuse a path the user added on this machine");
     assert!(fixture.repo.join(".env.secret").exists());
@@ -421,7 +433,7 @@ fn test_hide_reveal_roundtrip() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -441,7 +453,7 @@ fn test_hide_reveal_roundtrip() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("reveal");
 
@@ -469,7 +481,7 @@ fn test_hide_creates_valid_age_ciphertext() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -481,21 +493,6 @@ fn test_hide_creates_valid_age_ciphertext() {
         ciphertext.starts_with(b"age-encryption.org"),
         "should be age format"
     );
-}
-
-#[test]
-fn test_hide_no_tracked_files_is_ok() {
-    let fixture = TestRepo::new("hide-empty");
-    fixture.add_collaborator("alice@example.com");
-
-    cmd_hide(
-        &fixture.repo.path,
-        "origin",
-        &fixture.key_store.path,
-        true,
-        Vec::new(),
-    )
-    .expect("hide with no tracked files");
 }
 
 #[test]
@@ -537,7 +534,13 @@ fn test_hide_no_keys_fails() {
     )
     .expect("add");
 
-    let result = cmd_hide(&repo.path, "origin", &key_store.path, true, Vec::new());
+    let result = cmd_hide(
+        &repo.path,
+        "origin",
+        &key_store.path,
+        true,
+        vec![".env".to_string()],
+    );
     assert!(result.is_err(), "hide with no keys should fail");
 }
 
@@ -560,7 +563,7 @@ fn test_cat_decrypts_to_stdout() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -598,7 +601,7 @@ fn test_cat_untracked_file_fails() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -632,7 +635,7 @@ fn test_unhide_single_file() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -675,7 +678,7 @@ fn test_changes_detects_modification() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -708,7 +711,7 @@ fn test_changes_no_modification() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -1183,7 +1186,7 @@ fn test_multi_recipient_hide_reveal() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -1192,7 +1195,7 @@ fn test_multi_recipient_hide_reveal() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("alice reveal");
 
@@ -1205,7 +1208,7 @@ fn test_multi_recipient_hide_reveal() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("re-hide");
 
@@ -1214,7 +1217,7 @@ fn test_multi_recipient_hide_reveal() {
         "bob@example.com",
         "origin",
         &fixture.key_store.path,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("bob reveal");
 
@@ -1263,7 +1266,7 @@ fn test_full_lifecycle() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -1279,7 +1282,7 @@ fn test_full_lifecycle() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("reveal");
 
@@ -1329,7 +1332,7 @@ fn test_hide_keep_plaintext_leaves_both_copies() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -1357,7 +1360,7 @@ fn test_hide_deletes_plaintext_by_default() {
         "origin",
         &fixture.key_store.path,
         false,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide (default deletes plaintext)");
 
@@ -1372,8 +1375,8 @@ fn test_hide_deletes_plaintext_by_default() {
 }
 
 #[test]
-fn test_hide_skips_missing_plaintext_instead_of_erroring() {
-    let fixture = TestRepo::new("hide-skip-missing");
+fn test_hide_of_an_already_hidden_name_refuses_at_resolution() {
+    let fixture = TestRepo::new("hide-already-hidden");
 
     let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&collab_identity, "alice.age");
@@ -1384,25 +1387,29 @@ fn test_hide_skips_missing_plaintext_instead_of_erroring() {
         "origin",
         &fixture.key_store.path,
         false,
-        Vec::new(),
+        vec![".env".to_string()],
     )
     .expect("hide");
     assert!(!fixture.repo.join(".env").exists());
 
-    // Steady state of the delete-by-default lifecycle. The plaintext is
-    // absent and the ciphertext is committed, so re-hiding is a
-    // skip-and-report, not an error.
-    cmd_hide(
+    // The plaintext is deleted, so the name no longer exists on disk.
+    // Naming it refuses: hide resolves paths the way add does. Reveal
+    // restores the plaintext, then hide re-encrypts.
+    let err = cmd_hide(
         &fixture.repo.path,
         "origin",
         &fixture.key_store.path,
         false,
-        Vec::new(),
+        vec![".env".to_string()],
     )
-    .expect("re-hide with absent plaintext must succeed (skip-and-report)");
+    .expect_err("an absent plaintext does not resolve");
+    assert!(
+        format!("{:#}", err).contains(".env"),
+        "the refusal names the unresolvable path"
+    );
     assert!(
         fixture.repo.join(".env.secret").exists(),
-        "ciphertext untouched by the skip"
+        "ciphertext untouched by the refusal"
     );
 }
 
@@ -1420,7 +1427,7 @@ fn test_reveal_does_not_delete_ciphertext() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -1429,7 +1436,7 @@ fn test_reveal_does_not_delete_ciphertext() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("reveal");
 
@@ -1457,7 +1464,7 @@ fn test_unhide_does_not_delete_ciphertext() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
@@ -1531,7 +1538,7 @@ fn test_cat_does_not_touch_disk() {
         "origin",
         &fixture.key_store.path,
         true,
-        Vec::new(),
+        fixture.tracked_names(),
     )
     .expect("hide");
 
