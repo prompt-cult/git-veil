@@ -3,6 +3,7 @@
 //! age encryption (age-encryption.org/v1) + Ed25519 signing (RFC 8032).
 
 mod age_crypto;
+mod allowance;
 pub mod cli;
 mod codeowners;
 mod commands;
@@ -26,12 +27,14 @@ pub use age_crypto::{
     load_x25519_public_keys_from_store, parse_x25519_private_key, parse_x25519_public_key,
     x25519_public_key_encoding,
 };
+pub use allowance::{allowance_record_key, AllowanceStore};
 pub use codeowners::{
     covers_trust_critical_paths, find as find_codeowners, is_suppressed as codeowners_suppressed,
     record_suppression as record_codeowners_suppression, suggestion_text as codeowners_suggestion,
     warning_text as codeowners_warning,
 };
 pub use commands::add::cmd_add;
+pub use commands::allow::cmd_allow;
 pub use commands::cat::cmd_cat;
 pub use commands::changes::cmd_changes;
 pub use commands::clean::cmd_clean;

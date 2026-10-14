@@ -56,6 +56,8 @@ pub enum ExitCode {
     Refused = 70,
     /// Path-safety refusal (symlink, outside repository, unsafe tracked path).
     UnsafePath = 71,
+    /// `hide` refuses to first-encrypt a tracked path that was never
+    /// allowed on this machine.
     UnintendedEncryption = 72,
 }
 
@@ -153,7 +155,9 @@ impl ExitCode {
             ExitCode::UnsafePath => {
                 "Path safety refusal such as a symlink or a path outside the repository"
             }
-            ExitCode::UnintendedEncryption => "UnintendedEncryption",
+            ExitCode::UnintendedEncryption => {
+                "hide refuses to first-encrypt a tracked path never allowed on this machine"
+            }
         }
     }
 }

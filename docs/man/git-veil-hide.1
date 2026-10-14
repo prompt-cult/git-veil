@@ -44,7 +44,12 @@ itself git\-ignored \- e.g. swallowed by a parent\-directory rule like
 \&.tmp/ \- because that ciphertext would silently never reach the
 repository. It WARNS (error code 41) when a tracked plaintext exists on
 disk but is not git\-ignored, since a blind `git add \-A` would then commit
-it. The plaintext is DELETED by default once every ciphertext is durably
+it. It also REFUSES (exit code 72) a tracked path that has a plaintext on
+disk, no committed ciphertext in the git index, and no allowance on this
+machine: tracked.json is committed and unsigned, so a path added by
+someone else is refused until you allow it here. The allowance is
+recorded by add on this machine, or deliberately with git\-veil allow.
+The plaintext is DELETED by default once every ciphertext is durably
 written \- the normal loop is reveal (restore plaintexts) \-> edit \-> hide.
 \-\-keep\-plaintext leaves the plaintexts beside their ciphertexts. Tracked
 paths whose plaintext is absent are skipped and reported, never an error.

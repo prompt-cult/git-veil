@@ -4,10 +4,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::allowance::AllowanceStore;
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
+use crate::tracked_files::{ensure_regular_file, get_git_config_email, validate_tracked_path};
 use crate::{
     encrypt_to_x25519_public_keys, parse_x25519_public_key, verify_keyring_against_trust,
     TrackedFiles,
@@ -62,8 +63,10 @@ pub fn cmd_hide(
     keep_plaintext: bool,
 ) -> Result<()> {
     // Verify the keyring signature first. The same call yields the repo id
-    // and the keyring hide encrypts with.
-    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
+    // and the pin fingerprint the allowance gate keys on, plus the keyring
+    // hide encrypts with.
+    let (repo_id, pin_fingerprint, keyring) =
+        verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     let _ = &keyring;
 
@@ -116,6 +119,11 @@ pub fn cmd_hide(
         );
     }
     let mut orphans: Vec<String> = Vec::new();
+    // Tracked plaintext paths whose ciphertext is already committed. They
+    // are established, so re-encrypting them needs no allowance. There is
+    // no history check and no cache: the index either carries the
+    // ciphertext path or it does not.
+    let mut established: HashSet<PathBuf> = HashSet::new();
     for raw in ls.stdout.split(|b| *b == 0) {
         if raw.is_empty() {
             continue;
@@ -142,6 +150,8 @@ pub fn cmd_hide(
             .join(stem);
         if !tracked_set.contains(&plaintext) {
             orphans.push(line);
+        } else {
+            established.insert(plaintext);
         }
     }
     if !orphans.is_empty() {
@@ -153,6 +163,57 @@ pub fn cmd_hide(
                  Re-track the paths, or delete the stale ciphertext. See the rotation documentation. \
                  The offending committed ciphertext paths:\n  {}",
                 orphans.join("\n  ")
+            ),
+        ));
+    }
+
+    // Encryption-allowance gate (exit 72, see "Allowance" in
+    // docs/design.md). tracked.json is committed and unsigned, so a repo
+    // writer can nominate a path. A tracked path with a plaintext on disk,
+    // no committed ciphertext in the index and no allowance on this machine
+    // is exactly a nominated first-encrypt: encrypting it would write the
+    // plaintext's contents into a committed ciphertext to every keyring
+    // member, including the attacker's, silently when the plaintext is
+    // gitignored. The allowance record lives in the key store, outside any
+    // repo writer's reach, keyed to this machine's trust pin and this git
+    // user. Re-encryption of an established ciphertext needs no allowance.
+    let mut unintended: Vec<String> = Vec::new();
+    let mut principal: Option<String> = None;
+    for file in &tracked.files {
+        // Only paths that have a plaintext can be first-encrypted. A path
+        // with no plaintext has nothing to exfiltrate and is handled by the
+        // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
+        // lifecycle").
+        if established.contains(file) || !repo_root.join(file).exists() {
+            continue;
+        }
+        // The principal is resolved lazily, and only when the gate has a
+        // candidate path, so a repo without user.email set keeps hiding
+        // established ciphertexts.
+        if principal.is_none() {
+            principal = Some(get_git_config_email(repo_root).context(
+                "hide checks the encryption allowance for this machine, which needs your git config user.email",
+            )?);
+        }
+        if !AllowanceStore::contains(
+            key_store,
+            &repo_id,
+            &pin_fingerprint,
+            principal.as_ref().expect("principal was just resolved"),
+            file,
+        ) {
+            unintended.push(file.to_string_lossy().to_string());
+        }
+    }
+    if !unintended.is_empty() {
+        return Err(coded(
+            ExitCode::UnintendedEncryption,
+            format!(
+                "refusing to hide: paths are tracked but were never allowed for encryption on \
+                 this machine. tracked.json may have been modified by someone else. Allow the \
+                 paths deliberately if the tracking is wanted. Error code 72. \
+                 The offending tracked paths:\n  {}",
+                unintended.join("\n  ")
             ),
         ));
     }
@@ -220,12 +281,11 @@ pub fn cmd_hide(
         // hidden and has nothing to hide. Either way there is nothing to
         // encrypt and nothing to exfiltrate, so the path is skipped.
         if !repo_root.join(file).exists() {
-            let state =
-                if encrypted_path_for(repo_root, file).exists() {
-                    "already hidden because the plaintext is absent"
-                } else {
-                    "never hidden because there is no plaintext and no ciphertext"
-                };
+            let state = if encrypted_path_for(repo_root, file).exists() {
+                "already hidden because the plaintext is absent"
+            } else {
+                "never hidden because there is no plaintext and no ciphertext"
+            };
             skipped.push(format!("{}: {}", file.display(), state));
             continue;
         }

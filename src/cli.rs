@@ -390,6 +390,12 @@ repo-relative). Nothing is encrypted yet - hide does that. Files must
 exist, and a symlink must resolve inside the repository, so hide can
 never be tricked into reading or deleting a file outside the repo.
 
+The manifest nomination is also your standing instruction, so each added
+path is recorded in the machine-local allowance store in your key store:
+hide refuses to first-encrypt a tracked path that was never allowed on
+this machine (exit code 72), so a tracked.json modified by someone else
+cannot silently nominate your files for encryption.
+
 Typical flow: init -> trust -> tell (once per collaborator) -> add -> hide.
 
 EXAMPLES
@@ -400,6 +406,41 @@ EXAMPLES
         /// File(s) to add
         #[arg(required = true)]
         files: Vec<String>,
+        /// Git remote name (derives the repository id for the allowance store)
+        #[arg(long, default_value = "origin")]
+        remote: String,
+    },
+
+    /// Allow files for encryption on this machine
+    #[command(after_long_help = "\
+Records paths in the machine-local allowance store in your key store:
+this repository, anchored by the trust pin, and this git user, have
+allowed these paths for encryption. tracked.json is committed and
+unsigned, so any repo writer can nominate a path in it; hide refuses to
+first-encrypt a tracked path that was never allowed on this machine
+(exit code 72). Once recorded, an allowance survives manifest changes
+and never needs re-recording. removeperson purges the allowance record
+of a removed principal.
+
+allow resolves paths exactly like add: the file must exist and resolve
+inside the repository. add records the allowance too, so allow is only
+needed for a path someone else nominated, or to allow a path under a
+principal the manifest nomination did not run for.
+
+allow reads your principal from git config user.email and requires an
+established trust pin (git-veil trust) on this machine.
+
+EXAMPLES
+  $ git-veil allow .env
+  $ git-veil allow config/credentials.yml notes.md
+")]
+    Allow {
+        /// File(s) to allow
+        #[arg(required = true)]
+        files: Vec<String>,
+        /// Git remote name (derives the repository id for the allowance store)
+        #[arg(long, default_value = "origin")]
+        remote: String,
     },
 
     /// Untrack files (deletes the sibling .secret unless --keep-ciphertext)
@@ -465,7 +506,12 @@ itself git-ignored - e.g. swallowed by a parent-directory rule like
 .tmp/ - because that ciphertext would silently never reach the
 repository. It WARNS (error code 41) when a tracked plaintext exists on
 disk but is not git-ignored, since a blind `git add -A` would then commit
-it. The plaintext is DELETED by default once every ciphertext is durably
+it. It also REFUSES (exit code 72) a tracked path that has a plaintext on
+disk, no committed ciphertext in the git index, and no allowance on this
+machine: tracked.json is committed and unsigned, so a path added by
+someone else is refused until you allow it here. The allowance is
+recorded by add on this machine, or deliberately with git-veil allow.
+The plaintext is DELETED by default once every ciphertext is durably
 written - the normal loop is reveal (restore plaintexts) -> edit -> hide.
 --keep-plaintext leaves the plaintexts beside their ciphertexts. Tracked
 paths whose plaintext is absent are skipped and reported, never an error.
