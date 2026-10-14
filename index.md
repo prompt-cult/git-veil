@@ -25,9 +25,9 @@ Grab a release binary from the
 git-veil init                                   # creates .git-veil/ state in the repo
 git-veil import private-key.txt                 # your X25519 private key (age identity), made by age-keygen
 git-veil trust <repo-id>                        # possession proof on the machine holding the signing key
-git-veil add .env                               # tracks it, records intent, gitignores it
-git-veil hide                                   # encrypts; deletes the plaintext by default
-git-veil reveal                                 # brings it back when you need to edit
+git-veil add .env                               # tracks it, records the allowance, gitignores it
+git-veil hide .env                              # encrypts; deletes the plaintext by default
+git-veil reveal .env                            # brings it back when you need to edit
 ```
 
 Your keys never live in the repository. `git-veil init` refuses to reset an
@@ -35,18 +35,40 @@ already-trusted repo; `git-veil trust` refuses a typo'd repo id.
 
 ## 3. Running solo
 
-The loop is `reveal` → edit → `hide`. Hidden state is boring on purpose:
-`git-veil list-keys`, `git-veil changes`, `git-veil verify-keyring` and
-`git-veil show-repo-id` tell you what is in the ring, what changed, and who
-the repo claims to be.
+Solo, git-veil is a backup of your secret material that lives alongside the
+code. The ciphertexts are committed, so every clone carries the secrets,
+and a build or deployment script reveals on its own key: give the box its
+own key, pin trust with a pin-file, `tell` the box's public key, re-hide,
+and the script reads `git-veil cat .env` straight from the ciphertext.
+
+Name the file you are working with: `git-veil hide .env` and
+`git-veil reveal .env` touch one file. A bare `hide` and `reveal` lock and
+unlock every tracked file, which is the solo convenience. Hidden state is
+boring on purpose: `git-veil list-keys`, `git-veil changes`,
+`git-veil verify-keyring` and `git-veil show-repo-id` tell you what is in
+the ring, what changed, and who the repo claims to be.
 
 ## 4. Working as a team
 
 ```
-git-veil tell alice@example.com alice.recipient   # add a collaborator, re-sign the keyring
+git-veil tell alice@example.com alice.pub        # add a collaborator, re-sign the keyring
 git-veil removeperson alice@example.com           # remove them, re-sign
 git-veil hide                                     # re-encrypt to the new ring (rotation)
 ```
+
+A bare `hide` re-encrypts every tracked file: every ciphertext changes,
+and a commit where you edited one secret looks like you edited all of
+them. Name the files instead (`git-veil hide .env`); keep the bare form
+for rotations, when you mean the whole manifest.
+
+Before `hide` first-encrypts a path it did not see you add, it asks, as an
+error code (exit 72) and never as a blocking prompt: are you sure this
+file is one you want to share with the others in the keyring? Confirm with
+`git-veil allow <path>`. The answer is cached per clone per git username,
+and `git-veil add` records it too, so files you added never ask.
+Re-encrypting a ciphertext that is already committed never asks, which is
+why rotation on a fresh clone works. `reveal` is never gated: decryption
+needs only keyring membership.
 
 A machine without the signing key pins trust by importing a pin-file:
 `git-veil export-pin <repo-id> --output pin` on the signing machine, move it
