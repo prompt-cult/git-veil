@@ -44,8 +44,7 @@ pub fn cmd_tell(
     let public_key_str = key_content
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .next()
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
         .unwrap_or("");
     let collaborator_public_key = parse_x25519_public_key(public_key_str)?;
 
