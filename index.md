@@ -38,28 +38,32 @@ already-trusted repo; `git-veil trust` refuses a typo'd repo id.
 Solo, git-veil is a backup of your secret material that lives alongside the
 code. The ciphertexts are committed, so every clone carries the secrets,
 and a build or deployment script reveals on its own key: give the box its
-own key, pin trust with a pin-file, `tell` the box's public key, re-hide,
-and the script reads `git-veil cat .env` straight from the ciphertext.
+own key, pin trust with a pin-file, `tell` the box's public key, deliver
+the ring-change pass, and the script reads `git-veil cat .env` straight
+from the ciphertext.
 
 Name the file you are working with: `git-veil hide .env` and
-`git-veil reveal .env` touch one file. A bare `hide` and `reveal` lock and
-unlock every tracked file, which is the solo convenience. Hidden state is
-boring on purpose: `git-veil list-keys`, `git-veil changes`,
-`git-veil verify-keyring` and `git-veil show-repo-id` tell you what is in
-the ring, what changed, and who the repo claims to be.
+`git-veil reveal .env` act on exactly the paths you give them, so the
+commit shows what you actually touched. Hidden state is boring on purpose:
+`git-veil list-keys`, `git-veil changes`, `git-veil verify-keyring` and
+`git-veil show-repo-id` tell you what is in the ring, what changed, and
+who the repo claims to be.
 
 ## 4. Working as a team
 
 ```
 git-veil tell alice@example.com alice.pub        # add a collaborator, re-sign the keyring
-git-veil removeperson alice@example.com           # remove them, re-sign
-git-veil hide                                     # re-encrypt to the new ring (rotation)
+git-veil removeperson alice@example.com          # remove them, re-sign
+git-veil hide --all                              # the ring-change pass: re-encrypt every tracked file to the new ring
 ```
 
-A bare `hide` re-encrypts every tracked file: every ciphertext changes,
-and a commit where you edited one secret looks like you edited all of
-them. Name the files instead (`git-veil hide .env`); keep the bare form
-for rotations, when you mean the whole manifest.
+A ring change stamps a pass as due on the machine that signed the new
+ring, and one `hide --all` consumes the stamp. The pass re-encrypts every
+tracked file that has a plaintext on disk; without a due stamp it refuses
+(exit code 70). A scoped `hide` names its files, never consults the stamp
+and never consumes it. Name the files you touched and the commit shows a
+fresh `.secret` for each; a whole-manifest pass changes every ciphertext,
+so a commit where you edited one secret looks like you edited all of them.
 
 Before `hide` first-encrypts a path it did not see you add, it asks, as an
 error code (exit 72) and never as a blocking prompt: are you sure this
