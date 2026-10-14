@@ -36,7 +36,7 @@ owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c1
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com newcomer.pub
 added newcomer@example.com to the keyring
-note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
+note: existing ciphertext does not include the new collaborator. Re-hide the tracked files (name each one) to encrypt them to the current keyring.
 ```
 
 Send the owner your X25519 public key first. Create an X25519 private key
@@ -54,13 +54,13 @@ Then, and this is critical, the owner re-hides. Files hidden before you
 were told were not encrypted to your key:
 
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env deploy.env
 keyring signature verified
 keys in keyring: 3
 Decrypted: .env
 Decrypted: deploy.env
 files revealed
-$ git-veil hide
+$ git-veil hide .env deploy.env
 Encrypted: .env
 Encrypted: deploy.env
 Deleted plaintext: .env
@@ -71,8 +71,8 @@ $ git commit -m "Add newcomer to keyring and re-hide"
 $ git push
 ```
 
-This re-encrypts every tracked file, which is what a rotation is for. For
-day-to-day work the owner names files instead; see
+Naming every tracked file re-encrypts each one, which is what a rotation
+is for. For day-to-day work the owner names files instead; see
 [two-collaborators.md](two-collaborators.md).
 
 If the owner skips the re-hide, your reveal later fails with
@@ -164,7 +164,7 @@ Nothing on your side can fix that.
 
 ### 6. Reveal
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env deploy.env
 keyring signature verified
 keys in keyring: 3
 Decrypted: .env
@@ -203,8 +203,8 @@ meet as a newcomer:
 
 Identical to any other member. See [solo.md](solo.md) section 6 for the
 edit, `changes`, `hide`, commit, `reveal` cycle, and name the files you
-work with: `git-veil hide .env` churns one ciphertext, while a bare
-`hide` re-encrypts every tracked file and churns them all.
+work with: `git-veil hide .env` churns one ciphertext instead of the
+whole manifest.
 
 `hide` asks one question before it first-encrypts a path you did not add
 on this machine: exit code 72, naming the path. Answer it with

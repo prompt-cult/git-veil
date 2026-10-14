@@ -118,7 +118,7 @@ pub fn cmd_tell(
             .iter()
             .any(|file| encrypted_path_for(repo_root, file).exists());
         if has_ciphertext {
-            println!("note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.");
+            println!("note: existing ciphertext does not include the new collaborator. Re-hide the tracked files (name each one) to encrypt them to the current keyring.");
         }
     }
     Ok(())

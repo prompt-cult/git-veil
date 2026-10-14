@@ -481,19 +481,19 @@ EXAMPLES
 ")]
     List,
 
-    /// Encrypt tracked files to the keyring
+    /// Encrypt named tracked files to the keyring
     #[command(after_long_help = "\
-Encrypts every tracked file to every key in the keyring and leaves
+Encrypts each named tracked file to every key in the keyring and leaves
 <name>.secret beside where the plaintext was (notes -> notes.secret).
 You gitignore the PLAINTEXT filenames and commit the .secret files:
 a fresh clone carrying only ciphertext stays decryptable by every
 keyring member via reveal.
 
 hide is TWO-PHASE and ALL-OR-NOTHING: phase 1 reads and validates every
-tracked plaintext and encrypts EVERY file to the full public key set in
-memory - if any plaintext is missing, unreadable or cannot be encrypted,
-hide aborts having changed NOTHING on disk. Phase 2 (only after every
-encryption succeeded) writes each .secret atomically.
+named plaintext and encrypts EVERY named file to the full public key set
+in memory - if any plaintext is missing, unreadable or cannot be
+encrypted, hide aborts having changed NOTHING on disk. Phase 2 (only
+after every encryption succeeded) writes each .secret atomically.
 
 hide only works after the repository is initialized (git-veil init), the
 owner's key is trusted on this machine (git-veil trust), collaborators are
@@ -513,22 +513,22 @@ someone else is refused until you allow it here. The allowance is
 recorded by add on this machine, or deliberately with git-veil allow.
 The plaintext is DELETED by default once every ciphertext is durably
 written - the normal loop is reveal (restore plaintexts) -> edit -> hide.
---keep-plaintext leaves the plaintexts beside their ciphertexts. Tracked
-paths whose plaintext is absent are skipped and reported, never an error.
+--keep-plaintext leaves the plaintexts beside their ciphertexts. Each
+named file must exist when you name it (hide resolves paths the way add
+does); once a plaintext is hidden, reveal restores it before hide can
+re-encrypt it.
 
-Without paths hide covers every tracked file. With one or more FILE
-arguments hide covers exactly the named files: each is resolved the way
-add resolves paths, and must already be tracked - an unknown or untracked
+hide covers exactly the named files: each is resolved the way add
+resolves paths, and must already be tracked - an unknown or untracked
 name refuses (error code 71). The allowance check (error code 72) then
-applies to the named files only, and names only the offenders among them.
-No path arguments, no guessing from file changes: you name the file, the
-gate checks that file.
+applies to the named files only, and names only the offenders among
+them. You name the file, the gate checks that file.
 
 EXAMPLES
-  $ git-veil hide    # encrypt and delete plaintexts (the default)
-  $ git-veil hide --keep-plaintext
-  $ git-veil hide --remote upstream
-  $ git-veil hide .env    # hide only .env, leave every other tracked file alone
+  $ git-veil hide .env    # encrypt .env and delete the plaintext (the default)
+  $ git-veil hide .env --keep-plaintext
+  $ git-veil hide .env --remote upstream
+  $ git-veil hide .env config.yml    # encrypt exactly the named files
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
 ")]
     Hide {
@@ -541,27 +541,26 @@ EXAMPLES
         /// Leave plaintext files beside their ciphertexts instead of deleting them
         #[arg(long)]
         keep_plaintext: bool,
-        /// Tracked files to hide; no paths means every tracked file
-        #[arg(value_name = "FILE")]
+        /// Tracked files to hide
+        #[arg(value_name = "FILE", required = true)]
         files: Vec<String>,
     },
 
-    /// Decrypt tracked files back to plaintext
+    /// Decrypt named tracked files back to plaintext
     #[command(after_long_help = "\
-Decrypts every tracked file back to its plaintext path, using your X25519
-private key from the local key store. The keyring signature is verified
-against the pinned trusted key before any decryption. Your principal
-comes from git config user.email or --email; a missing private key exits
-with code 21 and the create-and-back-up recipe.
+Decrypts each named tracked file back to its plaintext path, using your
+X25519 private key from the local key store. The keyring signature is
+verified against the pinned trusted key before any decryption. Your
+principal comes from git config user.email or --email; a missing private
+key exits with code 21 and the create-and-back-up recipe.
 
-Without paths reveal covers every tracked file. With one or more FILE
-arguments reveal covers exactly the named files: each must already be
-tracked - an unknown or untracked name refuses (error code 71). Reveal
-is never gated by the encryption allowance: decryption needs only
-keyring membership, so a named path is revealed without any allow step.
+reveal covers exactly the named files: each must already be tracked -
+an unknown or untracked name refuses (error code 71). Reveal is never
+gated by the encryption allowance: decryption needs only keyring
+membership, so a named path is revealed without any allow step.
 
-reveal is the inverse of hide for all files; unhide does one file;
-cat prints one file without touching disk state.
+reveal is the inverse of hide; unhide does one file; cat prints one
+file without touching disk state.
 
 reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY file in the working set
 must have its .secret ciphertext present and decrypt successfully.
@@ -571,9 +570,9 @@ anything on disk. Phase 2 (only after every decryption succeeded)
 writes each plaintext atomically.
 
 EXAMPLES
-  $ git-veil reveal
-  $ git-veil reveal --email alice@example.com
   $ git-veil reveal .env    # restore only .env, leave every other file hidden
+  $ git-veil reveal .env --email alice@example.com
+  $ git-veil reveal .env config.yml    # restore exactly the named files
 ")]
     Reveal {
         /// Your email address
@@ -585,8 +584,8 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
-        /// Tracked files to reveal; no paths means every tracked file
-        #[arg(value_name = "FILE")]
+        /// Tracked files to reveal
+        #[arg(value_name = "FILE", required = true)]
         files: Vec<String>,
     },
 

@@ -658,7 +658,14 @@ fn test_hide_and_tell_fail_without_trust() {
     cmd_init(&repo.path, false).expect("init");
 
     assert!(
-        cmd_hide(&repo.path, "origin", &key_store.path, true, Vec::new()).is_err(),
+        cmd_hide(
+            &repo.path,
+            "origin",
+            &key_store.path,
+            true,
+            vec![".env".to_string()]
+        )
+        .is_err(),
         "hide should fail without trust"
     );
 
@@ -722,7 +729,7 @@ fn test_reveal_no_pin_error_names_both_paths() {
         "owner@example.com",
         "origin",
         &key_store.path,
-        Vec::new(),
+        vec![".env".to_string()],
     )
     .expect_err("reveal without a pin must fail");
     let message = err.to_string();

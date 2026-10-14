@@ -164,7 +164,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-'*::files -- Tracked files to hide; no paths means every tracked file:_default' \
+'*::files -- Tracked files to hide:_default' \
 && ret=0
 ;;
 (reveal)
@@ -175,7 +175,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-'*::files -- Tracked files to reveal; no paths means every tracked file:_default' \
+'*::files -- Tracked files to reveal:_default' \
 && ret=0
 ;;
 (cat)
@@ -434,8 +434,8 @@ _git-veil_commands() {
 'allow:Allow files for encryption on this machine' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
-'hide:Encrypt tracked files to the keyring' \
-'reveal:Decrypt tracked files back to plaintext' \
+'hide:Encrypt named tracked files to the keyring' \
+'reveal:Decrypt named tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
@@ -518,8 +518,8 @@ _git-veil__subcmd__help_commands() {
 'allow:Allow files for encryption on this machine' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
-'hide:Encrypt tracked files to the keyring' \
-'reveal:Decrypt tracked files back to plaintext' \
+'hide:Encrypt named tracked files to the keyring' \
+'reveal:Decrypt named tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \

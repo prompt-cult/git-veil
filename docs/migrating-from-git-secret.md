@@ -186,7 +186,7 @@ it with `git-veil export`:
 ```sh
 $ git-veil tell alice@example.com alice.pub
 added alice@example.com to the keyring
-note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
+note: existing ciphertext does not include the new collaborator. Re-hide the tracked files (name each one) to encrypt them to the current keyring.
 ```
 
 What happened. This is the git-secret `tell` split into two steps.
@@ -206,7 +206,7 @@ Back to the file list captured in step 1:
 $ git-veil add .env
 file not in .gitignore, adding: .env
 added 1 files
-$ git-veil hide
+$ git-veil hide .env
 Encrypted: .env
 Deleted plaintext: .env
 files hidden
@@ -215,8 +215,8 @@ $ git commit -m "feat: re-key secrets with git-veil"
 $ git push
 ```
 
-What happened. `hide` encrypts every tracked file to the whole
-current keyring and deletes the plaintext. Pass `--keep-plaintext` to keep
+What happened. `hide .env` encrypts `.env` to the whole current keyring
+and deletes the plaintext. Pass `--keep-plaintext` to keep
 it, as git-secret does by default. The committed
 set matches git-secret's philosophy of check in the state and the
 ciphertext. That is `.git-veil/keyring`, signed, plus `tracked.json`,
@@ -249,7 +249,7 @@ Keys in keyring:
   alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
 
 Total: 2 keys
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env

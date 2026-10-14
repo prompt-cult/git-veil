@@ -147,7 +147,7 @@ $ printf 'API_KEY=hunter2\n' > .env
 $ git-veil add .env
 file not in .gitignore, adding: .env
 added 1 files
-$ git-veil hide
+$ git-veil hide .env
 Encrypted: .env
 Deleted plaintext: .env
 files hidden
@@ -217,12 +217,12 @@ diff to show, it prints `unchanged: …`, `no hidden version: …` or
 `git-veil cat .env` writes the plaintext to stdout only. Neither the
 plaintext nor the ciphertext on disk is touched.
 
-A bare `hide` re-encrypts every tracked file and a bare `reveal` restores
-every plaintext: the lock-everything convenience. Solo there is nobody to
-notice, but keep the naming habit anyway. It is the habit that matters in
-a team, where a bare `hide` re-encrypts every tracked file, every
-ciphertext changes, and the commit looks like you edited every secret when
-you edited a few. See the [two-collaborators guide](two-collaborators.md).
+Every `hide` and `reveal` names its file(s); the bare form is gone. The
+command acts on exactly the paths you give it, so keep the naming habit:
+it is the habit that matters in a team, where a whole-manifest pass would
+touch every ciphertext and the commit would look like you edited every
+secret when you edited a few. See the
+[two-collaborators guide](two-collaborators.md).
 
 For the tightest solo posture, no plaintext lingers on disk. That is the
 default. `hide` deletes the plaintext. Pass `--keep-plaintext` if you want

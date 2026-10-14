@@ -1,14 +1,14 @@
 //! Attack reproduction tests and fix regressions.
 //!
-//! The tests below assert the refusals (exit codes 14, 42, 72) plus the
+//! The tests below assert the refusals (exit codes 14, 71, 72) plus the
 //! migration and normal-flow semantics of each fix.
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_allow, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_remove,
     cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide,
-    cmd_verify_keyring, decrypt_with_x25519_private_key, exit_code_of, generate_signing_keypair,
-    generate_x25519_private_key, x25519_public_key_encoding, TrackedFiles,
+    cmd_verify_keyring, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
+    x25519_public_key_encoding, TrackedFiles,
 };
 
 use std::fs;
@@ -141,9 +141,21 @@ impl Fixture {
             "origin",
             &self.key_store.path,
             true,
-            Vec::new(),
+            self.tracked_names(),
         )
         .expect("hide");
+    }
+
+    /// The tracked file names, as the required-form hide and reveal calls
+    /// name them. Tests that act on the whole tracked set name the whole
+    /// tracked set explicitly: the bare form is gone (issue 50).
+    fn tracked_names(&self) -> Vec<String> {
+        TrackedFiles::load(&self.repo.path.join(".git-veil/tracked.json"))
+            .unwrap()
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
     }
 
     /// Stages everything the way the owner's commit would, so the git index
@@ -222,8 +234,14 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     );
 
     // And hide (like every gated command) refuses on the same check.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect_err("hide must refuse on the rolled-back keyring");
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect_err("hide must refuse on the rolled-back keyring");
     assert_eq!(exit_code_of(&err), 14);
 
     // The stale v1 ciphertext on disk is untouched. Carol still decrypts
@@ -363,8 +381,14 @@ fn fix_nominated_path_refused_at_hide() {
 
     // Hide refuses with exit 72. No ciphertext is created and nothing is
     // exfiltrated.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect_err("hide must refuse a nominated path with no allowance and no ciphertext");
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect_err("hide must refuse a nominated path with no allowance and no ciphertext");
     assert_eq!(
         exit_code_of(&err),
         72,
@@ -391,8 +415,14 @@ fn fix_nominated_path_refused_at_hide() {
         &f.key_store.path,
     )
     .expect("victim allows the path deliberately");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect("hide after the allowance");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide after the allowance");
 }
 
 #[test]
@@ -424,8 +454,14 @@ fn fix_committed_ciphertext_needs_no_allowance() {
 
     // The ciphertext is in the git index, so hide proceeds with no
     // allowance on this machine.
-    cmd_hide(&f.repo.path, "origin", &fresh_store.path, true, Vec::new())
-        .expect("an established ciphertext re-encrypts without a local allowance");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &fresh_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("an established ciphertext re-encrypts without a local allowance");
 }
 
 #[test]
@@ -608,84 +644,7 @@ fn fix_removeperson_purges_the_removed_principal_allowance() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression: de-tracking cannot defeat rotation
-//
-// Hide's orphaned-ciphertext gate (exit 42, see "Orphaned ciphertext" in
-// docs/design.md) refuses to run while a committed .secret exists for an
-// untracked path, so the de-tracking-then-rotate attack fails loudly.
-// `git-veil remove` deletes the sibling ciphertext by default.
-// ---------------------------------------------------------------------------
-
-#[test]
-fn fix_detracking_orphan_ciphertext_refuses_hide() {
-    let f = Fixture::new("detrack-rotation");
-
-    let carol = f.add_collab("carol@example.com");
-    let plaintext = b"API_KEY=live-key\n";
-    f.add_file("api.key", plaintext);
-    f.hide();
-    assert!(f.repo.join("api.key.secret").exists());
-    // The orphan gate reads the git index, which is what gets pushed. Stage
-    // the ciphertext the way the owner's commit would.
-    f.stage_all();
-
-    // Attack: a repo writer de-tracks the file before the rotation.
-    // tracked.json is committed and unsigned.
-    fs::write(
-        f.repo.join(".git-veil/tracked.json"),
-        "{\n  \"files\": []\n}",
-    )
-    .unwrap();
-
-    // Owner rotates: revoke carol, onboard dave, re-hide.
-    cmd_removeperson(
-        &f.repo.path,
-        "carol@example.com",
-        "origin",
-        &f.key_store.path,
-        None,
-    )
-    .expect("removeperson");
-    let _dave = f.add_collab("dave@example.com");
-
-    // Hide refuses outright with exit 42 while the stale ciphertext is
-    // committed but untracked. Rotation cannot skip it silently.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect_err("hide must refuse orphaned committed ciphertext");
-    assert_eq!(
-        exit_code_of(&err),
-        42,
-        "orphaned ciphertext must exit with the documented code 42"
-    );
-    // The committed ciphertext path lives in the git index. It is a public
-    // repository fact, so the refusal names it.
-    assert!(
-        err.to_string().contains("api.key.secret"),
-        "exit 42 names the offending committed ciphertext path: {err}"
-    );
-
-    // Remedy, because de-tracking was intentional: delete the stale
-    // ciphertext.
-    fs::remove_file(f.repo.join("api.key.secret")).unwrap();
-    // Re-track the file (the manifest was emptied by the attack), stage,
-    // and hide to the new ring.
-    f.add_file("api.key", plaintext);
-    f.stage_all();
-    f.hide();
-
-    // The revoked collaborator can no longer decrypt the live ciphertext.
-    let ciphertext = fs::read(f.repo.join("api.key.secret")).unwrap();
-    assert!(
-        decrypt_with_x25519_private_key(&ciphertext, &carol).is_err(),
-        "revoked carol must not decrypt the post-rotation ciphertext"
-    );
-}
-
-// ---------------------------------------------------------------------------
 // Regression: `remove` deletes the sibling ciphertext by default
-//
-// The explicit --keep-ciphertext flag keeps an untracked ciphertext, and
-// hide then refuses the orphan.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -711,7 +670,7 @@ fn fix_remove_deletes_ciphertext_by_default() {
 }
 
 #[test]
-fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
+fn fix_remove_keep_ciphertext_leaves_the_orphan_in_place() {
     let f = Fixture::new("remove-keep");
     let _carol = f.add_collab("carol@example.com");
     f.add_file("api.key", b"API_KEY=x\n");
@@ -724,10 +683,19 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
         "--keep-ciphertext leaves the ciphertext in place"
     );
 
-    // Hide refuses the orphan with exit 42 until it is resolved.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect_err("hide must refuse the kept-back orphaned ciphertext");
-    assert_eq!(exit_code_of(&err), 42);
+    // The kept-back ciphertext is an untracked orphan. A scoped hide never
+    // rotates it: hide acts only on the files it names (issue 50), so the
+    // name is refused. The ring-change ceremony owns the whole-manifest
+    // pass and the orphan gate that guards it.
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        vec!["api.key".to_string()],
+    )
+    .expect_err("hide refuses a name outside the manifest");
+    assert_eq!(exit_code_of(&err), 71);
 }
 
 // ---------------------------------------------------------------------------
@@ -798,7 +766,7 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
         "victim@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     )
     .expect_err("reveal must refuse a git-tracked plaintext");
     assert_eq!(
@@ -857,7 +825,7 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
         "owner@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     )
     .expect("reveal of a gitignored tracked plaintext must work");
     assert_eq!(fs::read(f.repo.join("secrets.env")).unwrap(), secret);
@@ -1004,7 +972,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
         "victim@example.com",
         "origin",
         &f.key_store.path,
-        Vec::new(),
+        f.tracked_names(),
     )
     .expect_err("exit-43 gate must refuse the case-variant spelling");
     assert_eq!(exit_code_of(&err), 43);
@@ -1015,12 +983,11 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     );
 }
 
-/// The orphan gate does not false-positive on core.quotePath-quoted
-/// unicode names, because the index is read verbatim, nor on an
-/// attacker-committed file named exactly `.secret`. That file is
-/// warned about and ignored.
+/// Hide does not false-positive on core.quotePath-quoted unicode names,
+/// because the index is read verbatim, nor on an attacker-committed file
+/// named exactly `.secret`. That file is warned about and ignored.
 #[test]
-fn fix_orphan_gate_survives_quoting_and_dot_secret() {
+fn fix_hide_survives_quoting_and_dot_secret_in_index() {
     let f = Fixture::new("orphan-brick");
     let _carol = f.add_collab("carol@example.com");
 
@@ -1036,8 +1003,14 @@ fn fix_orphan_gate_survives_quoting_and_dot_secret() {
 
     // Hide proceeds. The unicode ciphertext maps back to its tracked
     // path, and the stemless junk file is warned about, not fatal.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
-        .expect("hide must not be bricked");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide must not be bricked");
     assert!(
         f.repo.join(unicode_name).exists(),
         "--keep-plaintext path: the unicode plaintext is intact"

@@ -56,13 +56,13 @@ pub(crate) fn ensure_ciphertext_beside_plaintext(
 
 /// Encrypts tracked files to all keys in the keyring.
 ///
-/// With an empty `files`, hide covers every tracked file. With positional
-/// paths, hide covers exactly the named files: each is resolved the way
-/// add resolves paths (canonicalise, repo-relative, validated), and must
-/// already be tracked - an unknown or untracked name refuses with the
-/// path-safety code (71). The gates below then apply to that set only.
-/// There is no change detection: the caller names the file, the gate
-/// checks that file.
+/// `files` names the working set: hide covers exactly the named files.
+/// Each is resolved the way add resolves paths (canonicalise,
+/// repo-relative, validated), and must already be tracked - an unknown or
+/// untracked name refuses with the path-safety code (71). The gates below
+/// then apply to that set only. There is no change detection: the caller
+/// names the file, the gate checks that file. The CLI requires at least
+/// one path; there is no bare whole-manifest form.
 ///
 /// Tracked paths are repo-relative (relative to `repo_root`) and are
 /// validated before any use, so a malicious committed tracked.json cannot
@@ -97,54 +97,48 @@ pub fn cmd_hide(
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
-    // The working set. Bare hide covers the whole manifest. With positional
-    // paths, hide covers exactly the named files: each is resolved like add
-    // resolves paths, and must already be tracked. No change detection.
-    let bare = files.is_empty();
-    let scoped: Vec<PathBuf> = if bare {
-        tracked.files.clone()
-    } else {
-        let mut seen: HashSet<PathBuf> = HashSet::new();
-        let mut named: Vec<PathBuf> = Vec::new();
-        for file in &files {
-            let relative = resolve_repo_relative_input(
-                repo_root,
-                file,
-                PathResolveMode::CanonicaliseRequireExists,
-                "hide",
-            )?;
-            if !tracked.files.contains(&relative) {
-                return Err(coded(
-                    ExitCode::UnsafePath,
-                    format!(
-                        "refusing to hide: {} is not a tracked path in .git-veil/tracked.json. \
-                         Track it with git-veil add first. Error code 71.",
-                        relative.to_string_lossy()
-                    ),
-                ));
-            }
-            if seen.insert(relative.clone()) {
-                named.push(relative);
-            }
+    // The working set. Hide covers exactly the named files: each is
+    // resolved like add resolves paths, and must already be tracked. No
+    // change detection.
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut scoped: Vec<PathBuf> = Vec::new();
+    for file in &files {
+        let relative = resolve_repo_relative_input(
+            repo_root,
+            file,
+            PathResolveMode::CanonicaliseRequireExists,
+            "hide",
+        )?;
+        if !tracked.files.contains(&relative) {
+            return Err(coded(
+                ExitCode::UnsafePath,
+                format!(
+                    "refusing to hide: {} is not a tracked path in .git-veil/tracked.json. \
+                     Track it with git-veil add first. Error code 71.",
+                    relative.to_string_lossy()
+                ),
+            ));
         }
-        named
-    };
+        if seen.insert(relative.clone()) {
+            scoped.push(relative);
+        }
+    }
 
-    // Orphaned-ciphertext gate (exit 42). It runs before the
-    // empty-manifest early return, because an emptied tracked.json is
-    // exactly the de-tracking attack shape. A committed `.secret` whose
-    // plaintext path is no longer tracked would be silently skipped by
-    // rotation: removeperson + hide never re-encrypts it, leaving a
-    // ciphertext a revoked collaborator can still decrypt. The gate reads
-    // the git index, not the manifest, as the source of what is
-    // established. Both are attacker-writable, but the index is what gets
-    // pushed.
-    let tracked_set: HashSet<&PathBuf> = tracked.files.iter().collect();
-    // core.quotePath=false plus -z: the index listing arrives verbatim, no
-    // octal-UTF8 quoting, NUL-separated, so the plaintext-path reversal
-    // below sees the real names. With the default quoting, a committed
-    // unicode or space ciphertext name never matches any tracked entry and
-    // false-positives the orphan gate into a permanent exit-42 bricking.
+    // Established-ciphertext scan. The git index is read to learn which
+    // tracked plaintext paths already have a committed ciphertext: those
+    // are established, so re-encrypting them needs no allowance (the gate
+    // below skips them). core.quotePath=false plus -z: the index listing
+    // arrives verbatim, no octal-UTF8 quoting, NUL-separated, so the
+    // plaintext-path reversal below sees the real names. With the default
+    // quoting, a committed unicode or space ciphertext name never matches
+    // any tracked entry and mis-classes it.
+    //
+    // There is no orphan refusal here. A scoped hide re-encrypts only the
+    // files it names and touches no other ciphertext, so a de-tracked
+    // committed ciphertext it would not rotate is not this invocation's
+    // problem. A named file is tracked by construction, so hide can never
+    // rotate into its own orphan. The ring-change ceremony owns the
+    // whole-manifest pass and the orphan gate that guards it.
     let ls = Command::new("git")
         .current_dir(repo_root)
         .args([
@@ -163,10 +157,8 @@ pub fn cmd_hide(
             String::from_utf8_lossy(&ls.stderr).trim()
         );
     }
-    let mut orphans: Vec<String> = Vec::new();
-    // Tracked plaintext paths whose ciphertext is already committed. They
-    // are established, so re-encrypting them needs no allowance. There is
-    // no history check and no cache: the index either carries the
+    // Tracked plaintext paths whose ciphertext is already committed. There
+    // is no history check and no cache: the index either carries the
     // ciphertext path or it does not.
     let mut established: HashSet<PathBuf> = HashSet::new();
     for raw in ls.stdout.split(|b| *b == 0) {
@@ -175,10 +167,9 @@ pub fn cmd_hide(
         }
         let line = String::from_utf8_lossy(raw).to_string();
         // Reverse of the ciphertext naming rule: `<name>.secret` guards
-        // plaintext `<name>`. A committed file named exactly `.secret` has no
-        // plaintext path. It cannot correspond to any tracked path, so
-        // refusing on it would let one attacker-committed junk file brick
-        // hide repo-wide. Ignore it with a warning instead.
+        // plaintext `<name>`. A committed file named exactly `.secret` has
+        // no plaintext path. It cannot correspond to any tracked path.
+        // Warn about it and move on.
         let ciphertext = PathBuf::from(&line);
         let stem = ciphertext.file_name().and_then(|name| {
             name.to_string_lossy()
@@ -193,30 +184,9 @@ pub fn cmd_hide(
             .parent()
             .expect("file_name is Some, so a parent exists")
             .join(stem);
-        if !tracked_set.contains(&plaintext) {
-            // Bare hide refuses (below). A scoped hide re-encrypts only the
-            // named tracked files and touches no other ciphertext, so an
-            // orphan it would not rotate is not that invocation's problem.
-            // A named file is tracked by construction, so a scoped hide can
-            // never rotate into its own orphan.
-            if bare {
-                orphans.push(line);
-            }
-        } else {
+        if tracked.files.contains(&plaintext) {
             established.insert(plaintext);
         }
-    }
-    if !orphans.is_empty() {
-        return Err(coded(
-            ExitCode::OrphanedCiphertext,
-            format!(
-                "refusing to hide: committed ciphertext paths are not tracked with error code 42. \
-                 Rotation would silently leave them decryptable by removed collaborators. \
-                 Re-track the paths, or delete the stale ciphertext. See the rotation documentation. \
-                 The offending committed ciphertext paths:\n  {}",
-                orphans.join("\n  ")
-            ),
-        ));
     }
 
     // Encryption-allowance gate (exit 72, see "Allowance" in
@@ -233,9 +203,9 @@ pub fn cmd_hide(
     let mut principal: Option<String> = None;
     for file in &scoped {
         // Only paths that have a plaintext can be first-encrypted. A path
-        // with no plaintext has nothing to exfiltrate and is handled by the
-        // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
-        // lifecycle").
+        // whose plaintext is absent has nothing to exfiltrate. A name
+        // resolved a moment ago, so this is the between-resolve-and-read
+        // window only; the read in phase 1 would fail anyway.
         if established.contains(file) || !repo_root.join(file).exists() {
             continue;
         }
@@ -271,8 +241,7 @@ pub fn cmd_hide(
     }
 
     if scoped.is_empty() {
-        println!("No files tracked");
-        return Ok(());
+        anyhow::bail!("hide requires at least one file name");
     }
 
     // Ciphertext-ignored gate. A `.secret` swallowed by a broad ignore rule,
@@ -309,14 +278,17 @@ pub fn cmd_hide(
     }
 
     // Two-phase, all-or-nothing hide (compute-then-commit). Phase 1 reads
-    // and validates every tracked plaintext and encrypts every file to the
+    // and validates every named plaintext and encrypts every file to the
     // full public key set, holding all ciphertexts in memory. Any failure
     // here aborts with nothing changed on disk. There is no mixed state
     // where some files are hidden and others remain plaintext. Secrets are
     // small config-scale files, so holding every ciphertext in memory is
     // acceptable. Hide is not a bulk-archival path.
+    //
+    // A named path resolved, so its plaintext existed moments ago. A
+    // plaintext that vanished in between fails the read below, which is
+    // the all-or-nothing contract doing its job.
     let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
-    let mut skipped: Vec<String> = Vec::new();
     for file in &scoped {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
@@ -325,22 +297,6 @@ pub fn cmd_hide(
         // pointing outside the repo. Reading through it would exfiltrate the
         // link target into the ciphertext written back to the repo.
         ensure_regular_file(repo_root, file)?;
-
-        // Skip-and-report (docs/design.md "Plaintext lifecycle"). A tracked
-        // path with no plaintext is the steady state of the delete-by-default
-        // lifecycle, never an error. With a ciphertext present, on disk or
-        // committed, the file is already hidden. With neither, it was never
-        // hidden and has nothing to hide. Either way there is nothing to
-        // encrypt and nothing to exfiltrate, so the path is skipped.
-        if !repo_root.join(file).exists() {
-            let state = if encrypted_path_for(repo_root, file).exists() {
-                "already hidden because the plaintext is absent"
-            } else {
-                "never hidden because there is no plaintext and no ciphertext"
-            };
-            skipped.push(format!("{}: {}", file.display(), state));
-            continue;
-        }
 
         // Read plaintext
         let plaintext = fs::read(repo_root.join(file))
@@ -392,10 +348,6 @@ pub fn cmd_hide(
             written.len(),
             prepared.len()
         )));
-    }
-
-    for line in &skipped {
-        println!("Skipped: {line}");
     }
 
     // Plaintext deletion is the default (docs/design.md "Plaintext

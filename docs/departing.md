@@ -28,12 +28,12 @@ reveal first if everything is currently hidden):
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env
 files revealed
-$ git-veil hide
+$ git-veil hide .env
 Encrypted: .env
 Deleted plaintext: .env
 files hidden
@@ -92,7 +92,7 @@ Keys in keyring:
   alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
 
 Total: 2 keys
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env
@@ -119,7 +119,7 @@ DB_PASSWORD=correct-horse
 Meanwhile, bob pulling the updated repo finds the tool shuts him out:
 
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 error: user not found in the keyring. Check the principal, or ask the owner to add it

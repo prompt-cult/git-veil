@@ -34,7 +34,7 @@ git-veil import my-age-identity.txt
 git-veil trust demo+example@github.com  # possession proof. The seed must match owner.verifying
 git-veil export age1... --output me.pub
 git-veil tell example@github.com me.pub    # the owner must be in the keyring too
-git-veil add .env && git-veil hide
+git-veil add .env && git-veil hide .env
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
 git push
 ```
@@ -60,7 +60,7 @@ the keyring:
 ```sh
 $ git-veil tell alice@example.com alice.pub
 added alice@example.com to the keyring
-note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
+note: existing ciphertext does not include the new collaborator. Re-hide the tracked files (name each one) to encrypt them to the current keyring.
 ```
 
 What happened. The keyring signature was verified against the pinned owner
@@ -75,16 +75,15 @@ bring her in, the owner re-hides. hide only encrypts plaintexts present on
 disk, so reveal first if everything is currently hidden:
 
 ```sh
-git-veil reveal && git-veil hide
+git-veil reveal .env && git-veil hide .env
 git add .git-veil/keyring .env.secret
 git commit -m "Add alice to keyring and re-hide"
 git push
 ```
 
-A bare `hide` re-encrypts every tracked file. Every `.secret` in the
-commit changes, and the diff looks like you edited every secret when you
-edited a few. For rotation that is the right move. For day-to-day work,
-name the files instead; see Part 4.
+The hide names every tracked file, so the commit carries a fresh
+`.secret` for each one. For rotation that is the right move. For
+day-to-day work, name only the files you touched; see Part 4.
 
 The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
@@ -137,7 +136,7 @@ refused outright.
 Now she can decrypt:
 
 ```sh
-$ git-veil reveal
+$ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2
 Decrypted: .env
@@ -149,11 +148,12 @@ $ git-veil cat .env        # peek to stdout. Touches no disk state.
 
 ### Ciphertext churn
 
-A bare `hide` re-encrypts every tracked file. Every `.secret` changes in
-the commit, so a commit where you edited one secret looks like you edited
-all of them. Reviewers cannot tell a one-file change from a repo-wide
-re-encryption without reading the command that made it. So the team habit
-is to name the files:
+Hide covers exactly the files you name. A whole-manifest pass - naming
+every tracked file at once - changes every `.secret` in the commit, so a
+commit where you edited one secret looks like you edited all of them.
+Reviewers cannot tell a one-file change from a repo-wide re-encryption
+without reading the command that made it. So the team habit is to name
+only the files you touched:
 
 ```sh
 $ git-veil hide .env     # re-encrypt .env only; every other ciphertext is untouched
@@ -163,8 +163,9 @@ files hidden
 $ git-veil reveal .env   # restore .env only
 ```
 
-The bare forms stay useful when you mean the whole manifest: a rotation
-after `tell` or `removeperson`, or a hide across a freshly revealed clone.
+When you mean the whole manifest - a rotation after `tell` or
+`removeperson` - name every tracked file; `git-veil list` shows the
+manifest.
 
 ### The exit-72 question
 
@@ -188,10 +189,10 @@ $ git push
 ```
 
 The owner keeps his own `deploy.env` on disk. He pulls Alice's manifest
-change and runs a bare `hide`:
+change and names the file:
 
 ```sh
-$ git-veil hide
+$ git-veil hide deploy.env
 error: refusing to hide: paths are tracked but were never allowed for encryption on this machine. tracked.json may have been modified by someone else. Allow the paths deliberately if the tracking is wanted. Error code 72. The offending tracked paths:
   deploy.env
 ```
@@ -214,12 +215,18 @@ $ git push
 ```
 
 The answer is cached. It lives in the owner's key store, keyed to this
-clone's trust pin and his git user, so a later hide does not ask again:
+clone's trust pin and his git user, so a later hide of the same path does
+not ask again:
 
 ```sh
-$ git-veil hide
-Skipped: .env: already hidden because the plaintext is absent
-Skipped: deploy.env: already hidden because the plaintext is absent
+$ git-veil reveal deploy.env
+keyring signature verified
+keys in keyring: 2
+Decrypted: deploy.env
+files revealed
+$ git-veil hide deploy.env
+Encrypted: deploy.env
+Deleted plaintext: deploy.env
 files hidden
 ```
 

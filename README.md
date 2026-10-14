@@ -127,11 +127,10 @@ echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 
 ## Name the file you are working with
 
-`git-veil hide` with no file names re-encrypts every tracked file, and
-`git-veil reveal` with no file names restores every plaintext. Solo, that
-is a convenience: the lock-everything move. The habit worth keeping from
-the start is to name the file, because it is the habit that matters when
-the repository gains collaborators:
+Every `git-veil hide` and `git-veil reveal` names its file(s). There is no
+bare form: the command acts on exactly the paths you give it. Naming keeps
+the diff to what you touched and the decrypted plaintexts to your working
+set, which matters most when the repository gains collaborators:
 
 ```sh
 git-veil reveal .env    # restore one file
@@ -139,9 +138,7 @@ git-veil reveal .env    # restore one file
 git-veil hide .env      # re-encrypt one file; every other ciphertext is untouched
 ```
 
-In a team, a bare `hide` re-encrypts every tracked file. Every ciphertext
-changes, and the commit looks like you edited every secret when you edited
-a few. Name the files explicitly; see
+Name the files explicitly; see
 [docs/two-collaborators.md](docs/two-collaborators.md).
 
 ## The hide gate: allow
@@ -157,7 +154,7 @@ is exit code 72, and it names the paths.
 You answer with `git-veil allow`:
 
 ```sh
-$ git-veil hide
+$ git-veil hide deploy.env
 error: refusing to hide: paths are tracked but were never allowed for encryption on this machine. tracked.json may have been modified by someone else. Allow the paths deliberately if the tracking is wanted. Error code 72. The offending tracked paths:
   deploy.env
 $ git-veil allow deploy.env

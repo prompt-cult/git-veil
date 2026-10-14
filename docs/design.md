@@ -515,25 +515,24 @@ plaintext's only protection in the worktree is a `.gitignore` line, so the
 normal loop is `reveal` → edit → `hide`, with the plaintext existing only
 while it is being edited. Consequences, stated honestly:
 
-- **The working set.** `hide` and `reveal` accept named paths: with FILE
-  arguments they act on exactly the named tracked files (an unknown or
-  untracked name refuses, exit 71); a bare invocation covers every tracked
-  file. The skip-and-report rule, the allowance gate and the code-41
-  warning apply to the working set. The orphan gate (exit 42) is a
-  bare-hide gate: a scoped hide re-encrypts only the files it names and
-  touches no other ciphertext, so an orphan it would not rotate is not
-  that invocation's problem.
-- **Skip-and-report, not error.** A tracked path whose plaintext is absent
-  and whose ciphertext exists (on disk or committed) is skipped and reported
-  as "already hidden" - re-running `hide` on a hidden repo does nothing and
-  succeeds. A tracked path with neither plaintext nor ciphertext is skipped
-  and reported as never-hidden. Neither state is an error: absence of
-  plaintext is the steady state of this lifecycle.
+- **The working set.** `hide` and `reveal` require named paths: they act
+  on exactly the named tracked files (an unknown or untracked name
+  refuses, exit 71). There is no bare whole-manifest form; the
+  ring-change ceremony owns the whole-manifest pass. Hide resolves names
+  the way `add` does, so a named plaintext must exist when you name it;
+  reveal resolves with the lexical strip, so a name need not exist on
+  disk. The allowance gate and the code-41 warning apply to the named
+  set.
+- **Naming a hidden file.** A plaintext that hide deleted no longer
+  exists, so naming it refuses at resolution (File not found). The loop
+  is `reveal` (restores the plaintexts you name) → edit → `hide`. There
+  is no skip-and-report on the named path: the file must exist to be
+  named.
 - **Rotation requires the plaintext.** `removeperson` + `hide` alone cannot
   re-encrypt ciphertexts whose plaintexts are gone - the correct rotation is
-  `reveal` (restores plaintexts), `removeperson`, `hide` (re-encrypts to the
-  new ring, deletes plaintexts again). Documented here because it is the one
-  workflow that changed shape with this default.
+  `reveal` (restores plaintexts), `removeperson`, `hide` naming each file
+  (re-encrypts to the new ring, deletes plaintexts again). Documented here
+  because it is the one workflow that changed shape with this default.
 - The allowance gate (exit 72) and the code-41 plaintext-leak warning only
   apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
@@ -607,15 +606,18 @@ Two mitigations close the hole:
    ciphertext is committed content, so deletion is recoverable from git
    history; the honest way to keep an untracked ciphertext around is now an
    explicit flag, not a default.
-2. **`hide` refuses orphaned ciphertext (exit 42).** Algorithm 9's steps 2
-   and 3 enumerate ciphertext paths committed to the git index and refuse
-   when any of them does not correspond to a tracked path, naming each one. The
-   gate runs even when `tracked.json` is empty - that is exactly the
-   de-tracking-then-rotate attack shape. The index is read verbatim
+2. **The orphan gate travels with the whole-manifest pass.** Every `hide`
+   names its files, and a named file is tracked by construction, so a
+   scoped hide can never rotate into its own orphan and no orphan refusal
+   runs on it. The whole-manifest pass - the ring-change ceremony - owns
+   the orphan gate (exit 42): it enumerates ciphertext paths committed to
+   the git index and refuses when any of them does not correspond to a
+   tracked path, naming each one. The index is read verbatim
    (`git -c core.quotePath=false ls-files -z`) so unicode/space names map
    back to their tracked paths; a committed file named exactly `.secret`
-   (no plaintext stem - it cannot correspond to any tracked path) is warned
-   about and ignored rather than fatal, so one junk file cannot brick hide.
+   (no plaintext stem - it cannot correspond to any tracked path) is
+   warned about and ignored rather than fatal, so one junk file cannot
+   brick the pass.
 
 Scope, stated honestly: the gate reads the git **index**, so it catches
 committed (staged) ciphertexts - the exfiltration channel. An uncommitted
@@ -671,18 +673,17 @@ ciphertext path or it does not.
 $$
 \begin{array}{ll}
 \multicolumn{2}{l}{\textbf{Algorithm 9} \quad \textsc{Hide} \text{ - the gate sequence before any encryption (} \texttt{cmd\_hide} \text{)}} \\
-\multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair; } W \text{ = the working set: the whole tracked manifest for a bare } \texttt{hide} \text{, exactly the named files otherwise}} \\
+\multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair; } W \text{ = the working set: exactly the named files; there is no bare } \texttt{hide}} \\
 1: & \textbf{upon } \textsc{Hide} \\
 2: & \quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4; yields } \mathit{repoId} \text{ and the pin fingerprint} \\
-3: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
-4: & \quad orphans \leftarrow \{ c \in index : \text{plaintext}(c) \notin tracked \} \\
-5: & \quad \textbf{if } orphans \ne \emptyset \text{ then refuse} \ . \ \text{exit 42, naming each orphan; a committed file named exactly .secret is warned and skipped; bare } \texttt{hide} \text{ only} \\
-6: & \quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \\
-7: & \quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
+3: & \quad W \leftarrow \text{the named paths, resolved; a name outside } tracked \text{ refuses, exit 71} \\
+4: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
+5: & \quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \quad . \ \text{a committed file named exactly .secret is warned and skipped} \\
+6: & \quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
    & \quad\quad . \ \text{exit 72, naming the paths; the remedy is this document} \\
-8: & \quad \text{gates 40 and 41 over } W \text{: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
-9: & \quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
-10: & \textbf{end upon}
+7: & \quad \text{gates 40 and 41 over } W \text{: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
+8: & \quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
+9: & \textbf{end upon}
 \end{array}
 $$
 
@@ -825,7 +826,7 @@ codes are never renumbered, only appended.
 | 30   | UnsafeKeyStorePermissions    | Key store directory or private key file is group/world accessible |
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
-| 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `hide` refuses (see "Orphaned ciphertext") |
+| 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; the whole-manifest pass refuses (see "Orphaned ciphertext") |
 | 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`/`unhide`; see "Ignore safety" gate 4) |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local private key |
 | 61   | EncryptionFailed             | Encryption failed |

@@ -177,13 +177,13 @@ Back on the owner's machine, using the inventory from step 2:
 
 ```sh
 git-veil add .env config/credentials.yml   # every file from encrypted-files.txt
-git-veil hide
+git-veil hide .env config/credentials.yml
 git add .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Re-encrypt secrets with git-veil"
 git push
 ```
 
-What happened. `hide` encrypted each tracked file to every key in
+What happened. `hide` encrypted each named file to every key in
 the signed keyring and wrote `<name>.secret` beside where the plaintext
 was, deleting the plaintext. Pass `--keep-plaintext` to keep it.
 `hide` reads each tracked plaintext from disk and fails if one
@@ -206,7 +206,7 @@ git-veil show-repo-id
 git-veil trust --import ~/demo.pin         # pin-file exported by the owner, out of band
 git-veil verify-keyring                    # exit 0 = signature matches the pin
 git-veil list-keys                         # who can decrypt, after verification
-git-veil reveal
+git-veil reveal .env config/credentials.yml
 shasum -a 256 .env config/credentials.yml  # must match plaintext-before.sha256
 git-veil changes                           # "unchanged" everywhere, nothing pending
 ```
@@ -243,13 +243,13 @@ belong in circulation.
 `git-crypt unlock` puts the repository into a persistent unlocked state.
 The key sits in `.git/git-crypt/`, filters decrypt on every checkout, and
 `lock` ends that state. git-veil has no repository-wide state.
-`git-veil reveal` is a one-shot bulk operation. It verifies the keyring
-signature, then decrypts every tracked file back to its plaintext path
-and leaves each `.secret` in the worktree. It fails outright if any
-tracked ciphertext is missing. There is nothing to `lock`. The inverse
-one-shot is `git-veil hide`, which re-encrypts all tracked plaintexts to
-the whole keyring and deletes the plaintexts. Pass `--keep-plaintext` to
-keep them. It fails if a tracked plaintext is
+`git-veil reveal` is a one-shot operation on the files you name. It
+verifies the keyring signature, then decrypts each named file back to
+its plaintext path and leaves each `.secret` in the worktree. It fails
+outright if any named ciphertext is missing. There is nothing to `lock`.
+The inverse one-shot is `git-veil hide`, which re-encrypts the named
+plaintexts to the whole keyring and deletes them. Pass
+`--keep-plaintext` to keep them. It fails if a named plaintext is
 missing. For one file at a time use `unhide`,
 and `cat` prints a file to stdout without touching disk state.
 

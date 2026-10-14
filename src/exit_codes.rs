@@ -40,7 +40,9 @@ pub enum ExitCode {
     CiphertextIgnored = 40,
     /// Tracked plaintext on disk is not git-ignored (a warning, the exit code stays 0).
     PlaintextNotIgnored = 41,
-    /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
+    /// A committed `.secret` ciphertext path is not tracked (the
+    /// whole-manifest pass refuses it; see docs/design.md "Orphaned
+    /// ciphertext").
     OrphanedCiphertext = 42,
     /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
     PlaintextTracked = 43,
@@ -140,7 +142,7 @@ impl ExitCode {
                 "Tracked plaintext on disk is not git-ignored which is a warning only"
             }
             ExitCode::OrphanedCiphertext => {
-                "A committed ciphertext path is not tracked which hide refuses"
+                "A committed ciphertext path is not tracked; the whole-manifest pass refuses it"
             }
             ExitCode::PlaintextTracked => {
                 "The plaintext is tracked in git which reveal and unhide refuse"
