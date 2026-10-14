@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -10,7 +10,7 @@ use crate::fs_atomic::write_atomic;
 pub struct TrustStore {
     #[serde(default)]
     pub trusted_keys: HashMap<String, String>,
-    /// repo_id -> FIXED-derivation fingerprint (SHA-256 of the raw key
+    /// repo_id -> fixed-derivation fingerprint (SHA-256 of the raw key
     /// bytes, hex) of the repository's committed owner verifying key
     /// (`owner.verifying`). Committed alongside the key so pin-file
     /// import can cross-check three channels (pin-file, committed key,
@@ -43,11 +43,29 @@ impl TrustStore {
         self.owner_fingerprints.insert(repo_id, fingerprint);
     }
 
-    /// The committed fixed-derivation owner fingerprint for `repo_id`;
-    /// `None` when the metadata predates this field (the owner must
-    /// re-run `trust` on a seed-holding machine and commit the update).
+    /// The committed fixed-derivation owner fingerprint for `repo_id`.
+    /// `None` when the committed metadata carries no such field. The owner
+    /// must re-run `trust` on a seed-holding machine and commit the update.
     pub fn get_owner_fingerprint(&self, repo_id: &str) -> Option<&str> {
         self.owner_fingerprints.get(repo_id).map(|s| s.as_str())
+    }
+
+    /// Reconciles `trusted_keys` against `live`, the repository ids the
+    /// configured remotes currently derive. Every entry whose id no remote
+    /// derives, the residue of a repository move or rename, is removed.
+    /// Returns the pruned ids in sorted order so the caller can print the
+    /// removals. Repository ids are public repository facts, so naming
+    /// them is allowed.
+    pub fn reconcile_trusted_keys(&mut self, live: &BTreeSet<String>) -> Vec<String> {
+        let mut pruned: Vec<String> = self
+            .trusted_keys
+            .keys()
+            .filter(|id| !live.contains(*id))
+            .cloned()
+            .collect();
+        pruned.sort();
+        self.trusted_keys.retain(|id, _| live.contains(id));
+        pruned
     }
 
     pub fn serialize(&self) -> Result<String> {
@@ -74,7 +92,7 @@ impl TrustStore {
     }
 }
 
-/// Per-machine trust pins, stored OUTSIDE the repository in the tool-owned
+/// Per-machine trust pins, stored outside the repository in the tool-owned
 /// key store: `<key_store>/trust-pins/<sanitized-repo-id>` holds the pinned
 /// fingerprint.
 ///
@@ -83,7 +101,8 @@ impl TrustStore {
 /// it points at ships with the repo too. The pin is the out-of-band record,
 /// written only by `git-veil trust` on this machine, of which fingerprint the
 /// user actually chose to trust. A fresh clone has no pin, so trust must be
-/// re-established per machine — the correct posture for a secrets tool.
+/// re-established per machine. That is the correct posture for a secrets
+/// tool.
 pub struct TrustPinStore;
 
 impl TrustPinStore {
@@ -104,7 +123,7 @@ impl TrustPinStore {
             }
         }
         // A repo_id made only of dots would sanitize to a directory alias
-        // ("." or "..") and escape the pin directory; encode it instead.
+        // ("." or "..") and escape the pin directory. Encode it instead.
         if out == "." || out == ".." {
             out = out.replace('.', "%2E");
         }
@@ -127,7 +146,7 @@ impl TrustPinStore {
         Ok(())
     }
 
-    /// Reads the pinned fingerprint for `repo_id`; `Ok(None)` when no pin
+    /// Reads the pinned fingerprint for `repo_id`. `Ok(None)` when no pin
     /// exists yet (the fresh-clone state).
     pub fn read_pin(key_store: &Path, repo_id: &str) -> Result<Option<String>> {
         let path = Self::pin_path(key_store, repo_id);
@@ -138,24 +157,24 @@ impl TrustPinStore {
         Ok(Some(content.trim().to_string()))
     }
 
-    /// The path of the per-machine keyring baseline for `repo_id`:
-    /// the highest keyring version this machine has ever accepted, plus —
-    /// since the fork fix (issue #20) — the SHA-256 digest of the accepted
-    /// signed content at that version. Lives beside the pin, OUTSIDE the
-    /// repository — a committed baseline would be attacker-writable and the
-    /// rollback refusal would be void. See "Keyring format and freshness" in
-    /// docs/design.md.
+    /// The path of the per-machine keyring baseline for `repo_id`. It holds
+    /// the highest keyring version this machine has ever accepted and the
+    /// SHA-256 digest of the accepted signed content at that version. It
+    /// lives beside the pin, outside the repository. A committed baseline
+    /// would be attacker-writable and the rollback refusal would be void.
+    /// See "Keyring format and freshness" in docs/design.md.
     ///
-    /// File format: line 1 is the version digits; line 2 (optional) is the
-    /// hex digest. Pre-fork-fix baselines carried only the version; they are
-    /// read as (version, None) and upgraded on the next accepted signed ring.
+    /// File format: line 1 is the version digits. Line 2 is optional and
+    /// holds the hex digest. A baseline written before the digest field
+    /// existed carries only the version. It is read as (version, None) and
+    /// upgraded on the next accepted signed ring.
     fn ring_version_path(key_store: &Path, repo_id: &str) -> PathBuf {
         key_store
             .join(Self::PIN_DIR)
             .join(format!("{}.ring-version", Self::sanitize_repo_id(repo_id)))
     }
 
-    /// Reads the freshness baseline; `Ok((None, None))` when this machine has
+    /// Reads the freshness baseline. `Ok((None, None))` when this machine has
     /// never accepted a versioned keyring for this repo (fresh-clone state).
     pub fn read_ring_baseline(
         key_store: &Path,
@@ -195,8 +214,8 @@ impl TrustPinStore {
         Ok(())
     }
 
-    /// Clears the freshness baseline for `repo_id`. Run by `git-veil trust`:
-    /// re-pinning is the documented recovery for an intended keyring
+    /// Clears the freshness baseline for `repo_id`. Run by `git-veil trust`.
+    /// Re-pinning is the documented recovery for an intended keyring
     /// rollback, so the baseline must reset with the pin or the next gated
     /// command would refuse the very keyring the user just re-anchored.
     pub fn clear_ring_version(key_store: &Path, repo_id: &str) -> Result<()> {

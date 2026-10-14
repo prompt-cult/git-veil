@@ -15,13 +15,13 @@ pub struct TrackedFiles {
 /// Validates that a tracked path is a safe repo-relative path.
 ///
 /// Tracked paths must be relative, must contain no `..` (or other
-/// non-normal) components, and — as defence in depth — must stay inside
-/// the repository root when joined under it (ciphertext lives beside the
+/// non-normal) components, and, as defence in depth, must stay inside
+/// the repository root when joined under it. Ciphertext lives beside the
 /// plaintext as `<name>.secret`, so every tracked path is used both for
-/// reads and for sibling writes). This is the shared boundary check used
-/// when loading tracked.json and before any path use in hide/reveal, so a
-/// malicious tracked.json (committed by any repo writer) cannot make git-veil
-/// read or write outside the repository.
+/// reads and for sibling writes. This is the shared boundary check used
+/// when loading tracked.json and before any path use in hide/reveal, so
+/// a malicious tracked.json, committed by any repo writer, cannot make
+/// git-veil read or write outside the repository.
 pub fn validate_tracked_path(path: &Path) -> Result<()> {
     if path.as_os_str().is_empty() {
         return Err(coded(ExitCode::UnsafePath, "Tracked path is empty"));
@@ -66,15 +66,15 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
 /// `repo_root`, must not be a symlink and must be a regular file.
 ///
 /// A committed tracked.json can name a path another repo writer has
-/// committed as a SYMLINK pointing outside the repository (e.g.
-/// `innocent.txt` -> `/home/victim/.ssh/id_rsa`). Opening such a path for
-/// reading would leak the link target into ciphertext committed back to the
-/// repo (hide), or print/diff it (cat/changes); writing through it would
-/// corrupt the link target or silently replace the link. The lstat gate
-/// (symlink_metadata, which does not follow the link) rejects this,
-/// naming the path. A path that does not exist on disk is accepted: for
-/// cat/changes/reveal/unhide the plaintext is normally ABSENT (the file is
-/// hidden and only the `.secret` ciphertext remains).
+/// committed as a symlink pointing outside the repository, for example
+/// `innocent.txt` pointing at `/home/victim/.ssh/id_rsa`. Opening such a
+/// path for reading would leak the link target into ciphertext committed
+/// back to the repo (hide), or print or diff it (cat/changes). Writing
+/// through it would corrupt the link target or silently replace the link.
+/// The lstat gate (symlink_metadata, which does not follow the link)
+/// rejects this, naming the path. A path that does not exist on disk is
+/// accepted. For cat/changes/reveal/unhide the plaintext is normally
+/// absent: the file is hidden and only the `.secret` ciphertext remains.
 pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
     let full_path = repo_root.join(file);
     let metadata = match fs::symlink_metadata(&full_path) {
@@ -104,13 +104,15 @@ pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
 }
 
 /// Defence in depth: lexically joins `path` under a repository root and
-/// resolves `.`/`..` components; the result must still be inside that root.
-/// The component check in `validate_tracked_path` already rejects `..`, so
-/// this names and enforces the repo-root containment guarantee on its own:
-/// if the component rule is ever relaxed, this check still holds the line.
+/// resolves `.`/`..` components. The result must still be inside that
+/// root. The component check in `validate_tracked_path` already rejects
+/// `..`, so this check enforces the repo-root containment guarantee on
+/// its own. If the component rule is ever relaxed, this check still holds
+/// the line.
 fn stays_inside_repo_root(path: &Path) -> bool {
-    // A single representative root suffices: containment under an absolute
-    // root is a lexical property independent of the root's exact name.
+    // A single representative root suffices. Containment under an
+    // absolute root is a lexical property independent of the root's
+    // exact name.
     let repo_root = PathBuf::from("/repo");
     let mut normalized = PathBuf::new();
     for component in repo_root.join(path).components() {
@@ -132,19 +134,19 @@ fn stays_inside_repo_root(path: &Path) -> bool {
 /// How a user-supplied path is resolved to its repo-relative tracked form.
 ///
 /// The commands share one canonicalise-and-strip shape but deliberately
-/// differ in two documented ways:
+/// differ in two documented ways.
 ///
-/// - whether the plaintext may be absent: `cmd_add`, `cmd_cat` and
+/// - whether the plaintext may be absent. `cmd_add`, `cmd_cat` and
 ///   `cmd_changes` require existence for the paths they canonicalise,
 ///   while `cmd_remove` and `cmd_unhide` must work while the file is
 ///   hidden (hide deleted the plaintext, only the `.secret` ciphertext
-///   remains);
-/// - which path `validate_tracked_path` guards: `cmd_add`/`cmd_remove`
-///   validate the resolved result (it is about to be stored in
-///   tracked.json), while `cmd_cat`/`cmd_changes`/`cmd_unhide` validate
-///   only the literal relative input.
+///   remains).
+/// - which path `validate_tracked_path` guards. `cmd_add` and
+///   `cmd_remove` validate the resolved result, which is about to be
+///   stored in tracked.json, while `cmd_cat`, `cmd_changes` and
+///   `cmd_unhide` validate only the literal relative input.
 ///
-/// The variants pin down each caller's exact contract;
+/// The variants pin down each caller's exact contract.
 /// [`resolve_repo_relative_input`] enforces it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathResolveMode {
@@ -158,13 +160,13 @@ pub enum PathResolveMode {
     /// are taken as-is, and the resolved path is validated.
     LexicalStripValidateResolved,
     /// `cmd_cat` / `cmd_changes`: absolute inputs must exist and are
-    /// canonicalised before stripping; relative inputs are taken as-is
-    /// after validation. The stripped absolute-derived path is NOT
-    /// re-validated: the caller's tracked-file membership check guards it.
+    /// canonicalised before stripping. Relative inputs are taken as-is
+    /// after validation. The stripped absolute-derived path is not
+    /// re-validated. The caller's tracked-file membership check guards it.
     CanonicaliseAbsoluteValidateRelative,
     /// `cmd_unhide`: no existence requirement. Absolute inputs are
-    /// stripped lexically; relative inputs are taken as-is after
-    /// validation; the stripped path is not re-validated.
+    /// stripped lexically. Relative inputs are taken as-is after
+    /// validation. The stripped path is not re-validated.
     LexicalStripValidateRelative,
 }
 

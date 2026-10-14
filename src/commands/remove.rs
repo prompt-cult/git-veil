@@ -6,24 +6,26 @@ use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, Tracked
 
 /// Removes files from the tracked files list.
 ///
-/// Unlike cmd_add, the tracked plaintext may not exist: hide deletes it and
-/// leaves only the `.secret` ciphertext beside it, so removal must NOT
-/// require the plaintext to be on disk (forcing the user to reveal a secret
-/// just to untrack it would defeat the purpose). Resolution therefore mirrors
-/// cmd_unhide: an absolute path is stripped lexically against the canonical
-/// repository root, a relative path is taken as repo-relative, and both go
-/// through the shared `validate_tracked_path` boundary check. Paths outside
-/// the repository are still rejected.
+/// Unlike cmd_add, the tracked plaintext may not exist. Hide deletes
+/// it and leaves only the `.secret` ciphertext beside it, so removal
+/// must not require the plaintext to be on disk. Forcing the user to
+/// reveal a secret just to untrack it would defeat the purpose.
+/// Resolution therefore mirrors cmd_unhide. An absolute path is
+/// stripped lexically against the canonical repository root, a
+/// relative path is taken as repo-relative, and both go through the
+/// shared `validate_tracked_path` boundary check. Paths outside the
+/// repository are still rejected.
 ///
-/// By default the sibling `<name>.secret` ciphertext is deleted in the same
-/// step. This is the fail-closed default: a de-tracked but committed
-/// ciphertext would otherwise be silently skipped by the next hide, leaving
-/// it decryptable by collaborators removed in a later rotation (see
-/// "Orphaned ciphertext" in docs/design.md — hide refuses such orphans with
-/// exit 42). The ciphertext is committed content, so deletion is recoverable
-/// from git history. `--keep-ciphertext` preserves the old leave-in-place
-/// behaviour for callers that want it; hide will then refuse the orphan
-/// until it is staged-deleted or the path is re-tracked.
+/// By default the sibling `<name>.secret` ciphertext is deleted in the
+/// same step. This is the fail-closed default. A de-tracked but
+/// committed ciphertext would otherwise be silently skipped by the
+/// next hide, leaving it decryptable by collaborators removed in a
+/// later rotation. See "Orphaned ciphertext" in docs/design.md. Hide
+/// refuses such orphans with exit 42. The ciphertext is committed
+/// content, so deletion is recoverable from git history.
+/// `--keep-ciphertext` leaves the ciphertext in place for callers that
+/// want it. Hide will then refuse the orphan until it is staged-deleted
+/// or the path is re-tracked.
 pub fn cmd_remove(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -> Result<()> {
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;

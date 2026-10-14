@@ -6,12 +6,12 @@ use crate::commands::add::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::key_discovery::discover_identity;
+use crate::key_discovery::discover_x25519_private_key;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
-use crate::{decrypt_with_identity, verify_keyring_against_trust, TrackedFiles};
+use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
-/// index — same gate as reveal; see docs/design.md "Ignore safety" gate 4.
+/// index. The same gate as reveal. See docs/design.md "Ignore safety" gate 4.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
@@ -29,19 +29,20 @@ fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
 /// ciphertext back to the tracked plaintext path, leaving the ciphertext
 /// in place.
 ///
-/// This is the inverse of hide for ONE file (matching cat's single-file
-/// scope): hide encrypts the plaintext and leaves the ciphertext beside it;
-/// unhide restores the plaintext and also leaves the ciphertext in place —
-/// neither copy is deleted, so hide can re-encrypt and reveal can re-restore
-/// without touching git. The keyring signature is verified against the
-/// pinned trust before any decryption, exactly as reveal and cat do.
+/// This is the inverse of hide for one file, matching cat's
+/// single-file scope. Hide encrypts the plaintext and leaves the
+/// ciphertext beside it. Unhide restores the plaintext and also
+/// leaves the ciphertext in place. Neither copy is deleted, so hide
+/// can re-encrypt and reveal can re-restore without touching git.
+/// The keyring signature is verified against the pinned trust before
+/// any decryption, exactly as reveal and cat do.
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
 /// cmd_cat resolves paths. Unlike cat, the plaintext may not exist (it is
 /// hidden), so an absolute path is checked lexically against the canonical
-/// repository root instead of canonicalised; relative paths go through the
-/// shared tracked-path validation. The file must be tracked — unhide refuses
-/// untracked paths — and the ciphertext must exist beside the plaintext.
+/// repository root instead of canonicalised. Relative paths go through the
+/// shared tracked-path validation. The file must be tracked. Unhide refuses
+/// untracked paths. The ciphertext must exist beside the plaintext.
 pub fn cmd_unhide(
     repo_root: &Path,
     file: &str,
@@ -49,21 +50,22 @@ pub fn cmd_unhide(
     remote_name: &str,
     key_store: &Path,
 ) -> Result<()> {
-    // Verify keyring signature first: never decrypt against an unverified keyring
+    // Verify the keyring signature first. Never decrypt against an
+    // unverified keyring.
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
-            ExitCode::IdentityNotInKeyring,
-            "user not found in the keyring. Check the identity, or ask the owner to add it"
+            ExitCode::PrincipalNotInKeyring,
+            "user not found in the keyring. Check the principal, or ask the owner to add it"
                 .to_string(),
         )
     })?;
 
-    // Find user's age identity by recipient string (exit code 21 with the
-    // create-and-back-up recipe when absent)
-    let identity = discover_identity(key_store, &entry.recipient)?;
+    // Find the user's X25519 private key by its public key encoding (exit
+    // code 21 with the create-and-back-up recipe when absent)
+    let private_key = discover_x25519_private_key(key_store, &entry.public_key)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -81,13 +83,13 @@ pub fn cmd_unhide(
         anyhow::bail!("file not tracked: {}. Add it before unhiding it", file);
     }
 
-    // Lstat gate: writing the plaintext through a committed symlink would
-    // corrupt the link target outside the repo (or silently replace the
-    // link); refuse for consistency with the read gates.
+    // Lstat gate. Writing the plaintext through a committed symlink would
+    // corrupt the link target outside the repo or silently replace the
+    // link. Refuse for consistency with the read gates.
     ensure_regular_file(repo_root, &relative)?;
 
-    // Tracked-plaintext gate (exit 43): same refusal as reveal — see
-    // docs/design.md "Ignore safety" gate 4 and issue #15.
+    // Tracked-plaintext gate (exit 43). The same refusal as reveal. See
+    // docs/design.md "Ignore safety" gate 4.
     ensure_not_tracked_in_git(repo_root, &relative)?;
 
     // Compute encrypted path
@@ -114,7 +116,7 @@ pub fn cmd_unhide(
     })?;
 
     // Decrypt
-    let plaintext = decrypt_with_identity(&ciphertext, &identity)?;
+    let plaintext = decrypt_with_x25519_private_key(&ciphertext, &private_key)?;
 
     if let Some(parent) = relative.parent() {
         if !parent.as_os_str().is_empty() {

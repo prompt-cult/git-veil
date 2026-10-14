@@ -49,22 +49,22 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
-'--output=[Write the recipient string to this file instead of stdout]:OUTPUT:_files' \
+'--output=[Write the public key encoding to this file instead of stdout]:OUTPUT:_files' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Recipient string (age1...) or fingerprint of the key to export:_default' \
+':identifier -- X25519 public key encoding (age1...) of the key to export:_default' \
 && ret=0
 ;;
 (removekey)
 _arguments "${_arguments_options[@]}" : \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
-'--yes[Confirm destructive removals\: required when the target is the only private key in the store, and to remove ALL keys when the email matches several]' \
+'--yes[Confirm destructive removal\: required when the target is the only private key in the store]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Fingerprint or exact recipient string of the identity to remove:_default' \
+':identifier -- Exact X25519 public key encoding (age1...) of the key to remove:_default' \
 && ret=0
 ;;
 (trust)
@@ -81,7 +81,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (export-pin)
 _arguments "${_arguments_options[@]}" : \
-'--output=[Pin-file destination — must be OUTSIDE the repository worktree]:OUTPUT:_files' \
+'--output=[Pin-file destination - must be OUTSIDE the repository worktree]:OUTPUT:_files' \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
@@ -90,22 +90,31 @@ _arguments "${_arguments_options[@]}" : \
 ':repo_id -- Repository ID (e.g., fara+simbo1905@github.com):_default' \
 && ret=0
 ;;
+(fingerprint)
+_arguments "${_arguments_options[@]}" : \
+'--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':label -- Principal label (keyring principal) or repository id (owner key):_default' \
+':public_key -- Public key encoding\: bech32 X25519 public key (age1...) or 64-hex Ed25519 verifying key:_default' \
+&& ret=0
+;;
 (tell)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--signing-key=[Signing key to use\: its 16-hex verifying-key fingerprint (default\: the key matching the pinned fingerprint)]:FINGERPRINT:_default' \
+'--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Collaborator'\''s email:_default' \
-':public_key -- Path to file containing the collaborator'\''s age recipient string (age1...):_default' \
+':public_key -- Path to a file containing the collaborator'\''s X25519 public key encoding (age1...):_default' \
 && ret=0
 ;;
 (removeperson)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
-'--signing-key=[Signing key to use\: its 16-hex verifying-key fingerprint (default\: the key matching the pinned fingerprint)]:FINGERPRINT:_default' \
+'--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -301,6 +310,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(fingerprint)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (tell)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -394,12 +407,13 @@ esac
 _git-veil_commands() {
     local commands; commands=(
 'init:Initialize git-veil state (.git-veil/) in the current repository' \
-'import:Import your age identity (private key) into the git-veil key store' \
-'export:Export a public key (recipient string) from the local key store' \
-'removekey:Remove an age identity from the local key store (destructive, local-only)' \
+'import:Import your X25519 private key into the git-veil key store' \
+'export:Export an X25519 public key from the local key store' \
+'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
-'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
+'fingerprint:Print the git-veil fingerprint of a labelled public key' \
+'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
@@ -410,7 +424,7 @@ _git-veil_commands() {
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity and key store git-veil will use' \
+'whoami:Show the principal git-veil will use for you' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \
@@ -462,16 +476,22 @@ _git-veil__subcmd__export-pin_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil export-pin commands' commands "$@"
 }
+(( $+functions[_git-veil__subcmd__fingerprint_commands] )) ||
+_git-veil__subcmd__fingerprint_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil fingerprint commands' commands "$@"
+}
 (( $+functions[_git-veil__subcmd__help_commands] )) ||
 _git-veil__subcmd__help_commands() {
     local commands; commands=(
 'init:Initialize git-veil state (.git-veil/) in the current repository' \
-'import:Import your age identity (private key) into the git-veil key store' \
-'export:Export a public key (recipient string) from the local key store' \
-'removekey:Remove an age identity from the local key store (destructive, local-only)' \
+'import:Import your X25519 private key into the git-veil key store' \
+'export:Export an X25519 public key from the local key store' \
+'removekey:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
-'tell:Add a collaborator'\''s age recipient key to the keyring and re-sign it' \
+'fingerprint:Print the git-veil fingerprint of a labelled public key' \
+'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
@@ -482,7 +502,7 @@ _git-veil__subcmd__help_commands() {
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
 'show-repo-id:Show the repository ID derived from the git remote push URL' \
-'whoami:Show the identity and key store git-veil will use' \
+'whoami:Show the principal git-veil will use for you' \
 'verify-keyring:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \
@@ -533,6 +553,11 @@ _git-veil__subcmd__help__subcmd__export_commands() {
 _git-veil__subcmd__help__subcmd__export-pin_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help export-pin commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__help__subcmd__fingerprint_commands] )) ||
+_git-veil__subcmd__help__subcmd__fingerprint_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil help fingerprint commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__help_commands] )) ||
 _git-veil__subcmd__help__subcmd__help_commands() {

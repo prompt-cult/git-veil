@@ -7,6 +7,7 @@ pub mod cli;
 mod codeowners;
 mod commands;
 mod exit_codes;
+mod fingerprint;
 mod fs_atomic;
 mod happen_before;
 mod intent;
@@ -20,11 +21,12 @@ mod tracked_files;
 mod trust_store;
 
 pub use age_crypto::{
-    decrypt_with_identity, default_key_store, encrypt_to_recipient, encrypt_to_recipients,
-    find_identity_by_fingerprint, find_identity_by_recipient, find_recipient_by_fingerprint,
-    fingerprint_for_recipient, generate_identity, import_identity_to_store,
-    import_recipient_to_store, load_identities_from_store, load_recipients_from_store,
-    parse_identity, parse_recipient, recipient_from_identity,
+    decrypt_with_x25519_private_key, default_key_store, encrypt_to_x25519_public_key,
+    encrypt_to_x25519_public_keys, find_x25519_private_key_by_public_key,
+    generate_x25519_private_key, import_x25519_private_key_to_store,
+    import_x25519_public_key_to_store, load_x25519_private_keys_from_store,
+    load_x25519_public_keys_from_store, parse_x25519_private_key, parse_x25519_public_key,
+    x25519_public_key_encoding,
 };
 pub use codeowners::{
     covers_trust_critical_paths, find as find_codeowners, is_suppressed as codeowners_suppressed,
@@ -37,6 +39,7 @@ pub use commands::changes::cmd_changes;
 pub use commands::clean::cmd_clean;
 pub use commands::export::{cmd_export, export_public_key};
 pub use commands::export_pin::cmd_export_pin;
+pub use commands::fingerprint::cmd_fingerprint;
 pub use commands::hide::cmd_hide;
 pub use commands::import::cmd_import;
 pub use commands::init::cmd_init;
@@ -53,6 +56,7 @@ pub use commands::unhide::cmd_unhide;
 pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
+pub use fingerprint::{fingerprint_for_public_key, is_legacy_pin_shape, owner_key_fingerprint};
 pub use fs_atomic::{write_atomic, write_atomic_mode};
 pub use happen_before::{
     baseline_path, ciphertext_predates_manifest_entry, manifest_digest, read_baseline,
@@ -60,7 +64,8 @@ pub use happen_before::{
 };
 pub use intent::LocalAdds;
 pub use key_discovery::{
-    discover_identity, discover_signing_key, discover_signing_key_explicit, load_signing_keys,
+    discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key,
+    load_signing_keys,
 };
 pub use keyring::{Keyring, KeyringEntry, BEGIN_MARKER, END_MARKER};
 pub use permissions::{
@@ -68,11 +73,12 @@ pub use permissions::{
     permissions_check_bypassed_from_env,
 };
 pub use pin_file::{load_pin_file, write_pin_file, PinFile};
-pub use repo_identity::{derive_repo_id, get_remote_push_url, parse_git_remote_url};
+pub use repo_identity::{
+    derive_configured_repo_ids, derive_repo_id, get_remote_push_url, parse_git_remote_url,
+};
 pub use signing::{
     create_signature_block, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
-    fingerprint_for_verifying_key, generate_signing_keypair, keyring_content_digest,
-    owner_fingerprint_for_verifying_key, parse_signing_key, parse_verifying_key,
+    generate_signing_keypair, keyring_content_digest, parse_signing_key, parse_verifying_key,
     sign_keyring_content, verify_keyring_signature,
 };
 pub use tracked_files::{get_git_config_email, validate_tracked_path, TrackedFiles};

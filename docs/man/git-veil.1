@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-veil 1  "git-veil 0.6.0" 
 .SH NAME
-git\-veil \- Git secret management using age encryption
+git\-veil \- Git secret management using "age" encryption
 .SH SYNOPSIS
 \fBgit\-veil\fR [\fB\-\-dangerously\-skip\-permissions\-check\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIsubcommands\fR>
 .SH DESCRIPTION
-Git secret management using age encryption
+Git secret management using "age" encryption
 .SH OPTIONS
 .TP
 \fB\-\-dangerously\-skip\-permissions\-check\fR
@@ -23,13 +23,13 @@ git\-veil\-init(1)
 Initialize git\-veil state (.git\-veil/) in the current repository
 .TP
 git\-veil\-import(1)
-Import your age identity (private key) into the git\-veil key store
+Import your X25519 private key into the git\-veil key store
 .TP
 git\-veil\-export(1)
-Export a public key (recipient string) from the local key store
+Export an X25519 public key from the local key store
 .TP
 git\-veil\-removekey(1)
-Remove an age identity from the local key store (destructive, local\-only)
+Remove a key from the local key store (destructive, local\-only)
 .TP
 git\-veil\-trust(1)
 Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
@@ -37,8 +37,11 @@ Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-f
 git\-veil\-export\-pin(1)
 Export this repository\*(Aqs pin\-file for import on another machine
 .TP
+git\-veil\-fingerprint(1)
+Print the git\-veil fingerprint of a labelled public key
+.TP
 git\-veil\-tell(1)
-Add a collaborator\*(Aqs age recipient key to the keyring and re\-sign it
+Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
 .TP
 git\-veil\-removeperson(1)
 Remove a collaborator from the keyring and re\-sign it
@@ -71,7 +74,7 @@ git\-veil\-show\-repo\-id(1)
 Show the repository ID derived from the git remote push URL
 .TP
 git\-veil\-whoami(1)
-Show the identity and key store git\-veil will use
+Show the principal git\-veil will use for you
 .TP
 git\-veil\-verify\-keyring(1)
 Verify the keyring signature against the pinned trusted key

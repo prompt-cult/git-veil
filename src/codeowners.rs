@@ -1,15 +1,14 @@
-//! CODEOWNERS coverage for the trust-critical paths (issue #27).
+//! CODEOWNERS coverage for the trust-critical paths.
 //!
 //! CODEOWNERS is a platform feature, not a git feature: plain git ignores
 //! the file. Where the platform enforces it, a write-access attacker's
 //! rekey of the trust anchor becomes a review-gated change instead of a
-//! silent push. The tool suggests (init) and warns (trust); it never
-//! requires, never creates the file, and never alters an exit code.
+//! silent push.
 //!
-//! Pattern matching reuses the gitignore matcher (gix-ignore): CODEOWNERS
-//! patterns are a subset of gitignore, and the matcher answers exactly the
-//! question asked here — does any pattern cover these paths, last match
-//! wins. Owner strings are not validated; that is the platform's job.
+//! Pattern matching reuses the gitignore matcher (gix-ignore). CODEOWNERS
+//! patterns are a subset of gitignore. The matcher answers the one question
+//! asked here: whether any pattern covers these paths, last match wins.
+//! Owner strings are not validated. That is the platform's job.
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -46,10 +45,10 @@ pub fn find(repo_root: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Whether any pattern in the CODEOWNERS content covers `path`, last match
-/// wins. A final negated match counts as not covered (a file with
-/// negation lines is not valid CODEOWNERS, but the matcher answers the
-/// gitignore semantics honestly rather than guessing intent).
+/// Whether any pattern in the CODEOWNERS content covers `path`. The last
+/// match wins, and a final negated match counts as not covered. A file
+/// with negation lines is not valid CODEOWNERS, but the matcher reports
+/// the gitignore semantics honestly rather than guessing intent.
 fn content_covers(content: &[u8], path: &str, is_dir: bool) -> bool {
     use bstr::ByteSlice;
     let rel_path = bstr::BString::from(path);
@@ -72,9 +71,9 @@ fn content_covers(content: &[u8], path: &str, is_dir: bool) -> bool {
 }
 
 /// Whether a found CODEOWNERS file covers both trust-critical paths: the
-/// committed owner verifying key and the `.git-veil/` directory (a pattern
-/// matching a representative file inside the directory also counts —
-/// gitignore patterns may name files rather than the directory itself).
+/// committed owner verifying key and the `.git-veil/` directory. A pattern
+/// matching a representative file inside the directory also counts, because
+/// gitignore patterns may name files rather than the directory itself.
 pub fn covers_trust_critical_paths(repo_root: &Path) -> bool {
     let Some(codeowners) = find(repo_root) else {
         return false;
@@ -89,7 +88,7 @@ pub fn covers_trust_critical_paths(repo_root: &Path) -> bool {
 }
 
 /// The init suggestion: which paths to protect and what to add. Printed
-/// only by a non-quiet `init`; the tool never creates the file.
+/// only by a non-quiet `init`. The tool never creates the file.
 pub fn suggestion_text() -> String {
     "suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform\n\
      add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:\n\
@@ -99,15 +98,14 @@ pub fn suggestion_text() -> String {
 }
 
 /// The trust warning: the pin succeeded, but the platform will not
-/// review-gate a trust-anchor change. Non-blocking: never an error, never
-/// an exit code change.
+/// review-gate a trust-anchor change. The warning is non-blocking. It is
+/// never an error and never changes an exit code.
 pub fn warning_text() -> String {
     "warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform."
         .to_string()
 }
 
-/// Whether the CODEOWNERS warning is suppressed for this repository: the
-/// key store records suppressed repository ids per pinned repo.
+/// Whether the CODEOWNERS warning is suppressed for this repository.
 pub fn is_suppressed(key_store: &Path, repo_id: &str) -> bool {
     let path = suppression_path(key_store);
     let sanitized = TrustPinStore::sanitize_repo_id(repo_id);
@@ -117,8 +115,8 @@ pub fn is_suppressed(key_store: &Path, repo_id: &str) -> bool {
 }
 
 /// Records the suppression for this repository, next to the pin in the key
-/// store. Only the pin-creation command calls this: the suppression is
-/// bound to the possession proof (or import) that created the pin.
+/// store. Only the pin-creation command calls this. The suppression is
+/// bound to the possession proof, or import, that created the pin.
 pub fn record_suppression(key_store: &Path, repo_id: &str) -> Result<()> {
     let path = suppression_path(key_store);
     let sanitized = TrustPinStore::sanitize_repo_id(repo_id);
@@ -140,7 +138,7 @@ pub fn record_suppression(key_store: &Path, repo_id: &str) -> Result<()> {
         .context("Failed to record the CODEOWNERS suppression in the key store")
 }
 
-/// CODEOWNERS separates the pattern from its owner list with whitespace;
+/// CODEOWNERS separates the pattern from its owner list with whitespace.
 /// gitignore patterns cannot contain unescaped spaces, so the pattern is
 /// the first whitespace-delimited token of each line. Comments and blanks
 /// are dropped. The tokens are re-fed to the gitignore matcher one per

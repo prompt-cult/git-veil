@@ -1,13 +1,14 @@
 //! Documented exit codes.
 //!
-//! Every deliberate failure exits with a code from this enum; failures
-//! without a more specific code exit 1, and clap usage errors exit 2. The
-//! `error-codes` subcommand prints the table below, and the codes are
+//! Every deliberate failure exits with a code from this enum. Failures
+//! without a more specific code exit 1, and clap usage errors exit 2.
+//! The `error-codes` subcommand prints the table below. The codes are
 //! public API: they are never renumbered, only appended.
 //!
-//! Codes are carried inside `anyhow` errors as a [`CodedError`] payload so
-//! command signatures stay `anyhow::Result` and `main` can still exit with
-//! the right status — no error-type rewrite across every command.
+//! Codes are carried inside `anyhow` errors as a [`CodedError`] payload.
+//! Command signatures stay `anyhow::Result`, and `main` still exits with
+//! the right status, so no error-type rewrite is needed across every
+//! command.
 
 use std::fmt;
 
@@ -29,21 +30,21 @@ pub enum ExitCode {
     KeyringRollback = 14,
     /// No Ed25519 signing key in the key store.
     NoSigningKey = 20,
-    /// No age identity in the key store matching your keyring entry.
-    NoAgeIdentity = 21,
-    /// Your email is not in the signed keyring.
-    IdentityNotInKeyring = 22,
+    /// No X25519 private key in the key store matching your keyring entry.
+    NoX25519PrivateKey = 21,
+    /// Your principal is not in the signed keyring.
+    PrincipalNotInKeyring = 22,
     /// Key store directory or private key file is group/world accessible.
     UnsafeKeyStorePermissions = 30,
     /// A `.secret` ciphertext path is git-ignored (fatal in `hide`).
     CiphertextIgnored = 40,
-    /// Tracked plaintext on disk is not git-ignored (warning; exit stays 0).
+    /// Tracked plaintext on disk is not git-ignored (a warning, the exit code stays 0).
     PlaintextNotIgnored = 41,
     /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
     OrphanedCiphertext = 42,
     /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
     PlaintextTracked = 43,
-    /// Ciphertext could not be decrypted with the local identity.
+    /// Ciphertext could not be decrypted with the local private key.
     DecryptionFailed = 60,
     /// Encryption failed.
     EncryptionFailed = 61,
@@ -60,7 +61,7 @@ pub enum ExitCode {
 }
 
 impl ExitCode {
-    /// Every code, in numeric order — the source for `git-veil error-codes`.
+    /// Every code, in numeric order. The source for `git-veil error-codes`.
     pub const ALL: &'static [ExitCode] = &[
         ExitCode::GeneralError,
         ExitCode::NoTrustRecord,
@@ -69,8 +70,8 @@ impl ExitCode {
         ExitCode::TrustRepoIdMismatch,
         ExitCode::KeyringRollback,
         ExitCode::NoSigningKey,
-        ExitCode::NoAgeIdentity,
-        ExitCode::IdentityNotInKeyring,
+        ExitCode::NoX25519PrivateKey,
+        ExitCode::PrincipalNotInKeyring,
         ExitCode::UnsafeKeyStorePermissions,
         ExitCode::CiphertextIgnored,
         ExitCode::PlaintextNotIgnored,
@@ -95,8 +96,8 @@ impl ExitCode {
             ExitCode::TrustRepoIdMismatch => "TrustRepoIdMismatch",
             ExitCode::KeyringRollback => "KeyringRollback",
             ExitCode::NoSigningKey => "NoSigningKey",
-            ExitCode::NoAgeIdentity => "NoAgeIdentity",
-            ExitCode::IdentityNotInKeyring => "IdentityNotInKeyring",
+            ExitCode::NoX25519PrivateKey => "NoX25519PrivateKey",
+            ExitCode::PrincipalNotInKeyring => "PrincipalNotInKeyring",
             ExitCode::UnsafeKeyStorePermissions => "UnsafeKeyStorePermissions",
             ExitCode::CiphertextIgnored => "CiphertextIgnored",
             ExitCode::PlaintextNotIgnored => "PlaintextNotIgnored",
@@ -124,10 +125,10 @@ impl ExitCode {
             }
             ExitCode::KeyringRollback => "Keyring version is below this machine freshness baseline",
             ExitCode::NoSigningKey => "No Ed25519 signing key in the key store",
-            ExitCode::NoAgeIdentity => {
-                "No age identity in the key store matching your keyring entry"
+            ExitCode::NoX25519PrivateKey => {
+                "No X25519 private key in the key store matching your keyring entry"
             }
-            ExitCode::IdentityNotInKeyring => "Your identity is not in the signed keyring",
+            ExitCode::PrincipalNotInKeyring => "Your principal is not in the signed keyring",
             ExitCode::UnsafeKeyStorePermissions => {
                 "Key store directory or private key file is group/world accessible"
             }
@@ -144,7 +145,7 @@ impl ExitCode {
                 "The plaintext is tracked in git which reveal and unhide refuse"
             }
             ExitCode::DecryptionFailed => {
-                "Ciphertext could not be decrypted with the local identity"
+                "Ciphertext could not be decrypted with the local private key"
             }
             ExitCode::EncryptionFailed => "Encryption failed",
             ExitCode::KeyParseFailure => "A key, keyring or signature could not be parsed",

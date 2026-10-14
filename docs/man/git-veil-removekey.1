@@ -2,15 +2,15 @@
 .el .ds Aq '
 .TH git-veil-removekey 1  "git-veil-removekey " 
 .SH NAME
-git\-veil\-removekey \- Remove an age identity from the local key store (destructive, local\-only)
+git\-veil\-removekey \- Remove a key from the local key store (destructive, local\-only)
 .SH SYNOPSIS
 \fBgit\-veil removekey\fR [\fB\-\-yes\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
-Remove an age identity from the local key store (destructive, local\-only)
+Remove a key from the local key store (destructive, local\-only)
 .SH OPTIONS
 .TP
 \fB\-\-yes\fR
-Confirm destructive removals: required when the target is the only private key in the store, and to remove ALL keys when the email matches several
+Confirm destructive removal: required when the target is the only private key in the store
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
@@ -19,34 +19,33 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIIDENTIFIER\fR>
-Fingerprint or exact recipient string of the identity to remove
+Exact X25519 public key encoding (age1...) of the key to remove
 .SH EXTRA
-Drops key material from the LOCAL key store: every identity in
-$GIT_VEIL_HOME (or $HOME/.git\-veil) identities.txt whose recipient
-matches the identifier, or whose exact case\-insensitive fingerprint
-matches, is removed. Prefer the FINGERPRINT when it is not unambiguous
-which key you mean — a shared recipient that matches several identities
-is refused unless \-\-yes confirms removing ALL of them.
+Drops key material from the LOCAL key store: every X25519 private key in
+$GIT_VEIL_HOME (or $HOME/.git\-veil) identities.txt and every X25519
+public key in recipients.txt whose public key encoding exactly matches
+the identifier is removed. Keys are selected by public key string only;
+no fingerprint\-as\-identifier mode remains.
 
 This is destructive and LOCAL\-ONLY: it does not touch any repository,
-keyring or trust state, and it does NOT revoke anything. Removing an
-identity from the store does not stop old ciphertext that was encrypted
-to it from being decryptable by whoever holds it. Revoking a departing
-collaborator is removeperson + re\-hide (docs/departing.md); removekey is
-the departing user\*(Aqs housekeeping step for their own machine\*(Aqs store.
+keyring or trust state, and it does NOT revoke anything. Removing a
+private key from the store does not stop old ciphertext that was
+encrypted to it from being decryptable by whoever holds it. Revoking a
+departing collaborator is removeperson + re\-hide (docs/departing.md);
+removekey is the departing user\*(Aqs housekeeping step for their own
+machine\*(Aqs store.
 
-Danger guard: if the target identity is the only one in identities.txt,
-removekey refuses without \-\-yes — this is your only identity, and without
-it you cannot decrypt anything.
+Danger guard: if the target private key is the only one in
+identities.txt, removekey refuses without \-\-yes \- this is your only
+private key, and without it you cannot decrypt anything.
 
 The store rewrite is atomic and lossless for the retained lines. A
-corrupt (e.g. truncated) store is refused untouched — the error names the
+corrupt (e.g. truncated) store is refused untouched \- the error names the
 file, the line number, and the corrupt line so you can delete exactly it;
 removekey never rewrites a store it could not fully parse. On success a
-per\-store summary prints the fingerprints removed.
+per\-store summary prints the public key encodings removed.
 
 EXAMPLES
-  $ git\-veil removekey 9A1F...                     # by fingerprint (preferred)
-  $ git\-veil removekey age1axmf...                 # exact recipient string
-  $ git\-veil removekey age1axmf... \-\-yes           # confirm only\-identity removal
+  $ git\-veil removekey age1axmf...                 # exact public key encoding
+  $ git\-veil removekey age1axmf... \-\-yes           # confirm only\-private\-key removal
   $ git\-veil removekey age1axmf... \-\-key\-store /path/to/store

@@ -42,12 +42,16 @@ pin\-creation paths exist, and nothing else:
    produced by git\-veil export\-pin on a machine that proved possession.
    Three mandatory consistency checks: the pin\-file\*(Aqs repo\-id must match
    this repository; its verifying key must exactly match the committed
-   owner.verifying; and its fingerprint must match the owner fingerprint
-   recorded in .git\-veil/trust.json. Any mismatch \-> refusal: one of the
-   two channels is compromised.
+   owner.verifying; and its owner key fingerprint must match the owner
+   fingerprint recorded in .git\-veil/trust.json. Any mismatch \-> refusal:
+   one of the two channels is compromised.
+
+A pin or trust record in the retired 16 hex character fingerprint format
+is hostile: every gated command refuses it until trust is re\-established.
+See the fingerprint documentation for the current derivation.
 
 Both paths refuse a path inside the repository worktree, so a pin\-file
-always travels out of band (e.g. ssh) — the same model as known_hosts
+always travels out of band (e.g. ssh) \- the same model as known_hosts
 provisioning. The pin lives in the key store, never committed; every
 machine (including the owner\*(Aqs fresh clones) pins for itself.
 

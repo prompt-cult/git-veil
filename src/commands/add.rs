@@ -44,10 +44,10 @@ pub fn cmd_add(
 
         ensure_gitignored(repo_root, &relative_str)?;
 
-        // A .secret swallowed by a broad ignore rule (e.g. a parent
-        // directory like .tmp/) would silently never reach the repository:
-        // add succeeds, but the ciphertext beside the plaintext is
-        // untrackable. Warn now; hide refuses outright before encrypting.
+        // A .secret swallowed by a broad ignore rule, such as a parent
+        // directory like .tmp/, would silently never reach the repository.
+        // Add succeeds, but the ciphertext beside the plaintext is
+        // untrackable. Warn now. Hide refuses outright before encrypting.
         let secret_relative = format!("{}.secret", relative_str);
         if is_gitignored(repo_root, &secret_relative)? {
             println!(
@@ -78,20 +78,22 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
         .success())
 }
 
-/// True when the repo-relative path is tracked in the git index (staged or
-/// committed). Shared by reveal and unhide's tracked-plaintext refusal
-/// (exit 43, docs/design.md "Ignore safety" gate 4): a git-tracked plaintext
-/// is ordinary repository content, not a secret, and overwriting it from
-/// attacker-committed ciphertext is the reveal-clobber channel.
+/// True when the repo-relative path is tracked in the git index, staged
+/// or committed. Shared by reveal and unhide's tracked-plaintext
+/// refusal (exit 43, docs/design.md "Ignore safety" gate 4). A
+/// git-tracked plaintext is ordinary repository content, not a
+/// secret, and overwriting it from attacker-committed ciphertext is
+/// the reveal-clobber channel.
 ///
-/// The check is case-INSENSITIVE as a fallback (issue #21): on the macOS and
-/// Windows default filesystems a case-variant spelling of a tracked path
-/// resolves to the SAME file, so an exact-match miss must still refuse when
-/// any case-variant of the path is in the index — a miss there would let a
-/// committed payload ciphertext overwrite a tracked source file through
-/// reveal. On case-sensitive filesystems the fallback can in principle
-/// false-positive two genuinely distinct case-variant files; for a secrets
-/// tool refusing beats overwriting, and the refusal names the path.
+/// The check is case-insensitive as a fallback. On the macOS and
+/// Windows default filesystems a case-variant spelling of a tracked
+/// path resolves to the same file, so an exact-match miss must still
+/// refuse when any case-variant of the path is in the index. A miss
+/// there would let a committed payload ciphertext overwrite a tracked
+/// source file through reveal. On case-sensitive filesystems the
+/// fallback can in principle false-positive two genuinely distinct
+/// case-variant files. For a secrets tool refusing beats overwriting,
+/// and the refusal names the path.
 pub(crate) fn is_tracked_in_git(repo_root: &Path, relative_path: &Path) -> bool {
     let exact = Command::new("git")
         .current_dir(repo_root)

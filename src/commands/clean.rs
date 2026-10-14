@@ -7,21 +7,22 @@ use crate::{coded, ExitCode, TrackedFiles};
 
 /// Removes the .git-veil internal state directory.
 ///
-/// Single responsibility: destroy git-veil's internal state (.git-veil/).
-/// `.gitignore` is never rewritten — init no longer adds any entry, and the
-/// in-place `<name>.secret` ciphertext files are ordinary committable files
-/// that a clean must not disown.
+/// Single responsibility: destroy git-veil's internal state
+/// (.git-veil/). `.gitignore` is never rewritten. The in-place
+/// `<name>.secret` ciphertext files are ordinary committable files that a
+/// clean must not disown.
 ///
-/// Because hide deletes the plaintexts, the `<name>.secret` ciphertexts
-/// beside them can be the ONLY remaining copy of a secret, and the tracked
-/// state that references them dies with the clean. A clean that would
-/// destroy such data therefore refuses unless `--yes` confirms it.
+/// Because hide deletes the plaintexts, the `<name>.secret`
+/// ciphertexts beside them can be the only remaining copy of a
+/// secret, and the tracked state that references them dies with the
+/// clean. A clean that would destroy such data therefore refuses
+/// unless `--yes` confirms it.
 pub fn cmd_clean(repo_root: &Path, yes: bool) -> Result<()> {
     let git_veil_dir = repo_root.join(".git-veil");
 
-    // Compute the danger condition BEFORE removing anything: tracked state
-    // (the manifest itself is being destroyed) and any in-place ciphertext
-    // beside the tracked paths (possibly the only remaining copy).
+    // Compute the danger condition before removing anything. It covers
+    // tracked state, the manifest itself, and any in-place ciphertext
+    // beside the tracked paths, possibly the only remaining copy.
     let tracked = TrackedFiles::load(&git_veil_dir.join("tracked.json"))?;
     let mut ciphertext_paths = Vec::new();
     for file in &tracked.files {

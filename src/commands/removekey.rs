@@ -1,36 +1,35 @@
 use anyhow::{Context, Result};
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::age_crypto::{
-    fingerprint_for_recipient, for_each_store_line, parse_identity, parse_recipient,
-    recipient_from_identity,
+    for_each_store_line, parse_x25519_private_key, parse_x25519_public_key,
+    x25519_public_key_encoding,
 };
 use crate::fs_atomic::write_atomic;
 
 /// One key line parsed out of a key store file.
 struct StoreLine {
     text: String,
-    fingerprint: String,
-    recipient: String,
+    public_key: String,
 }
 
 /// A key store file parsed into lines. `exists` is false when the store
-/// file is absent (fresh machine) — absent stores are never created.
+/// file is absent (fresh machine). Absent stores are never created.
 struct StoreContents {
     path: PathBuf,
     exists: bool,
     lines: Vec<StoreLine>,
 }
 
-/// Loads and parses the identities store (identities.txt).
+/// Loads and parses the private key store (identities.txt).
 ///
-/// A non-comment line that is not a parseable identity is a hard error
-/// naming the corrupt line: the store is refused untouched. Silently
-/// skipping corrupt lines would let a successful removal rewrite the store
-/// without them — deleting key material removekey was never asked to touch
-/// (the same fail-closed rule every key store read applies).
-fn load_identity_store(path: &Path) -> Result<StoreContents> {
+/// A non-comment line that is not a parseable X25519 private key is a
+/// hard error naming the corrupt line. The store is refused untouched.
+/// Silently skipping corrupt lines would let a successful removal
+/// rewrite the store without them, deleting key material removekey was
+/// never asked to touch. The same fail-closed rule applies to every key
+/// store read.
+fn load_private_key_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
             path: path.to_path_buf(),
@@ -41,13 +40,11 @@ fn load_identity_store(path: &Path) -> Result<StoreContents> {
     let content = std::fs::read_to_string(path).context("Failed to read identities.txt")?;
     let mut lines = Vec::new();
     for_each_store_line(path, &content, |_, line_str| {
-        let identity = parse_identity(line_str)?;
-        let recipient = recipient_from_identity(&identity);
-        let fingerprint = fingerprint_for_recipient(&recipient);
+        let private_key = parse_x25519_private_key(line_str)?;
+        let public_key = x25519_public_key_encoding(&private_key);
         lines.push(StoreLine {
             text: line_str.to_string(),
-            fingerprint,
-            recipient,
+            public_key,
         });
         Ok(())
     })?;
@@ -58,13 +55,13 @@ fn load_identity_store(path: &Path) -> Result<StoreContents> {
     })
 }
 
-/// Loads and parses the recipients store (recipients.txt).
+/// Loads and parses the public key store (recipients.txt).
 ///
-/// The same fail-closed rule as every key store read: a non-comment line
-/// that is not a parseable recipient is a hard error naming the corrupt
-/// line — the store is refused untouched, never rewritten from a partial
-/// parse.
-fn load_recipient_store(path: &Path) -> Result<StoreContents> {
+/// The same fail-closed rule as every key store read. A non-comment
+/// line that is not a parseable X25519 public key is a hard error
+/// naming the corrupt line. The store is refused untouched, never
+/// rewritten from a partial parse.
+fn load_public_key_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
             path: path.to_path_buf(),
@@ -75,11 +72,10 @@ fn load_recipient_store(path: &Path) -> Result<StoreContents> {
     let content = std::fs::read_to_string(path).context("Failed to read recipients.txt")?;
     let mut lines = Vec::new();
     for_each_store_line(path, &content, |_, line_str| {
-        parse_recipient(line_str)?;
+        parse_x25519_public_key(line_str)?;
         lines.push(StoreLine {
             text: line_str.to_string(),
-            fingerprint: fingerprint_for_recipient(line_str),
-            recipient: line_str.to_string(),
+            public_key: line_str.to_string(),
         });
         Ok(())
     })?;
@@ -90,71 +86,51 @@ fn load_recipient_store(path: &Path) -> Result<StoreContents> {
     })
 }
 
-/// Matching: the identifier equals the key's fingerprint (case-insensitively),
-/// or equals the recipient string.
-fn line_matches(line: &StoreLine, wanted_fingerprint: &str, wanted_recipient: &str) -> bool {
-    line.fingerprint == wanted_fingerprint || line.recipient == wanted_recipient
-}
-
-/// Removes key material from the LOCAL key store: every line in
+/// Removes key material from the local key store. Every line in
 /// `<key_store>/identities.txt` and `<key_store>/recipients.txt` whose
-/// fingerprint matches `identifier`, or whose recipient string matches, is dropped.
+/// X25519 public key encoding exactly matches `identifier` is dropped.
+/// Keys are selected by public key string only.
 pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
-    let identities_path = key_store.join("identities.txt");
-    let recipients_path = key_store.join("recipients.txt");
+    let private_keys_path = key_store.join("identities.txt");
+    let public_keys_path = key_store.join("recipients.txt");
 
-    let identity_store = load_identity_store(&identities_path)?;
-    let recipient_store = load_recipient_store(&recipients_path)?;
+    let private_key_store = load_private_key_store(&private_keys_path)?;
+    let public_key_store = load_public_key_store(&public_keys_path)?;
 
-    let wanted_recipient = identifier.trim();
-    let wanted_fingerprint = identifier.trim().to_lowercase();
+    let wanted_public_key = identifier.trim();
 
-    let identity_matches: Vec<usize> = identity_store
+    let private_key_matches: Vec<usize> = private_key_store
         .lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| line_matches(line, &wanted_fingerprint, wanted_recipient))
+        .filter(|(_, line)| line.public_key == wanted_public_key)
         .map(|(i, _)| i)
         .collect();
-    let recipient_matches: Vec<usize> = recipient_store
+    let public_key_matches: Vec<usize> = public_key_store
         .lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| line_matches(line, &wanted_fingerprint, wanted_recipient))
+        .filter(|(_, line)| line.public_key == wanted_public_key)
         .map(|(i, _)| i)
         .collect();
 
-    if identity_matches.is_empty() && recipient_matches.is_empty() {
+    if private_key_matches.is_empty() && public_key_matches.is_empty() {
         anyhow::bail!(
             "no matching key found in the key store. removekey only removes keys this machine local store holds"
         );
     }
 
-    // Danger guard: the target is the only identity in identities.txt.
-    if !identity_matches.is_empty() && identity_store.lines.len() == 1 && !yes {
+    // Danger guard: the target is the only private key in identities.txt.
+    if !private_key_matches.is_empty() && private_key_store.lines.len() == 1 && !yes {
         anyhow::bail!(
-            "refusing to remove the only identity. Without it you cannot decrypt anything. Confirm to continue"
-        );
-    }
-
-    // Ambiguity guard: several DISTINCT keys match the identifier.
-    let mut matched_fingerprints: BTreeSet<String> = BTreeSet::new();
-    for i in &identity_matches {
-        matched_fingerprints.insert(identity_store.lines[*i].fingerprint.clone());
-    }
-    for i in &recipient_matches {
-        matched_fingerprints.insert(recipient_store.lines[*i].fingerprint.clone());
-    }
-    if matched_fingerprints.len() > 1 && !yes {
-        anyhow::bail!(
-            "multiple keys match in the key store. Pass a fingerprint to select one, or confirm to remove all of them"
+            "refusing to remove the only private key. Without it you cannot decrypt anything. Confirm to continue"
         );
     }
 
     // Rewrite only the stores that hold matching lines.
     for (store, matches) in [
-        (&identity_store, &identity_matches),
-        (&recipient_store, &recipient_matches),
+        (&private_key_store, &private_key_matches),
+        (&public_key_store, &public_key_matches),
     ] {
         if matches.is_empty() {
             if store.exists {
@@ -166,7 +142,7 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
         }
         let removed: Vec<String> = matches
             .iter()
-            .map(|i| store.lines[*i].fingerprint.clone())
+            .map(|i| store.lines[*i].public_key.clone())
             .collect();
         let mut retained = String::new();
         for (i, line) in store.lines.iter().enumerate() {

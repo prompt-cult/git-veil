@@ -31,8 +31,8 @@ fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };
     if let Err(err) = decrypt_with_private_key(s, &FIXED_SECRET_KEY, None) {
         let message = format!("{err:#}");
-        // the empty string is a substring of everything — only meaningful
-        // for non-trivial inputs
+        // the empty string is a substring of everything. The check only
+        // matters for non-trivial inputs
         if !s.is_empty() {
             assert!(
                 !message.contains(s),

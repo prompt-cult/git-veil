@@ -27,8 +27,8 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      # Version pinned to match fuzz/README.md (cargo-fuzz 0.13.2 has no
-      # config-file support; libFuzzer flags are passed per invocation).
+      # Version pinned to match fuzz/README.md. cargo-fuzz 0.13.2 has no
+      # config-file support, so libFuzzer flags are passed per invocation.
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
 

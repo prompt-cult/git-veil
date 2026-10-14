@@ -6,12 +6,12 @@ use crate::commands::add::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::key_discovery::discover_identity;
+use crate::key_discovery::discover_x25519_private_key;
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
-use crate::{cmd_verify_keyring, decrypt_with_identity, Keyring, TrackedFiles};
+use crate::{cmd_verify_keyring, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
-/// index — see docs/design.md "Ignore safety" gate 4 and issue #15.
+/// index. See docs/design.md "Ignore safety" gate 4.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
@@ -48,15 +48,15 @@ pub fn cmd_reveal(
     // Find user's entry
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
-            ExitCode::IdentityNotInKeyring,
-            "user not found in the keyring. Check the identity, or ask the owner to add it"
+            ExitCode::PrincipalNotInKeyring,
+            "user not found in the keyring. Check the principal, or ask the owner to add it"
                 .to_string(),
         )
     })?;
 
-    // Find user's age identity by recipient string (exit code 21 with the
-    // create-and-back-up recipe when absent)
-    let identity = discover_identity(key_store, &entry.recipient)?;
+    // Find the user's X25519 private key by its public key encoding (exit
+    // code 21 with the create-and-back-up recipe when absent)
+    let private_key = discover_x25519_private_key(key_store, &entry.public_key)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -67,29 +67,29 @@ pub fn cmd_reveal(
         return Ok(());
     }
 
-    // Two-phase, all-or-nothing reveal (compute-then-commit). PHASE 1
-    // verifies every tracked file's ciphertext exists and decrypts ALL of
-    // them into memory; ANY failure (missing ciphertext, key error) aborts
-    // with nothing changed on disk — no mixed state where some files are
-    // revealed and others remain hidden. Memory trade: secrets are small
+    // Two-phase, all-or-nothing reveal (compute-then-commit). Phase 1
+    // verifies every tracked file's ciphertext exists and decrypts all of
+    // them into memory. Any failure, a missing ciphertext or a key error,
+    // aborts with nothing changed on disk. There is no mixed state where
+    // some files are revealed and others remain hidden. Secrets are small
     // config-scale files, so holding every plaintext in memory is
-    // acceptable; reveal is not a bulk-restoration path.
+    // acceptable. Reveal is not a bulk-restoration path.
     let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
 
-        // Lstat gate: writing the plaintext through a committed symlink
-        // would corrupt the link target outside the repo (or silently
-        // replace the link); refuse for consistency with the read gates.
+        // Lstat gate. Writing the plaintext through a committed symlink
+        // would corrupt the link target outside the repo or silently
+        // replace the link. Refuse for consistency with the read gates.
         ensure_regular_file(repo_root, file)?;
 
         // Tracked-plaintext gate (exit 43, docs/design.md "Ignore safety"
-        // gate 4): a plaintext tracked in git is ordinary repository
+        // gate 4). A plaintext tracked in git is ordinary repository
         // content, not a secret. Overwriting it from committed ciphertext
-        // is the F-1 clobber channel: a repo writer nominates a source
+        // is the reveal-clobber channel: a repo writer nominates a source
         // file in the unsigned tracked.json and commits payload ciphertext
-        // encrypted to the public ring keys; the victim's reveal would
+        // encrypted to the public ring keys. The victim's reveal would
         // overwrite the source file for the CI to execute.
         ensure_not_tracked_in_git(repo_root, file)?;
 
@@ -117,7 +117,7 @@ pub fn cmd_reveal(
         })?;
 
         // Decrypt
-        let plaintext = decrypt_with_identity(&ciphertext, &identity)?;
+        let plaintext = decrypt_with_x25519_private_key(&ciphertext, &private_key)?;
 
         prepared.push((file.clone(), encrypted_path, plaintext));
     }

@@ -2,18 +2,20 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
+use crate::fingerprint::fingerprint_for_public_key;
 use crate::{verify_keyring_against_trust, Keyring};
 
-/// Lists all keys in the keyring, gated on keyring signature verification.
+/// Lists all keys in the keyring, gated on keyring signature
+/// verification.
 ///
-/// The keyring is verified against the trust pin (the same gate as
-/// verify-keyring) BEFORE it is presented. On success the listing is prefixed
-/// with a verification banner. On failure the unverified content is still
-/// printed (an auditor must SEE the tampered content) but under a loud
-/// invalid-signature banner, and the command exits with an error so scripts
-/// never mistake an audit of a tampered ring for a clean one. A repo with no
-/// trust established or no local pin fails closed like every other gated
-/// command.
+/// The keyring is verified against the trust pin, the same gate as
+/// verify-keyring, before it is presented. On success the listing is
+/// prefixed with a verification banner. On failure the unverified
+/// content is still printed, so an auditor can see the tampered
+/// content, but under a loud invalid-signature banner, and the
+/// command exits with an error so scripts never mistake an audit of a
+/// tampered ring for a clean one. A repo with no trust established or
+/// no local pin fails closed like every other gated command.
 pub fn cmd_list_keys(repo_root: &Path, remote_name: &str, key_store: &Path) -> Result<()> {
     match verify_keyring_against_trust(repo_root, remote_name, key_store) {
         Ok((_repo_id, _fingerprint, keyring)) => {
@@ -53,7 +55,13 @@ fn print_keyring(keyring: &Keyring) {
     } else {
         println!("Keys in keyring:");
         for entry in &keyring.entries {
-            println!("  {}", entry.email);
+            // The binding fingerprint is computed at print time. The
+            // keyring stores only the principal and the public key.
+            println!(
+                "  {} {}",
+                entry.email,
+                fingerprint_for_public_key(&entry.email, &entry.public_key)
+            );
         }
         println!("\nTotal: {} keys", keyring.entries.len());
     }

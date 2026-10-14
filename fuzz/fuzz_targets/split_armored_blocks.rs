@@ -28,8 +28,8 @@ fn check_public(s: &str, path: &Path) {
             );
         }
         // truncation-attack invariant: an Ok here implies no BEGIN marker
-        // was left unterminated (a BEGIN inside a previous block's span is
-        // body, but it still has an END after it somewhere in the store)
+        // was left unterminated. A BEGIN inside a previous block's span is
+        // body, but it still has an END after it somewhere in the store.
         assert_every_begin_terminated(s, PUBLIC_KEY_BEGIN, PUBLIC_KEY_END);
     }
 }

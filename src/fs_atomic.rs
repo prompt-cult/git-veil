@@ -1,21 +1,21 @@
 //! Crash-safe atomic file replacement for all git-veil state writes.
 //!
 //! Every durable state file this tool writes (keyring, trust.json,
-//! tracked.json, the key store, ciphertext `.secret` files,
-//! restored plaintext) goes through [`write_atomic`]. A plain
-//! `fs::write` truncates the target in place, so a crash mid-write
-//! leaves half-written state — for a secrets tool the worst case is a
-//! torn identity store (bricks ALL decryption access, fail-closed)
-//! or a torn plaintext/ciphertext pair (data loss). The write-temp-then-
-//! rename sequence below is atomic on POSIX and Windows same-volume, so
-//! the target is always either the old content or the new content,
-//! never a mix.
+//! tracked.json, the key store, ciphertext `.secret` files, restored
+//! plaintext) goes through [`write_atomic`]. A plain `fs::write`
+//! truncates the target in place, so a crash mid-write leaves
+//! half-written state. For a secrets tool the worst case is a torn
+//! private key store, which bricks all decryption access and fails
+//! closed, or a torn plaintext/ciphertext pair, which loses data. The
+//! write-temp-then-rename sequence below is atomic on POSIX and Windows
+//! same-volume, so the target is always either the old content or the
+//! new content, never a mix.
 //!
-//! The key stores are APPENDS (identities.txt, recipients.txt): their
-//! atomic-append shape is read-existing + `write_atomic` of the whole
-//! accumulated content. The O(n) rewrite per append is the accepted
-//! trade — a torn store of private keys bricks all decryption access,
-//! so a partial write must never be possible.
+//! The key stores are appends (identities.txt, recipients.txt). Their
+//! atomic-append shape is read-existing plus a [`write_atomic`] of the
+//! whole accumulated content. The O(n) rewrite per append is the
+//! accepted trade: a torn store of private keys bricks all decryption
+//! access, so a partial write must never be possible.
 
 use anyhow::{Context, Result};
 use std::fs::{self, File};
@@ -24,23 +24,24 @@ use std::path::Path;
 
 /// Atomically replaces the file at `path` with `bytes`.
 ///
-/// Sequence: write to `<path>.tmp-<pid>` in the SAME directory (same
-/// volume, so the rename can never degrade into a copy), fsync the file,
-/// rename it over the target, then best-effort fsync the parent
-/// directory so the rename itself survives a crash (directory fsync is
-/// not portable — errors there are ignored by design).
+/// The sequence writes to `<path>.tmp-<pid>` in the same directory, so
+/// the rename stays on one volume and can never degrade into a copy. It
+/// fsyncs the file, renames it over the target, then best-effort fsyncs
+/// the parent directory so the rename itself survives a crash. Directory
+/// fsync is not portable, so errors there are ignored by design.
 ///
 /// On any failure the original target is untouched and the temp file is
-/// removed. Note the temp name is per-target (`<name>.tmp-<pid>`), so
-/// two different files never collide even within one process.
+/// removed. The temp name is per-target (`<name>.tmp-<pid>`), so two
+/// different files never collide even within one process.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     write_atomic_impl(path, bytes, None)
 }
 
-/// [`write_atomic`] with an explicit creation mode (Unix only) for files
-/// git-veil creates that hold private key material — `identities.txt`,
-/// the permissions acknowledgment — so they land 0600 regardless of the
-/// process umask. Repo working-tree files keep [`write_atomic`].
+/// [`write_atomic`] with an explicit creation mode (Unix only). It is for
+/// files git-veil creates that hold private key material, such as
+/// `identities.txt` and the permissions acknowledgment, so they land 0600
+/// regardless of the process umask. Repo working-tree files keep
+/// [`write_atomic`].
 #[cfg(unix)]
 pub fn write_atomic_mode(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
     write_atomic_impl(path, bytes, Some(mode))
@@ -77,8 +78,8 @@ fn write_atomic_impl(path: &Path, bytes: &[u8], mode: Option<u32>) -> Result<()>
         drop(tmp);
         fs::rename(&tmp_path, path)
             .with_context(|| format!("Failed to atomically replace {}", path.display()))?;
-        // Best-effort durability of the rename itself; several platforms
-        // (and some filesystems) reject fsync on directories.
+        // Best-effort durability of the rename itself. Several platforms
+        // and some filesystems reject fsync on directories.
         if let Ok(dir) = File::open(parent) {
             let _ = dir.sync_all();
         }

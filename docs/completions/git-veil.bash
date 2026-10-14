@@ -40,6 +40,9 @@ _git__veil() {
             git__veil,export-pin)
                 cmd="git__veil__subcmd__export__subcmd__pin"
                 ;;
+            git__veil,fingerprint)
+                cmd="git__veil__subcmd__fingerprint"
+                ;;
             git__veil,help)
                 cmd="git__veil__subcmd__help"
                 ;;
@@ -118,6 +121,9 @@ _git__veil() {
             git__veil__subcmd__help,export-pin)
                 cmd="git__veil__subcmd__help__subcmd__export__subcmd__pin"
                 ;;
+            git__veil__subcmd__help,fingerprint)
+                cmd="git__veil__subcmd__help__subcmd__fingerprint"
+                ;;
             git__veil__subcmd__help,help)
                 cmd="git__veil__subcmd__help__subcmd__help"
                 ;;
@@ -179,7 +185,7 @@ _git__veil() {
 
     case "${cmd}" in
         git__veil)
-            opts="-h -V --dangerously-skip-permissions-check --help --version init import export removekey trust export-pin tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys trust-permissions error-codes clean completions manpages help"
+            opts="-h -V --dangerously-skip-permissions-check --help --version init import export removekey trust export-pin fingerprint tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys trust-permissions error-codes clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -352,8 +358,22 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        git__subcmd__veil__subcmd__fingerprint)
+            opts="-h --dangerously-skip-permissions-check --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         git__subcmd__veil__subcmd__help)
-            opts="init import export removekey trust export-pin tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys trust-permissions error-codes clean completions manpages help"
+            opts="init import export removekey trust export-pin fingerprint tell removeperson add remove list hide reveal cat unhide changes show-repo-id whoami verify-keyring list-keys trust-permissions error-codes clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -465,6 +485,20 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__help__subcmd__export__subcmd__pin)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        git__subcmd__veil__subcmd__help__subcmd__fingerprint)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

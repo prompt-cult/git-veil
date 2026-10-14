@@ -18,8 +18,9 @@ fuzz_target!(|data: &[u8]| {
         );
     }
 
-    // TrackedFiles::load contract: Ok ⇒ every entry passed validation.
-    // load() reads from a file, so stage the fuzzed JSON in a temp file.
+    // TrackedFiles::load contract: if load returns Ok, every entry passed
+    // validation. load() reads from a file, so stage the fuzzed JSON in a
+    // temp file.
     let temp = std::env::temp_dir().join(format!("git-veil-fuzz-tracked-{}", std::process::id()));
     if std::fs::write(&temp, data).is_ok() {
         if let Ok(tracked) = TrackedFiles::load(&temp) {

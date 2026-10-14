@@ -1,14 +1,18 @@
-//! Key discovery tests: git-veil never generates keys — a missing key
-//! fails with a documented exit code and the create-and-back-up recipe;
-//! selection honours the pinned fingerprint and the first-key default.
+//! Key discovery tests: git-veil never generates keys. A missing key
+//! fails with a documented exit code and the create-and-back-up recipe.
+//! Selection honours the pinned fingerprint and the explicit verifying
+//! key form.
 
 use git_veil::{
-    discover_identity, discover_signing_key, discover_signing_key_explicit, exit_code_of,
-    fingerprint_for_verifying_key, generate_signing_keypair, load_signing_keys, parse_signing_key,
+    discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key, exit_code_of,
+    fingerprint_for_public_key, generate_signing_keypair, load_signing_keys, parse_signing_key,
     ExitCode,
 };
 use std::fs;
 use std::path::PathBuf;
+
+/// The repository id used as the fingerprint label in these tests.
+const TEST_REPO_ID: &str = "fara+owner@github.com";
 
 struct TempDir {
     path: std::path::PathBuf,
@@ -50,7 +54,7 @@ fn write_signing_keys(store: &TempDir, seeds: &[String]) {
 #[test]
 fn test_missing_signing_key_fails_with_code_20_and_recipe() {
     let store = TempDir::new("nosigning");
-    let err = discover_signing_key(&store.path, "0000000000000000").unwrap_err();
+    let err = discover_signing_key(&store.path, TEST_REPO_ID, &"0".repeat(64)).unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(code_of(err), 20);
     assert!(
@@ -88,17 +92,30 @@ fn test_pinned_fingerprint_selects_the_trusted_key() {
         ],
     );
 
-    let pinned = fingerprint_for_verifying_key(&second.verifying_key());
-    let selected = discover_signing_key(&store.path, &pinned).unwrap();
+    let pinned = fingerprint_for_public_key(
+        TEST_REPO_ID,
+        &hex::encode(second.verifying_key().to_bytes()),
+    );
+    let selected = discover_signing_key(&store.path, TEST_REPO_ID, &pinned).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 
-    // A pin no stored key matches: code 20, never a wrong-key signature
-    let err = discover_signing_key(&store.path, &"0".repeat(64)).unwrap_err();
+    // When no stored key matches the pin, the result is code 20, never a
+    // wrong-key signature.
+    let err = discover_signing_key(&store.path, TEST_REPO_ID, &"0".repeat(64)).unwrap_err();
+    assert_eq!(code_of(err), 20);
+
+    // The pin binds the repository id: the same key's fingerprint under a
+    // different label selects nothing.
+    let foreign = fingerprint_for_public_key(
+        "other+owner@github.com",
+        &hex::encode(second.verifying_key().to_bytes()),
+    );
+    let err = discover_signing_key(&store.path, TEST_REPO_ID, &foreign).unwrap_err();
     assert_eq!(code_of(err), 20);
 }
 
 #[test]
-fn test_explicit_fingerprint_selects_the_named_key() {
+fn test_explicit_verifying_key_selects_the_named_key() {
     let store = TempDir::new("explicit-fp");
     let (first, _) = generate_signing_keypair();
     let (second, _) = generate_signing_keypair();
@@ -110,13 +127,13 @@ fn test_explicit_fingerprint_selects_the_named_key() {
         ],
     );
 
-    let wanted = fingerprint_for_verifying_key(&second.verifying_key());
+    let wanted = hex::encode(second.verifying_key().to_bytes());
     let selected = discover_signing_key_explicit(&store.path, &wanted).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 }
 
 #[test]
-fn test_explicit_fingerprint_is_reorder_invariant() {
+fn test_explicit_verifying_key_is_reorder_invariant() {
     let store = TempDir::new("explicit-fp-reorder");
     let (first, _) = generate_signing_keypair();
     let (second, _) = generate_signing_keypair();
@@ -124,7 +141,7 @@ fn test_explicit_fingerprint_is_reorder_invariant() {
     let second_hex = hex::encode(second.to_bytes());
     write_signing_keys(&store, &[first_hex.clone(), second_hex.clone()]);
 
-    let wanted = fingerprint_for_verifying_key(&second.verifying_key());
+    let wanted = hex::encode(second.verifying_key().to_bytes());
     let before = discover_signing_key_explicit(&store.path, &wanted).unwrap();
 
     fs::write(
@@ -137,29 +154,29 @@ fn test_explicit_fingerprint_is_reorder_invariant() {
     assert_eq!(
         before.to_bytes(),
         after.to_bytes(),
-        "reordering signing-keys.txt must not change what a fingerprint selects"
+        "reordering signing-keys.txt must not change what a verifying key selects"
     );
     assert_eq!(after.to_bytes(), second.to_bytes());
 }
 
 #[test]
-fn test_explicit_fingerprint_no_match_refuses_code_20() {
+fn test_explicit_verifying_key_no_match_refuses_code_20() {
     let store = TempDir::new("explicit-fp-miss");
     let (key, _) = generate_signing_keypair();
     write_signing_keys(&store, &[hex::encode(key.to_bytes())]);
 
-    let err = discover_signing_key_explicit(&store.path, "0123456789abcdef").unwrap_err();
+    let err = discover_signing_key_explicit(&store.path, &"0".repeat(64)).unwrap_err();
     assert_eq!(code_of(err), 20);
 }
 
 #[test]
-fn test_explicit_fingerprint_ambiguous_refuses_code_70() {
+fn test_explicit_verifying_key_ambiguous_refuses_code_70() {
     let store = TempDir::new("explicit-fp-dup");
     let (key, _) = generate_signing_keypair();
     let seed_hex = hex::encode(key.to_bytes());
     write_signing_keys(&store, &[seed_hex.clone(), seed_hex]);
 
-    let wanted = fingerprint_for_verifying_key(&key.verifying_key());
+    let wanted = hex::encode(key.verifying_key().to_bytes());
     let err = discover_signing_key_explicit(&store.path, &wanted).unwrap_err();
     assert_eq!(code_of(err), ExitCode::Refused as i32);
 }
@@ -182,16 +199,16 @@ fn test_comments_and_blank_lines_skipped() {
 }
 
 #[test]
-fn test_missing_identity_fails_with_code_21_and_recipe() {
+fn test_missing_private_key_fails_with_code_21_and_recipe() {
     let store = TempDir::new("noidentity");
-    let err = match discover_identity(&store.path, "age1qqnotpresent") {
-        Ok(_) => panic!("identity discovery must fail for an absent identity"),
+    let err = match discover_x25519_private_key(&store.path, "age1qqnotpresent") {
+        Ok(_) => panic!("private key discovery must fail for an absent private key"),
         Err(err) => err,
     };
     let message = format!("{:#}", err);
-    assert_eq!(code_of(err), ExitCode::NoAgeIdentity as i32);
+    assert_eq!(code_of(err), ExitCode::NoX25519PrivateKey as i32);
     assert!(
-        message.contains("Create your own age identity and back it up"),
+        message.contains("Create your own X25519 private key (age identity) and back it up"),
         "guidance printed: {message}"
     );
     assert!(
@@ -205,7 +222,7 @@ fn test_missing_identity_fails_with_code_21_and_recipe() {
 }
 
 #[test]
-fn test_corrupt_identity_store_line_refused_with_code_62_not_21() {
+fn test_corrupt_private_key_store_line_refused_with_code_62_not_21() {
     let store = TempDir::new("corruptidentities");
     fs::write(
         store.join("identities.txt"),
@@ -213,10 +230,11 @@ fn test_corrupt_identity_store_line_refused_with_code_62_not_21() {
     )
     .unwrap();
 
-    // A corrupt store is NOT reported as a missing identity (21 + recipe):
-    // it is a parse refusal (62) naming the corrupt line to delete.
-    let err = match discover_identity(&store.path, "age1qqnotpresent") {
-        Ok(_) => panic!("a corrupt identity line must fail discovery"),
+    // A corrupt store is not reported as a missing private key (21 plus
+    // recipe). It is a parse refusal (62) naming the corrupt line to
+    // delete.
+    let err = match discover_x25519_private_key(&store.path, "age1qqnotpresent") {
+        Ok(_) => panic!("a corrupt private key line must fail discovery"),
         Err(err) => err,
     };
     let message = format!("{:#}", err);
@@ -236,9 +254,9 @@ fn test_parse_signing_key_roundtrip() {
     let (key, verifying_hex) = generate_signing_keypair();
     let parsed = parse_signing_key(&hex::encode(key.to_bytes())).unwrap();
     assert_eq!(
-        fingerprint_for_verifying_key(&parsed.verifying_key()),
-        fingerprint_for_verifying_key(&key.verifying_key()),
-        "the parsed seed has the same fingerprint as the original key"
+        parsed.verifying_key().to_bytes(),
+        key.verifying_key().to_bytes(),
+        "the parsed seed derives the same verifying key as the original key"
     );
     assert_eq!(
         hex::encode(parsed.verifying_key().to_bytes()),

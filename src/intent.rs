@@ -1,11 +1,12 @@
 //! Machine-local encryption-intent log.
 //!
 //! `add` records each tracked path here so `hide` can refuse "nominated"
-//! paths — committed to tracked.json by some other repo writer — that the
-//! user on THIS machine never added. See "Encryption intent" in
-//! docs/design.md. The log lives in the key store (outside the repository,
-//! permission-checked) because anything committed would be attacker-writable
-//! and the refusal void; one repo-relative path per line, no JSON, no header.
+//! paths, committed to tracked.json by some other repo writer, that the
+//! user on this machine never added. See "Encryption intent" in
+//! docs/design.md. The log lives in the key store, outside the repository
+//! and permission-checked, because anything committed would be
+//! attacker-writable and the refusal void. One repo-relative path per
+//! line, no JSON, no header.
 
 use anyhow::{Context, Result};
 use std::fs;
@@ -22,8 +23,8 @@ impl LocalAdds {
             .join(TrustPinStore::sanitize_repo_id(repo_id))
     }
 
-    /// Records intent for one repo-relative path (append; dedup is
-    /// unnecessary — membership is what hide asks).
+    /// Records intent for one repo-relative path. Append only. Dedup is
+    /// unnecessary because membership is what hide asks.
     pub fn record(key_store: &Path, repo_id: &str, relative: &Path) -> Result<()> {
         let path = Self::path(key_store, repo_id);
         fs::create_dir_all(path.parent().expect("intent path always has a parent"))?;

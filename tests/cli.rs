@@ -2,8 +2,8 @@
 //!
 //! These tests exercise the full command pipeline (init -> trust -> tell -> add ->
 //! hide -> reveal/cat/unhide/changes -> removeperson -> verify-keyring -> clean)
-//! using temporary git repositories and in-memory age identities + Ed25519
-//! signing keys. No PGP, no external key servers, no passphrases.
+//! using temporary git repositories and in-memory X25519 private keys and
+//! Ed25519 signing keys. No PGP, no external key servers, no passphrases.
 
 use age::secrecy::ExposeSecret;
 use clap::Parser as _;
@@ -11,9 +11,8 @@ use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
     cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
-    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, fingerprint_for_recipient,
-    generate_identity, generate_signing_keypair, recipient_from_identity, Keyring, TrackedFiles,
-    TrustStore,
+    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, generate_signing_keypair,
+    generate_x25519_private_key, x25519_public_key_encoding, Keyring, TrackedFiles, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -83,7 +82,7 @@ fn init_git_repo(dir: &Path) {
 /// The repo_id that `derive_repo_id` will produce for the test remote.
 const TEST_REPO_ID: &str = "fara+owner@github.com";
 
-/// A complete test fixture: git repo, key store, owner identity, owner signing key.
+/// A complete test fixture: git repo, key store, owner X25519 private key, owner signing key.
 struct TestRepo {
     repo: TempDir,
     key_store: TempDir,
@@ -102,8 +101,8 @@ impl TestRepo {
 
         init_git_repo(&repo.path);
 
-        let owner_identity = generate_identity();
-        let owner_recipient = recipient_from_identity(&owner_identity);
+        let owner_identity = generate_x25519_private_key();
+        let owner_recipient = x25519_public_key_encoding(&owner_identity);
 
         let (owner_signing_key, owner_verifying_key_hex) = generate_signing_keypair();
 
@@ -115,8 +114,8 @@ impl TestRepo {
         .expect("write identity file");
 
         // The committed owner.verifying: verifying key hex on line 1, the
-        // owner's age recipient on line 2. trust proves possession of the
-        // matching seed and pins the key.
+        // owner's X25519 public key encoding on line 2. trust proves
+        // possession of the matching seed and pins the key.
         fs::write(
             repo.join("owner.verifying"),
             format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
@@ -146,11 +145,11 @@ impl TestRepo {
         }
     }
 
-    /// Generates a collaborator identity, writes their recipient to a file,
-    /// and runs tell to add them to the keyring.
+    /// Generates a collaborator key, writes the X25519 public key encoding
+    /// to a file, and runs tell to add them to the keyring.
     fn add_collaborator(&self, email: &str) -> (age::x25519::Identity, String) {
-        let collab_identity = generate_identity();
-        let collab_recipient = recipient_from_identity(&collab_identity);
+        let collab_identity = generate_x25519_private_key();
+        let collab_recipient = x25519_public_key_encoding(&collab_identity);
 
         let key_file = self.repo.join(&format!("{}.recipient", email));
         fs::write(&key_file, &collab_recipient).expect("write collab recipient file");
@@ -168,7 +167,8 @@ impl TestRepo {
         (collab_identity, collab_recipient)
     }
 
-    /// Imports a collaborator identity into the key store (for reveal).
+    /// Imports a collaborator's X25519 private key into the key store (for
+    /// reveal).
     fn import_identity(&self, identity: &age::x25519::Identity, filename: &str) {
         let path = self.repo.join(filename);
         fs::write(&path, format!("{}\n", identity.to_string().expose_secret()))
@@ -254,7 +254,7 @@ fn test_tell_adds_collaborator() {
     let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
     assert_eq!(keyring.entries.len(), 1);
     assert_eq!(keyring.entries[0].email, "alice@example.com");
-    assert_eq!(keyring.entries[0].recipient, recipient);
+    assert_eq!(keyring.entries[0].public_key, recipient);
     assert!(keyring.signature.is_some(), "keyring should be signed");
 }
 
@@ -367,7 +367,8 @@ fn test_hide_reveal_roundtrip() {
 
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
-    // git-secret does NOT delete plaintext by default -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // plaintext by default.
     assert!(
         fixture.repo.join(".env").exists(),
         "plaintext should still exist"
@@ -387,7 +388,8 @@ fn test_hide_reveal_roundtrip() {
 
     let revealed = fs::read(fixture.repo.join(".env")).unwrap();
     assert_eq!(revealed, plaintext);
-    // git-secret does NOT delete ciphertext on reveal -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // ciphertext on reveal.
     assert!(
         fixture.repo.join(".env.secret").exists(),
         "ciphertext should still exist"
@@ -430,8 +432,8 @@ fn test_hide_no_keys_fails() {
     let key_store = TempDir::new("hide-no-keys-keys");
     init_git_repo(&repo.path);
 
-    let identity = generate_identity();
-    let recipient = recipient_from_identity(&identity);
+    let identity = generate_x25519_private_key();
+    let recipient = x25519_public_key_encoding(&identity);
     let (signing_key, verifying_hex) = generate_signing_keypair();
 
     fs::write(
@@ -493,7 +495,7 @@ fn test_cat_decrypts_to_stdout() {
     .expect("cat");
 
     assert_eq!(result, plaintext);
-    // cat should not touch disk -- both plaintext and ciphertext exist
+    // cat should not touch disk. Both plaintext and ciphertext exist.
     assert!(
         fixture.repo.join(".env").exists(),
         "cat should not delete plaintext"
@@ -550,7 +552,8 @@ fn test_unhide_single_file() {
     )
     .expect("unhide");
 
-    // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
+    // unhide restores the plaintext and does not delete the ciphertext
+    // (matching git-secret).
     assert!(fixture.repo.join(".env").exists());
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -684,7 +687,7 @@ fn test_removeperson_re_signs_keyring() {
 }
 
 // ---------------------------------------------------------------------------
-// --signing-key parse shape: fingerprint only (issues #29, #30)
+// --signing-key parse shape: full verifying key only
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -702,22 +705,9 @@ fn test_tell_signing_key_index_form_is_a_parse_error() {
 }
 
 #[test]
-fn test_tell_signing_key_seed_form_is_a_parse_error() {
+fn test_tell_signing_key_fingerprint_form_is_a_parse_error() {
+    // The 16-hex fingerprint form is not accepted. It must not even parse.
     let err = Cli::try_parse_from([
-        "git-veil",
-        "tell",
-        "alice@example.com",
-        "alice.pub",
-        "--signing-key",
-        &"a".repeat(64),
-    ])
-    .unwrap_err();
-    assert!(err.use_stderr(), "the full-key form must be rejected");
-}
-
-#[test]
-fn test_tell_signing_key_fingerprint_form_parses_normalized() {
-    let cli = Cli::try_parse_from([
         "git-veil",
         "tell",
         "alice@example.com",
@@ -725,10 +715,24 @@ fn test_tell_signing_key_fingerprint_form_parses_normalized() {
         "--signing-key",
         "ABCDEF0123456789",
     ])
-    .expect("the fingerprint form parses");
+    .unwrap_err();
+    assert!(err.use_stderr(), "the fingerprint form must be rejected");
+}
+
+#[test]
+fn test_tell_signing_key_verifying_key_form_parses_normalized() {
+    let cli = Cli::try_parse_from([
+        "git-veil",
+        "tell",
+        "alice@example.com",
+        "alice.pub",
+        "--signing-key",
+        &"A".repeat(64),
+    ])
+    .expect("the full verifying key form parses");
     match cli.command {
         Commands::Tell { signing_key, .. } => {
-            assert_eq!(signing_key.as_deref(), Some("abcdef0123456789"));
+            assert_eq!(signing_key.as_deref(), Some("a".repeat(64).as_str()));
         }
         _ => panic!("expected the Tell subcommand"),
     }
@@ -748,31 +752,31 @@ fn test_removeperson_signing_key_index_form_is_a_parse_error() {
 }
 
 #[test]
-fn test_removeperson_signing_key_seed_form_is_a_parse_error() {
+fn test_removeperson_signing_key_fingerprint_form_is_a_parse_error() {
     let err = Cli::try_parse_from([
-        "git-veil",
-        "removeperson",
-        "alice@example.com",
-        "--signing-key",
-        &"b".repeat(64),
-    ])
-    .unwrap_err();
-    assert!(err.use_stderr(), "the full-key form must be rejected");
-}
-
-#[test]
-fn test_removeperson_signing_key_fingerprint_form_parses() {
-    let cli = Cli::try_parse_from([
         "git-veil",
         "removeperson",
         "alice@example.com",
         "--signing-key",
         "0123456789abcdef",
     ])
-    .expect("the fingerprint form parses");
+    .unwrap_err();
+    assert!(err.use_stderr(), "the fingerprint form must be rejected");
+}
+
+#[test]
+fn test_removeperson_signing_key_verifying_key_form_parses() {
+    let cli = Cli::try_parse_from([
+        "git-veil",
+        "removeperson",
+        "alice@example.com",
+        "--signing-key",
+        &"b".repeat(64),
+    ])
+    .expect("the full verifying key form parses");
     match cli.command {
         Commands::RemovePerson { signing_key, .. } => {
-            assert_eq!(signing_key.as_deref(), Some("0123456789abcdef"));
+            assert_eq!(signing_key.as_deref(), Some("b".repeat(64).as_str()));
         }
         _ => panic!("expected the RemovePerson subcommand"),
     }
@@ -814,6 +818,33 @@ fn test_whoami() {
     cmd_whoami(&fixture.repo.path, None, &fixture.key_store.path).expect("whoami");
 }
 
+/// The principal label is committed in the public keyring. It is a public
+/// repository fact, so whoami prints it. This test drives the built
+/// binary because the label is asserted on stdout.
+#[test]
+fn test_whoami_prints_the_principal_label() {
+    let key_store = TempDir::new("whoami-principal-ks");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .arg("whoami")
+        .arg("--email")
+        .arg("alice@example.com")
+        .arg("--key-store")
+        .arg(&key_store.path)
+        .env("GIT_VEIL_SKIP_PERMISSIONS", "1")
+        .output()
+        .expect("run git-veil whoami");
+    assert!(
+        output.status.success(),
+        "whoami failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert!(
+        stdout.contains("alice@example.com"),
+        "whoami prints the principal label: {stdout}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // export
 // ---------------------------------------------------------------------------
@@ -824,25 +855,30 @@ fn test_export_by_recipient() {
 
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
 
-    // Import the collaborator's recipient to the key store so export can find it
-    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+    // Import the collaborator's public key into the key store so export can
+    // find it
+    git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
     let exported = export_public_key(&fixture.key_store.path, &recipient).unwrap();
     assert_eq!(exported.trim(), recipient);
 }
 
 #[test]
-fn test_export_by_fingerprint() {
+fn test_export_by_fingerprint_is_not_an_identifier() {
+    // Export selects by public key string only. A 64-hex binding
+    // fingerprint is not an export identifier.
     let fixture = TestRepo::new("export-fp");
 
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
-    let fingerprint = fingerprint_for_recipient(&recipient);
+    let fingerprint = git_veil::fingerprint_for_public_key("alice@example.com", &recipient);
 
-    // Import the collaborator's recipient to the key store so export can find it
-    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+    git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
-    let exported = export_public_key(&fixture.key_store.path, &fingerprint).unwrap();
-    assert_eq!(exported.trim(), recipient);
+    let result = export_public_key(&fixture.key_store.path, &fingerprint);
+    assert!(
+        result.is_err(),
+        "a fingerprint must not select a key for export"
+    );
 }
 
 #[test]
@@ -858,21 +894,44 @@ fn test_export_not_found_fails() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_removekey_by_fingerprint() {
+fn test_removekey_by_recipient() {
     let fixture = TestRepo::new("removekey");
 
     let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&collab_identity, "alice.age");
 
-    let fingerprint = fingerprint_for_recipient(&recipient);
+    cmd_removekey(&fixture.key_store.path, &recipient, false).expect("removekey");
 
-    cmd_removekey(&fixture.key_store.path, &fingerprint, false).expect("removekey");
-
-    // The collaborator's identity should be gone; the owner's identity remains
-    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
-    let collab_recipient = recipient_from_identity(&collab_identity);
+    // The collaborator's private key should be gone. The owner's private
+    // key remains.
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
+    let collab_recipient = x25519_public_key_encoding(&collab_identity);
     let found = identities.iter().any(|(_, r)| *r == collab_recipient);
     assert!(!found, "collaborator identity should be removed");
+}
+
+#[test]
+fn test_removekey_by_fingerprint_is_not_an_identifier() {
+    // Removekey selects by public key string only. A 64-hex binding
+    // fingerprint removes nothing.
+    let fixture = TestRepo::new("removekey-fp");
+
+    let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+    let fingerprint = git_veil::fingerprint_for_public_key("alice@example.com", &recipient);
+
+    let result = cmd_removekey(&fixture.key_store.path, &fingerprint, false);
+    assert!(
+        result.is_err(),
+        "a fingerprint must not select a key for removekey"
+    );
+
+    // Nothing was removed.
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
+    let collab_recipient = x25519_public_key_encoding(&collab_identity);
+    assert!(identities.iter().any(|(_, r)| *r == collab_recipient));
 }
 
 #[test]
@@ -881,16 +940,16 @@ fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
 
     let (_collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&_collab_identity, "alice.age");
-    let fingerprint = fingerprint_for_recipient(&recipient);
 
-    // Corrupt the store: a truncated identity line the tool cannot parse
+    // Corrupt the store: a truncated identities.txt line the tool cannot
+    // parse
     let identities_path = fixture.key_store.path.join("identities.txt");
     let corrupt =
         fs::read_to_string(&identities_path).unwrap() + "AGE-SECRET-KEY-1TRUNCATEDGARBAGE\n";
     fs::write(&identities_path, &corrupt).unwrap();
 
     // Removing any key must refuse, exit 62, and name the corrupt line
-    let err = cmd_removekey(&fixture.key_store.path, &fingerprint, false)
+    let err = cmd_removekey(&fixture.key_store.path, &recipient, false)
         .expect_err("removekey must refuse a corrupt store");
     let message = format!("{:#}", err);
     assert_eq!(
@@ -913,16 +972,15 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
     let fixture = TestRepo::new("removekey-corrupt-recipients");
 
     let (_identity, recipient) = fixture.add_collaborator("alice@example.com");
-    let fingerprint = fingerprint_for_recipient(&recipient);
-    git_veil::import_recipient_to_store(&fixture.key_store.path, &recipient).unwrap();
+    git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
-    // Corrupt the recipients store with a line that is not a parseable
-    // age1... recipient
+    // Corrupt recipients.txt with a line that is not a parseable
+    // age1... public key encoding
     let recipients_path = fixture.key_store.path.join("recipients.txt");
     let corrupt = fs::read_to_string(&recipients_path).unwrap() + "not-a-recipient\n";
     fs::write(&recipients_path, &corrupt).unwrap();
 
-    let err = cmd_removekey(&fixture.key_store.path, &fingerprint, false)
+    let err = cmd_removekey(&fixture.key_store.path, &recipient, false)
         .expect_err("removekey must refuse a corrupt recipients store");
     let message = format!("{:#}", err);
     assert_eq!(
@@ -941,25 +999,23 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
 }
 
 #[test]
-fn test_removekey_only_identity_refuses_without_yes() {
+fn test_removekey_only_private_key_refuses_without_yes() {
     let fixture = TestRepo::new("removekey-only");
 
-    let fingerprint = fingerprint_for_recipient(&fixture.owner_recipient);
-
-    let result = cmd_removekey(&fixture.key_store.path, &fingerprint, false);
-    assert!(result.is_err(), "should refuse to remove only identity");
-    assert!(result.unwrap_err().to_string().contains("only identity"));
+    let result = cmd_removekey(&fixture.key_store.path, &fixture.owner_recipient, false);
+    assert!(result.is_err(), "should refuse to remove only private key");
+    assert!(result.unwrap_err().to_string().contains("only private key"));
 }
 
 #[test]
-fn test_removekey_only_identity_with_yes() {
+fn test_removekey_only_private_key_with_yes() {
     let fixture = TestRepo::new("removekey-only-yes");
 
-    let fingerprint = fingerprint_for_recipient(&fixture.owner_recipient);
+    cmd_removekey(&fixture.key_store.path, &fixture.owner_recipient, true)
+        .expect("removekey with --yes");
 
-    cmd_removekey(&fixture.key_store.path, &fingerprint, true).expect("removekey with --yes");
-
-    let identities = git_veil::load_identities_from_store(&fixture.key_store.path).unwrap();
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
     assert!(identities.is_empty());
 }
 
@@ -999,7 +1055,7 @@ fn test_clean_empty_repo_no_yes_ok() {
 }
 
 // ---------------------------------------------------------------------------
-// Multi-recipient encryption
+// Encryption to multiple keys
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1081,7 +1137,8 @@ fn test_full_lifecycle() {
 
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
-    // git-secret does NOT delete plaintext by default -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // plaintext by default.
     assert!(fixture.repo.join(".env").exists());
     assert!(fixture.repo.join(".env.secret").exists());
     assert!(fixture.repo.join("config/secrets.yml").exists());
@@ -1121,16 +1178,10 @@ fn test_full_lifecycle() {
 }
 
 // ---------------------------------------------------------------------------
-// git-secret behavioural alignment tests
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Plaintext lifecycle tests
 //
-// DIVERGENCE from git-secret (deliberate, issue #13): hide now DELETES the
-// plaintext by default; --keep-plaintext preserves the git-secret-aligned
-// leave-in-place behaviour. The old "both copies exist" pin lives on as the
-// keep-plaintext test; the delete path is the new default test.
+// Hide deletes the plaintext by default. --keep-plaintext leaves both
+// copies in place, matching git-secret.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1187,8 +1238,9 @@ fn test_hide_skips_missing_plaintext_instead_of_erroring() {
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
     assert!(!fixture.repo.join(".env").exists());
 
-    // Steady state of the delete-by-default lifecycle: plaintext absent,
-    // ciphertext committed — re-hiding is a skip-and-report, not an error.
+    // Steady state of the delete-by-default lifecycle. The plaintext is
+    // absent and the ciphertext is committed, so re-hiding is a
+    // skip-and-report, not an error.
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
         .expect("re-hide with absent plaintext must succeed (skip-and-report)");
     assert!(
@@ -1262,7 +1314,7 @@ fn test_add_auto_gitignores_file() {
 
     fs::write(fixture.repo.join("newsecret.txt"), b"secret\n").unwrap();
 
-    // .gitignore does NOT contain newsecret.txt yet
+    // .gitignore does not contain newsecret.txt yet
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
     assert!(!gitignore.contains("newsecret.txt"));
 
@@ -1274,7 +1326,7 @@ fn test_add_auto_gitignores_file() {
     )
     .expect("add");
 
-    // git-secret auto-adds the file to .gitignore -- git-veil must match
+    // git-secret auto-adds the file to .gitignore. git-veil must match.
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
     assert!(
         gitignore.contains("newsecret.txt"),

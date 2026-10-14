@@ -3,16 +3,18 @@ use std::path::Path;
 
 use crate::get_git_config_email;
 
-/// Shows the current user's identity.
+/// Shows the current user's principal.
 pub fn cmd_whoami(repo_root: &Path, email_override: Option<&str>, _key_store: &Path) -> Result<()> {
-    let _email = match email_override {
+    let email = match email_override {
         Some(e) => e.to_string(),
         None => get_git_config_email(repo_root).context(
             "git config user.email is not set. Set the git email or pass the email flag",
         )?,
     };
 
-    println!("Your identity is set");
-    println!("Key store is configured");
+    // The principal label is committed in the public keyring. It is a
+    // public repository fact, not secret material, so naming it is the
+    // whole point of asking.
+    println!("Your principal: {}", email);
     Ok(())
 }

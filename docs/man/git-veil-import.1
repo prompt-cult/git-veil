@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-veil-import 1  "git-veil-import " 
 .SH NAME
-git\-veil\-import \- Import your age identity (private key) into the git\-veil key store
+git\-veil\-import \- Import your X25519 private key into the git\-veil key store
 .SH SYNOPSIS
 \fBgit\-veil import\fR [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
-Import your age identity (private key) into the git\-veil key store
+Import your X25519 private key into the git\-veil key store
 .SH OPTIONS
 .TP
 \fB\-\-key\-store\fR \fI<KEY_STORE>\fR
@@ -18,17 +18,23 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 <\fIFILES\fR>
 File(s) containing AGE\-SECRET\-KEY\-1... lines (age\-keygen output works as\-is)
 .SH EXTRA
-Imports age identity strings (AGE\-SECRET\-KEY\-1... lines) into your
-per\-machine key store ($GIT_VEIL_HOME or $HOME/.git\-veil). This is where
-reveal/cat/unhide/changes find the identity matching your email. The key
-store is local to this machine and is never committed; each collaborator
-imports their own identity. The store is written mode 0600 regardless of
-umask. git\-veil never generates keys — create yours with age\-keygen (or
-rage\-keygen) and back the AGE\-SECRET\-KEY\-1... line up; without it,
+Imports X25519 private keys ("age" identities \- the AGE\-SECRET\-KEY\-1...
+lines produced by age\-keygen) into your per\-machine key store
+($GIT_VEIL_HOME or $HOME/.git\-veil). This is where reveal/cat/unhide/
+changes find the private key matching your keyring entry. The key store
+is local to this machine and is never committed; each collaborator
+imports their own private key. The store is written mode 0600 regardless
+of umask. git\-veil never generates keys \- create yours with age\-keygen
+(or rage\-keygen) and back the AGE\-SECRET\-KEY\-1... line up; without it,
 ciphertexts encrypted to you are unrecoverable.
 
-Identities whose recipient is already present in the key store are not
-duplicated.
+Here "age" refers to the open source age encryption tooling, which may
+be installed separately to securely create and maintain cryptographic
+keys outside of the git repo; the git\-veil software uses the Rust "rage"
+library to work with the keys.
+
+A private key whose X25519 public key is already present in the key store
+is not duplicated.
 
 EXAMPLES
   $ age\-keygen \-o my\-age\-identity.txt      # create + print the recipe

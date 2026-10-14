@@ -9,8 +9,9 @@ use git_veil::{
 fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };
     if let Ok(key) = parse_armored_public_key(s) {
-        // the trust gate must never panic; expiry/revocation logic rejects,
-        // never "warn and proceed", so we only care that it returns
+        // the trust gate must never panic. Expiry and revocation logic
+        // rejects rather than warns and proceeds, so only the return value
+        // matters here
         let _ = validate_public_key_for_use(&key, KeyUse::Certify);
         let _ = validate_public_key_for_use(&key, KeyUse::Encrypt);
         let _ = extract_key_identities(&key);

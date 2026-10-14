@@ -4,21 +4,34 @@ use std::path::Path;
 
 use crate::age_crypto::for_each_store_line;
 use crate::exit_codes::{coded, ExitCode};
+use crate::fingerprint::{fingerprint_for_public_key, is_legacy_pin_shape};
 use crate::{
     derive_repo_id, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
-    fingerprint_for_verifying_key, get_remote_push_url, keyring_content_digest,
-    parse_verifying_key, verify_keyring_signature, Keyring, TrustPinStore, TrustStore,
+    get_remote_push_url, keyring_content_digest, parse_verifying_key, verify_keyring_signature,
+    Keyring, TrustPinStore, TrustStore,
 };
 
-/// Loads the Ed25519 verifying key matching `fingerprint` from the key store.
+/// The refusal for a retired 16 hex character fingerprint, wherever it is
+/// found. Plain ASCII. It names the derivation change and no command.
+/// The remedy is the trust documentation.
+fn legacy_fingerprint_error() -> anyhow::Error {
+    coded(
+        ExitCode::Refused,
+        "a trust pin or record in the retired 16 hex character fingerprint format was found. The fingerprint derivation changed to SHA-256 over the label, a colon, and the public key encoding, printed as 64 lowercase hex characters. Re-establish the pin as described in the trust documentation.".to_string(),
+    )
+}
+
+/// Loads the Ed25519 verifying key whose owner key fingerprint, the
+/// single derivation with the repository id as the label, equals
+/// `fingerprint`, from the key store.
 ///
-/// Like every key store read, a non-comment line that does not parse is a
-/// hard refusal (code 62) naming the corrupt line — never a silent skip
-/// that would misreport the pin as missing.
+/// Like every key store read, a non-comment line that does not parse
+/// is a hard refusal (code 62) naming the corrupt line, never a
+/// silent skip that would misreport the pin as missing.
 fn load_verifying_key_by_fingerprint(
     key_store: &Path,
     fingerprint: &str,
-    repo_id_for_hint: &str,
+    repo_id: &str,
 ) -> Result<ed25519_dalek::VerifyingKey> {
     let verifying_keys_path = key_store.join("verifying-keys.txt");
     let content =
@@ -28,13 +41,12 @@ fn load_verifying_key_by_fingerprint(
     let mut found = None;
     for_each_store_line(&verifying_keys_path, &content, |_, line| {
         let key = parse_verifying_key(line)?;
-        if fingerprint_for_verifying_key(&key) == wanted {
+        if fingerprint_for_public_key(repo_id, &hex::encode(key.to_bytes())) == wanted {
             found = Some(key);
         }
         Ok(())
     })?;
 
-    let _ = repo_id_for_hint;
     found.ok_or_else(|| {
         coded(
             ExitCode::NoTrustPin,
@@ -46,7 +58,7 @@ fn load_verifying_key_by_fingerprint(
 /// Verifies the keyring signature against the trusted signing key, without printing.
 ///
 /// A keyring with no signature is only acceptable when it has zero entries
-/// (the fresh-init state); a keyring containing entries must carry a valid
+/// (the fresh-init state). A keyring containing entries must carry a valid
 /// signature made by the trusted key.
 ///
 /// Returns the repository ID, the trusted signer fingerprint, and the parsed keyring.
@@ -62,7 +74,7 @@ pub fn verify_keyring_against_trust(
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     // Covers both the no-trust.json case (empty store) and the
-    // missing-repo_id case (store without this repo's entry): both name the
+    // missing-repo_id case (store without this repo's entry). Both name the
     // repo_id and the remote that produced it, plus the remedy.
     let trusted_fingerprint = match trust_store.get_trusted_fingerprint(&repo_id) {
         Some(fingerprint) => fingerprint,
@@ -73,33 +85,61 @@ pub fn verify_keyring_against_trust(
                     "no trust record for this repository. See the trust documentation.".to_string(),
                 ));
             }
+            let recorded_ids: Vec<&str> = trust_store
+                .trusted_keys
+                .keys()
+                .map(String::as_str)
+                .collect();
             return Err(coded(
                 ExitCode::NoTrustRecord,
-                "the committed trust record names a different repository identity than this repository derives. This looks like a rename or a remote change based on the existing trust record.".to_string(),
+                format!(
+                    "the committed trust record names {} but this repository derives {} from remote {}. This looks like a rename or a remote change based on the existing trust record.",
+                    recorded_ids.join(", "),
+                    repo_id,
+                    remote_name
+                ),
             ));
         }
     };
 
-    // trust.json is committed to the repo and therefore attacker-writable;
-    // it is never a sufficient anchor on its own. Require the per-machine
-    // pin written by cmd_trust, and fail closed on any disagreement.
-    match TrustPinStore::read_pin(key_store, &repo_id)? {
-        Some(pinned) if pinned.eq_ignore_ascii_case(trusted_fingerprint) => {}
-        Some(_) => {
-            return Err(coded(
-                ExitCode::TrustMismatch,
-                "the pinned repository identity changed on this machine. The committed trust record and this machine pin disagree. See the trust documentation.".to_string(),
-            ))
+    // trust.json is committed to the repo and therefore
+    // attacker-writable. It is never a sufficient anchor on its own.
+    // Require the per-machine pin written by cmd_trust, and fail closed
+    // on any disagreement.
+    //
+    // A 16 hex character value is a retired fingerprint, hostile
+    // wherever it is found. The pin is checked before the committed
+    // record so a missing pin stays a missing pin and a legacy pin is
+    // never silently compared away. Nothing is rewritten. The recovery is
+    // re-establishing the pin.
+    let pinned = match TrustPinStore::read_pin(key_store, &repo_id)? {
+        Some(pinned) => {
+            if is_legacy_pin_shape(&pinned) {
+                return Err(legacy_fingerprint_error());
+            }
+            pinned
         }
         None => {
             return Err(coded(
                 ExitCode::NoTrustPin,
-                "no trust pin exists on this machine. See the trust documentation.".to_string(),
+                format!(
+                    "no trust pin exists on this machine for repository identity {repo_id} \
+                     derived from remote {remote_name}. See the trust documentation."
+                ),
             ))
         }
+    };
+    if is_legacy_pin_shape(trusted_fingerprint) {
+        return Err(legacy_fingerprint_error());
+    }
+    if !pinned.eq_ignore_ascii_case(trusted_fingerprint) {
+        return Err(coded(
+            ExitCode::TrustMismatch,
+            "the pinned repository identity changed on this machine. The committed trust record and this machine pin disagree. See the trust documentation.".to_string(),
+        ));
     }
 
-    // Load signing (verifying) public key
+    // Load the pinned Ed25519 verifying key
     let verifying_key =
         load_verifying_key_by_fingerprint(key_store, trusted_fingerprint, &repo_id)?;
 
@@ -134,26 +174,26 @@ pub fn verify_keyring_against_trust(
         ));
     }
 
-    // Freshness check (see "Keyring format and freshness" in docs/design.md):
-    // a valid signature proves the owner signed this keyring at some point,
-    // not that it is current. A `git revert` of a removeperson commit would
-    // otherwise silently return a revoked collaborator to the recipient set.
-    // The per-machine baseline (highest version ever accepted here, stored
-    // outside the repo beside the pin) turns any version regression —
-    // including a versionless pre-freshness keyring, which counts as 0 —
-    // into a fail-closed refusal.
+    // Freshness check (see "Keyring format and freshness" in
+    // docs/design.md). A valid signature proves the owner signed this
+    // keyring at some point, not that it is current. A `git revert` of a
+    // removeperson commit would otherwise silently return a revoked
+    // collaborator to the keyring. The per-machine baseline, the highest
+    // version ever accepted here and stored outside the repo beside the
+    // pin, turns any version regression into a fail-closed refusal. A
+    // versionless keyring counts as 0.
     //
-    // An UNSIGNED zero-entry keyring (the fresh-init state) is unauthenticated
-    // repo content: it is accepted as version 0 but must NEVER move the
-    // baseline — otherwise an attacker's junk ring (e.g. version:u64::MAX,
-    // issue #22) poisons the baseline and bricks every machine past a revert
-    // of the attacker's commit.
+    // An unsigned zero-entry keyring (the fresh-init state) is
+    // unauthenticated repo content. It is accepted as version 0 but must
+    // never move the baseline. Otherwise an attacker's junk ring, for
+    // example version:u64::MAX, poisons the baseline and bricks every
+    // machine past a revert of the attacker's commit.
     //
-    // Fork detection (issue #20): the baseline also records the SHA-256
-    // digest of the accepted signed content. An equal-version keyring with
-    // DIFFERENT content (two machines curating without pulling, or an
-    // attacker substituting a same-version ring) is refused as the same
-    // trust violation class as a rollback — re-trust is the recovery.
+    // Fork detection. The baseline also records the SHA-256 digest of the
+    // accepted signed content. An equal-version keyring with different
+    // content, two machines curating without pulling or an attacker
+    // substituting a same-version ring, is refused as the same trust
+    // violation class as a rollback. Re-trust is the recovery.
     let unsigned_empty = keyring.entries.is_empty() && keyring.signature.is_none();
     let observed = if unsigned_empty {
         0
@@ -187,7 +227,7 @@ pub fn verify_keyring_against_trust(
     }
     if let Some(cd) = current_digest {
         // Only an owner-signed ring may advance the baseline. A versionless
-        // ring records 0 (the pre-freshness migration state).
+        // ring records 0.
         if baseline_version != Some(observed) || baseline_digest.as_deref() != Some(cd.as_str()) {
             TrustPinStore::write_ring_baseline(key_store, &repo_id, observed, &cd)?;
         }

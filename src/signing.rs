@@ -8,7 +8,7 @@ use crate::keyring::END_MARKER;
 /// Generates a new Ed25519 signing keypair.
 ///
 /// Returns (signing_key, verifying_key_string) where verifying_key_string is
-/// a hex-encoded Ed25519 public key.
+/// a hex-encoded Ed25519 verifying key.
 pub fn generate_signing_keypair() -> (SigningKey, String) {
     let mut rng = thread_rng();
     let signing_key = SigningKey::generate(&mut rng);
@@ -24,9 +24,9 @@ pub fn sign_keyring_content(keyring_content: &str, signing_key: &SigningKey) -> 
 
 /// SHA-256 hex digest of the canonical signed keyring content. Recorded in
 /// the per-machine baseline beside the freshness counter so that an
-/// equal-version keyring with DIFFERENT content (a curation fork — two
-/// machines both curating without pulling — issue #20) is refused rather
-/// than silently replacing the accepted collaborator set.
+/// equal-version keyring with different content, a curation fork from two
+/// machines both curating without pulling, is refused rather than
+/// silently replacing the accepted collaborator set.
 pub fn keyring_content_digest(keyring_content: &str) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(Sha256::digest(keyring_content.as_bytes()))
@@ -70,30 +70,6 @@ pub fn parse_signing_key(hex_str: &str) -> Result<SigningKey> {
     Ok(SigningKey::from_bytes(&arr))
 }
 
-/// Derives a fingerprint from an Ed25519 verifying key.
-pub fn fingerprint_for_verifying_key(verifying_key: &VerifyingKey) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    verifying_key.to_bytes().hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
-}
-
-/// The FIXED, documented fingerprint of an Ed25519 verifying key: SHA-256
-/// of the 32 raw key bytes, hex-encoded (64 characters).
-///
-/// Unlike [`fingerprint_for_verifying_key`] — an internal display/matching
-/// hash with no cross-implementation contract — this derivation is public
-/// spec (docs/design.md, "Pin creation and the owner fingerprint"): any
-/// implementation can compute it, which is what pin-file consistency
-/// checks and human out-of-band verification (read it over the phone)
-/// require. It is never computed over the seed, only the public half.
-pub fn owner_fingerprint_for_verifying_key(verifying_key: &VerifyingKey) -> String {
-    use sha2::{Digest, Sha256};
-    hex::encode(Sha256::digest(verifying_key.to_bytes()))
-}
-
-/// Signs keyring content and returns the signature block for the keyring file.
 pub fn create_signature_block(keyring_content: &str, signing_key: &SigningKey) -> Result<String> {
     let sig_b64 = sign_keyring_content(keyring_content, signing_key)?;
     Ok(format!(

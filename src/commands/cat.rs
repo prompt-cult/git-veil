@@ -5,15 +5,15 @@ use std::path::Path;
 
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
-use crate::key_discovery::discover_identity;
+use crate::key_discovery::discover_x25519_private_key;
 use crate::tracked_files::{ensure_regular_file, resolve_repo_relative_input, PathResolveMode};
-use crate::{decrypt_with_identity, verify_keyring_against_trust, TrackedFiles};
+use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, TrackedFiles};
 
 /// Decrypts a single tracked file to stdout without touching disk state.
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
 /// cmd_add/cmd_remove resolve paths (canonicalise-and-strip). Relative paths
-/// resolve against `repo_root`; tracked paths are stored repo-relative and
+/// resolve against `repo_root`. Tracked paths are stored repo-relative and
 /// are validated, so the ciphertext path can never escape the repository
 /// root.
 pub fn cmd_cat(
@@ -23,21 +23,22 @@ pub fn cmd_cat(
     remote_name: &str,
     key_store: &Path,
 ) -> Result<Vec<u8>> {
-    // Verify keyring signature first: never decrypt against an unverified keyring
+    // Verify the keyring signature first. Never decrypt against an
+    // unverified keyring.
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
     let entry = keyring.find_by_email(email).ok_or_else(|| {
         coded(
-            ExitCode::IdentityNotInKeyring,
-            "user not found in the keyring. Check the identity, or ask the owner to add it"
+            ExitCode::PrincipalNotInKeyring,
+            "user not found in the keyring. Check the principal, or ask the owner to add it"
                 .to_string(),
         )
     })?;
 
-    // Find user's age identity by recipient string (exit code 21 with the
-    // create-and-back-up recipe when absent)
-    let identity = discover_identity(key_store, &entry.recipient)?;
+    // Find the user's X25519 private key by its public key encoding (exit
+    // code 21 with the create-and-back-up recipe when absent)
+    let private_key = discover_x25519_private_key(key_store, &entry.public_key)?;
 
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
@@ -55,8 +56,9 @@ pub fn cmd_cat(
         anyhow::bail!("file not tracked: {}. Add it before reading it", file);
     }
 
-    // Lstat gate: refuse if the tracked path is a committed symlink or not a
-    // regular file (absent is fine — the plaintext is normally hidden).
+    // Lstat gate. Refuse if the tracked path is a committed symlink or not
+    // a regular file. An absent path is fine. The plaintext is normally
+    // hidden.
     ensure_regular_file(repo_root, &relative)?;
 
     // Compute encrypted path
@@ -83,7 +85,7 @@ pub fn cmd_cat(
     })?;
 
     // Decrypt
-    let plaintext = decrypt_with_identity(&ciphertext, &identity)?;
+    let plaintext = decrypt_with_x25519_private_key(&ciphertext, &private_key)?;
 
     // Write plaintext to stdout
     std::io::stdout()
