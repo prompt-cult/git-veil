@@ -303,8 +303,8 @@ the workflow differ. One payoff is a smaller binary.
 | `allow`          | Allow files for encryption on this machine (answers `hide`'s exit-72 question, cached per clone per git user) |
 | `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt tracked files to the keyring and DELETE the plaintexts (all files by default; named files with FILE arguments; `--keep-plaintext` keeps them; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
-| `reveal`         | Decrypt tracked files back to plaintext (all files by default; named files with FILE arguments; never gated) |
+| `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts (`hide --all` runs the ring-change ceremony: the gated whole-manifest pass; `--keep-plaintext` keeps the plaintexts; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
+| `reveal`         | Decrypt the named tracked files back to plaintext (never gated) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
 | `changes`        | Report where plaintext differs from the last hidden version             |

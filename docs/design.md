@@ -529,11 +529,13 @@ while it is being edited. Consequences, stated honestly:
   is `reveal` (restores the plaintexts you name) → edit → `hide`. There
   is no skip-and-report on the named path: the file must exist to be
   named.
-- **Rotation requires the plaintext.** `removeperson` + `hide` alone cannot
-  re-encrypt ciphertexts whose plaintexts are gone - the correct rotation is
-  `reveal` (restores plaintexts), `removeperson`, `hide` naming each file
-  (re-encrypts to the new ring, deletes plaintexts again). Documented here
-  because it is the one workflow that changed shape with this default.
+- **Rotation requires the plaintext.** `removeperson` + a scoped `hide`
+  alone cannot re-encrypt ciphertexts whose plaintexts are gone - the
+  correct rotation is `reveal` (restores the plaintexts you name),
+  `removeperson` (stamps the ring change), then the ring-change pass,
+  `hide --all` (re-encrypts every tracked file that has a plaintext on
+  disk to the new ring and consumes the stamp). Documented here because it
+  is the one workflow that changed shape with this default.
 - The allowance gate (exit 72) and the code-41 plaintext-leak warning only
   apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
@@ -596,8 +598,9 @@ Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`,
 de-facto revocation boundary: if a path is removed from `tracked.json`, the
 old ciphertext is never re-encrypted, so after a `removeperson` rotation the
 stale `.secret` stays decryptable by the removed collaborator - silently,
-with `hide` reporting success. Since `tracked.json` is committed and unsigned
-repo content, any repo writer can cause this by deleting manifest entries.
+on any run of `hide` that does not carry the orphan gate. Since
+`tracked.json` is committed and unsigned repo content, any repo writer can
+cause the manifest deletion in the first place.
 
 Two mitigations close the hole:
 
@@ -633,8 +636,8 @@ such, not hidden.
 After `tell` or `removeperson` re-signs the keyring, every tracked
 `.secret` still holds ciphertext encrypted to the previous ring. The
 whole-manifest re-encrypt is the one legitimate global pass, and it has
-its own door: `hide --all`. A scoped hide never runs it, and the pass
-runs nowhere else.
+its own door: `hide --all`. A scoped hide never opens that door, and the
+pass runs nowhere else.
 
 - **The stamp.** `tell` and `removeperson` write a ring-change stamp
   into the key store after they write the re-signed keyring. The stamp
@@ -658,16 +661,17 @@ runs nowhere else.
   ciphertext whose path is no longer tracked (exit 42). When the pass
   completes, the stamp is cleared: one pass per ring change.
 - **The notice.** `tell` and `removeperson` print one plain line when
-  they stamp: the ring changed on this machine and a pass is due. The
-  line states the fact and the verb and names no command, per the issue
-  #42 message policy.
+  they stamp: the keyring changed on this machine and a pass is due. The
+  line states the fact and names no command, per the issue #42 message
+  policy.
 - **reveal needs no ceremony.** An old ciphertext decrypts against the
   ring entry it was written to, so decryption keeps working while a pass
   is pending. The new ring matters only for encryption, which makes the
   ceremony a hide-side concern.
 - **Fresh start and migration.** The 0.7.0 runbook folds into the
   ceremony: init, trust, tell (the first tell changes the ring from
-  empty and stamps the pass), allow each path, then `hide --all` once.
+  empty and stamps the pass), add each path (add implies the allowance),
+  then `hide --all` once.
 
 ## Allowance (first-encrypt consent, keyed to pin and principal)
 
@@ -755,7 +759,7 @@ files it names, so the ambush fires only when the victim hides at that
 exact path, and a scoped refusal names that exact path.
 
 Stated honestly, the remaining trade-offs: the allowance store is
-machine-local, so an owner who re-hides from a machine whose key store was
+machine-local, so an owner who re-encrypts from a machine whose key store was
 restored must re-run `allow` for any path without an established
 ciphertext; and a malicious collaborator can still make `hide` refuse
 (availability) by nominating junk paths - that is fail-closed by design,

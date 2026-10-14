@@ -60,7 +60,7 @@ the keyring:
 ```sh
 $ git-veil tell alice@example.com alice.pub
 added alice@example.com to the keyring
-note: existing ciphertext does not include the new collaborator. Re-hide the tracked files (name each one) to encrypt them to the current keyring.
+note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
 
 What happened. The keyring signature was verified against the pinned owner
@@ -71,19 +71,20 @@ of duplicating it.
 
 Important. Telling Alice does not change ciphertext that already exists.
 Files hidden before she was told were encrypted only to the owner's key. To
-bring her in, the owner re-hides. hide only encrypts plaintexts present on
-disk, so reveal first if everything is currently hidden:
+bring her in, the owner delivers the ring-change pass. The pass re-encrypts
+only tracked files with a plaintext on disk, so reveal the files first:
 
 ```sh
-git-veil reveal .env && git-veil hide .env
+git-veil reveal .env && git-veil hide --all
 git add .git-veil/keyring .env.secret
-git commit -m "Add alice to keyring and re-hide"
+git commit -m "Add alice to keyring and re-encrypt"
 git push
 ```
 
-The hide names every tracked file, so the commit carries a fresh
-`.secret` for each one. For rotation that is the right move. For
-day-to-day work, name only the files you touched; see Part 4.
+The pass re-encrypts every tracked file that has a plaintext on disk, so
+the commit carries a fresh `.secret` for each one, now encrypted to
+Alice's key too. One pass consumes the stamp `tell` wrote. For day-to-day
+work, name only the files you touched; see Part 4.
 
 The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
@@ -148,9 +149,9 @@ $ git-veil cat .env        # peek to stdout. Touches no disk state.
 
 ### Ciphertext churn
 
-Hide covers exactly the files you name. A whole-manifest pass - naming
-every tracked file at once - changes every `.secret` in the commit, so a
-commit where you edited one secret looks like you edited all of them.
+Hide covers exactly the files you name. A whole-manifest pass - `hide
+--all`, the ring-change ceremony - changes every `.secret` in the commit,
+so a commit where you edited one secret looks like you edited all of them.
 Reviewers cannot tell a one-file change from a repo-wide re-encryption
 without reading the command that made it. So the team habit is to name
 only the files you touched:
@@ -164,8 +165,33 @@ $ git-veil reveal .env   # restore .env only
 ```
 
 When you mean the whole manifest - a rotation after `tell` or
-`removeperson` - name every tracked file; `git-veil list` shows the
-manifest.
+`removeperson` - the ring-change ceremony owns the pass. `tell` and
+`removeperson` stamp a pass as due on this machine when they re-sign the
+keyring, and one `hide --all` consumes the stamp. The pass re-encrypts
+every tracked file that has a plaintext on disk, so reveal the files
+first:
+
+```sh
+$ git-veil reveal .env deploy.env
+keyring signature verified
+keys in keyring: 3
+Decrypted: .env
+Decrypted: deploy.env
+files revealed
+$ git-veil hide --all
+Encrypted: .env
+Encrypted: deploy.env
+Deleted plaintext: .env
+Deleted plaintext: deploy.env
+files hidden
+ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
+```
+
+Without a due stamp, `hide --all` refuses with exit code 70 and names
+the repository id: the pass exists to turn a ring change into ciphertext,
+and one pass consumes one change. A scoped `hide` never consults the
+stamp and never consumes it. See
+[docs/design.md](design.md), "The ring-change ceremony".
 
 ### The exit-72 question
 
@@ -265,7 +291,7 @@ moment its ciphertext lands. Decryption needs only keyring membership.
   membership.
 - The reveal error `user not found in the keyring. Check the principal,
   or ask the owner to add it` means the owner
-  has not yet done Part 2's re-hide-and-push.
+  has not yet done Part 2's re-encrypt-and-push.
 
 ## Handy checks on either side
 
