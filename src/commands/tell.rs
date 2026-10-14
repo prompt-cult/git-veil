@@ -35,11 +35,17 @@ pub fn cmd_tell(
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Read and parse the collaborator key file. Relative paths resolve
-    // against repo_root. The first line holds the X25519 public key
-    // encoding.
+    // against repo_root. The first content line holds the X25519 public
+    // key encoding. Blank lines and # comment lines are skipped, the
+    // same leniency the key store reads apply, so a hand-shared file
+    // with a leading comment parses.
     let key_content = fs::read_to_string(repo_root.join(collaborator_key_path))
         .with_context(|| "failed to read the collaborator key file".to_string())?;
-    let public_key_str = key_content.lines().next().unwrap_or("").trim();
+    let public_key_str = key_content
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+        .unwrap_or("");
     let collaborator_public_key = parse_x25519_public_key(public_key_str)?;
 
     // Test-encrypt a canary to the collaborator key to verify it can

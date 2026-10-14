@@ -76,17 +76,17 @@ pub fn verify_keyring_against_trust(
     // Covers both the no-trust.json case (empty store) and the
     // missing-repo_id case (store without this repo's entry). Both name the
     // repo_id and the remote that produced it, plus the remedy.
-    let trusted_fingerprint = match trust_store.get_trusted_fingerprint(&repo_id) {
+    let trusted_fingerprint = match trust_store.get_owner_fingerprint(&repo_id) {
         Some(fingerprint) => fingerprint,
         None => {
-            if trust_store.trusted_keys.is_empty() {
+            if trust_store.owner_fingerprints.is_empty() {
                 return Err(coded(
                     ExitCode::NoTrustRecord,
                     "no trust record for this repository. See the trust documentation.".to_string(),
                 ));
             }
             let recorded_ids: Vec<&str> = trust_store
-                .trusted_keys
+                .owner_fingerprints
                 .keys()
                 .map(String::as_str)
                 .collect();

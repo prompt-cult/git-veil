@@ -87,16 +87,17 @@ wrong identity.
 ## The trust record (`trust.json`) and the per-machine pin
 
 `trust.json` lives at `.git-veil/trust.json` and holds one JSON object with
-two maps (`TrustStore`, src/trust_store.rs):
+one map (`TrustStore`, src/trust_store.rs):
 
-- `trusted_keys`: `{ "<repo_id>": "<fingerprint>" }` - the fingerprint of
-  the owner key pinned for the repository under the single derivation (see
-  "Fingerprints": the repository id is the label), compared against the
-  local pin by every gated command;
-- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` - the same
-  value: the fingerprint of the repository's committed owner verifying key
-  (`owner.verifying`) under the single derivation, used by pin-file import
-  and by humans verifying out of band.
+- `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` - the
+  fingerprint of the repository's committed owner verifying key
+  (`owner.verifying`) under the single derivation (see "Fingerprints": the
+  repository id is the label). Every gated command compares it against the
+  local pin, pin-file import uses it as the witness, and `export-pin`
+  prints it as the human out-of-band token. Under the single derivation
+  these were once two maps carrying the same value; the schema carries
+  one. A legacy file with only `trusted_keys` loads empty and every gated
+  command refuses until the owner re-runs `trust`.
 
 Both fields default to absent when missing (pre-0.6 files parse cleanly);
 the file is written pretty-printed and atomically
@@ -128,7 +129,7 @@ after a move.
 $$
 \begin{array}{ll}
 \multicolumn{2}{l}{\textbf{Algorithm 2} \quad \textsc{Trust} \text{ - the possession proof (} \texttt{cmd\_trust} \text{, src/commands/trust.rs)}} \\
-\multicolumn{2}{l}{\textit{Permanent state: } T \text{ = committed } \texttt{.git-veil/trust.json} \text{ (} \mathit{trustedKeys}, \mathit{ownerFingerprints} \text{ maps);} \ S \text{ = the machine key store}} \\
+\multicolumn{2}{l}{\textit{Permanent state: } T \text{ = committed } \texttt{.git-veil/trust.json} \text{ (} \mathit{ownerFingerprints}, \mathit{ownerFingerprints} \text{ maps);} \ S \text{ = the machine key store}} \\
 \multicolumn{2}{l}{\textit{Machine state: } P \text{ = per-machine pins;} \ B \text{ = freshness baselines}} \\
 1: & \textbf{upon } \textsc{Trust}(\mathit{providedId}) \\
 2: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
@@ -145,17 +146,16 @@ $$
 13: & \quad \textsc{ProvePossession}(\mathit{cand}) \\
 14: & \quad \text{append } \mathit{cand} \text{ to } \texttt{verifying-keys.txt} \\
 15: & \quad \mathit{fp} \leftarrow \textsc{Fingerprint}(\mathit{derivedId}, \mathit{cand}) \\
-16: & \quad T.\mathit{trustedKeys}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed} \\
-17: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the owner commits the updated trust.json alongside owner.verifying} \\
-18: & \quad \textsc{Reconcile}(T) \\
-19: & \quad P[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the machine pin, outside the repository} \\
-20: & \quad B[\mathit{derivedId}] \leftarrow \bot \quad . \ \text{re-pinning is the recovery ceremony, so the baseline resets with it} \\
-21: & \quad \textsc{CodeownersNotice} \quad . \ \text{non-blocking warning or suppression record; never alters an exit code} \\
-22: & \textbf{end upon} \\[2mm]
+16: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside owner.verifying} \\
+17: & \quad \textsc{Reconcile}(T) \\
+18: & \quad P[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the machine pin, outside the repository} \\
+19: & \quad B[\mathit{derivedId}] \leftarrow \bot \quad . \ \text{re-pinning is the recovery ceremony, so the baseline resets with it} \\
+20: & \quad \textsc{CodeownersNotice} \quad . \ \text{non-blocking warning or suppression record; never alters an exit code} \\
+21: & \textbf{end upon} \\[2mm]
 \multicolumn{2}{l}{\textbf{function } \textsc{Reconcile}(T) \ . \ \text{issue \#43}} \\
 a: & \quad live \leftarrow \{ \textsc{DeriveRepoId}(\text{pushURL}(r)) : r \in \text{configured remotes} \} \\
-b: & \quad \textbf{for all } id \in \text{keys}(T.\mathit{trustedKeys}) \text{ with } id \notin live \textbf{ do} \\
-c: & \quad\quad \text{delete } T.\mathit{trustedKeys}[id] \,; \text{ print the pruned } id \quad . \ \text{repository ids are public repository facts} \\
+b: & \quad \textbf{for all } id \in \text{keys}(T.\mathit{ownerFingerprints}) \text{ with } id \notin live \textbf{ do} \\
+c: & \quad\quad \text{delete } T.\mathit{ownerFingerprints}[id] \,; \text{ print the pruned } id \quad . \ \text{repository ids are public repository facts} \\
 d: & \quad \textbf{end for} \\
 e: & \textbf{end function}
 \end{array}
@@ -232,10 +232,10 @@ $$
 \multicolumn{2}{l}{\textbf{Algorithm 4} \quad \textsc{VerifyKeyring} \text{ - run by every gated command}} \\
 1: & \textbf{upon any gated command} \\
 2: & \quad \mathit{repoId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \,; \ T \leftarrow \text{load } \texttt{.git-veil/trust.json} \\
-3: & \quad \textbf{if } \mathit{repoId} \notin \text{keys}(T.\mathit{trustedKeys}) \textbf{ then} \\
-4: & \quad\quad \textbf{if } T.\mathit{trustedKeys} = \emptyset \textbf{ then refuse} \ . \ \text{exit 10: no trust record} \\
+3: & \quad \textbf{if } \mathit{repoId} \notin \text{keys}(T.\mathit{ownerFingerprints}) \textbf{ then} \\
+4: & \quad\quad \textbf{if } T.\mathit{ownerFingerprints} = \emptyset \textbf{ then refuse} \ . \ \text{exit 10: no trust record} \\
 5: & \quad\quad \textbf{else refuse} \ . \ \text{exit 10: rename suspicion, naming the recorded and derived ids as the clue} \\
-6: & \quad \mathit{claimed} \leftarrow T.\mathit{trustedKeys}[\mathit{repoId}] \\
+6: & \quad \mathit{claimed} \leftarrow T.\mathit{ownerFingerprints}[\mathit{repoId}] \\
 7: & \quad \textbf{guard } \mathit{claimed} \text{ and the pin are not retired 16-hex values} \quad \textbf{else refuse} \ . \ \text{exit 70; hostile legacy format, nothing rewritten} \\
 8: & \quad \mathit{pin} \leftarrow \text{read } P[\mathit{repoId}] \\
 9: & \quad \textbf{if } \mathit{pin} = \bot \textbf{ then refuse} \ . \ \text{exit 11, naming } \mathit{repoId} \text{ and the remote it came from} \\
@@ -315,10 +315,9 @@ else.
 
 Where fingerprints are used:
 
-- the per-machine pin and the committed `trusted_keys` record carry the
-  owner key fingerprint - the derivation with the repository id as the
-  label (`owner_key_fingerprint`);
-- `owner_fingerprints` carries the same value: the human out-of-band token
+- the per-machine pin and the committed `owner_fingerprints` record carry
+  the owner key fingerprint - the derivation with the repository id as
+  the label (`owner_key_fingerprint`), the human out-of-band token
   (`export-pin` prints it) and the pin-file import witness;
 - `list-keys` prints the binding fingerprint of each keyring principal -
   the derivation with the principal label - computed at print time; the

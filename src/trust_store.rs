@@ -8,33 +8,28 @@ use crate::fs_atomic::write_atomic;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrustStore {
-    #[serde(default)]
-    pub trusted_keys: HashMap<String, String>,
     /// repo_id -> fixed-derivation fingerprint (SHA-256 of the raw key
     /// bytes, hex) of the repository's committed owner verifying key
     /// (`owner.verifying`). Committed alongside the key so pin-file
     /// import can cross-check three channels (pin-file, committed key,
     /// committed fingerprint) and so a human can verify it out of band.
-    /// Distinct from `trusted_keys`, whose fingerprints use the internal
-    /// display derivation and exist to be compared against the local pin.
+    /// One map: under the single derivation the pinned fingerprint and
+    /// the owner fingerprint are the same value.
     #[serde(default)]
     pub owner_fingerprints: HashMap<String, String>,
 }
 
+/// The on-disk shapes. trust.json once carried a second map,
+/// `trusted_keys`, written before the derivations were unified. That
+/// field is legacy and ignored on load. A file without
+/// `owner_fingerprints` loads empty, so every gated command refuses
+/// until the owner re-runs `trust` on a seed-holding machine and
+/// commits the refresh.
 impl TrustStore {
     pub fn new() -> Self {
         Self {
-            trusted_keys: HashMap::new(),
             owner_fingerprints: HashMap::new(),
         }
-    }
-
-    pub fn add_trust(&mut self, repo_id: String, fingerprint: String) {
-        self.trusted_keys.insert(repo_id, fingerprint);
-    }
-
-    pub fn get_trusted_fingerprint(&self, repo_id: &str) -> Option<&str> {
-        self.trusted_keys.get(repo_id).map(|s| s.as_str())
     }
 
     /// Records the fixed-derivation fingerprint of the repository's
@@ -50,21 +45,21 @@ impl TrustStore {
         self.owner_fingerprints.get(repo_id).map(|s| s.as_str())
     }
 
-    /// Reconciles `trusted_keys` against `live`, the repository ids the
+    /// Reconciles the committed map against `live`, the repository ids the
     /// configured remotes currently derive. Every entry whose id no remote
     /// derives, the residue of a repository move or rename, is removed.
     /// Returns the pruned ids in sorted order so the caller can print the
     /// removals. Repository ids are public repository facts, so naming
     /// them is allowed.
-    pub fn reconcile_trusted_keys(&mut self, live: &BTreeSet<String>) -> Vec<String> {
+    pub fn reconcile_owner_fingerprints(&mut self, live: &BTreeSet<String>) -> Vec<String> {
         let mut pruned: Vec<String> = self
-            .trusted_keys
+            .owner_fingerprints
             .keys()
             .filter(|id| !live.contains(*id))
             .cloned()
             .collect();
         pruned.sort();
-        self.trusted_keys.retain(|id, _| live.contains(id));
+        self.owner_fingerprints.retain(|id, _| live.contains(id));
         pruned
     }
 

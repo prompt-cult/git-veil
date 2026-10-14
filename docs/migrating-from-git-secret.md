@@ -146,10 +146,14 @@ The owner, in the repo:
 ```sh
 $ cargo build --release          # binary: target/release/git-veil
 $ git-veil init
-✓ git-veil initialized
+git-veil initialized
+suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
+add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
+owner.verifying @the-repository-owner
+.git-veil/ @the-repository-owner
 $ age-keygen -o my-age-identity.txt
 $ git-veil import my-age-identity.txt
-+ imported: age1… (…)
++ imported: age13dejlgwd4nc4xkavuxz3axf0c7tm0v2yr3d6p62tv9rqtaa4xe8qv6tuqa
 Summary: 1 imported, 0 skipped
 $ umask 077
 $ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
@@ -162,8 +166,8 @@ Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
 $ git-veil trust demo+example@github.com
-✓ Trusted key for demo+example@github.com (fingerprint: …)
-✓ Pinned … for demo+example@github.com on this machine
+trusted the repository owner key
+pinned this repository owner key on this machine
 ```
 
 Each collaborator, on their machine, creates their own X25519 private key
@@ -175,12 +179,14 @@ $ age-keygen -o alice-age-identity.txt
 $ git-veil import alice-age-identity.txt
 ```
 
-The owner then adds each one (any file whose first line is the public key
-encoding works):
+The owner then adds each one. The collaborator key file's first content
+line must be the X25519 public key encoding, so each collaborator exports
+it with `git-veil export`:
 
 ```sh
-$ git-veil tell alice@example.com alice-age-identity.txt
-✓ Added alice@example.com to keyring
+$ git-veil tell alice@example.com alice.pub
+added alice@example.com to the keyring
+note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
 ```
 
 What happened. This is the git-secret `tell` split into two steps.
@@ -198,11 +204,12 @@ Back to the file list captured in step 1:
 
 ```sh
 $ git-veil add .env
+file not in .gitignore, adding: .env
+added 1 files
 $ git-veil hide
-✓ Keyring signature verified
-...
 Encrypted: .env
-✓ Files hidden
+Deleted plaintext: .env
+files hidden
 $ git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 $ git commit -m "feat: re-key secrets with git-veil"
 $ git push
@@ -233,17 +240,20 @@ $ git-veil import alice-age-identity.txt      # once per machine
 $ git-veil show-repo-id                        # print the ID trust wants
 Repository ID: demo+example@github.com
 $ git-veil trust --import ~/demo.pin          # pin-file from the owner, out of band
+trusted the repository owner key
+pinned this repository owner key on this machine
 $ git-veil list-keys
-✓ Keyring signature verified (signed by pinned trusted key)
+keyring signature verified and made by the pinned trusted key
 Keys in keyring:
-  example@github.com (…)
-  alice@example.com (…)
+  example@github.com ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
+  alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
+
 Total: 2 keys
 $ git-veil reveal
-✓ Keyring signature verified
-...
+keyring signature verified
+keys in keyring: 2
 Decrypted: .env
-✓ Files revealed
+files revealed
 $ git-veil cat .env            # spot-check contents match pre-migration
 $ sha256sum .env               # or compare bytes against your step-1 copy
 ```

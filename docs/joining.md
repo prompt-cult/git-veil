@@ -32,10 +32,11 @@ their machine, which holds the signing key:
 ```sh
 $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
-owner key fingerprint: 22fb3bcb…
+owner key fingerprint: ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com newcomer.pub
-✓ Added newcomer@example.com to keyring
+added newcomer@example.com to the keyring
+note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
 ```
 
 Send the owner your X25519 public key first. Create an X25519 private key
@@ -55,10 +56,9 @@ were told were not encrypted to your key:
 ```sh
 $ git-veil reveal
 $ git-veil hide
-✓ Keyring signature verified
-...
 Encrypted: .env
-✓ Files hidden
+Deleted plaintext: .env
+files hidden
 $ git add .git-veil/keyring .env.secret
 $ git commit -m "Add newcomer to keyring and re-hide"
 $ git push
@@ -86,7 +86,7 @@ explicitly.
 
 ```sh
 $ git-veil import newcomer-age-identity.txt
-+ imported: age1a1b2… (1a2b3c4d5e6f7a8b)
++ imported: age1pu5aefgjq753cqp6ayuamc2h0ynupzy96pt6rj4rvm42rd8z8aysnhk76u
 Summary: 1 imported, 0 skipped
 ```
 
@@ -116,8 +116,9 @@ For a non-`origin` remote, add `--remote <name>`.
 
 ```sh
 $ git-veil trust --import ~/demo.pin
-✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
-✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
+trusted the repository owner key
+pinned this repository owner key on this machine
+warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
 What happened. Your machine holds no signing key. It never needs one.
@@ -137,10 +138,11 @@ out-of-band anchor.
 
 ```sh
 $ git-veil list-keys
-✓ Keyring signature verified (signed by pinned trusted key)
+keyring signature verified and made by the pinned trusted key
 Keys in keyring:
-  example@github.com (22fb3bcb…)
-  newcomer@example.com (1a2b3c4d…)
+  example@github.com ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
+  newcomer@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
+
 Total: 2 keys
 ```
 
@@ -151,12 +153,10 @@ Nothing on your side can fix that.
 ### 6. Reveal
 ```sh
 $ git-veil reveal
-✓ Keyring signature verified
-Signed by fingerprint: 22fb3bcb…
-Repository ID: demo+example@github.com
-Keys in keyring: 2
+keyring signature verified
+keys in keyring: 2
 Decrypted: .env
-✓ Files revealed
+files revealed
 ```
 
 What happened. Every tracked file's `.secret` ciphertext was decrypted to

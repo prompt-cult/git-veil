@@ -32,7 +32,8 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 git-veil init
 git-veil import my-age-identity.txt
 git-veil trust demo+example@github.com  # possession proof. The seed must match owner.verifying
-git-veil tell example@github.com my-age-identity.txt    # the owner must be in the keyring too
+git-veil export age1... --output me.pub
+git-veil tell example@github.com me.pub    # the owner must be in the keyring too
 git-veil add .env && git-veil hide
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
 git push
@@ -58,7 +59,8 @@ the keyring:
 
 ```sh
 $ git-veil tell alice@example.com alice.pub
-✓ Added alice@example.com to keyring
+added alice@example.com to the keyring
+note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
 ```
 
 What happened. The keyring signature was verified against the pinned owner
@@ -85,7 +87,7 @@ signing key, so the pin-file is the only way she can pin:
 ```sh
 $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
-owner key fingerprint: 22fb3bcb…
+owner key fingerprint: ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 ```
 
@@ -113,8 +115,9 @@ signing key, so she imports the pin-file the owner sent her:
 
 ```sh
 $ git-veil trust --import ~/demo.pin
-✓ Trusted key for demo+example@github.com (fingerprint: 22fb3bcb…)
-✓ Pinned 22fb3bcb… for demo+example@github.com on this machine
+trusted the repository owner key
+pinned this repository owner key on this machine
+warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
 What happened. `trust --import` checked three things, and all three are
@@ -130,12 +133,10 @@ Now she can decrypt:
 
 ```sh
 $ git-veil reveal
-✓ Keyring signature verified
-Signed by fingerprint: 22fb3bcb…
-Repository ID: demo+example@github.com
-Keys in keyring: 2
+keyring signature verified
+keys in keyring: 2
 Decrypted: .env
-✓ Files revealed
+files revealed
 $ git-veil cat .env        # peek to stdout. Touches no disk state.
 ```
 

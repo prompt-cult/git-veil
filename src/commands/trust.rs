@@ -214,23 +214,22 @@ fn write_pin_state(
     // anchor verifies without an explicit re-pin.
     let trust_path = repo_root.join(".git-veil/trust.json");
     let mut trust_store = TrustStore::load_from_file(&trust_path)?;
-    trust_store.add_trust(repo_id.to_string(), fingerprint.clone());
     if record_owner_fingerprint {
         // The owner fingerprint is the pinned fingerprint. Both use one
         // derivation, with the repository id as the label.
         trust_store.set_owner_fingerprint(repo_id.to_string(), fingerprint.clone());
 
         // Reconcile the committed store. A repository move or rename leaves
-        // trusted_keys entries for ids no configured remote derives any
-        // more. Entries matching any configured remote are kept, one per
-        // remote. The pruned ids are public repository facts, so the removal
-        // names them.
+        // entries for ids no configured remote derives any more. Entries
+        // matching any configured remote are kept, one per remote. The
+        // pruned ids are public repository facts, so the removal names
+        // them.
         let live = derive_configured_repo_ids(repo_root)?;
-        for pruned_id in trust_store.reconcile_trusted_keys(&live) {
+        for pruned_id in trust_store.reconcile_owner_fingerprints(&live) {
             println!("pruned the stale trusted key entry for {}", pruned_id);
         }
+        trust_store.save_to_file(&trust_path)?;
     }
-    trust_store.save_to_file(&trust_path)?;
 
     // Pin the fingerprint on this machine, outside the repo: trust.json is
     // committed (attacker-writable), so the local pin is the real anchor.
