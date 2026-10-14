@@ -227,7 +227,7 @@ fn test_init_refuses_reinit_with_trust() {
     cmd_init(&repo.path, false).expect("first init");
 
     let mut trust = TrustStore::new();
-    trust.add_trust("test+user@github.com".to_string(), "abc123".to_string());
+    trust.set_owner_fingerprint("test+user@github.com".to_string(), "abc123".to_string());
     trust
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();

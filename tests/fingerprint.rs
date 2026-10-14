@@ -283,7 +283,7 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     TrustPinStore::write_pin(&key_store.path, TEST_REPO_ID, legacy).unwrap();
     let trust_path = repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
-    trust.add_trust(TEST_REPO_ID.to_string(), legacy.to_string());
+    trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), legacy.to_string());
     trust.save_to_file(&trust_path).unwrap();
     let pin_before = fs::read_to_string(&pin_path).unwrap();
     let record_before = fs::read_to_string(&trust_path).unwrap();
@@ -327,7 +327,7 @@ fn test_legacy_record_alone_refuses() {
     // record is a legacy 16-hex value.
     let trust_path = repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
-    trust.add_trust(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
+    trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
     trust.save_to_file(&trust_path).unwrap();
 
     let err = cmd_verify_keyring(&repo.path, "origin", &key_store.path)

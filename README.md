@@ -92,7 +92,8 @@ git-veil init                                   # create .git-veil/ state
 git-veil import my-age-identity.txt             # import your X25519 private key into the local key store
 git-veil show-repo-id                           # print the repository ID
 git-veil trust demo+example@github.com          # pin the owner key by possession proof
-git-veil tell example@github.com my-age-identity.txt    # add yourself to the signed keyring
+git-veil export age1... --output me.pub         # print your public key as a file
+git-veil tell example@github.com me.pub         # add yourself to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add .env                               # track the file (gitignores the plaintext name)
 git-veil hide                                   # encrypt: .env -> .env.secret (plaintext deleted)

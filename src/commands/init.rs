@@ -26,7 +26,7 @@ pub fn cmd_init(repo_root: &Path, quiet: bool) -> Result<()> {
     if git_veil_dir.is_dir() && trust_path.exists() {
         let existing_trust = TrustStore::load_from_file(&trust_path)
             .context("Failed to read existing trust.json")?;
-        if !existing_trust.trusted_keys.is_empty() {
+        if !existing_trust.owner_fingerprints.is_empty() {
             return Err(coded(
                 ExitCode::Refused,
                 "git-veil is already initialized here; refusing to reset existing trust state \

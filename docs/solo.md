@@ -65,9 +65,13 @@ proves your seed against.
 
 ```sh
 $ git-veil init
-✓ git-veil initialized
+git-veil initialized
+suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
+add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
+owner.verifying @the-repository-owner
+.git-veil/ @the-repository-owner
 $ git-veil import my-age-identity.txt
-+ imported: age1axmf…q5xnw2s (1a2b3c4d5e6f7a8b)
++ imported: age13dejlgwd4nc4xkavuxz3axf0c7tm0v2yr3d6p62tv9rqtaa4xe8qv6tuqa
 Summary: 1 imported, 0 skipped
 $ git-veil show-repo-id
 Repository ID: demo+example@github.com
@@ -90,8 +94,9 @@ shows which principal decrypting commands will use. The principal comes from
 
 ```sh
 $ git-veil trust demo+example@github.com
-✓ Trusted key for demo+example@github.com (fingerprint: 1a2b3c4d…)
-✓ Pinned 1a2b3c4d… for demo+example@github.com on this machine
+trusted the repository owner key
+pinned this repository owner key on this machine
+warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
 What happened. There is no keyfile argument. A repository must never supply
@@ -116,8 +121,10 @@ for that flow.
 ## 4. Put yourself in the keyring
 
 ```sh
-$ git-veil tell example@github.com my-age-identity.txt
-✓ Added example@github.com to keyring
+$ git-veil export age13dejlgwd4nc4xkavuxz3axf0c7tm0v2yr3d6p62tv9rqtaa4xe8qv6tuqa --output me.pub
+$ git-veil tell example@github.com me.pub
+added example@github.com to the keyring
+note: existing ciphertext does not include the new collaborator. Hide again to re-encrypt all tracked files to the current keyring.
 ```
 
 What happened. `hide` encrypts to every key in the signed keyring, so even
@@ -126,7 +133,8 @@ store file is `signing-keys.txt`. The key whose verifying fingerprint matches
 the pin `trust` wrote is the one used. `tell` verified the existing keyring
 signature against your pin, test-encrypted an in-memory canary to the new
 key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
-committed.
+committed. The collaborator key file is the exported public key. Its first
+content line must be the X25519 public key encoding.
 
 ## 5. Track, hide, commit
 
@@ -134,16 +142,14 @@ committed.
 $ printf 'API_KEY=hunter2\n' > .env
 $ git-veil add .env
 file not in .gitignore, adding: .env
-Added 1 file(s)
+added 1 files
 $ git-veil hide
-✓ Keyring signature verified
-Signed by fingerprint: 1a2b3c4d…
-Repository ID: demo+example@github.com
-Keys in keyring: 1
 Encrypted: .env
-✓ Files hidden
+Deleted plaintext: .env
+files hidden
 $ ls .env .env.secret
-.env	.env.secret
+ls: .env: No such file or directory
+.env.secret
 ```
 
 What happened. `add` gitignored the plaintext name for you, as git-secret
@@ -173,15 +179,25 @@ Edit, check, hide, commit, reveal:
 
 ```sh
 $ git-veil unhide .env          # decrypt one file in place
+Decrypted: .env
+file unhidden
 ... edit .env ...
 $ git-veil changes .env         # report the diff
 changed: .env
-- API_KEY=hunter2
-+ API_KEY=hunter3
-1 file(s) with changes
+- API_KEY=hunter3
++ API_KEY=hunter4
+
+1 files with changes
 $ git-veil hide                 # re-encrypt, plaintext deleted
+Encrypted: .env
+Deleted plaintext: .env
+files hidden
 $ git add .env.secret && git commit -m "Rotate API key"
 $ git-veil reveal               # bring every tracked file back as plaintext
+keyring signature verified
+keys in keyring: 1
+Decrypted: .env
+files revealed
 ```
 
 What happened. `unhide` and `reveal` decrypt ciphertext back to the plaintext

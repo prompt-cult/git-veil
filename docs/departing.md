@@ -27,16 +27,16 @@ reveal first if everything is currently hidden):
 
 ```sh
 $ git-veil removeperson bob@example.com
-✓ Removed bob@example.com from keyring
+removed bob@example.com from the keyring
 $ git-veil reveal
-✓ Keyring signature verified
-...
-✓ Files revealed
+keyring signature verified
+keys in keyring: 2
+Decrypted: .env
+files revealed
 $ git-veil hide
-✓ Keyring signature verified
-...
 Encrypted: .env
-✓ Files hidden
+Deleted plaintext: .env
+files hidden
 $ git add .git-veil/keyring .env.secret
 $ git commit -m "Remove bob from keyring and re-hide"
 $ git push
@@ -86,16 +86,17 @@ alice is analogous:
 
 ```sh
 $ git-veil list-keys
-✓ Keyring signature verified (signed by pinned trusted key)
+keyring signature verified and made by the pinned trusted key
 Keys in keyring:
-  example@github.com (5ea3e5f8…)
-  alice@example.com (8ae022f3…)
+  example@github.com ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
+  alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
+
 Total: 2 keys
 $ git-veil reveal
-✓ Keyring signature verified
-...
+keyring signature verified
+keys in keyring: 2
 Decrypted: .env
-✓ Files revealed
+files revealed
 $ cat .env            # confirm the new value. Rotate anything bob ever saw.
 ```
 
@@ -119,9 +120,9 @@ Meanwhile, bob pulling the updated repo finds the tool shuts him out:
 
 ```sh
 $ git-veil reveal
-✓ Keyring signature verified
-...
-Error: user not found in the keyring. Check the principal, or ask the owner to add it
+keyring signature verified
+keys in keyring: 2
+error: user not found in the keyring. Check the principal, or ask the owner to add it
 ```
 
 Together these are the whole story. The tool refuses bob on new
