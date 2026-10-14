@@ -221,3 +221,77 @@ impl TrustPinStore {
         Ok(())
     }
 }
+
+/// The per-machine ring-change stamp: the record that a keyring change was
+/// signed on THIS machine and the whole-manifest re-encrypt pass is due.
+///
+/// `tell` and `removeperson` write the stamp after they write the re-signed
+/// keyring; `hide --all` requires it, verifies the committed ring against
+/// it, and clears it after a successful pass (docs/design.md "The
+/// ring-change ceremony"). The stamp lives in the key store, outside the
+/// repository, so committed repo content can neither forge nor clear it.
+///
+/// File format: line 1 is the keyring version digits, line 2 the SHA-256
+/// hex digest of the signed keyring content - the same two values the
+/// freshness baseline records, here standing for "the ring changed here
+/// and the pass has not run yet".
+pub struct RingPassStore;
+
+impl RingPassStore {
+    const DIR: &str = "ring-pass";
+
+    /// The path of the ring-change stamp for `repo_id` under `key_store`.
+    fn stamp_path(key_store: &Path, repo_id: &str) -> PathBuf {
+        key_store
+            .join(Self::DIR)
+            .join(TrustPinStore::sanitize_repo_id(repo_id))
+    }
+
+    /// Stamps the ring state a `hide --all` pass must match: the keyring
+    /// version just signed and the digest of the signed content.
+    pub fn write(key_store: &Path, repo_id: &str, version: u64, digest: &str) -> Result<()> {
+        let path = Self::stamp_path(key_store, repo_id);
+        fs::create_dir_all(path.parent().expect("stamp path always has a parent"))?;
+        write_atomic(&path, format!("{}\n{}\n", version, digest).as_bytes())?;
+        Ok(())
+    }
+
+    /// Reads the stamp. `Ok(None)` when no stamp exists (no pass is due).
+    /// A file that does not parse is a hard error, never a silent
+    /// no-stamp: a corrupt stamp must not wave a pass through.
+    pub fn read(key_store: &Path, repo_id: &str) -> Result<Option<(u64, String)>> {
+        let path = Self::stamp_path(key_store, repo_id);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let content = fs::read_to_string(&path)?;
+        let mut lines = content.lines();
+        let version = match lines.next().map(str::trim) {
+            None | Some("") => {
+                return Err(anyhow::anyhow!(
+                    "corrupt ring-change stamp: {}",
+                    path.display()
+                ))
+            }
+            Some(v) => v
+                .parse::<u64>()
+                .map_err(|_| anyhow::anyhow!("corrupt ring-change stamp: {}", path.display()))?,
+        };
+        let digest = lines
+            .next()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("corrupt ring-change stamp: {}", path.display()))?;
+        Ok(Some((version, digest.to_string())))
+    }
+
+    /// Clears the stamp. Run after a successful ceremony pass: one pass
+    /// per ring change.
+    pub fn clear(key_store: &Path, repo_id: &str) -> Result<()> {
+        let path = Self::stamp_path(key_store, repo_id);
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        Ok(())
+    }
+}

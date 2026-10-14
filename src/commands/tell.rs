@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
-use crate::commands::hide::encrypted_path_for;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
+use crate::trust_store::RingPassStore;
 use crate::{
     create_signature_block, encrypt_to_x25519_public_key, extract_content_to_verify_from_keyring,
-    parse_x25519_public_key, verify_keyring_against_trust, Keyring, TrackedFiles,
+    keyring_content_digest, parse_x25519_public_key, verify_keyring_against_trust, Keyring,
 };
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
@@ -102,24 +102,21 @@ pub fn cmd_tell(
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
+    // Stamp the ring-change pass as due (docs/design.md "The ring-change
+    // ceremony"). The stamp records the version and the signed-content
+    // digest just written, in this machine's key store: the whole-manifest
+    // pass runs only against this exact ring, only on this machine, and
+    // one pass consumes it. No committed repo content can forge it.
+    let version = keyring.version.expect("bump_version set the version");
+    let digest = keyring_content_digest(&content_to_sign);
+    RingPassStore::write(key_store, &repo_id, version, &digest)?;
+
     println!("added {} to the keyring", email);
 
-    // UX hint. Any ciphertext hidden before this tell was encrypted to
-    // the previous keyring and does not include the new collaborator's
-    // key, so their first reveal would fail. Point the owner at
-    // `git-veil hide`.
-    //
-    // Informational only. A load failure or empty tracked list means there
-    // is nothing yet to re-encrypt, so no hint and never an error.
-    let tracked = TrackedFiles::load(&repo_root.join(".git-veil/tracked.json"));
-    if let Ok(tracked) = tracked {
-        let has_ciphertext = tracked
-            .files
-            .iter()
-            .any(|file| encrypted_path_for(repo_root, file).exists());
-        if has_ciphertext {
-            println!("note: existing ciphertext does not include the new collaborator. Re-hide the tracked files (name each one) to encrypt them to the current keyring.");
-        }
-    }
+    // One plain line for the due pass: the fact, then the verb, and no
+    // command (the issue #42 message policy). The stamp is written on
+    // every tell, so the notice is unconditional: the fresh-start flow
+    // reaches the same pass on its first hide --all.
+    println!("note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.");
     Ok(())
 }

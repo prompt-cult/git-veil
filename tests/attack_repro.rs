@@ -5,7 +5,7 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_allow, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_remove,
+    cmd_add, cmd_allow, cmd_export_pin, cmd_hide, cmd_hide_all, cmd_import, cmd_init, cmd_remove,
     cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide,
     cmd_verify_keyring, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
     x25519_public_key_encoding, TrackedFiles,
@@ -696,6 +696,50 @@ fn fix_remove_keep_ciphertext_leaves_the_orphan_in_place() {
     )
     .expect_err("hide refuses a name outside the manifest");
     assert_eq!(exit_code_of(&err), 71);
+}
+
+// ---------------------------------------------------------------------------
+// Regression: the ring-change ceremony refuses a committed-but-untracked
+// ciphertext (exit 42)
+//
+// The de-tracking attack: a repo writer untracks a path while its
+// ciphertext stays committed. The ceremony rotates the whole manifest, so
+// it is exactly the pass that would silently skip the orphan and leave it
+// decryptable by a removed collaborator. The orphan gate refuses the pass.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fix_ceremony_refuses_a_committed_untracked_ciphertext() {
+    let f = Fixture::new("ceremony-orphan");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("api.key", b"API_KEY=x\n");
+    f.hide();
+    f.stage_all();
+
+    // De-track the path while its ciphertext stays committed (the
+    // --keep-ciphertext shape, as a repo writer or a careless owner would
+    // produce), then stage the manifest change so the index reflects it.
+    cmd_remove(&f.repo.path, vec!["api.key".to_string()], true).expect("remove");
+    f.stage_all();
+
+    // The stamp is due (tell stamped the ring change; the scoped hide never
+    // consumed it), so the refusal is the orphan gate, not the stamp gate.
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, true)
+        .expect_err("the ceremony must refuse a committed orphan");
+    assert_eq!(
+        exit_code_of(&err),
+        42,
+        "the orphan gate refuses the whole-manifest pass"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("api.key.secret"),
+        "the refusal names the orphan: {message}"
+    );
+    assert!(
+        f.repo.join("api.key.secret").exists(),
+        "nothing is rotated on refusal"
+    );
 }
 
 // ---------------------------------------------------------------------------

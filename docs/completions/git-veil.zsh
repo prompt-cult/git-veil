@@ -161,6 +161,7 @@ _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--keep-plaintext[Leave plaintext files beside their ciphertexts instead of deleting them]' \
+'()--all[Run the ring-change pass\: re-encrypt every tracked file to the current keyring. Gated on the ring-change stamp that tell and removeperson write on this machine]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \

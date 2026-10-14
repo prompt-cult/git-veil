@@ -41,7 +41,7 @@ pub use commands::clean::cmd_clean;
 pub use commands::export::{cmd_export, export_public_key};
 pub use commands::export_pin::cmd_export_pin;
 pub use commands::fingerprint::cmd_fingerprint;
-pub use commands::hide::cmd_hide;
+pub use commands::hide::{cmd_hide, cmd_hide_all};
 pub use commands::import::cmd_import;
 pub use commands::init::cmd_init;
 pub use commands::list::cmd_list;
@@ -78,4 +78,4 @@ pub use signing::{
     sign_keyring_content, verify_keyring_signature,
 };
 pub use tracked_files::{get_git_config_email, validate_tracked_path, TrackedFiles};
-pub use trust_store::{TrustPinStore, TrustStore};
+pub use trust_store::{RingPassStore, TrustPinStore, TrustStore};

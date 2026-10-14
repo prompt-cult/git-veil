@@ -153,7 +153,9 @@ impl ExitCode {
             ExitCode::EncryptionFailed => "Encryption failed",
             ExitCode::KeyParseFailure => "A key, keyring or signature could not be parsed",
             ExitCode::SignatureVerificationFailed => "Keyring signature missing or invalid",
-            ExitCode::Refused => "Policy refusal such as init over established trust",
+            ExitCode::Refused => {
+                "Policy refusal such as init over established trust or a ring-change pass not due"
+            }
             ExitCode::UnsafePath => {
                 "Path safety refusal such as a symlink or a path outside the repository"
             }

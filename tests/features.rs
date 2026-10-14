@@ -3,10 +3,11 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_unhide, cmd_verify_keyring, encrypt_to_x25519_public_keys, exit_code_of,
-    generate_signing_keypair, generate_x25519_private_key, parse_x25519_public_key,
-    x25519_public_key_encoding, Keyring, TrackedFiles,
+    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_hide_all, cmd_import, cmd_init,
+    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    encrypt_to_x25519_public_keys, exit_code_of, extract_content_to_verify_from_keyring,
+    generate_signing_keypair, generate_x25519_private_key, keyring_content_digest,
+    parse_x25519_public_key, x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
 };
 use std::fs;
 use std::path::Path;
@@ -1002,4 +1003,213 @@ fn test_positional_reveal_is_never_allowance_gated() {
         fs::read(f.repo.join("nominated")).unwrap(),
         b"nominated plaintext\n"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The ring-change ceremony: tell/removeperson stamp the pass; hide --all
+// runs the whole-manifest re-encrypt once against the stamped ring.
+// ---------------------------------------------------------------------------
+
+/// The stamp holds the keyring version and the signed-content digest, and
+/// tell/removeperson re-stamp it on every ring change.
+#[test]
+fn test_tell_and_removeperson_stamp_the_ring_change() {
+    let f = Fixture::new("ring-pass-stamp");
+
+    f.add_collab("alice@example.com");
+
+    let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let signed = extract_content_to_verify_from_keyring(&keyring_text).unwrap();
+    let version = Keyring::parse(&keyring_text).unwrap().version.unwrap();
+    let stamp = RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .expect("tell stamps the ring-change pass");
+    assert_eq!(
+        stamp,
+        (version, keyring_content_digest(&signed)),
+        "the stamp names the ring tell signed"
+    );
+
+    // removeperson re-signs at the next version and re-stamps.
+    cmd_removeperson(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        None,
+    )
+    .expect("removeperson");
+    let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let signed = extract_content_to_verify_from_keyring(&keyring_text).unwrap();
+    let version = Keyring::parse(&keyring_text).unwrap().version.unwrap();
+    let stamp = RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .expect("removeperson stamps the ring-change pass");
+    assert_eq!(
+        stamp,
+        (version, keyring_content_digest(&signed)),
+        "the stamp names the ring removeperson signed"
+    );
+}
+
+#[test]
+fn test_hide_all_runs_once_then_refuses() {
+    let f = Fixture::new("hide-all-once");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false).expect("the ceremony pass");
+    assert!(f.repo.join(".env.secret").exists());
+    assert!(f.repo.join("config.yml.secret").exists());
+    assert!(
+        !f.repo.join(".env").exists() && !f.repo.join("config.yml").exists(),
+        "the pass deletes plaintexts by default, like any hide"
+    );
+    assert!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+            .unwrap()
+            .is_none(),
+        "one pass consumes the stamp"
+    );
+
+    // The stamp is spent, so a second pass refuses with the policy code.
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("a consumed pass refuses");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::Refused as i32,
+        "the stamp gate refuses with the policy code 70"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains(TEST_REPO_ID),
+        "the refusal names the repository id: {message}"
+    );
+}
+
+#[test]
+fn test_hide_all_refuses_without_a_due_stamp() {
+    let f = Fixture::new("hide-all-nostamp");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+
+    // No stamp at all: the ring changed on this machine, but the record is
+    // gone. The pass refuses before anything is encrypted.
+    RingPassStore::clear(&f.key_store.path, TEST_REPO_ID).unwrap();
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("a pass with no stamp refuses");
+    assert_eq!(exit_code_of(&err), git_veil::ExitCode::Refused as i32);
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains(TEST_REPO_ID),
+        "the refusal names the repository id: {message}"
+    );
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is encrypted on refusal"
+    );
+
+    // A stamp that does not match the committed ring refuses too: the
+    // stamp says which ring the pass may rotate, and the committed ring
+    // moved on.
+    RingPassStore::write(&f.key_store.path, TEST_REPO_ID, 999, &"a".repeat(64)).unwrap();
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect_err("a pass against a ring the stamp does not name refuses");
+    assert_eq!(exit_code_of(&err), git_veil::ExitCode::Refused as i32);
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is encrypted on refusal"
+    );
+}
+
+#[test]
+fn test_the_ceremony_re_encrypts_every_tracked_secret() {
+    let f = Fixture::new("hide-all-reencrypt");
+
+    let alice = f.add_collab("alice@example.com");
+    f.import_id(&alice, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    // Hide to the ring as it stands, keeping plaintexts so the pass has
+    // something to rotate (rotation is reveal -> ring change -> pass).
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
+    let old_ciphertext = fs::read(f.repo.join(".env.secret")).unwrap();
+
+    // Rotate the ring: bob joins. The pass is stamped as due.
+    let bob = f.add_collab("bob@example.com");
+    f.import_id(&bob, "bob.age");
+
+    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false).expect("the ceremony pass");
+
+    // Every tracked ciphertext was re-encrypted to the current ring: fresh
+    // bytes, and bob - who was never in the old ring - can reveal.
+    assert_ne!(
+        fs::read(f.repo.join(".env.secret")).unwrap(),
+        old_ciphertext,
+        "the pass rewrote the ciphertext to the new ring"
+    );
+    cmd_reveal(
+        &f.repo.path,
+        "bob@example.com",
+        "origin",
+        &f.key_store.path,
+        vec![".env".to_string(), "config.yml".to_string()],
+    )
+    .expect("the new collaborator decrypts the passed ciphertexts");
+    assert_eq!(fs::read(f.repo.join(".env")).unwrap(), b"API_KEY=1\n");
+    assert_eq!(fs::read(f.repo.join("config.yml")).unwrap(), b"config\n");
+}
+
+#[test]
+fn test_a_scoped_hide_needs_no_stamp_and_consumes_none() {
+    let f = Fixture::new("scoped-hide-stamp");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    // The pass is due (tell stamped it), and the scoped hide ignores the
+    // stamp both ways: it runs, and it leaves the pass armed.
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("scoped hide");
+    assert!(f.repo.join(".env.secret").exists());
+    assert!(
+        !f.repo.join("config.yml.secret").exists(),
+        "the scoped hide covers exactly the named file"
+    );
+    assert!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+            .unwrap()
+            .is_some(),
+        "the scoped hide never consumes the stamp"
+    );
+
+    // And the ceremony still runs afterwards against the same stamp.
+    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+        .expect("the pass runs after a scoped hide");
+    assert!(f.repo.join("config.yml.secret").exists());
 }

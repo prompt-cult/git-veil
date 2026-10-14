@@ -6,9 +6,10 @@ use crate::allowance::AllowanceStore;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
+use crate::trust_store::RingPassStore;
 use crate::{
-    create_signature_block, extract_content_to_verify_from_keyring, verify_keyring_against_trust,
-    Keyring,
+    create_signature_block, extract_content_to_verify_from_keyring, keyring_content_digest,
+    verify_keyring_against_trust, Keyring,
 };
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
@@ -77,6 +78,15 @@ pub fn cmd_removeperson(
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
+    // Stamp the ring-change pass as due (docs/design.md "The ring-change
+    // ceremony"). The stamp records the version and the signed-content
+    // digest just written, in this machine's key store: the whole-manifest
+    // pass runs only against this exact ring, only on this machine, and
+    // one pass consumes it. No committed repo content can forge it.
+    let version = keyring.version.expect("bump_version set the version");
+    let digest = keyring_content_digest(&content_to_sign);
+    RingPassStore::write(key_store, &repo_id, version, &digest)?;
+
     // Purge the removed principal's allowance records in the key store
     // this machine runs against (docs/design.md "Allowance"). The pin was
     // verified equal to the committed fingerprint above, so it keys the
@@ -87,5 +97,11 @@ pub fn cmd_removeperson(
     }
 
     println!("removed {} from the keyring", email_to_remove);
+
+    // One plain line for the due pass: the fact, then the verb, and no
+    // command (the issue #42 message policy). After a removal the pass is
+    // the rotation step: without it, existing ciphertext stays decryptable
+    // by the removed principal.
+    println!("note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.");
     Ok(())
 }
