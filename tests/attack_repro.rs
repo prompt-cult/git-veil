@@ -798,6 +798,7 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
         "victim@example.com",
         "origin",
         &f.key_store.path,
+        Vec::new(),
     )
     .expect_err("reveal must refuse a git-tracked plaintext");
     assert_eq!(
@@ -856,6 +857,7 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
         "owner@example.com",
         "origin",
         &f.key_store.path,
+        Vec::new(),
     )
     .expect("reveal of a gitignored tracked plaintext must work");
     assert_eq!(fs::read(f.repo.join("secrets.env")).unwrap(), secret);
@@ -1002,6 +1004,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
         "victim@example.com",
         "origin",
         &f.key_store.path,
+        Vec::new(),
     )
     .expect_err("exit-43 gate must refuse the case-variant spelling");
     assert_eq!(exit_code_of(&err), 43);

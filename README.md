@@ -232,8 +232,8 @@ the workflow differ. One payoff is a smaller binary.
 | `add`            | Track files for encryption (auto-gitignores plaintext names)           |
 | `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt all tracked files to the keyring and DELETE the plaintexts (the default; `--keep-plaintext` keeps them; refuses when a `.secret` path is git-ignored) |
-| `reveal`         | Decrypt all tracked files back to plaintext                             |
+| `hide`           | Encrypt tracked files to the keyring and DELETE the plaintexts (all files by default; named files with FILE arguments; `--keep-plaintext` keeps them; refuses when a `.secret` path is git-ignored) |
+| `reveal`         | Decrypt tracked files back to plaintext (all files by default; named files with FILE arguments) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
 | `changes`        | Report where plaintext differs from the last hidden version             |

@@ -717,8 +717,14 @@ fn test_reveal_no_pin_error_names_both_paths() {
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
 
-    let err = cmd_reveal(&repo.path, "owner@example.com", "origin", &key_store.path)
-        .expect_err("reveal without a pin must fail");
+    let err = cmd_reveal(
+        &repo.path,
+        "owner@example.com",
+        "origin",
+        &key_store.path,
+        Vec::new(),
+    )
+    .expect_err("reveal without a pin must fail");
     let message = err.to_string();
     assert!(
         message.contains("no trust pin exists on this machine"),

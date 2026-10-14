@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,7 +8,9 @@ use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plainte
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::discover_x25519_private_key;
-use crate::tracked_files::{ensure_regular_file, validate_tracked_path};
+use crate::tracked_files::{
+    ensure_regular_file, resolve_repo_relative_input, validate_tracked_path, PathResolveMode,
+};
 use crate::{cmd_verify_keyring, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
@@ -25,7 +28,16 @@ fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Decrypts all tracked files using the user's private key.
+/// Decrypts tracked files using the user's private key.
+///
+/// With an empty `files`, reveal covers every tracked file. With positional
+/// paths, reveal covers exactly the named files: each is resolved the way
+/// unhide resolves paths (the plaintext is normally absent at reveal time,
+/// so the name need not exist on disk), and must already be tracked - an
+/// unknown or untracked name refuses with the path-safety code (71). Reveal
+/// is ungated: ring membership is the only requirement, so the encryption
+/// allowance never applies here. There is no change detection: the caller
+/// names the file, reveal restores that file.
 ///
 /// Tracked paths are repo-relative (relative to `repo_root`) and are
 /// validated before any use, so a malicious committed tracked.json cannot
@@ -36,6 +48,7 @@ pub fn cmd_reveal(
     email: &str,
     remote_name: &str,
     key_store: &Path,
+    files: Vec<String>,
 ) -> Result<()> {
     // Verify keyring signature first
     cmd_verify_keyring(repo_root, remote_name, key_store)?;
@@ -62,7 +75,39 @@ pub fn cmd_reveal(
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
-    if tracked.files.is_empty() {
+    // The working set. Bare reveal covers the whole manifest. With positional
+    // paths, reveal covers exactly the named files: each is resolved the way
+    // unhide resolves paths, and must already be tracked. No change detection.
+    let scoped: Vec<PathBuf> = if files.is_empty() {
+        tracked.files.clone()
+    } else {
+        let mut seen: HashSet<PathBuf> = HashSet::new();
+        let mut named: Vec<PathBuf> = Vec::new();
+        for file in &files {
+            let relative = resolve_repo_relative_input(
+                repo_root,
+                file,
+                PathResolveMode::LexicalStripValidateRelative,
+                "reveal",
+            )?;
+            if !tracked.files.contains(&relative) {
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!(
+                        "refusing to reveal: {} is not a tracked path in .git-veil/tracked.json. \
+                         Track it with git-veil add first. Error code 71.",
+                        relative.to_string_lossy()
+                    ),
+                ));
+            }
+            if seen.insert(relative.clone()) {
+                named.push(relative);
+            }
+        }
+        named
+    };
+
+    if scoped.is_empty() {
         println!("No files tracked");
         return Ok(());
     }
@@ -75,7 +120,7 @@ pub fn cmd_reveal(
     // config-scale files, so holding every plaintext in memory is
     // acceptable. Reveal is not a bulk-restoration path.
     let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
-    for file in &tracked.files {
+    for file in &scoped {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
 

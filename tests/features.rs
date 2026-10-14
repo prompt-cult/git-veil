@@ -4,8 +4,9 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell,
-    cmd_trust, cmd_unhide, cmd_verify_keyring, exit_code_of, generate_signing_keypair,
-    generate_x25519_private_key, x25519_public_key_encoding, Keyring,
+    cmd_trust, cmd_unhide, cmd_verify_keyring, encrypt_to_x25519_public_keys, exit_code_of,
+    generate_signing_keypair, generate_x25519_private_key, parse_x25519_public_key,
+    x25519_public_key_encoding, Keyring,
 };
 use std::fs;
 use std::path::Path;
@@ -198,6 +199,7 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
+        Vec::new(),
     );
     assert!(
         result.is_err(),
@@ -241,13 +243,21 @@ fn test_multi_recipient_both_can_decrypt() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
+        Vec::new(),
     )
     .expect("alice reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
     // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("re-hide");
-    cmd_reveal(&f.repo.path, "bob@example.com", "origin", &f.key_store.path).expect("bob reveal");
+    cmd_reveal(
+        &f.repo.path,
+        "bob@example.com",
+        "origin",
+        &f.key_store.path,
+        Vec::new(),
+    )
+    .expect("bob reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 }
 
@@ -298,6 +308,7 @@ fn test_subdirectory_hide_reveal() {
         "alice@example.com",
         "origin",
         &f.key_store.path,
+        Vec::new(),
     )
     .expect("reveal");
 
@@ -755,4 +766,152 @@ fn test_positional_hide_allow_gate_is_scoped_to_named_set() {
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
         .expect_err("bare hide still gates on the whole manifest");
     assert_eq!(exit_code_of(&err), 72, "bare hide keeps its own gate");
+}
+
+// ---------------------------------------------------------------------------
+// Positional reveal: `git-veil reveal <path>...` decrypts exactly the named
+// files. Reveal stays ungated: the allowance never applies.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_positional_reveal_reveals_only_named_files() {
+    let f = Fixture::new("positional-reveal-only");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    // Hide everything. The default deletes both plaintexts.
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false, Vec::new()).expect("bare hide");
+    assert!(!f.repo.join(".env").exists() && !f.repo.join("config.yml").exists());
+
+    // Scoped reveal restores exactly the named file. The plaintext is
+    // absent, so the name need not exist on disk to resolve.
+    cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        vec![".env".to_string()],
+    )
+    .expect("scoped reveal");
+    assert_eq!(
+        fs::read(f.repo.join(".env")).unwrap(),
+        b"API_KEY=1\n",
+        "the named file is revealed"
+    );
+    assert!(
+        !f.repo.join("config.yml").exists(),
+        "an un-named file is never revealed by a scoped reveal"
+    );
+    assert!(
+        f.repo.join(".env.secret").exists() && f.repo.join("config.yml.secret").exists(),
+        "reveal never deletes ciphertexts"
+    );
+
+    // Bare reveal keeps the whole-manifest behaviour.
+    cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        Vec::new(),
+    )
+    .expect("bare reveal");
+    assert_eq!(fs::read(f.repo.join("config.yml")).unwrap(), b"config\n");
+}
+
+#[test]
+fn test_positional_reveal_refuses_untracked_name_with_code_71() {
+    let f = Fixture::new("positional-reveal-untracked");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false, Vec::new()).expect("hide");
+
+    // On disk or not, a name outside the manifest refuses with the
+    // path-safety code.
+    let err = cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        vec!["stray.txt".to_string()],
+    )
+    .expect_err("an untracked name must refuse");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::UnsafePath as i32,
+        "an untracked name refuses with the path-safety code 71"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("stray.txt"),
+        "the refusal names the offending path: {message}"
+    );
+    assert!(
+        !f.repo.join(".env").exists(),
+        "nothing is revealed when the named set refuses"
+    );
+}
+
+#[test]
+fn test_positional_reveal_is_never_allowance_gated() {
+    let f = Fixture::new("positional-reveal-ungated");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    // Nominate a path directly in the committed manifest, the way the
+    // exit-72 regression tests do. No allowance for it exists on this
+    // machine, so hide would refuse a first-encrypt of it. The ciphertext
+    // here is written out of band, straight to the ring's public keys, so
+    // no allow step ever runs in this test.
+    fs::write(f.repo.join("nominated"), b"nominated plaintext\n").unwrap();
+    fs::write(f.repo.join(".gitignore"), "nominated\n").unwrap();
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        "{\n  \"files\": [\n    \"nominated\"\n  ]\n}",
+    )
+    .unwrap();
+    let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).unwrap();
+    let public_keys: Vec<_> = keyring
+        .entries
+        .iter()
+        .map(|e| parse_x25519_public_key(&e.public_key).unwrap())
+        .collect();
+    let ciphertext = encrypt_to_x25519_public_keys(b"nominated plaintext\n", &public_keys).unwrap();
+    fs::write(f.repo.join("nominated.secret"), ciphertext).unwrap();
+
+    // The contrast: hide of the same path refuses with the allowance code.
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        vec!["nominated".to_string()],
+    )
+    .expect_err("hide is gated on first-encrypt");
+    assert_eq!(exit_code_of(&err), 72);
+
+    // Reveal of the named path succeeds with no allow step. Ring
+    // membership is the only requirement; the allowance store is never
+    // consulted on the reveal path.
+    cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        vec!["nominated".to_string()],
+    )
+    .expect("reveal is ungated: ring membership is the only requirement");
+    assert_eq!(
+        fs::read(f.repo.join("nominated")).unwrap(),
+        b"nominated plaintext\n"
+    );
 }

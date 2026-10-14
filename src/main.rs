@@ -243,6 +243,7 @@ fn run() -> Result<()> {
             email,
             remote,
             key_store: opt,
+            files,
         } => {
             let email = resolve_email(&repo_root, email)?;
             cmd_reveal(
@@ -250,6 +251,7 @@ fn run() -> Result<()> {
                 &email,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
+                files,
             )?;
         }
         Commands::Cat {

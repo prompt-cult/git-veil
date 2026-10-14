@@ -441,6 +441,7 @@ fn test_hide_reveal_roundtrip() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        Vec::new(),
     )
     .expect("reveal");
 
@@ -1191,6 +1192,7 @@ fn test_multi_recipient_hide_reveal() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        Vec::new(),
     )
     .expect("alice reveal");
 
@@ -1212,6 +1214,7 @@ fn test_multi_recipient_hide_reveal() {
         "bob@example.com",
         "origin",
         &fixture.key_store.path,
+        Vec::new(),
     )
     .expect("bob reveal");
 
@@ -1276,6 +1279,7 @@ fn test_full_lifecycle() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        Vec::new(),
     )
     .expect("reveal");
 
@@ -1425,6 +1429,7 @@ fn test_reveal_does_not_delete_ciphertext() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        Vec::new(),
     )
     .expect("reveal");
 

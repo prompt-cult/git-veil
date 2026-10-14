@@ -546,7 +546,7 @@ EXAMPLES
         files: Vec<String>,
     },
 
-    /// Decrypt all tracked files back to plaintext
+    /// Decrypt tracked files back to plaintext
     #[command(after_long_help = "\
 Decrypts every tracked file back to its plaintext path, using your X25519
 private key from the local key store. The keyring signature is verified
@@ -554,18 +554,26 @@ against the pinned trusted key before any decryption. Your principal
 comes from git config user.email or --email; a missing private key exits
 with code 21 and the create-and-back-up recipe.
 
+Without paths reveal covers every tracked file. With one or more FILE
+arguments reveal covers exactly the named files: each must already be
+tracked - an unknown or untracked name refuses (error code 71). Reveal
+is never gated by the encryption allowance: decryption needs only
+keyring membership, so a named path is revealed without any allow step.
+
 reveal is the inverse of hide for all files; unhide does one file;
 cat prints one file without touching disk state.
 
-reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY tracked file must have its
-.secret ciphertext present and decrypt successfully. Phase 1 verifies and
-decrypts all files in memory - if any ciphertext is missing or cannot be
-decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
-(only after every decryption succeeded) writes each plaintext atomically.
+reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY file in the working set
+must have its .secret ciphertext present and decrypt successfully.
+Phase 1 verifies and decrypts all files in memory - if any ciphertext
+is missing or cannot be decrypted, reveal refuses WITHOUT changing
+anything on disk. Phase 2 (only after every decryption succeeded)
+writes each plaintext atomically.
 
 EXAMPLES
   $ git-veil reveal
   $ git-veil reveal --email alice@example.com
+  $ git-veil reveal .env    # restore only .env, leave every other file hidden
 ")]
     Reveal {
         /// Your email address
@@ -577,6 +585,9 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
+        /// Tracked files to reveal; no paths means every tracked file
+        #[arg(value_name = "FILE")]
+        files: Vec<String>,
     },
 
     /// Decrypt a single tracked file to stdout
