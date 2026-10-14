@@ -301,8 +301,11 @@ on line 2.
 
 Golden vectors. These (label, public key encoding, fingerprint)
 triples are produced by the one-liners above and asserted against the Rust
-implementation (tests/fingerprint.rs) - code equals coreutils for every
-key type. The first public key is a real `age-keygen` X25519 public key; the
+implementation (tests/fingerprint.rs) - code equals the stock tools for
+every key type. Both toolchains were run by hand over every vector: GNU
+coreutils 9.11 `sha256sum`, and uutils coreutils 0.9.0 `uu-sha256sum`, the
+latter also cross-checked through `uu-printf`. The first public key is a
+real `age-keygen` X25519 public key; the
 second is a real openssl-generated Ed25519 verifying key:
 
 | label | public key encoding | fingerprint |
