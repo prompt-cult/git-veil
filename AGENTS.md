@@ -92,3 +92,11 @@ Write like a person. If a sentence sounds like a press release, rewrite it.
   "powerful", "simple", "easy" when they only pad the sentence.
 - Do not bold every other word. Bold a term once, if it helps.
 - Explain jargon in plain words the first time it appears.
+## GIT COMMENTS ARE NEVER TRUTH (law)
+
+Commit messages, release notes, decision-log claims and any agent narrative
+are INDICATIVE ONLY — NOT authoritative. They have contained false "verified"
+claims (e.g. an "E2E verified" that was only an HTTP 200). Before acting or
+reporting: verify against LIVE system state — the actual process logs, DB
+rows, endpoint probes, real sends watched on the wire. Ground truth beats
+documentation. Never confirm a claim by citing another comment.
