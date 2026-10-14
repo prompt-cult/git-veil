@@ -1,13 +1,14 @@
 //! `git-veil export-pin <repo_id> --output <pin-file>`: emit the pin-file
-//! that a machine WITHOUT the signing key imports with
+//! that a machine without the signing key imports with
 //! `git-veil trust --import`.
 //!
-//! Export requires the SAME possession proof as `trust`: an exact match
-//! between the repository's committed `owner.verifying` and the verifying
-//! key derived from a seed in the signing key store. A machine without the
-//! matching seed cannot export at all - pins originate only from machines
-//! holding the signing key; store-less machines are consumers, never
-//! producers. The output path must be outside the repository worktree.
+//! Export requires the same possession proof as `trust`: an exact
+//! match between the repository's committed `owner.verifying` and the
+//! verifying key derived from a seed in the signing key store. A
+//! machine without the matching seed cannot export at all. Pins
+//! originate only from machines holding the signing key. Store-less
+//! machines are consumers, never producers. The output path must be
+//! outside the repository worktree.
 
 use anyhow::Result;
 use std::path::Path;

@@ -1,4 +1,4 @@
-//! Interop tests: age identity/recipient roundtrip, key store import/export,
+//! Interop tests: X25519 key roundtrip, key store import/export,
 //! keyring serialization format, and cross-implementation interoperability
 //! with the `age` and `rage` CLI tools.
 
@@ -169,8 +169,8 @@ fn test_keyring_serialize_parse_roundtrip() {
 
 #[test]
 fn test_keyring_v2_two_field_format() {
-    // Keyring format v2 (issue #41): exactly two fields per entry,
-    // principal and public key; fingerprints are computed, never stored.
+    // Keyring format v2: exactly two fields per entry, principal and
+    // public key. Fingerprints are computed and never stored.
     let identity = generate_x25519_private_key();
     let recipient_str = x25519_public_key_encoding(&identity);
 
@@ -264,7 +264,8 @@ fn test_keyring_find_case_insensitive() {
 // CLI interop: age-keygen / rage-keygen keys work with git-veil
 // ===========================================================================
 
-/// Generates an age identity file using `age-keygen` and returns (identity_str, recipient_str).
+/// Generates an X25519 private key file (age identity) using `age-keygen`
+/// and returns (private key string, public key string).
 fn age_keygen(dir: &TempDir, filename: &str) -> (String, String) {
     let path = dir.join(filename);
     let status = Command::new("age-keygen")
@@ -290,7 +291,8 @@ fn age_keygen(dir: &TempDir, filename: &str) -> (String, String) {
     (identity_str, recipient_str)
 }
 
-/// Generates an age identity file using `rage-keygen` and returns (identity_str, recipient_str).
+/// Generates an X25519 private key file (age identity) using `rage-keygen`
+/// and returns (private key string, public key string).
 fn rage_keygen(dir: &TempDir, filename: &str) -> (String, String) {
     let path = dir.join(filename);
     let status = Command::new("rage-keygen")
@@ -326,18 +328,18 @@ fn test_age_keygen_identity_works_with_git_veil() {
     let dir = TempDir::new("age-keygen");
     let (identity_str, recipient_str) = age_keygen(&dir, "key.txt");
 
-    // git-veil can parse the identity
+    // git-veil can parse the private key
     let identity =
         parse_x25519_private_key(&identity_str).expect("git-veil parse age-keygen identity");
 
-    // git-veil can derive the same recipient
+    // git-veil can derive the same public key encoding
     let derived = x25519_public_key_encoding(&identity);
     assert_eq!(
         derived, recipient_str,
         "git-veil recipient should match age-keygen recipient"
     );
 
-    // git-veil can parse the recipient
+    // git-veil can parse the public key encoding
     let _recipient =
         parse_x25519_public_key(&recipient_str).expect("git-veil parse age-keygen recipient");
 }
@@ -374,12 +376,12 @@ fn test_git_veil_identity_works_with_age_keygen_recipient() {
     let dir = TempDir::new("gv-age-keygen");
     let (identity_str, recipient_str) = age_keygen(&dir, "key.txt");
 
-    // git-veil encrypts with the age-keygen recipient
+    // git-veil encrypts to the age-keygen public key
     let recipient = parse_x25519_public_key(&recipient_str).unwrap();
     let plaintext = b"encrypted by git-veil, key from age-keygen\n";
     let ciphertext = encrypt_to_x25519_public_key(plaintext, &recipient).unwrap();
 
-    // git-veil decrypts with the age-keygen identity
+    // git-veil decrypts with the age-keygen private key
     let identity = parse_x25519_private_key(&identity_str).unwrap();
     let decrypted = decrypt_with_x25519_private_key(&ciphertext, &identity).unwrap();
     assert_eq!(decrypted, plaintext);
@@ -389,7 +391,8 @@ fn test_git_veil_identity_works_with_age_keygen_recipient() {
 // CLI interop: git-veil encrypts, age/rage CLI decrypts
 // ===========================================================================
 
-/// Writes an age identity file in the format age/rage CLI expects.
+/// Writes an X25519 private key file (age identity) in the format the
+/// age/rage CLI expects.
 fn write_identity_file(
     dir: &TempDir,
     filename: &str,
@@ -429,7 +432,7 @@ fn test_git_veil_encrypts_age_cli_decrypts() {
     let ct_path = dir.join("ciphertext.bin");
     fs::write(&ct_path, &ciphertext).unwrap();
 
-    // Write identity file for age CLI
+    // Write the private key file for the age CLI
     let id_path = write_identity_file(&dir, "identity.txt", &identity_str, &recipient_str);
 
     // age CLI decrypts
@@ -643,14 +646,14 @@ fn test_git_veil_key_age_cli_encrypts_and_decrypts() {
     let identity_str = identity.to_string().expose_secret().to_string();
     let recipient_str = x25519_public_key_encoding(&identity);
 
-    // Write identity file in age CLI format
+    // Write the private key file in the age CLI format
     let id_path = write_identity_file(&dir, "identity.txt", &identity_str, &recipient_str);
 
     let pt_path = dir.join("plaintext.txt");
     let plaintext = b"git-veil key, age CLI encrypt and decrypt\n";
     fs::write(&pt_path, plaintext).unwrap();
 
-    // age CLI encrypts using git-veil's recipient
+    // age CLI encrypts to git-veil's public key encoding
     let ct_path = dir.join("ciphertext.bin");
     let status = Command::new("age")
         .arg("-r")
@@ -662,7 +665,7 @@ fn test_git_veil_key_age_cli_encrypts_and_decrypts() {
         .expect("age");
     assert!(status.success(), "age encrypt failed");
 
-    // age CLI decrypts using git-veil's identity
+    // age CLI decrypts using git-veil's private key
     let output = Command::new("age")
         .arg("-d")
         .arg("-i")
@@ -739,7 +742,7 @@ fn test_git_veil_key_rage_cli_encrypts_and_decrypts() {
 }
 
 // ===========================================================================
-// CLI interop: multi-recipient git-veil encrypts, age CLI decrypts one
+// CLI interop: git-veil encrypts to multiple keys, age CLI decrypts one
 // ===========================================================================
 
 #[test]
@@ -799,7 +802,7 @@ fn test_git_veil_multi_recipient_age_cli_decrypts() {
 }
 
 // ===========================================================================
-// CLI interop: age-keygen identity file importable by git-veil import
+// CLI interop: git-veil imports an age-keygen key file
 // ===========================================================================
 
 #[test]

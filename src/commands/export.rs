@@ -4,13 +4,13 @@ use std::path::Path;
 use crate::age_crypto::load_x25519_public_keys_from_store;
 use crate::fs_atomic::write_atomic;
 
-/// Resolves `identifier` - an exact X25519 public key encoding - against
+/// Resolves `identifier`, an exact X25519 public key encoding, against
 /// every public key in the local key store and returns its encoding.
 ///
-/// Matching is exact equality on the public key string; no
-/// fingerprint-as-identifier mode remains (issue #41). The store may hold
-/// public keys imported via `trust` or derived from imported private keys;
-/// it deduplicates by public key encoding, so at most one entry matches.
+/// Matching is exact equality on the public key string. The store may
+/// hold public keys imported via `trust` or derived from imported
+/// private keys. It deduplicates by public key encoding, so at most
+/// one entry matches.
 pub fn export_public_key(key_store: &Path, identifier: &str) -> Result<String> {
     let public_keys = load_x25519_public_keys_from_store(key_store)?;
     let wanted = identifier.trim();

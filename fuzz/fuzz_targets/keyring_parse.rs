@@ -6,12 +6,12 @@ use git_veil::Keyring;
 fuzz_target!(|data: &[u8]| {
     let Ok(s) = std::str::from_utf8(data) else { return };
     if let Ok(k) = Keyring::parse(s) {
-        // a colon in any email would brick the keyring line format
-        // (add_entry guards it; parse must never let one through)
+        // a colon in any email would brick the keyring line format.
+        // add_entry guards it. Parse must never let one through.
         for e in &k.entries {
             assert!(!e.email.contains(':'), "parsed email must not contain ':'");
         }
-        // roundtrip oracle: serialize∘parse must be stable, field for field
+        // roundtrip oracle: serialize then parse must be stable, field for field
         let reparsed = Keyring::parse(&k.serialize())
             .expect("serialize(parse(x)) must re-parse");
         assert_eq!(reparsed.entries.len(), k.entries.len());

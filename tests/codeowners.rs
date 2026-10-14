@@ -1,6 +1,6 @@
-//! CODEOWNERS coverage tests (issue #27): init suggests, trust warns,
-//! suppression is deliberate and per pinned repository. The tool never
-//! requires, never creates the file, and never alters an exit code.
+//! CODEOWNERS coverage tests. Suppression is deliberate and per pinned
+//! repository. The tool never requires CODEOWNERS, never creates the
+//! file, and never alters an exit code.
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
@@ -115,9 +115,9 @@ fn test_directory_pattern_and_inner_file_both_cover_the_state_directory() {
     fs::write(repo_partial.join("CODEOWNERS"), b"owner.verifying @owner\n").unwrap();
     assert!(!covers_trust_critical_paths(&repo_partial.path));
 
-    // Last match wins: a final negation uncovers what an earlier pattern
-    // covered (negation is not valid CODEOWNERS, but the matcher answers
-    // the gitignore semantics honestly).
+    // Last match wins. A final negation uncovers what an earlier pattern
+    // covered. Negation is not valid CODEOWNERS, but the matcher reports
+    // the gitignore semantics honestly.
     let repo_negated = TempDir::new("negated");
     init_git_repo(&repo_negated.path);
     fs::write(
@@ -159,10 +159,9 @@ fn test_suppression_is_per_repository_and_recorded_in_the_key_store() {
 
 #[test]
 fn test_init_suggestion_respects_quiet_and_the_coverage_gate() {
-    // Not quiet, nothing covered: cmd_init must not fail and the state
-    // directory must exist (the suggestion is printed to stdout, which
-    // these cmd-level tests cannot capture; the quiet gate is exercised by
-    // the code path below).
+    // Not quiet and nothing covered. cmd_init must not fail and the state
+    // directory must exist. The suggestion is printed to stdout, which
+    // these cmd-level tests cannot capture.
     let repo = TempDir::new("init-suggest");
     init_git_repo(&repo.path);
     cmd_init(&repo.path, false).expect("init");
@@ -263,5 +262,5 @@ fn test_trust_warns_or_suppresses_without_touching_the_exit_code() {
         "a covered repository records no suppression"
     );
 
-    let _ = exit_code_of; // referenced to keep the import list honest
+    let _ = exit_code_of; // keeps the exit_code_of import used
 }

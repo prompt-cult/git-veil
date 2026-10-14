@@ -1,18 +1,18 @@
-//! Pin creation (issue #28): possession proof is the ONLY way to create a
-//! pin directly, and the keyfile argument is gone - a repository must never
+//! Pin creation. Possession proof is the only way to create a pin
+//! directly, and the keyfile argument is gone. A repository must never
 //! be able to supply its own trust anchor.
 //!
-//! Two pin-creation paths exist, and nothing else:
+//! Two pin-creation paths exist, and nothing else.
 //!
 //! 1. `git-veil trust <repo_id>` - possession proof. The candidate is the
-//!    repository's committed `owner.verifying`; the proof is an exact match
+//!    repository's committed `owner.verifying`. The proof is an exact match
 //!    between that candidate and the verifying key derived from a seed in
 //!    the signing key store (`<key store>/signing-keys.txt`). A machine
 //!    without the matching seed cannot pin.
 //! 2. `git-veil trust --import <pin-file>` - a pin-file produced by
-//!    `git-veil export-pin` on a machine that DID prove possession. Three
+//!    `git-veil export-pin` on a machine that proved possession. Three
 //!    mandatory consistency checks tie the pin-file to the repository's
-//!    committed key and metadata; any mismatch is a refusal.
+//!    committed key and metadata. Any mismatch is a refusal.
 //!
 //! Both commands refuse paths inside the repository worktree, so a bogus
 //! pin-file cannot travel through the repository itself.
@@ -35,8 +35,8 @@ use crate::{
     import_x25519_public_key_to_store, TrustPinStore, TrustStore,
 };
 
-/// The repository's committed owner verifying key: line 1 is the 64-hex
-/// Ed25519 verifying key; line 2, when present, is the owner's X25519
+/// The repository's committed owner verifying key. Line 1 is the 64-hex
+/// Ed25519 verifying key. Line 2, when present, is the owner's X25519
 /// public key encoding (imported into the key store as a convenience).
 pub(crate) const OWNER_VERIFYING: &str = "owner.verifying";
 
@@ -80,9 +80,9 @@ pub(crate) fn read_owner_verifying(
 /// The possession proof: the signing key store must hold a seed whose
 /// derived verifying key exactly matches `candidate`.
 ///
-/// All seeds are iterated; exactly one match pins, zero matches refuse
-/// with the no-match error, and more than one (a degenerate duplicated
-/// store) refuses on ambiguity rather than picking.
+/// All seeds are iterated. Exactly one match pins. Zero matches refuse
+/// with the no-match error. More than one, a degenerate duplicated
+/// store, refuses on ambiguity rather than picking.
 pub(crate) fn prove_possession(key_store: &Path, candidate: &VerifyingKey) -> Result<()> {
     let seeds = load_signing_keys(key_store)?;
     let matches: Vec<_> = seeds
@@ -187,15 +187,16 @@ fn write_pin_state(
 
     append_verifying_key_to_store(key_store, verifying_key_hex)?;
 
-    // The one derivation (issue #41): the repository id is the label, the
+    // The one derivation: the repository id is the label, and the
     // canonical lowercase hex of the verifying key bytes is the public key
     // encoding. The committed record, the per-machine pin and the owner
     // fingerprint metadata all carry this same value.
     let fingerprint = owner_key_fingerprint(repo_id, verifying_key);
 
-    // Re-trust visibility: if a pin already exists for this repo and names
-    // a DIFFERENT fingerprint, this machine's record of the repository's
-    // trust anchor is about to CHANGE - say so loudly before rewriting it.
+    // Re-trust visibility. If a pin already exists for this repo and
+    // names a different fingerprint, this machine's record of the
+    // repository's trust anchor is about to change. Say so loudly before
+    // rewriting it.
     if let Some(previous) = TrustPinStore::read_pin(key_store, repo_id)? {
         if !previous.eq_ignore_ascii_case(&fingerprint) {
             println!(
@@ -206,7 +207,7 @@ fn write_pin_state(
     }
 
     // Update the committed trust record. Ordering invariant: trust.json is
-    // written BEFORE the pin. verify compares the committed trust.json
+    // written before the pin. verify compares the committed trust.json
     // fingerprint against this pin and fails closed on a missing or
     // mismatched pin, so if the process dies between the two writes the
     // result is fail-closed (mismatch), never a state where a changed
@@ -215,15 +216,15 @@ fn write_pin_state(
     let mut trust_store = TrustStore::load_from_file(&trust_path)?;
     trust_store.add_trust(repo_id.to_string(), fingerprint.clone());
     if record_owner_fingerprint {
-        // The owner fingerprint IS the pinned fingerprint: one derivation,
-        // the repository id as the label (issue #41).
+        // The owner fingerprint is the pinned fingerprint. Both use one
+        // derivation, with the repository id as the label.
         trust_store.set_owner_fingerprint(repo_id.to_string(), fingerprint.clone());
 
-        // Reconcile the committed store (issue #43): a repository move or
-        // rename leaves trusted_keys entries for ids no configured remote
-        // derives any more. Entries matching any configured remote are
-        // kept - one per remote - and the pruned ids are public repository
-        // facts, so the removal names them (issue #42).
+        // Reconcile the committed store. A repository move or rename leaves
+        // trusted_keys entries for ids no configured remote derives any
+        // more. Entries matching any configured remote are kept, one per
+        // remote. The pruned ids are public repository facts, so the removal
+        // names them.
         let live = derive_configured_repo_ids(repo_root)?;
         for pruned_id in trust_store.reconcile_trusted_keys(&live) {
             println!("pruned the stale trusted key entry for {}", pruned_id);
@@ -262,7 +263,7 @@ pub fn cmd_trust(
         ));
     }
 
-    // The candidate is the repository's committed owner.verifying - never
+    // The candidate is the repository's committed owner.verifying, never
     // an argument. The proof: a seed in the signing key store derives to
     // exactly this key.
     let (verifying_key, verifying_key_hex, public_key) = read_owner_verifying(repo_root)?;
@@ -282,7 +283,7 @@ pub fn cmd_trust(
 
 /// `git-veil trust --import <pin-file>`: pin from a pin-file exported by a
 /// machine that proved possession. Three mandatory consistency checks tie
-/// the pin-file to this repository; a mismatch on any of them means one of
+/// the pin-file to this repository. A mismatch on any of them means one of
 /// the two channels is compromised.
 pub fn cmd_trust_import(
     repo_root: &Path,
@@ -316,12 +317,12 @@ pub fn cmd_trust_import(
         ));
     }
 
-    // Check (c): the pin-file's owner key fingerprint (the single
-    // documented derivation with the repository id as the label, over the
-    // public half - never the seed) exactly matches the owner fingerprint
-    // recorded in the committed .git-veil/ metadata. An absent field is a
-    // refusal: the metadata predates this rule and must be refreshed by
-    // the owner.
+    // Check (c): the pin-file's owner key fingerprint exactly matches the
+    // owner fingerprint recorded in the committed .git-veil/ metadata. The
+    // fingerprint is the single documented derivation with the repository id
+    // as the label, over the public half and never the seed. An absent
+    // field is a refusal. The metadata predates this rule and must be
+    // refreshed by the owner.
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let recorded = match trust_store.get_owner_fingerprint(&repo_id) {
@@ -358,10 +359,10 @@ pub fn cmd_trust_import(
         ));
     }
 
-    // All three channels agree: the pin-file is the anchor, the committed
-    // key and the committed fingerprint are the witnesses. The metadata is
-    // already committed and correct - import records the pin without
-    // rewriting it.
+    // All three channels agree: the pin-file is the anchor, and the
+    // committed key and the committed fingerprint are the witnesses. The
+    // metadata is already committed and correct. Import records the pin
+    // without rewriting it.
     write_pin_state(
         repo_root,
         key_store,
@@ -374,11 +375,12 @@ pub fn cmd_trust_import(
     codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners)
 }
 
-/// The non-blocking CODEOWNERS notice after a successful pin (issue #27):
-/// suppress the warning when asked (the suppression lives beside the pin in
-/// the key store, recorded only by this possession-proofed command), warn
-/// when no CODEOWNERS file covers the trust-critical paths, stay silent
-/// otherwise. Never refuses, never alters the exit code.
+/// The non-blocking CODEOWNERS notice after a successful pin.
+/// Suppress the warning when asked. The suppression lives beside the
+/// pin in the key store and is recorded only by this
+/// possession-proofed command. Warn when no CODEOWNERS file covers
+/// the trust-critical paths. Stay silent otherwise. Never refuses,
+/// never alters the exit code.
 fn codeowners_notice(
     repo_root: &Path,
     key_store: &Path,

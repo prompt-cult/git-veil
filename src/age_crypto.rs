@@ -1,14 +1,14 @@
 //! X25519 encryption and decryption over the age format
-//! (age-encryption.org/v1; X25519 per RFC 7748).
+//! (age-encryption.org/v1, X25519 per RFC 7748).
 //!
-//! Terminology (issue #40, see "Terminology" in docs/design.md): the core
-//! speaks RFC-standard cryptography only. The one boundary with the age
-//! crate's own vocabulary is this import, where the upstream type names are
-//! aliased to the crypto terms used everywhere else:
+//! Terminology (see "Terminology" in docs/design.md): the core speaks
+//! RFC-standard cryptography only. The one boundary with the age crate's
+//! own vocabulary is this import, where the upstream type names are aliased
+//! to the crypto terms used everywhere else.
 //!
-//! - `age::x25519::Recipient` - the bech32 X25519 public key - is
+//! - `age::x25519::Recipient` (the bech32 X25519 public key) is
 //!   [`X25519PublicKey`]
-//! - `age::x25519::Identity` - the bech32 X25519 private key - is
+//! - `age::x25519::Identity` (the bech32 X25519 private key) is
 //!   [`X25519PrivateKey`]
 
 pub(crate) use age::x25519::{Identity as X25519PrivateKey, Recipient as X25519PublicKey};
@@ -24,9 +24,9 @@ use crate::fs_atomic::{write_atomic, write_atomic_mode};
 
 /// Builds the fail-closed error for a corrupt key store line.
 ///
-/// git-veil is a security tool and never silently drops key material it
-/// cannot parse: the error names the file, the 1-based line number, and the
-/// offending line itself, so the user can delete exactly that line
+/// git-veil is a security tool, so it never silently drops key material
+/// it cannot parse. The error names the file, the 1-based line number, and
+/// the offending line itself, so the user can delete exactly that line
 /// deliberately and re-run.
 pub(crate) fn corrupt_store_line_error(
     _path: &Path,
@@ -42,9 +42,9 @@ pub(crate) fn corrupt_store_line_error(
 }
 
 /// Yields the meaningful lines of a key store file with their 1-based line
-/// numbers: blank lines and `#` comments are skipped; everything else is
-/// handed to the caller's parser, whose failure is a hard refusal (never a
-/// silent skip) via `corrupt_store_line_error`.
+/// numbers. Blank lines and `#` comments are skipped. Everything else goes
+/// to the caller's parser. A parser failure is a hard refusal via
+/// `corrupt_store_line_error`, never a silent skip.
 pub(crate) fn for_each_store_line(
     path: &Path,
     content: &str,
@@ -65,11 +65,11 @@ pub(crate) fn for_each_store_line(
 
 /// Returns the default key store directory.
 ///
-/// Resolution order: `$GIT_VEIL_HOME` wins, then `$HOME/.git-veil`.
-/// Errors when neither is set or both are empty, instead of silently
-/// falling back to a world-writable location such as `/tmp`, where an
-/// attacker on a multi-user system could plant or tamper with key
-/// material. An explicit `--key-store` on the CLI always overrides both.
+/// `$GIT_VEIL_HOME` wins, then `$HOME/.git-veil`. Errors when neither is
+/// set or both are empty, instead of silently falling back to a
+/// world-writable location such as `/tmp`, where an attacker on a
+/// multi-user system could plant or tamper with key material. An explicit
+/// `--key-store` on the CLI always overrides both.
 pub fn default_key_store() -> Result<PathBuf> {
     std::env::var("GIT_VEIL_HOME")
         .ok()
@@ -119,7 +119,7 @@ pub fn generate_x25519_private_key() -> X25519PrivateKey {
     X25519PrivateKey::generate()
 }
 
-/// Encrypts plaintext to ALL the given X25519 public keys as ONE age
+/// Encrypts plaintext to all the given X25519 public keys as one age
 /// message.
 ///
 /// Each public key gets its own stanza wrapping the same file key, so every
@@ -224,11 +224,11 @@ pub fn import_x25519_public_key_to_store(key_store: &Path, public_key_str: &str)
 
 /// Loads all X25519 private keys from the key store.
 ///
-/// Sources: `<key_store>/identities.txt` (one private key per line).
+/// The source is `<key_store>/identities.txt`, one private key per line.
 /// Returns an empty Vec if the store is absent (fresh machine).
 ///
 /// A non-comment line that does not parse is a hard refusal (code 62)
-/// naming the corrupt line - key material is never silently skipped.
+/// naming the corrupt line. Key material is never silently skipped.
 pub fn load_x25519_private_keys_from_store(
     key_store: &Path,
 ) -> Result<Vec<(X25519PrivateKey, String)>> {
@@ -272,7 +272,7 @@ pub fn load_x25519_public_keys_from_store(
         })?;
     }
 
-    // Also derive public keys from the imported private keys
+    // Also derive public keys from the imported private keys.
     let private_keys_path = key_store.join("identities.txt");
     if private_keys_path.exists() {
         let content =

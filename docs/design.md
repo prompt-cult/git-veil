@@ -190,14 +190,14 @@ $$
 $$
 
 The pin-file is the anchor; the repository's committed key and fingerprint
-are the witnesses. **Owner fingerprint derivation is fixed and documented**
+are the witnesses. Owner fingerprint derivation is fixed and documented
 (`owner_key_fingerprint`, src/fingerprint.rs): the single derivation with the
 repository id as the label and the canonical lowercase hex of the 32
 verifying-key bytes as the public key encoding - never computed over the
 seed, only the public half. See "Fingerprints" for the exact construction,
 the stock-tool one-liners and the golden vectors.
 
-**Pin-files travel out of band, never through the repository.** The path
+Pin-files travel out of band, never through the repository. The path
 gates in Algorithm 3 (exit 71) exist because an attacker with repo write
 access could otherwise commit a bogus pin-file and have the victim import
 it, and since without a pin the tool refuses all other operations, the pin
@@ -207,13 +207,13 @@ provisioning - and the printed owner fingerprint is the token for human
 out-of-band verification (read it over the phone and compare with the
 committed `owner_fingerprints` value).
 
-**Repo renames** change the repo_id (it is derived from the remote push
+Repo renames change the repo_id (it is derived from the remote push
 URL), so a new pin is required. When the committed `trust.json` records
 trust for a repo_id that differs from the one the current remote derives,
 the gated commands refuse with a stated suspicion - Algorithm 4's
 rename-suspicion refusals (exit code 10 on the verify path, 70 on the
 import path) - naming the recorded and derived repo-ids as the clue and
-**nothing else**. Error text is plain ASCII: no quoting marks, no
+nothing else. Error text is plain ASCII: no quoting marks, no
 parentheses, no path echoes, nothing that trips a log parser or a terminal.
 No remedy is printed: handing an operator a one-line fix for a trust-anchor
 change is exactly what an attacker staging a repo move wants them to run
@@ -270,7 +270,7 @@ pinned fingerprint ...` notice.
 
 ## Fingerprints
 
-Every fingerprint in git-veil is ONE derivation (`fingerprint_for_public_key`,
+Every fingerprint in git-veil is one derivation (`fingerprint_for_public_key`,
 src/fingerprint.rs), stated exactly:
 
 $$
@@ -299,7 +299,7 @@ hex. `owner.verifying` line 1 is the verifying key; `head -n 1` selects it
 because the file may carry the owner's X25519 public key (`age` recipient)
 on line 2.
 
-**Golden vectors.** These (label, public key encoding, fingerprint)
+Golden vectors. These (label, public key encoding, fingerprint)
 triples are produced by the one-liners above and asserted against the Rust
 implementation (tests/fingerprint.rs) - code equals coreutils for every
 key type. The first public key is a real `age-keygen` X25519 public key; the
@@ -350,7 +350,7 @@ version:<n>
 Keyring format v2: exactly two fields per entry - the
 principal (email) and the bech32 X25519 public key - with the signature
 over the pair.
-Fingerprints are computed on demand (see "Fingerprints") and NEVER stored;
+Fingerprints are computed on demand (see "Fingerprints") and never stored;
 a legacy three-field entry carrying a stored fingerprint is a parse
 refusal (exit code 62), never a silent migration.
 
@@ -366,7 +366,7 @@ is current": a plain `git revert` of a removeperson commit restores an old,
 still-validly-signed keyring, silently returning a revoked collaborator to
 the keyring. The defence is a per-machine **freshness baseline** - the
 highest keyring version this machine has ever accepted for this repo id,
-with the SHA-256 digest of the accepted signed content, stored OUTSIDE the
+with the SHA-256 digest of the accepted signed content, stored outside the
 repository next to the pin
 (`<key store>/trust-pins/<sanitized repo id>.ring-version`,
 TrustPinStore, src/trust_store.rs):
@@ -525,7 +525,7 @@ while it is being edited. Consequences, stated honestly:
   new ring, deletes plaintexts again). Documented here because it is the one
   workflow that changed shape with this default.
 - The intent gate (exit 72) and the code-41 plaintext-leak warning only
-  apply to paths that HAVE a plaintext to encrypt; a path with no plaintext
+  apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
 
 **Crash windows that remain.** Death between a phase-2 write and its paired
@@ -559,7 +559,7 @@ Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`):
    that turns it into a hard stop.
 4. **Reveal-side tracked-plaintext refusal**: the inverse case is not a
    warning but a hard refusal in the decryption-write commands. A plaintext
-   that is TRACKED IN GIT is ordinary repository content, not a secret
+   that is tracked in git is ordinary repository content, not a secret
    (git-veil plaintexts are gitignored by construction; a tracked plaintext
    is exactly the state the code-41 warning flags). If `reveal` or `unhide`
    refused nothing there, a repo writer could nominate a source file - say
@@ -572,7 +572,7 @@ Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`):
    `git rm --cached` remedy. `cat` is not gated: it never writes. The gate
    is `ensure_not_tracked_in_git` (src/commands/reveal.rs, unhide.rs) over
    `is_tracked_in_git` (src/commands/add.rs), whose index match is
-   CASE-INSENSITIVE as a fallback: on the macOS and Windows default
+   case-insensitive as a fallback: on the macOS and Windows default
    filesystems a case-variant spelling (`BUILD.SH` vs `Build.sh`) resolves
    to the same file, so an exact-match miss must still refuse when any
    case-variant of the path is in the index. On case-sensitive filesystems

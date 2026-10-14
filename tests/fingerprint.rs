@@ -1,4 +1,4 @@
-//! Fingerprint tests (issue #41): the single derivation
+//! Fingerprint tests: the single derivation
 //! FP = SHA-256( UTF8(label) + ":" + UTF8(public-key-encoding) )
 //! asserted against golden vectors produced by the documented coreutils
 //! one-liners, the pure `git-veil fingerprint` command, the hostile
@@ -24,10 +24,11 @@ use std::process::Command;
 /// printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
 /// ```
 ///
-/// The first vector's public key is a real age-keygen X25519 public key;
-/// the second's is a real openssl-generated Ed25519 verifying key (the
-/// raw 32 public bytes, lowercase hex). The expected values are the
-/// sha256sum output over exactly those bytes - code must equal coreutils.
+/// The first vector's public key is a real age-keygen X25519 public key.
+/// The second's is a real openssl-generated Ed25519 verifying key, as the
+/// raw 32 verifying key bytes in lowercase hex. The expected values are the
+/// sha256sum output over exactly those bytes, so the code must equal
+/// coreutils.
 const GOLDEN_VECTORS: [(&str, &str, &str); 2] = [
     (
         "alice@example.com",
@@ -245,11 +246,11 @@ fn trusted_fixture(label: &str) -> (TempDir, TempDir) {
 }
 
 // ---------------------------------------------------------------------------
-// Legacy 16-hex pins refuse as hostile (issue #41)
+// Legacy 16-hex pins refuse as hostile
 // ---------------------------------------------------------------------------
 
 /// Asserts the refusal names the derivation change, names no command, and
-/// is plain ASCII (message policy, issues #34 and #42).
+/// is plain ASCII.
 fn assert_legacy_refusal(err: &anyhow::Error) {
     assert_eq!(
         exit_code_of(err),
@@ -276,8 +277,7 @@ fn assert_legacy_refusal(err: &anyhow::Error) {
 fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     let (repo, key_store) = trusted_fixture("legacy-both");
 
-    // The pre-#41 state: a 16-hex SipHash pin with the agreeing committed
-    // record - the pair every old machine holds.
+    // The legacy state: a 16-hex pin with the agreeing committed record.
     let legacy = "0123456789abcdef";
     let pin_path = TrustPinStore::pin_path(&key_store.path, TEST_REPO_ID);
     TrustPinStore::write_pin(&key_store.path, TEST_REPO_ID, legacy).unwrap();
@@ -297,8 +297,8 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     assert_eq!(fs::read_to_string(&pin_path).unwrap(), pin_before);
     assert_eq!(fs::read_to_string(&trust_path).unwrap(), record_before);
 
-    // Recovery is re-establishing trust: after the possession proof runs
-    // again, the gated command passes with the new-derivation pin.
+    // Recovery is re-establishing trust. After the possession proof runs
+    // again, the gated command passes with the new pin.
     cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("re-trust");
     let pin_after = fs::read_to_string(&pin_path).unwrap();
     assert_eq!(pin_after.trim().len(), 64, "the rewritten pin is 64-hex");
@@ -310,7 +310,7 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
 fn test_legacy_pin_alone_refuses() {
     let (repo, key_store) = trusted_fixture("legacy-pin-only");
 
-    // The committed record carries the new derivation; only the
+    // The committed record carries the current derivation. Only the
     // per-machine pin is a legacy 16-hex value.
     TrustPinStore::write_pin(&key_store.path, TEST_REPO_ID, "deadbeefdeadbeef").unwrap();
 
@@ -323,7 +323,7 @@ fn test_legacy_pin_alone_refuses() {
 fn test_legacy_record_alone_refuses() {
     let (repo, key_store) = trusted_fixture("legacy-record-only");
 
-    // The per-machine pin carries the new derivation; only the committed
+    // The per-machine pin carries the current derivation. Only the committed
     // record is a legacy 16-hex value.
     let trust_path = repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
@@ -343,7 +343,7 @@ fn test_legacy_record_alone_refuses() {
 fn test_list_keys_prints_the_binding_fingerprint_per_principal() {
     let (repo, key_store) = trusted_fixture("list-keys-fp");
 
-    // Two collaborators with known recipient strings.
+    // Two collaborators with known public key encodings.
     let mut recipients = Vec::new();
     for email in ["alice@example.com", "bob@example.com"] {
         let identity = generate_x25519_private_key();

@@ -1,6 +1,6 @@
-//! Key discovery tests: git-veil never generates keys - a missing key
-//! fails with a documented exit code and the create-and-back-up recipe;
-//! selection honours the pinned fingerprint and the explicit verifying
+//! Key discovery tests: git-veil never generates keys. A missing key
+//! fails with a documented exit code and the create-and-back-up recipe.
+//! Selection honours the pinned fingerprint and the explicit verifying
 //! key form.
 
 use git_veil::{
@@ -99,7 +99,8 @@ fn test_pinned_fingerprint_selects_the_trusted_key() {
     let selected = discover_signing_key(&store.path, TEST_REPO_ID, &pinned).unwrap();
     assert_eq!(selected.to_bytes(), second.to_bytes());
 
-    // A pin no stored key matches: code 20, never a wrong-key signature
+    // When no stored key matches the pin, the result is code 20, never a
+    // wrong-key signature.
     let err = discover_signing_key(&store.path, TEST_REPO_ID, &"0".repeat(64)).unwrap_err();
     assert_eq!(code_of(err), 20);
 
@@ -229,8 +230,8 @@ fn test_corrupt_private_key_store_line_refused_with_code_62_not_21() {
     )
     .unwrap();
 
-    // A corrupt store is NOT reported as a missing private key (21 +
-    // recipe): it is a parse refusal (62) naming the corrupt line to
+    // A corrupt store is not reported as a missing private key (21 plus
+    // recipe). It is a parse refusal (62) naming the corrupt line to
     // delete.
     let err = match discover_x25519_private_key(&store.path, "age1qqnotpresent") {
         Ok(_) => panic!("a corrupt private key line must fail discovery"),

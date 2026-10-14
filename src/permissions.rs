@@ -4,8 +4,8 @@
 //! git-veil checks its key store the way gpg checks `~/.gnupg`: the store
 //! directory and the private key files (`identities.txt`,
 //! `signing-keys.txt`) must carry no group or world permission bits. It
-//! NEVER chmods key material it did not create - it reads it, and refuses
-//! to read it while the permissions expose private keys beyond the owner.
+//! never chmods key material it did not create. It refuses to read the
+//! material while the permissions expose private keys beyond the owner.
 //!
 //! The refusal is escapable two ways, mirroring git's dubious-ownership
 //! handling: record the exact current `(path, mode)` pairs as
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use crate::exit_codes::{coded, ExitCode};
 
 /// One acknowledged (path, mode) pair: the exact permission state the
-/// user accepted. A later finding matches only on BOTH fields.
+/// user accepted. A later finding matches only on both fields.
 #[derive(Debug, Serialize, Deserialize)]
 struct AckEntry {
     path: String,
@@ -52,7 +52,7 @@ pub struct PermissionFinding {
 
 /// Lists every unsafe permission finding in the key store: the store
 /// directory itself plus `identities.txt` and `signing-keys.txt` when
-/// present. Absent paths are skipped - a fresh machine has no store yet.
+/// present. Absent paths are skipped. A fresh machine has no store yet.
 #[cfg(unix)]
 pub fn find_unsafe_permissions(key_store: &Path) -> Result<Vec<PermissionFinding>> {
     use std::os::unix::fs::PermissionsExt as _;
@@ -98,10 +98,10 @@ fn load_acknowledgments(key_store: &Path) -> Result<Vec<AckEntry>> {
     serde_json::from_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
-/// Checks the key store permissions; `Err` carries exit code 30.
+/// Checks the key store permissions. `Err` carries exit code 30.
 ///
 /// Passes when every finding matches an acknowledged `(path, mode)` pair
-/// exactly - permissions that changed to anything else fail again.
+/// exactly. Permissions that changed to anything else fail again.
 pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
     if skip {
         return Ok(());

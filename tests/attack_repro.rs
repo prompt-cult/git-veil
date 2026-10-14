@@ -1,8 +1,7 @@
-//! ATTACK REPRODUCTION TESTS and FIX REGRESSIONS.
+//! Attack reproduction tests and fix regressions.
 //!
-//! All three audit attacks are now FIXED; the tests below assert the refusals
-//! (exit codes 14, 42, 72) plus the migration and normal-flow semantics of
-//! each fix. The corresponding issues document the full attack analysis.
+//! The tests below assert the refusals (exit codes 14, 42, 72) plus the
+//! migration and normal-flow semantics of each fix.
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
@@ -101,8 +100,9 @@ impl Fixture {
         Self { repo, key_store }
     }
 
-    /// Tells a collaborator into the keyring; returns their identity so the
-    /// test can later prove what that key can (still) decrypt.
+    /// Tells a collaborator into the keyring. Returns the collaborator's
+    /// X25519 private key so the test can later prove what it can still
+    /// decrypt.
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
         let id = generate_x25519_private_key();
         let r = x25519_public_key_encoding(&id);
@@ -153,7 +153,7 @@ impl Fixture {
     }
 
     /// Commits the staged state, so the git history exists for the
-    /// happen-before check (issue #19).
+    /// happen-before check.
     fn commit_all(&self, message: &str) {
         self.stage_all();
         let s = std::process::Command::new("git")
@@ -166,17 +166,12 @@ impl Fixture {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - keyring rollback is refused by the freshness baseline
-// (issue #5, FIXED)
+// Regression: a rolled-back keyring is refused by the freshness baseline
+// (exit 14).
 //
-// Previously: removeperson produced keyring v2 (signed, entry removed); a
-// repo writer restored v1 - a plain `git revert` - and it still verified,
-// because the signature proves "the owner signed this at some point", not
-// "this is current".
-//
-// Now: tell/removeperson bump a monotonic counter inside the signed payload,
+// tell/removeperson bump a monotonic counter inside the signed payload,
 // and every machine records the highest version it has accepted (beside the
-// pin, outside the repo). Any regression is refused with exit 14.
+// pin, outside the repo).
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -206,11 +201,11 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect("v2 (empty, signed) verifies");
 
-    // ATTACK: a repo writer restores the old keyring file content
+    // Attack: a repo writer restores the old keyring file content
     // (equivalent to `git revert` of the removeperson commit).
     fs::write(&keyring_path, &keyring_v1).unwrap();
 
-    // FIXED: verification REFUSES the rolled-back keyring (exit 14) - the
+    // Verification refuses the rolled-back keyring with exit 14. The
     // signature is valid but the version regressed below the baseline.
     let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("rolled-back keyring must be refused");
@@ -225,11 +220,11 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
         .expect_err("hide must refuse on the rolled-back keyring");
     assert_eq!(exit_code_of(&err), 14);
 
-    // The stale v1 ciphertext on disk is untouched: carol still decrypts
-    // what she always could, but no NEW secret can flow to her - hide
-    // refused. That refusal is the fix.
+    // The stale v1 ciphertext on disk is untouched. Carol still decrypts
+    // what she always could, but no new secret can flow to her. Hide
+    // refused.
 
-    // RECOVERY: a genuinely intended rollback is re-anchored with trust,
+    // Recovery: a genuinely intended rollback is re-anchored with trust,
     // which resets the freshness baseline along with the pin.
     cmd_trust(
         &f.repo.path,
@@ -245,7 +240,7 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - keyring version migration semantics (issue #5)
+// Regression: keyring version migration semantics
 // ---------------------------------------------------------------------------
 
 /// Re-signs `keyring_text`'s keyring block with the fixture's owner key,
@@ -273,15 +268,15 @@ fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
     f.hide();
     let keyring_path = f.repo.join(".git-veil/keyring");
 
-    // A versionless keyring (pre-freshness format) counts as version 0, so
-    // once a versioned baseline exists it is a rollback: refused.
+    // A versionless keyring counts as version 0. Once a versioned baseline
+    // exists it is a rollback, so it is refused.
     let versionless = resigned(&fs::read_to_string(&keyring_path).unwrap(), None, &f);
     fs::write(&keyring_path, &versionless).unwrap();
     let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("versionless keyring must be refused once a versioned baseline exists");
     assert_eq!(exit_code_of(&err), 14);
 
-    // But on a machine with NO baseline (the real migration case), a
+    // On a machine with no baseline (the real migration case), a
     // versionless signed keyring is accepted and establishes baseline 0.
     let f2 = Fixture::new("migration-fresh");
     let _carol2 = f2.add_collab("carol@example.com");
@@ -290,10 +285,9 @@ fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
         None,
         &f2,
     );
-    // Rebuild the scenario: baseline is already established by tell's
-    // verify? No - tell's verify saw the EMPTY unsigned keyring (observed 0,
-    // baseline 0), and no gated command ran since the v1 write, so the
-    // baseline is still 0 and a versionless keyring is NOT a regression.
+    // The baseline is still 0: tell's verify saw the empty unsigned keyring
+    // (observed 0, baseline 0), and no gated command ran since the v1 write.
+    // A versionless keyring is not a regression.
     fs::write(f2.repo.join(".git-veil/keyring"), &versionless2).unwrap();
     cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
         .expect("versionless keyring accepted while the baseline is still 0");
@@ -331,16 +325,11 @@ fn fix_malformed_version_lines_are_parse_failures() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - nominated paths are refused at hide time (issue #6, FIXED)
+// Regression: nominated paths are refused at hide time (exit 72).
 //
-// Previously: tracked.json is committed and unsigned, so a repo writer
-// nominated a victim's gitignored secret into it; the victim's next hide
-// encrypted it to the whole ring - silently (the gitignored plaintext never
-// trips the code-41 warning).
-//
-// Now: `add` records intent in a machine-local log in the key store, and
-// hide refuses (exit 72) to FIRST-encrypt any tracked path that has neither
-// a committed ciphertext nor recorded intent. See "Encryption intent" in
+// `add` records intent in a machine-local log in the key store. Hide
+// refuses to first-encrypt any tracked path that has neither a committed
+// ciphertext nor recorded intent. See "Encryption intent" in
 // docs/design.md.
 // ---------------------------------------------------------------------------
 
@@ -351,20 +340,21 @@ fn fix_nominated_path_refused_at_hide() {
     // The attacker is a legitimate keyring member (repo write access).
     let _mallory = f.add_collab("mallory@example.com");
 
-    // Victim's private file: gitignored, NEVER passed to `git-veil add`.
+    // Victim's private file. It is gitignored and never passed to
+    // `git-veil add`.
     let secret_plaintext = b"AWS_SECRET_ACCESS_KEY=AKIA...\n";
     fs::write(f.repo.join("prod-credentials"), secret_plaintext).unwrap();
     fs::write(f.repo.join(".gitignore"), "prod-credentials\n").unwrap();
 
-    // ATTACK: the repo writer edits the committed tracked.json directly
-    // (this file is not covered by the keyring signature).
+    // Attack: the repo writer edits the committed tracked.json directly.
+    // This file is not covered by the keyring signature.
     fs::write(
         f.repo.join(".git-veil/tracked.json"),
         "{\n  \"files\": [\n    \"prod-credentials\"\n  ]\n}",
     )
     .unwrap();
 
-    // FIXED: hide refuses (exit 72) - no ciphertext is created, nothing is
+    // Hide refuses with exit 72. No ciphertext is created and nothing is
     // exfiltrated.
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse a nominated path with no intent and no ciphertext");
@@ -373,8 +363,8 @@ fn fix_nominated_path_refused_at_hide() {
         72,
         "nomination must exit with the documented code 72"
     );
-    // The tracked path is committed in tracked.json - a public repository
-    // fact - so the refusal names it (issue #42).
+    // The tracked path is committed in tracked.json. It is a public
+    // repository fact, so the refusal names it.
     assert!(
         err.to_string().contains("prod-credentials"),
         "exit 72 names the offending tracked path: {err}"
@@ -384,8 +374,9 @@ fn fix_nominated_path_refused_at_hide() {
         "no ciphertext may be written for a nominated path"
     );
 
-    // REMEDY (the tracking is wanted): the victim's own add binds intent on
-    // this machine, and hide then proceeds.
+    // Remedy. The tracking is wanted, so the victim adds the path
+    // deliberately. This binds intent on the machine, and hide then
+    // proceeds.
     cmd_add(
         &f.repo.path,
         vec!["prod-credentials".to_string()],
@@ -398,10 +389,10 @@ fn fix_nominated_path_refused_at_hide() {
 
 #[test]
 fn fix_established_ciphertext_needs_no_intent() {
-    // Rotation flow under the happen-before rule (issue #19): the manifest
-    // entry and the ciphertext land in ONE commit, so a machine without a
-    // baseline for this manifest version must record its own intent via a
-    // deliberate add before hide first-encrypts. Fail-closed.
+    // Rotation flow under the happen-before rule. The manifest entry and
+    // the ciphertext land in one commit, so a machine without a baseline for
+    // this manifest version must record its own intent via a deliberate add
+    // before hide first-encrypts. The gate fails closed.
     let f = Fixture::new("established-ciphertext");
 
     let _carol = f.add_collab("carol@example.com");
@@ -411,7 +402,7 @@ fn fix_established_ciphertext_needs_no_intent() {
 
     // Simulate another machine: a new key store with no intent log and no
     // baseline for this manifest version. The ciphertext is committed, but
-    // it does NOT predate the manifest entry, so hide refuses with 72.
+    // it does not predate the manifest entry, so hide refuses with 72.
     let fresh_store = TempDir::new("established-fresh-ks");
     let pin_file = fresh_store.join("fara.pin");
     cmd_export_pin(
@@ -431,10 +422,10 @@ fn fix_established_ciphertext_needs_no_intent() {
         72,
         "the intent gate must fire when the ciphertext does not predate the manifest entry"
     );
-    // The committed ciphertext is untouched; hide simply did not proceed.
+    // The committed ciphertext is untouched. Hide simply did not proceed.
 
-    // The remedy is deliberate: the machine records its own intent via add,
-    // and hide then proceeds.
+    // The remedy is deliberate. The machine records its own intent via
+    // add, and hide then proceeds.
     cmd_add(
         &f.repo.path,
         vec!["secrets.env".to_string()],
@@ -447,14 +438,9 @@ fn fix_established_ciphertext_needs_no_intent() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - the hungry hippo attack (issue #19, FIXED)
+// Regression: the hungry hippo attack
 //
-// Previously: the git index is attacker-writable, so a repo writer committed
-// the tracked.json nomination and a dummy <path>.secret in ONE commit; the
-// victim's next hide treated the path as established and encrypted the
-// victim's real plaintext to the whole ring, attacker included.
-//
-// Now: a committed ciphertext is established only when it predates the
+// A committed ciphertext is established only when it predates the
 // manifest entry naming it. A nomination and a dummy in one commit fail the
 // happen-before check, the intent gate runs, and the victim refuses with 72.
 // ---------------------------------------------------------------------------
@@ -465,14 +451,15 @@ fn fix_dummy_ciphertext_in_one_commit_no_longer_established() {
 
     let _mallory = f.add_collab("mallory@example.com");
 
-    // Victim's private file: gitignored, NEVER passed to add on this machine.
+    // Victim's private file. It is gitignored and never passed to add on
+    // this machine.
     let secret_plaintext = b"AWS_SECRET_ACCESS_KEY=AKIA...\n";
     fs::write(f.repo.join("prod-credentials"), secret_plaintext).unwrap();
     fs::write(f.repo.join(".gitignore"), "prod-credentials\n").unwrap();
 
-    // ATTACK: one commit carries the nomination AND a valid dummy ciphertext.
-    // A real age ciphertext to the ring (mallory is a ring member, so any
-    // decrypt-with-mallory repair would pass too).
+    // Attack: one commit carries the nomination and a valid dummy
+    // ciphertext. It is a real age ciphertext to the ring. Mallory is a
+    // ring member, so any decrypt-with-mallory repair would pass too.
     let dummy = b"dummy ciphertext bytes\n";
     fs::write(f.repo.join("prod-credentials.secret"), dummy).unwrap();
     fs::write(
@@ -482,7 +469,8 @@ fn fix_dummy_ciphertext_in_one_commit_no_longer_established() {
     .unwrap();
     f.commit_all("attacker commits nomination and dummy together");
 
-    // The victim's store: no intent, no baseline for this manifest version.
+    // The victim's store has no intent and no baseline for this manifest
+    // version.
     let victim_store = TempDir::new("hungry-hippo-victim-ks");
     let pin_file = victim_store.join("fara.pin");
     cmd_export_pin(
@@ -510,13 +498,13 @@ fn happen_before_passes_when_ciphertext_predates_the_readd() {
     let f = Fixture::new("happen-before-readd");
     let _carol = f.add_collab("carol@example.com");
 
-    // Owner tracks and hides a file; the ciphertext is committed in one
+    // Owner tracks and hides a file. The ciphertext is committed in one
     // commit with the manifest entry.
     f.add_file("secrets.env", b"TOKEN=v1\n");
     f.hide();
     f.commit_all("commit one: manifest entry and ciphertext together");
 
-    // The path is removed from the manifest in a second commit; the
+    // The path is removed from the manifest in a second commit. The
     // committed ciphertext stays.
     cmd_remove(&f.repo.path, vec!["secrets.env".to_string()], true).expect("remove");
     f.commit_all("commit two: entry removed, ciphertext stays");
@@ -534,13 +522,13 @@ fn happen_before_passes_when_ciphertext_predates_the_readd() {
     .expect("export-pin");
     cmd_trust_import(&f.repo.path, &pin_file, "origin", &other_store.path, false).expect("import");
 
-    // The path is re-added on the OWNER machine in a third commit. The
+    // The path is re-added on the owner machine in a third commit. The
     // re-added entry's introducing commit has the ciphertext in its parent
     // tree, so the happen-before check holds.
     f.add_file("secrets.env", b"TOKEN=v2\n");
     f.commit_all("commit three: entry re-added, ciphertext predates it");
 
-    // On the OTHER machine: no intent was ever recorded here, yet the
+    // On the other machine, no intent was ever recorded here, yet the
     // ciphertext predates the re-added manifest entry, so the path is
     // established and hide re-encrypts without local intent.
     cmd_hide(&f.repo.path, "origin", &other_store.path, true)
@@ -562,17 +550,12 @@ fn happen_before_passes_when_ciphertext_predates_the_readd() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - de-tracking no longer defeats rotation (issue #7, FIXED)
+// Regression: de-tracking cannot defeat rotation
 //
-// Previously: a repo writer removed a path from tracked.json; the owner's
-// removeperson + re-hide silently skipped the stale ciphertext, which the
-// removed collaborator could still decrypt.
-//
-// Now: hide's orphaned-ciphertext gate (exit 42, see "Orphaned ciphertext"
-// in docs/design.md) refuses to run while a committed .secret exists for an
-// untracked path, so the de-tracking-then-rotate attack fails loudly. The
-// owner-side remedy - `git-veil remove` now deletes the sibling ciphertext
-// by default - is covered by the remove tests below.
+// Hide's orphaned-ciphertext gate (exit 42, see "Orphaned ciphertext" in
+// docs/design.md) refuses to run while a committed .secret exists for an
+// untracked path, so the de-tracking-then-rotate attack fails loudly.
+// `git-veil remove` deletes the sibling ciphertext by default.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -584,12 +567,12 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
     f.add_file("api.key", plaintext);
     f.hide();
     assert!(f.repo.join("api.key.secret").exists());
-    // The orphan gate reads the git INDEX (what gets pushed), so stage the
-    // ciphertext the way the owner's commit would.
+    // The orphan gate reads the git index, which is what gets pushed. Stage
+    // the ciphertext the way the owner's commit would.
     f.stage_all();
 
-    // ATTACK: a repo writer de-tracks the file before the rotation
-    // (tracked.json is committed and unsigned).
+    // Attack: a repo writer de-tracks the file before the rotation.
+    // tracked.json is committed and unsigned.
     fs::write(
         f.repo.join(".git-veil/tracked.json"),
         "{\n  \"files\": []\n}",
@@ -607,8 +590,8 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
     .expect("removeperson");
     let _dave = f.add_collab("dave@example.com");
 
-    // FIXED: hide refuses outright (exit 42) while the stale ciphertext is
-    // committed but untracked - rotation can no longer skip it silently.
+    // Hide refuses outright with exit 42 while the stale ciphertext is
+    // committed but untracked. Rotation cannot skip it silently.
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse orphaned committed ciphertext");
     assert_eq!(
@@ -616,16 +599,17 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
         42,
         "orphaned ciphertext must exit with the documented code 42"
     );
-    // The committed ciphertext path lives in the git index - a public
-    // repository fact - so the refusal names it (issue #42).
+    // The committed ciphertext path lives in the git index. It is a public
+    // repository fact, so the refusal names it.
     assert!(
         err.to_string().contains("api.key.secret"),
         "exit 42 names the offending committed ciphertext path: {err}"
     );
 
-    // REMEDY (de-tracking was intentional): delete the stale ciphertext…
+    // Remedy, because de-tracking was intentional: delete the stale
+    // ciphertext.
     fs::remove_file(f.repo.join("api.key.secret")).unwrap();
-    // …re-track the file (the manifest was emptied by the attack), stage,
+    // Re-track the file (the manifest was emptied by the attack), stage,
     // and hide to the new ring.
     f.add_file("api.key", plaintext);
     f.stage_all();
@@ -640,9 +624,10 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - `remove` deletes the sibling ciphertext by default
-// (issue #7). The honest way to keep an untracked ciphertext is now the
-// explicit --keep-ciphertext flag, after which hide refuses the orphan.
+// Regression: `remove` deletes the sibling ciphertext by default
+//
+// The explicit --keep-ciphertext flag keeps an untracked ciphertext, and
+// hide then refuses the orphan.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -681,31 +666,25 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
         "--keep-ciphertext leaves the ciphertext in place"
     );
 
-    // hide now refuses the orphan with exit 42 until it is resolved.
+    // Hide refuses the orphan with exit 42 until it is resolved.
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
         .expect_err("hide must refuse the kept-back orphaned ciphertext");
     assert_eq!(exit_code_of(&err), 42);
 }
 
 // ---------------------------------------------------------------------------
-// Regression - reveal/unhide refuse a tracked-in-git plaintext
-// (issue #15, FIXED - reveal-clobber hardening)
+// Regression: reveal/unhide refuse a tracked-in-git plaintext (exit 43)
 //
-// Previously: a repo writer nominated a tracked-in-git source file in
-// tracked.json and committed a payload ciphertext encrypted to the ring's
-// public keys; the victim's reveal overwrote the source file (RCE in the
-// documented CI flow).
-//
-// Now: reveal/unhide refuse (exit 43) when the target plaintext is tracked
-// in git - a git-tracked plaintext is repository content, not a secret.
+// A git-tracked plaintext is repository content, not a secret.
+// Reveal and unhide refuse to overwrite it.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn fix_reveal_refuses_tracked_in_git_plaintext() {
     let f = Fixture::new("f1-reveal-clobber");
 
-    // The victim: a legitimate collaborator with an identity in their key
-    // store (this store simulates the victim's machine).
+    // The victim: a legitimate collaborator with a key in their key store.
+    // This store simulates the victim's machine.
     let victim = generate_x25519_private_key();
     let victim_recipient = x25519_public_key_encoding(&victim);
     fs::write(f.repo.join("victim.recipient"), &victim_recipient).unwrap();
@@ -726,16 +705,16 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
     cmd_import(&f.repo.path, &["victim.age".to_string()], &f.key_store.path)
         .expect("import victim");
 
-    // A NORMAL repo source file, tracked in git - never a secret, never
-    // git-veil add'ed. The victim would never hide this.
+    // A normal repo source file, tracked in git. It is never a secret and
+    // never passed to git-veil add. The victim would never hide this.
     fs::create_dir_all(f.repo.join("ci")).unwrap();
     let legitimate = "#!/bin/sh\necho legitimate\n";
     fs::write(f.repo.join("ci/deploy.sh"), legitimate).unwrap();
 
-    // ATTACK: a repo writer nominates the source file in tracked.json and
-    // commits a payload ciphertext encrypted to the ring's PUBLIC keys
-    // (no signing key needed - only the keyring signature must verify,
-    // and the attacker leaves the keyring untouched).
+    // Attack: a repo writer nominates the source file in tracked.json and
+    // commits a payload ciphertext encrypted to the ring's public keys. No
+    // signing key is needed. Only the keyring signature must verify, and
+    // the attacker leaves the keyring untouched.
     fs::write(
         f.repo.join(".git-veil/tracked.json"),
         "{\n  \"files\": [\n    \"ci/deploy.sh\"\n  ]\n}",
@@ -754,8 +733,8 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
     fs::write(f.repo.join("ci/deploy.sh.secret"), evil_ct).unwrap();
     f.stage_all(); // attacker commits tracked.json + the evil ciphertext
 
-    // FIXED: reveal refuses (exit 43) - the tracked-in-git source file is
-    // not overwritten.
+    // Reveal refuses with exit 43. The tracked-in-git source file is not
+    // overwritten.
     let err = cmd_reveal(
         &f.repo.path,
         "victim@example.com",
@@ -788,13 +767,14 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
 
 #[test]
 fn fix_reveal_still_works_for_gitignored_plaintexts() {
-    // The normal flow: plaintext gitignored (never in the index), the
-    // committed ciphertext reveals fine - the exit-43 gate must not
-    // disturb legitimate reveal/unhide.
+    // The normal flow. The plaintext is gitignored and never in the
+    // index, and the committed ciphertext reveals fine. The exit-43 gate
+    // must not disturb legitimate reveal and unhide.
     let f = Fixture::new("reveal-normal");
     let _carol = f.add_collab("carol@example.com");
-    // The owner must be in the keyring too for the reveal below (their
-    // identity IS in the key store; the recipient is owner.verifying line 2).
+    // The owner must be in the keyring too for the reveal below. Their
+    // X25519 private key is in the key store. The public key is
+    // owner.verifying line 2.
     let owner_verifying = fs::read_to_string(f.repo.join("owner.verifying")).unwrap();
     let owner_recipient = owner_verifying.lines().nth(1).unwrap().trim();
     fs::write(f.repo.join("owner.recipient"), owner_recipient).unwrap();
@@ -833,16 +813,17 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
 }
 
 // ---------------------------------------------------------------------------
-// REPROS - red-team pass 2 (issues #21, #22, #23)
+// Repros - red-team pass 2
 //
-// These tests DOCUMENT the three confirmed findings; the assertions assert
-// the BAD outcome. Each is inverted by the matching fix commit.
+// These tests document the three confirmed findings and assert the
+// refusals the fixes introduced.
 // ---------------------------------------------------------------------------
 
-/// Issue #22 - FIXED: an unsigned zero-entry keyring is unauthenticated
-/// repo content; it is refused outright when a baseline exists (a rollback
-/// to "no collaborators" fails closed) and never moves the baseline, so the
-/// owner's restore of the real ring un-bricks the machine.
+/// An unsigned zero-entry keyring is unauthenticated repo content. It
+/// is refused outright when a baseline exists, because a rollback to
+/// "no collaborators" must fail closed, and it never moves the
+/// baseline, so the owner's restore of the real ring un-bricks the
+/// machine.
 #[test]
 fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
     let f = Fixture::new("poison-baseline");
@@ -853,7 +834,7 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
     let keyring_path = f.repo.join(".git-veil/keyring");
     let real_ring = fs::read_to_string(&keyring_path).unwrap();
 
-    // ATTACK: unsigned, zero-entry ring with a poisoned version line.
+    // Attack: unsigned, zero-entry ring with a poisoned version line.
     fs::write(
         &keyring_path,
         format!(
@@ -864,21 +845,22 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
     )
     .unwrap();
 
-    // FIXED: refused (exit 14) - it parses as a rollback to no collaborators,
-    // and its version line is unauthenticated so it cannot move the baseline.
+    // Refused with exit 14. It parses as a rollback to no collaborators,
+    // and its version line is unauthenticated so it cannot move the
+    // baseline.
     let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("unsigned ring must be refused when a baseline exists");
     assert_eq!(exit_code_of(&err), 14);
 
-    // Owner restores the real ring: the machine is NOT bricked - the
+    // Owner restores the real ring. The machine is not bricked. The
     // baseline was never advanced by the unsigned ring.
     fs::write(&keyring_path, &real_ring).unwrap();
     cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
         .expect("real ring verifies again: no baseline poisoning");
 
-    // And on a machine with NO baseline (fresh init), an unsigned empty
-    // ring is still the legitimate fresh-init state: accepted, and the
-    // baseline is not written (only signed rings may advance it).
+    // On a machine with no baseline (fresh init), an unsigned empty ring
+    // is still the legitimate fresh-init state. It is accepted, and the
+    // baseline is not written. Only signed rings may advance it.
     let f2 = Fixture::new("poison-fresh");
     let keyring_path2 = f2.repo.join(".git-veil/keyring");
     let _carol2 = f2.add_collab("carol@example.com");
@@ -901,9 +883,9 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
     );
 }
 
-/// Issue #21 - FIXED: a case-variant path spelling can no longer evade the
-/// exit-43 gate - the fallback refuses any case-insensitive index match, so
-/// the tracked source file is untouched on case-insensitive filesystems.
+/// A case-variant path spelling cannot evade the exit-43 gate. The
+/// fallback refuses any case-insensitive index match, so the tracked
+/// source file is untouched on case-insensitive filesystems.
 #[test]
 fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     let f = Fixture::new("case-variant");
@@ -955,7 +937,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     .unwrap();
     f.stage_all();
 
-    // FIXED: reveal refuses (exit 43) - the case-insensitive fallback sees
+    // Reveal refuses with exit 43. The case-insensitive fallback sees
     // the case-variant index entry.
     let err = cmd_reveal(
         &f.repo.path,
@@ -972,9 +954,10 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     );
 }
 
-/// Issue #23 - FIXED: the orphan gate no longer false-positives on
-/// core.quotePath-quoted unicode names (index read verbatim) nor on an
-/// attacker-committed file named exactly `.secret` (warned and ignored).
+/// The orphan gate does not false-positive on core.quotePath-quoted
+/// unicode names, because the index is read verbatim, nor on an
+/// attacker-committed file named exactly `.secret`. That file is
+/// warned about and ignored.
 #[test]
 fn fix_orphan_gate_survives_quoting_and_dot_secret() {
     let f = Fixture::new("orphan-brick");
@@ -990,8 +973,8 @@ fn fix_orphan_gate_survives_quoting_and_dot_secret() {
     fs::write(f.repo.join(".secret"), b"junk\n").unwrap();
     f.stage_all();
 
-    // FIXED: hide proceeds - the unicode ciphertext maps back to its tracked
-    // path and the stemless junk file is warned about, not fatal.
+    // Hide proceeds. The unicode ciphertext maps back to its tracked
+    // path, and the stemless junk file is warned about, not fatal.
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide must not be bricked");
     assert!(
         f.repo.join(unicode_name).exists(),
@@ -1000,13 +983,13 @@ fn fix_orphan_gate_survives_quoting_and_dot_secret() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression - equal-version fork refused via baseline digest
-// (issue #20, FIXED)
+// Regression: equal-version fork refused via baseline digest
 //
-// The freshness baseline now records the SHA-256 digest of the accepted
-// signed content alongside the version: an equal-version keyring with
-// different content (a curation fork, or a same-version substitution) is
-// refused with exit 14 instead of silently replacing the collaborator set.
+// The freshness baseline records the SHA-256 digest of the accepted
+// signed content alongside the version. An equal-version keyring with
+// different content, a curation fork or a same-version substitution,
+// is refused with exit 14 instead of silently replacing the
+// collaborator set.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1018,9 +1001,9 @@ fn fix_equal_version_fork_refused_by_baseline_digest() {
     f.stage_all();
     let keyring_path = f.repo.join(".git-veil/keyring");
 
-    // Fork: a different keyring at the SAME version (carol swapped for dave),
-    // signed by the owner key - what two unsynchronised curating machines
-    // would produce.
+    // Fork: a different keyring at the same version, carol swapped for
+    // dave and signed by the owner key. This is what two unsynchronised
+    // curating machines would produce.
     let base = fs::read_to_string(&keyring_path).unwrap();
     let fork = resigned(
         &base.replace("carol@example.com", "dave@example.com"),

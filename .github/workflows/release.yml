@@ -157,11 +157,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # softprops/action-gh-release@v2 replaces the deprecated
-      # actions/create-release@v1 + actions/upload-release-asset@v1 pair from
-      # the graphlite prior art. Assets are attached by the build and
-      # man-pages jobs against the same tag; this final pass attaches the
-      # release body. Files already uploaded are left untouched.
+      # Assets are attached by the build and man-pages jobs against the
+      # same tag. This final pass attaches the release body. Files
+      # already uploaded are left untouched.
       - name: Create / annotate release
         uses: softprops/action-gh-release@v2
         with:

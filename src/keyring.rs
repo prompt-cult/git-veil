@@ -23,8 +23,8 @@ pub struct Keyring {
     pub entries: Vec<KeyringEntry>,
     pub signature: Option<String>,
     /// Monotonic counter inside the signed payload, bumped by tell and
-    /// removeperson. `None` for keyrings written before freshness existed;
-    /// such keyrings count as version 0 for rollback comparisons.
+    /// removeperson. `None` means the keyring has no version line. Such
+    /// keyrings count as version 0 for rollback comparisons.
     pub version: Option<u64>,
 }
 
@@ -51,11 +51,11 @@ impl Keyring {
             .find(END_MARKER)
             .context("Missing END GIT-VEIL KEYRING marker")?;
 
-        // The END marker must come strictly after the full BEGIN marker:
-        // anything else (END before BEGIN, or an END overlapping the BEGIN
-        // region) is a misordered keyring. The keyring is committed repo
-        // content and therefore attacker-writable, so this is rejected as a
-        // parse error - never a slicing panic.
+        // The END marker must come strictly after the full BEGIN marker.
+        // Anything else, END before BEGIN or an END overlapping the BEGIN
+        // region, is a misordered keyring. The keyring is committed repo
+        // content and therefore attacker-writable, so this is rejected as
+        // a parse error, never a slicing panic.
         if end_idx < begin_idx + BEGIN_MARKER.len() {
             return Err(coded(
                 ExitCode::KeyParseFailure,
@@ -71,7 +71,7 @@ impl Keyring {
                 continue;
             }
             // The freshness counter is part of the signed payload and is
-            // parsed strictly: it is attacker-writable repo content, so a
+            // parsed strictly. It is attacker-writable repo content, so a
             // malformed version line is a refusal (code 62), never a silent
             // skip that would let a rollback slip through as an "entry"
             // parse error later.
@@ -143,7 +143,7 @@ impl Keyring {
     }
 
     /// Adds an entry, or updates the existing entry in place when the email
-    /// already exists (matched case-insensitively; the first-seen stored
+    /// already exists (matched case-insensitively. The first-seen stored
     /// casing is preserved). Clears the signature so the keyring gets
     /// re-signed.
     ///
@@ -151,10 +151,10 @@ impl Keyring {
     ///
     /// The serialized keyring line format is `email:public-key` (the
     /// bech32 X25519 public key encoding) with `:` as the field separator,
-    /// so the email MUST NOT contain `:`. A colon would produce a 3-field
+    /// so the email must not contain `:`. A colon would produce a 3-field
     /// line that every subsequent [`Keyring::parse`] rejects with
     /// "Malformed keyring entry", bricking the signed keyring. This is
-    /// rejected here with an error naming the offending email; on
+    /// rejected here with an error naming the offending email. On
     /// rejection nothing is mutated.
     pub fn add_entry(&mut self, email: String, public_key: String) -> Result<()> {
         if email.contains(':') {
@@ -176,11 +176,11 @@ impl Keyring {
         Ok(())
     }
 
-    /// Bumps the monotonic freshness counter for a re-sign: the new version
-    /// is current + 1 (a versionless keyring counts as 0). Called by tell
-    /// and removeperson before signing, so the bump is covered by the new
-    /// signature. Errors at u64::MAX rather than overflowing: a poisoned
-    /// ring (issue #22) must produce a clean refusal, never a panic.
+    /// Bumps the monotonic freshness counter for a re-sign. The new version
+    /// is current + 1, and a versionless keyring counts as 0. Called by
+    /// tell and removeperson before signing, so the bump is covered by the
+    /// new signature. Errors at u64::MAX rather than overflowing. A
+    /// poisoned ring must produce a clean refusal, never a panic.
     pub fn bump_version(&mut self) -> Result<()> {
         let next = self.version.unwrap_or(0).checked_add(1).ok_or_else(|| {
             anyhow::anyhow!("keyring version exhausted. Re-sign at a lower version is required.")

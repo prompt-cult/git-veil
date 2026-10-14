@@ -2,8 +2,8 @@
 //!
 //! Keeping `Cli`/`Commands` in the library lets the `completions` and
 //! `manpages` subcommands regenerate their output from the real clap
-//! definition (`Cli::command()`) with zero duplication - no build.rs
-//! copy of the parser is needed.
+//! definition (`Cli::command()`) with zero duplication. No build.rs copy
+//! of the parser is needed.
 
 use anyhow::{Context as _, Result};
 use clap::{CommandFactory, Parser, Subcommand};

@@ -30,7 +30,7 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Resul
 
     // Public key encodings already present in the private key store. A
     // corrupt store line refuses the import outright (code 62, naming the
-    // line) - never append to a store we could not fully parse.
+    // line). Never append to a store we could not fully parse.
     let mut known: HashSet<String> = HashSet::new();
     if private_keys_path.exists() {
         for_each_store_line(&private_keys_path, &private_keys_content, |_, line| {
@@ -58,9 +58,9 @@ pub fn cmd_import(repo_root: &Path, files: &[String], key_store: &Path) -> Resul
             let private_key = match parse_x25519_private_key(line) {
                 Ok(private_key) => private_key,
                 Err(err) => {
-                    // Source file, not the store: junk lines in an imported
-                    // file are skipped, but never silently - the note (and
-                    // the parse error) goes to stderr.
+                    // Source file, not the store. Junk lines in an imported
+                    // file are skipped, but never silently. The note and
+                    // the parse error go to stderr.
                     eprintln!("! skipped unparseable line in {}: {}", file, err);
                     continue;
                 }

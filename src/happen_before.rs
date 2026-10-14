@@ -1,4 +1,4 @@
-//! Git-history happen-before check for established ciphertexts (issue #19).
+//! Git-history happen-before check for established ciphertexts.
 //!
 //! The git index is attacker-writable: a repo writer can commit the
 //! `tracked.json` nomination and a dummy `<path>.secret` together, and the
@@ -9,12 +9,13 @@
 //!
 //! The check walks git history, so its result is cached per manifest
 //! version in the machine-local key store. The cache key is the SHA-256 of
-//! the `tracked.json` content: the key store either holds a baseline for
-//! that hash or it does not - there is no clone-versus-update distinction.
-//! Any manifest change (add, remove, reorder) changes the hash and selects
-//! a fresh cache entry, so remove-and-readd is re-checked with no
-//! invalidation logic and no garbage collection. A path that fails the
-//! check is never cached: every `hide` re-runs the check and refuses again.
+//! the `tracked.json` content. The key store either holds a baseline for
+//! that hash or it does not, so there is no clone-versus-update
+//! distinction. Any manifest change (add, remove, reorder) changes the
+//! hash and selects a fresh cache entry, so remove-and-readd is re-checked
+//! with no invalidation logic and no garbage collection. A path that fails
+//! the check is never cached. Every `hide` re-runs the check and refuses
+//! again.
 
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
@@ -26,7 +27,7 @@ use std::process::Command;
 use crate::tracked_files::TrackedFiles;
 use crate::trust_store::TrustPinStore;
 
-/// The baseline cache path for one manifest version:
+/// The baseline cache path for one manifest version. The path is
 /// `<key store>/baselines/<sanitized repo id>/<sha-256 of manifest>`.
 pub fn baseline_path(key_store: &Path, repo_id: &str, manifest_digest_hex: &str) -> PathBuf {
     key_store
@@ -82,10 +83,11 @@ pub fn manifest_digest(manifest_content: &str) -> String {
 /// True when the ciphertext path exists in the parent tree of the commit
 /// that introduced the `tracked.json` entry naming the plaintext path.
 ///
-/// The walk is oldest-first over the commits that touched the manifest; the
-/// first commit whose manifest version contains the entry is the
-/// introducing commit. No introducing commit (manifest uncommitted, entry
-/// never committed) is a fail-closed false.
+/// The walk is oldest-first over the commits that touched the manifest.
+/// The first commit whose manifest version contains the entry is the
+/// introducing commit. With no introducing commit, because the manifest is
+/// uncommitted or the entry was never committed, the result is a
+/// fail-closed false.
 pub fn ciphertext_predates_manifest_entry(
     repo_root: &Path,
     manifest_rel: &str,
@@ -101,11 +103,10 @@ pub fn ciphertext_predates_manifest_entry(
         return Ok(false);
     }
     let stdout = String::from_utf8_lossy(&log.stdout);
-    // Newest first: the entry's introduction commit is the MOST RECENT
+    // Newest first. The entry's introduction commit is the most recent
     // commit where the entry appears while absent from the parent's
-    // manifest version - the (re-)introduction. A remove-and-readd
-    // therefore re-anchors the check at the re-add commit, exactly as the
-    // issue specifies.
+    // manifest version: the (re-)introduction. A remove-and-readd
+    // therefore re-anchors the check at the re-add commit.
     for commit in stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
         let manifest_at = Command::new("git")
             .current_dir(repo_root)
@@ -138,8 +139,8 @@ pub fn ciphertext_predates_manifest_entry(
 }
 
 /// Whether the manifest version at hand names the plaintext path. A
-/// historical manifest that no longer parses (an older schema) counts as
-/// not naming the path - fail-closed.
+/// historical manifest that no longer parses, because it uses an older
+/// schema, counts as not naming the path. The result fails closed.
 fn manifest_entry_present(manifest_content: &str, plaintext_rel: &str) -> bool {
     let tracked: TrackedFiles = match serde_json::from_str(manifest_content) {
         Ok(tracked) => tracked,

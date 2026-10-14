@@ -12,16 +12,16 @@ use crate::{Keyring, TrackedFiles, TrustStore};
 /// Creates only the internal state directory `.git-veil/` (keyring,
 /// trust.json, tracked.json). It never touches `.gitignore`: ciphertext is
 /// stored in place beside the plaintext as `<name>.secret`, and those files
-/// are meant to be COMMITTED, so gitignoring them would defeat the
+/// are meant to be committed, so gitignoring them would defeat the
 /// fresh-clone decryptability contract.
 pub fn cmd_init(repo_root: &Path, quiet: bool) -> Result<()> {
     let git_veil_dir = repo_root.join(".git-veil");
 
-    // Fresh init only: a re-init over an established trust anchor would
+    // Fresh init only. A re-init over an established trust anchor would
     // silently destroy the user's trust.json and tracked-file manifest, so
     // refuse while real trust state exists. A `.git-veil/` directory with an
-    // absent or empty trust.json is a degenerate half-initialised state and
-    // keeps the old reset behaviour.
+    // absent or empty trust.json is a degenerate half-initialised state.
+    // Init proceeds in that case.
     let trust_path = git_veil_dir.join("trust.json");
     if git_veil_dir.is_dir() && trust_path.exists() {
         let existing_trust = TrustStore::load_from_file(&trust_path)
@@ -58,8 +58,8 @@ pub fn cmd_init(repo_root: &Path, quiet: bool) -> Result<()> {
 
     println!("git-veil initialized");
 
-    // Issue #27: suggest CODEOWNERS coverage for the trust-critical paths  -
-    // once, in plain text, opt-out via -q, never a prompt, never a block.
+    // Suggest CODEOWNERS coverage for the trust-critical paths. Once, in
+    // plain text, with opt-out via -q. Never a prompt, never a block.
     if !quiet && !covers_trust_critical_paths(repo_root) {
         println!("{}", suggestion_text());
     }

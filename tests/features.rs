@@ -1,5 +1,5 @@
-//! Feature tests: two-phase all-or-nothing semantics, multi-recipient,
-//! keyring tamper detection, and subdirectory file handling.
+//! Feature tests: two-phase all-or-nothing semantics, encryption to
+//! multiple keys, keyring tamper detection, and subdirectory file handling.
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
@@ -154,9 +154,9 @@ fn test_hide_all_or_nothing_missing_plaintext() {
     // Delete one plaintext before hide
     fs::remove_file(f.repo.join(".env")).unwrap();
 
-    // Issue #13 semantics: a missing plaintext is a skip-and-report, not an
-    // error - the file with a plaintext IS encrypted, and (default) its
-    // plaintext is deleted after the ciphertext is durable.
+    // A missing plaintext is a skip-and-report, not an error. The file
+    // with a plaintext is encrypted, and by default its plaintext is
+    // deleted after the ciphertext is durable.
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide succeeds with skip");
 
     assert!(
@@ -203,8 +203,8 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
         "reveal should abort when a ciphertext is missing"
     );
 
-    // The other file should NOT be revealed (all-or-nothing)
-    // config.yml still exists because hide does NOT delete plaintext
+    // The other file should not be revealed (all-or-nothing).
+    // config.yml still exists because hide does not delete plaintext
     assert!(
         f.repo.join("config.yml.secret").exists(),
         "config.yml.secret should still exist"
@@ -216,7 +216,7 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
 }
 
 // ---------------------------------------------------------------------------
-// Multi-recipient: both collaborators can decrypt the same ciphertext
+// Encryption to multiple keys: both collaborators can decrypt the same ciphertext
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -263,7 +263,7 @@ fn test_keyring_tamper_invalidates_signature() {
     let keyring_path = f.repo.join(".git-veil/keyring");
     let original = fs::read_to_string(&keyring_path).unwrap();
 
-    // Tamper: swap the recipient string
+    // Tamper: swap the public key string
     let tampered = original.replace("age1", "age2");
     fs::write(&keyring_path, &tampered).unwrap();
 
@@ -287,7 +287,8 @@ fn test_subdirectory_hide_reveal() {
 
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
-    // git-secret does NOT delete plaintext by default -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // plaintext by default.
     assert!(f.repo.join("config/secrets.yml").exists());
     assert!(f.repo.join("config/secrets.yml.secret").exists());
 
@@ -303,7 +304,8 @@ fn test_subdirectory_hide_reveal() {
         fs::read(f.repo.join("config/secrets.yml")).unwrap(),
         plaintext
     );
-    // git-secret does NOT delete ciphertext on reveal -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // ciphertext on reveal.
     assert!(f.repo.join("config/secrets.yml.secret").exists());
 }
 
@@ -330,7 +332,7 @@ fn test_cat_preserves_disk_state() {
     )
     .expect("cat");
 
-    // cat should not touch disk -- both plaintext and ciphertext exist
+    // cat should not touch disk. Both plaintext and ciphertext exist.
     assert!(
         f.repo.join(".env").exists(),
         "plaintext should still exist (hide does not delete)"
@@ -366,7 +368,8 @@ fn test_unhide_isolates_single_file() {
     )
     .expect("unhide .env");
 
-    // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
+    // unhide restores the plaintext and does not delete the ciphertext
+    // (matching git-secret).
     assert!(f.repo.join(".env").exists());
     assert!(
         f.repo.join(".env.secret").exists(),
@@ -498,7 +501,7 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     )
     .expect("add");
 
-    // hide FAILS CLOSED before encrypting anything: exit code 40
+    // Hide fails closed before encrypting anything. Exit code 40.
     let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(
@@ -533,10 +536,10 @@ fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
     f.add_file(".env", b"API_KEY=1\n");
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
 
-    // Simulate .gitignore drift: the tracked plaintext is no longer ignored
+    // Simulate .gitignore drift. The tracked plaintext is no longer ignored.
     fs::write(f.repo.join(".gitignore"), "").unwrap();
 
-    // A warning (error code 41), not a refusal: hide proceeds
+    // A warning (error code 41), not a refusal. Hide proceeds.
     cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide still succeeds");
     assert!(f.repo.join(".env.secret").exists());
 }
@@ -544,7 +547,7 @@ fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
 #[test]
 fn test_tell_fails_with_code_20_when_signing_key_missing() {
     let f = Fixture::new("tell-nosigning");
-    // The fixture wrote signing-keys.txt; simulate the fresh-machine case
+    // The fixture wrote signing-keys.txt. Simulate the fresh-machine case.
     fs::remove_file(f.key_store.join("signing-keys.txt")).unwrap();
 
     let id = git_veil::generate_x25519_private_key();

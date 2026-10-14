@@ -13,7 +13,7 @@ use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, Track
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
 /// cmd_add/cmd_remove resolve paths (canonicalise-and-strip). Relative paths
-/// resolve against `repo_root`; tracked paths are stored repo-relative and
+/// resolve against `repo_root`. Tracked paths are stored repo-relative and
 /// are validated, so the ciphertext path can never escape the repository
 /// root.
 pub fn cmd_cat(
@@ -23,7 +23,8 @@ pub fn cmd_cat(
     remote_name: &str,
     key_store: &Path,
 ) -> Result<Vec<u8>> {
-    // Verify keyring signature first: never decrypt against an unverified keyring
+    // Verify the keyring signature first. Never decrypt against an
+    // unverified keyring.
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
@@ -55,8 +56,9 @@ pub fn cmd_cat(
         anyhow::bail!("file not tracked: {}. Add it before reading it", file);
     }
 
-    // Lstat gate: refuse if the tracked path is a committed symlink or not a
-    // regular file (absent is fine - the plaintext is normally hidden).
+    // Lstat gate. Refuse if the tracked path is a committed symlink or not
+    // a regular file. An absent path is fine. The plaintext is normally
+    // hidden.
     ensure_regular_file(repo_root, &relative)?;
 
     // Compute encrypted path

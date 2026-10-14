@@ -1,7 +1,7 @@
 //! Generated-docs ratification: the committed man pages and shell
-//! completions must be EXACTLY what the current clap definition produces,
+//! completions must be exactly what the current clap definition produces,
 //! and `error-codes` must print every documented exit code. These tests make
-//! docs drift a CI failure instead of a silent divergence - the release
+//! docs drift a CI failure instead of a silent divergence. The release
 //! pipeline packages docs/man and installs docs/completions, so stale
 //! artifacts would ship.
 
@@ -86,7 +86,7 @@ fn test_completions_match_committed_docs() {
     }
 }
 
-/// The error-codes table must list every documented code - a new code added
+/// The error-codes table must list every documented code. A new code added
 /// to the enum but missing from docs/design.md is a spec gap, and the table
 /// is the public exit-code contract.
 #[test]
@@ -107,10 +107,9 @@ fn test_error_codes_are_all_documented() {
     }
 }
 
-/// Issue #41: the SipHash-1-3 fingerprint derivations and every one of
-/// their call sites were deleted; fingerprints are the single SHA-256
-/// derivation in src/fingerprint.rs. This grep test fails the build if
-/// any of the retired code reappears in src/.
+/// The single fingerprint derivation is the SHA-256 one in
+/// src/fingerprint.rs. This grep test fails the build if any retired
+/// SipHash-1-3 derivation code reappears in src/.
 #[test]
 fn test_no_legacy_fingerprint_code_remains_in_src() {
     let banned = [
@@ -146,15 +145,15 @@ fn test_no_legacy_fingerprint_code_remains_in_src() {
     );
 }
 
-/// Issue #40: the core and the code speak RFC-standard cryptography only.
-/// The ageisms - age's marketing words for key material: `recipient` for
-/// the bech32 X25519 public key, `identity`/`identities` for the bech32
-/// X25519 private key (docs/design.md, "Terminology") - are forbidden in
-/// src/ outside user-surface string literals. This grep test strips string
-/// and char literals from every src/*.rs (the user surface lives in string
-/// literals, where the bracketed `(age ...)` spanning form is allowed when
-/// advising age tooling) and fails on any remaining case-insensitive,
-/// word-boundary occurrence in code or comments.
+/// The core and the code speak RFC-standard cryptography only. The
+/// ageisms, the age vocabulary for key material, are forbidden in src/
+/// outside user-surface string literals: `recipient` for the bech32
+/// X25519 public key and `identity`/`identities` for the bech32 X25519
+/// private key (docs/design.md, "Terminology"). This grep test strips
+/// string and char literals from every src/*.rs. The user surface lives
+/// in string literals, where the bracketed `(age ...)` spanning form is
+/// allowed when advising age tooling. The test fails on any remaining
+/// case-insensitive, word-boundary occurrence in code or comments.
 ///
 /// The boundary tokens below are masked exactly, and naming them here is
 /// the contract: the upstream `age` crate's own type and trait names
@@ -346,9 +345,9 @@ fn strip_string_literals(src: &str) -> String {
     String::from_utf8(out).expect("blanking preserves utf8")
 }
 
-/// Issue #40: docs/design.md carries the prominent crypto → ageisms
-/// mapping table, and AGENTS.md carries the terminology law (the ageisms
-/// definition, the boundary, and the table) as law.
+/// docs/design.md carries the crypto to ageisms mapping table, and
+/// AGENTS.md carries the terminology law: the ageisms definition, the
+/// boundary, and the table.
 #[test]
 fn test_terminology_law_is_carried() {
     let design = fs::read_to_string(repo_root().join("docs/design.md")).unwrap();
@@ -381,7 +380,7 @@ fn test_terminology_law_is_carried() {
     );
 }
 
-/// Every subcommand's clap definition carries discussion help - a bare
+/// Every subcommand's clap definition carries discussion help. A bare
 /// subcommand with no after_long_help is a docs gap a user hits as an empty
 /// help page.
 #[test]

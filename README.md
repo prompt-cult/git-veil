@@ -3,8 +3,6 @@
 git-veil stores encrypted secrets in a git repository. It is written in Rust.
 It encrypts with [`age`][age] (via the pure-Rust [`age` crate][age-crate]) and
 signs the keyring with [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]).
-There is no PGP, no GPG, and no external crypto process. All cryptography
-happens in-process.
 
 In the following, `age` refers to the open source `age` encryption tooling,
 which may be installed separately to securely create and maintain
@@ -81,8 +79,7 @@ prints the full table with names and meanings; the specification is in
 
 You need two keys before you start (see [Key setup](#key-setup) below):
 
-- an X25519 private key for encryption, made with the separate `age` tooling
-  (`age-keygen`)
+- an X25519 private key for encryption, made with `age-keygen`
 - an Ed25519 signing key for the keyring. This is not an `age` key, and no
   `age` tool makes it. Make it with `openssl`, as shown below.
 
@@ -156,7 +153,7 @@ cp docs/man/*.1 /usr/local/share/man/man1/
 git-veil uses two kinds of key:
 
 - [`age`][age] X25519 keys for encryption
-- a separate Ed25519 key for signing the keyring
+- an Ed25519 key for signing the keyring. You make this one with `openssl`.
 
 You need both. git-veil generates neither, because a key the tool created
 would be a key you never backed up. Create each key once with a standard
@@ -218,8 +215,8 @@ it can never pin anything.
 ## Commands
 
 git-veil is a command-line tool in the style of git-secret. It encrypts with
-`age` rather than PGP. The algorithms are the same kind many tools use. The
-key formats and the workflow differ. One payoff is a smaller binary.
+`age`. The algorithms are the same kind many tools use. The key formats and
+the workflow differ. One payoff is a smaller binary.
 
 | Command          | Purpose                                                                 |
 |------------------|-------------------------------------------------------------------------|

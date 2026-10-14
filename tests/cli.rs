@@ -2,8 +2,8 @@
 //!
 //! These tests exercise the full command pipeline (init -> trust -> tell -> add ->
 //! hide -> reveal/cat/unhide/changes -> removeperson -> verify-keyring -> clean)
-//! using temporary git repositories and in-memory age identities + Ed25519
-//! signing keys. No PGP, no external key servers, no passphrases.
+//! using temporary git repositories and in-memory X25519 private keys and
+//! Ed25519 signing keys. No PGP, no external key servers, no passphrases.
 
 use age::secrecy::ExposeSecret;
 use clap::Parser as _;
@@ -82,7 +82,7 @@ fn init_git_repo(dir: &Path) {
 /// The repo_id that `derive_repo_id` will produce for the test remote.
 const TEST_REPO_ID: &str = "fara+owner@github.com";
 
-/// A complete test fixture: git repo, key store, owner identity, owner signing key.
+/// A complete test fixture: git repo, key store, owner X25519 private key, owner signing key.
 struct TestRepo {
     repo: TempDir,
     key_store: TempDir,
@@ -114,8 +114,8 @@ impl TestRepo {
         .expect("write identity file");
 
         // The committed owner.verifying: verifying key hex on line 1, the
-        // owner's age recipient on line 2. trust proves possession of the
-        // matching seed and pins the key.
+        // owner's X25519 public key encoding on line 2. trust proves
+        // possession of the matching seed and pins the key.
         fs::write(
             repo.join("owner.verifying"),
             format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
@@ -145,8 +145,8 @@ impl TestRepo {
         }
     }
 
-    /// Generates a collaborator identity, writes their recipient to a file,
-    /// and runs tell to add them to the keyring.
+    /// Generates a collaborator key, writes the X25519 public key encoding
+    /// to a file, and runs tell to add them to the keyring.
     fn add_collaborator(&self, email: &str) -> (age::x25519::Identity, String) {
         let collab_identity = generate_x25519_private_key();
         let collab_recipient = x25519_public_key_encoding(&collab_identity);
@@ -167,7 +167,8 @@ impl TestRepo {
         (collab_identity, collab_recipient)
     }
 
-    /// Imports a collaborator identity into the key store (for reveal).
+    /// Imports a collaborator's X25519 private key into the key store (for
+    /// reveal).
     fn import_identity(&self, identity: &age::x25519::Identity, filename: &str) {
         let path = self.repo.join(filename);
         fs::write(&path, format!("{}\n", identity.to_string().expose_secret()))
@@ -366,7 +367,8 @@ fn test_hide_reveal_roundtrip() {
 
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
-    // git-secret does NOT delete plaintext by default -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // plaintext by default.
     assert!(
         fixture.repo.join(".env").exists(),
         "plaintext should still exist"
@@ -386,7 +388,8 @@ fn test_hide_reveal_roundtrip() {
 
     let revealed = fs::read(fixture.repo.join(".env")).unwrap();
     assert_eq!(revealed, plaintext);
-    // git-secret does NOT delete ciphertext on reveal -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // ciphertext on reveal.
     assert!(
         fixture.repo.join(".env.secret").exists(),
         "ciphertext should still exist"
@@ -492,7 +495,7 @@ fn test_cat_decrypts_to_stdout() {
     .expect("cat");
 
     assert_eq!(result, plaintext);
-    // cat should not touch disk -- both plaintext and ciphertext exist
+    // cat should not touch disk. Both plaintext and ciphertext exist.
     assert!(
         fixture.repo.join(".env").exists(),
         "cat should not delete plaintext"
@@ -549,7 +552,8 @@ fn test_unhide_single_file() {
     )
     .expect("unhide");
 
-    // unhide restores plaintext, does NOT delete ciphertext (matches git-secret)
+    // unhide restores the plaintext and does not delete the ciphertext
+    // (matching git-secret).
     assert!(fixture.repo.join(".env").exists());
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -683,7 +687,7 @@ fn test_removeperson_re_signs_keyring() {
 }
 
 // ---------------------------------------------------------------------------
-// --signing-key parse shape: full verifying key only (issues #29, #30, #41)
+// --signing-key parse shape: full verifying key only
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -702,8 +706,7 @@ fn test_tell_signing_key_index_form_is_a_parse_error() {
 
 #[test]
 fn test_tell_signing_key_fingerprint_form_is_a_parse_error() {
-    // The 16-hex fingerprint form was retired with the derivation change
-    // (issue #41): it must not even parse.
+    // The 16-hex fingerprint form is not accepted. It must not even parse.
     let err = Cli::try_parse_from([
         "git-veil",
         "tell",
@@ -815,8 +818,8 @@ fn test_whoami() {
     cmd_whoami(&fixture.repo.path, None, &fixture.key_store.path).expect("whoami");
 }
 
-/// The principal label is committed in the public keyring - a public
-/// repository fact - so whoami prints it (issue #42). Drives the built
+/// The principal label is committed in the public keyring. It is a public
+/// repository fact, so whoami prints it. This test drives the built
 /// binary because the label is asserted on stdout.
 #[test]
 fn test_whoami_prints_the_principal_label() {
@@ -852,7 +855,8 @@ fn test_export_by_recipient() {
 
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
 
-    // Import the collaborator's recipient to the key store so export can find it
+    // Import the collaborator's public key into the key store so export can
+    // find it
     git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
     let exported = export_public_key(&fixture.key_store.path, &recipient).unwrap();
@@ -861,8 +865,8 @@ fn test_export_by_recipient() {
 
 #[test]
 fn test_export_by_fingerprint_is_not_an_identifier() {
-    // issue #41: export selects by public key string only. Even the new
-    // 64-hex binding fingerprint is not an export identifier.
+    // Export selects by public key string only. A 64-hex binding
+    // fingerprint is not an export identifier.
     let fixture = TestRepo::new("export-fp");
 
     let (_, recipient) = fixture.add_collaborator("alice@example.com");
@@ -898,7 +902,8 @@ fn test_removekey_by_recipient() {
 
     cmd_removekey(&fixture.key_store.path, &recipient, false).expect("removekey");
 
-    // The collaborator's identity should be gone; the owner's identity remains
+    // The collaborator's private key should be gone. The owner's private
+    // key remains.
     let identities =
         git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
     let collab_recipient = x25519_public_key_encoding(&collab_identity);
@@ -908,8 +913,8 @@ fn test_removekey_by_recipient() {
 
 #[test]
 fn test_removekey_by_fingerprint_is_not_an_identifier() {
-    // issue #41: removekey selects by public key string only. Even the new
-    // 64-hex binding fingerprint removes nothing.
+    // Removekey selects by public key string only. A 64-hex binding
+    // fingerprint removes nothing.
     let fixture = TestRepo::new("removekey-fp");
 
     let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
@@ -936,7 +941,8 @@ fn test_removekey_refuses_corrupt_identity_line_and_names_it() {
     let (_collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&_collab_identity, "alice.age");
 
-    // Corrupt the store: a truncated identity line the tool cannot parse
+    // Corrupt the store: a truncated identities.txt line the tool cannot
+    // parse
     let identities_path = fixture.key_store.path.join("identities.txt");
     let corrupt =
         fs::read_to_string(&identities_path).unwrap() + "AGE-SECRET-KEY-1TRUNCATEDGARBAGE\n";
@@ -968,8 +974,8 @@ fn test_removekey_refuses_corrupt_recipient_line_and_names_it() {
     let (_identity, recipient) = fixture.add_collaborator("alice@example.com");
     git_veil::import_x25519_public_key_to_store(&fixture.key_store.path, &recipient).unwrap();
 
-    // Corrupt the recipients store with a line that is not a parseable
-    // age1... recipient
+    // Corrupt recipients.txt with a line that is not a parseable
+    // age1... public key encoding
     let recipients_path = fixture.key_store.path.join("recipients.txt");
     let corrupt = fs::read_to_string(&recipients_path).unwrap() + "not-a-recipient\n";
     fs::write(&recipients_path, &corrupt).unwrap();
@@ -1049,7 +1055,7 @@ fn test_clean_empty_repo_no_yes_ok() {
 }
 
 // ---------------------------------------------------------------------------
-// Multi-recipient encryption
+// Encryption to multiple keys
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1131,7 +1137,8 @@ fn test_full_lifecycle() {
 
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
 
-    // git-secret does NOT delete plaintext by default -- both exist
+    // Both copies exist, matching git-secret, which does not delete the
+    // plaintext by default.
     assert!(fixture.repo.join(".env").exists());
     assert!(fixture.repo.join(".env.secret").exists());
     assert!(fixture.repo.join("config/secrets.yml").exists());
@@ -1171,16 +1178,10 @@ fn test_full_lifecycle() {
 }
 
 // ---------------------------------------------------------------------------
-// git-secret behavioural alignment tests
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Plaintext lifecycle tests
 //
-// DIVERGENCE from git-secret (deliberate, issue #13): hide now DELETES the
-// plaintext by default; --keep-plaintext preserves the git-secret-aligned
-// leave-in-place behaviour. The old "both copies exist" pin lives on as the
-// keep-plaintext test; the delete path is the new default test.
+// Hide deletes the plaintext by default. --keep-plaintext leaves both
+// copies in place, matching git-secret.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1237,8 +1238,9 @@ fn test_hide_skips_missing_plaintext_instead_of_erroring() {
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
     assert!(!fixture.repo.join(".env").exists());
 
-    // Steady state of the delete-by-default lifecycle: plaintext absent,
-    // ciphertext committed - re-hiding is a skip-and-report, not an error.
+    // Steady state of the delete-by-default lifecycle. The plaintext is
+    // absent and the ciphertext is committed, so re-hiding is a
+    // skip-and-report, not an error.
     cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
         .expect("re-hide with absent plaintext must succeed (skip-and-report)");
     assert!(
@@ -1312,7 +1314,7 @@ fn test_add_auto_gitignores_file() {
 
     fs::write(fixture.repo.join("newsecret.txt"), b"secret\n").unwrap();
 
-    // .gitignore does NOT contain newsecret.txt yet
+    // .gitignore does not contain newsecret.txt yet
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
     assert!(!gitignore.contains("newsecret.txt"));
 
@@ -1324,7 +1326,7 @@ fn test_add_auto_gitignores_file() {
     )
     .expect("add");
 
-    // git-secret auto-adds the file to .gitignore -- git-veil must match
+    // git-secret auto-adds the file to .gitignore. git-veil must match.
     let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap_or_default();
     assert!(
         gitignore.contains("newsecret.txt"),

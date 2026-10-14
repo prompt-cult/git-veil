@@ -5,21 +5,22 @@
 //! Pins originate only on machines holding the signing key: `export-pin`
 //! (which itself requires a possession proof) writes this file, and the
 //! receiving machine runs `trust --import`. Both commands refuse any path
-//! inside the repository worktree - an attacker with repo write access
-//! could otherwise commit a bogus pin-file and have the victim import it  -
-//! so the transfer is forced out of band (e.g. ssh), and pin-file integrity
-//! rides the transport, the same model as `known_hosts` provisioning.
+//! inside the repository worktree. An attacker with repo write access
+//! could otherwise commit a bogus pin-file and have the victim import it,
+//! so the transfer is forced out of band (e.g. ssh), and pin-file
+//! integrity rides the transport, the same model as `known_hosts`
+//! provisioning.
 //!
-//! File format (exactly two lines, order fixed, UTF-8, `\n` terminated):
+//! File format: exactly two lines, order fixed, UTF-8, and `\n` terminated.
 //!
 //! ```text
 //! repo-id: <repo_id>
 //! verifying-key: <64-hex Ed25519 verifying key>
 //! ```
 //!
-//! The fingerprint is NOT stored: it is derived with the single documented
-//! derivation (src/fingerprint.rs - the repository id as the label, the
-//! verifying key hex as the public key encoding) by whoever needs it, so
+//! The fingerprint is not stored. It is derived with the single documented
+//! derivation, the repository id as the label and the verifying key hex as
+//! the public key encoding (src/fingerprint.rs), by whoever needs it, so
 //! the file cannot disagree with itself.
 
 use anyhow::{Context, Result};
@@ -32,7 +33,7 @@ use crate::{derive_repo_id, get_remote_push_url};
 use ed25519_dalek::VerifyingKey;
 
 /// A parsed pin-file: the repository id and the owner's Ed25519 verifying
-/// key (public half only - a pin-file never carries a seed).
+/// key. The public half only. A pin-file never carries a seed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PinFile {
     pub repo_id: String,
@@ -49,9 +50,9 @@ impl PinFile {
         )
     }
 
-    /// Parses the two-line file format. Anything else - missing lines,
-    /// unknown keys, duplicate keys, extra content - is a hard refusal
-    /// (exit code 62), never a best-effort guess: a pin-file is a trust
+    /// Parses the two-line file format. Anything else, missing lines,
+    /// unknown keys, duplicate keys or extra content, is a hard refusal
+    /// (exit code 62), never a best-effort guess. A pin-file is a trust
     /// anchor, and a malformed one must never be half-trusted.
     pub fn parse(content: &str) -> Result<Self> {
         let mut repo_id: Option<String> = None;
@@ -117,7 +118,7 @@ impl PinFile {
     }
 
     /// The owner key fingerprint of the carried verifying key under the
-    /// single derivation, with the carried repository id as the label  -
+    /// single derivation, with the carried repository id as the label. It is
     /// the token for pin-file/metadata cross-checks and human out-of-band
     /// verification.
     pub fn owner_fingerprint(&self) -> String {
@@ -139,7 +140,7 @@ pub fn write_pin_file(path: &Path, pin_file: &PinFile) -> Result<()> {
 }
 
 /// Derives the repository id from the live remote, refusing a `repo_id`
-/// argument that does not match it (exit code 13) - the shared gate of
+/// argument that does not match it (exit code 13). The shared gate of
 /// `trust` and `export-pin`.
 pub fn derive_and_check_repo_id(repo_root: &Path, remote_name: &str, repo_id: &str) -> Result<()> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;

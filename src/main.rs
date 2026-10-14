@@ -14,7 +14,7 @@ use git_veil::{
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
-/// non-empty value wins; otherwise fall back to `git config user.email`.
+/// non-empty value wins. Otherwise fall back to `git config user.email`.
 fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<String> {
     match email {
         Some(e) if !e.trim().is_empty() => Ok(e),
@@ -23,16 +23,16 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
     }
 }
 
-/// Resolves the key store location for commands that consume a key_store:
-/// an explicit `--key-store` wins; then `$GIT_VEIL_HOME`; then `$HOME/.git-veil`.
-/// Resolved lazily so HOME-free subcommands (remove/list/clean/
-/// show-repo-id/error-codes) never fail on an unset HOME. add is no longer
-/// in this set: it records the machine-local intent log in the key store
-/// (see "Encryption intent" in docs/design.md). list-keys is no
-/// longer in this set: it verifies the keyring signature against the pinned
-/// key, so it consumes a key_store like every other gated command.
+/// Resolves the key store location for commands that consume a key_store.
+/// An explicit `--key-store` wins, then `$GIT_VEIL_HOME`, then
+/// `$HOME/.git-veil`. Resolved lazily so HOME-free subcommands
+/// (remove/list/clean/show-repo-id/error-codes) never fail on an unset
+/// HOME. add and list-keys are not in that set. add records the
+/// machine-local intent log in the key store (see "Encryption intent" in
+/// docs/design.md). list-keys verifies the keyring signature against the
+/// pinned key, so it consumes a key_store like every other gated command.
 ///
-/// Every resolved key store passes the permission gate BEFORE any key
+/// Every resolved key store passes the permission gate before any key
 /// material is read (gpg checks ~/.gnupg the same way). Bypassed by the
 /// global --dangerously-skip-permissions-check flag or a truthy
 /// GIT_VEIL_SKIP_PERMISSIONS.
@@ -42,9 +42,9 @@ fn resolve_key_store(key_store: Option<PathBuf>, skip_permissions_check: bool) -
     Ok(store)
 }
 
-/// Intercepts `git-veil help [cmd]` so that per the UX spec the command's
-/// discussion + EXAMPLES (its after_long_help content) render FIRST and the
-/// usage/options block renders LAST. `git-veil <cmd> --help` keeps clap's
+/// Intercepts `git-veil help [cmd]`. Per the UX spec, the command's
+/// discussion + EXAMPLES (its after_long_help content) render first and the
+/// usage/options block renders last. `git-veil <cmd> --help` keeps clap's
 /// native order (options before after_long_help), matching the man pages.
 fn handle_help_subcommand(rest: &[String]) -> Result<()> {
     let mut root = Cli::command();
@@ -151,7 +151,8 @@ fn run() -> Result<()> {
                     )?;
                 }
                 // clap's required_unless_present/conflicts_with make both
-                // remaining arms unreachable; keep them total anyway.
+                // remaining arms unreachable. They stay so the match is
+                // total.
                 (Some(_), Some(_)) => anyhow::bail!("--import cannot be combined with a repo_id"),
                 (None, None) => anyhow::bail!(
                     "trust requires a repository id or the import flag with a pin file"
@@ -318,9 +319,9 @@ fn run() -> Result<()> {
             )?;
         }
         Commands::TrustPermissions { key_store: opt } => {
-            // Deliberately resolved WITHOUT the permission gate: this is the
-            // command that records the acknowledgment, so it cannot be
-            // blocked by the very findings it acknowledges.
+            // Deliberately resolved without the permission gate. This
+            // command records the acknowledgment, so the gate must not
+            // block it with its own findings.
             let store = opt.map(Ok).unwrap_or_else(default_key_store)?;
             cmd_trust_permissions(&store)?;
         }

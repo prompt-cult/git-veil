@@ -1,10 +1,10 @@
 //! Discovery of user-owned keys.
 //!
-//! git-veil NEVER generates key material: a key the tool made would be a
+//! git-veil never generates key material. A key the tool made would be a
 //! key the user never backed up, and when the user's disk dies their
 //! ciphertext dies with it. When a key is missing, discovery fails with
-//! the documented exit code and prints the recipe to create it - with the
-//! backup instruction - instead of manufacturing one.
+//! the documented exit code and prints the recipe to create it, with the
+//! backup instruction, instead of manufacturing one.
 
 use anyhow::{Context, Result};
 use ed25519_dalek::SigningKey;
@@ -30,9 +30,9 @@ fn signing_key_recipe(_key_store: &Path) -> String {
 
 /// Loads every signing key seed from `<key_store>/signing-keys.txt`.
 ///
-/// One 64-hex-character Ed25519 seed per line; `#` comments and blank
+/// One 64-hex-character Ed25519 seed per line. `#` comments and blank
 /// lines are skipped. A missing file is an empty list (fresh machine),
-/// not an error; a present-but-garbage line IS an error - never guess
+/// not an error. A present-but-garbage line is an error. Never guess
 /// which line the user meant.
 pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
     let path = key_store.join("signing-keys.txt");
@@ -51,13 +51,13 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
 
 /// Selects the Ed25519 signing key for keyring curation (tell/removeperson).
 ///
-/// The TRUSTED key is used - the one whose owner key fingerprint under
-/// the single derivation (repository id as the label, see
-/// src/fingerprint.rs) equals `pinned_fingerprint`. The keyring must be
-/// signed with exactly the key the pin names (that is what verify_keyring
-/// checks against), so the pin, not list order, selects the key.
+/// The trusted key is used: the one whose owner key fingerprint under the
+/// single derivation (repository id as the label, see src/fingerprint.rs)
+/// equals `pinned_fingerprint`. The keyring must be signed with exactly
+/// the key the pin names, which is what verify_keyring checks against, so
+/// the pin, not list order, selects the key.
 ///
-/// No usable key → exit code 20 with the create-and-back-up recipe.
+/// No usable key exits with code 20 and the create-and-back-up recipe.
 pub fn discover_signing_key(
     key_store: &Path,
     repo_id: &str,
@@ -93,18 +93,17 @@ pub fn discover_signing_key(
 
 /// Explicit signing-key selection by the full verifying key.
 ///
-/// The ONLY selection form: the 64 hex character Ed25519 verifying key  -
-/// the public half, never the seed. The 1-based index into
-/// signing-keys.txt was removed (reordering the file silently renamed what
-/// an index selected), the full 64-hex seed was removed (the private
-/// key must never appear on a command line, where it lands in shell
-/// history, `ps` output, scrollback and agent transcripts), and the
-/// 16-hex-character fingerprint form was retired with the derivation
-/// change (issue #41).
+/// The only selection form is the 64 hex character Ed25519 verifying key.
+/// It is the public half, never the seed. A seed on a command line lands in
+/// shell history, `ps` output, scrollback and agent transcripts, so the
+/// private key must never appear there. A 1-based index into
+/// signing-keys.txt is not a selection form either, because reordering
+/// the file would silently rename what an index selected. The retired
+/// 16-hex-character fingerprint form is not a selection form.
 ///
-/// Zero matches → exit code 20. More than one match (a degenerate
-/// duplicated store) → exit code 70; silently picking one is not
-/// acceptable.
+/// Zero matches exits with code 20. More than one match, from a
+/// degenerate duplicated store, exits with code 70. Silently picking one
+/// is not acceptable.
 pub fn discover_signing_key_explicit(
     key_store: &Path,
     verifying_key_hex: &str,
@@ -138,7 +137,7 @@ pub fn discover_signing_key_explicit(
 /// `public_key_str` in the key store, exiting with code 21 and the
 /// creation recipe when it is absent.
 ///
-/// A corrupt identities.txt is NOT reported as a missing private key: the
+/// A corrupt identities.txt is not reported as a missing private key. The
 /// store loader's coded refusal (code 62, naming the corrupt line) passes
 /// through unchanged.
 pub fn discover_x25519_private_key(

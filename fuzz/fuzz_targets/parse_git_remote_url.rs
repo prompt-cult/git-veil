@@ -20,9 +20,9 @@ fuzz_target!(|data: &[u8]| {
                 );
             }
 
-            // repo_id shape: `repo+user@service`; feeding the derived id
-            // back into parse must be Err (a repo_id is not a supported URL
-            // - no accidental round-trip confusion)
+            // repo_id shape: `repo+user@service`. Feeding the derived id
+            // back into parse must be Err. A repo_id is not a supported URL,
+            // so there is no accidental round-trip confusion
             let repo_id = derive_repo_id(s).expect("derive_repo_id must agree with parse");
             assert_eq!(repo_id, format!("{repo}+{user}@{service}"));
             assert_eq!(derive_repo_id(s).unwrap(), repo_id, "derive must be deterministic");
@@ -32,7 +32,7 @@ fuzz_target!(|data: &[u8]| {
             );
         }
         Err(err) => {
-            // never-echo policy: on Err the error text must not contain ANY
+            // never-echo policy: on Err the error text must not contain any
             // substring of the raw input longer than 8 characters. Check the
             // error string against each sliding 8-char window of the input,
             // so no URL shape can leak credentials into the error message.

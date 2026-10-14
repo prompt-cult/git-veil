@@ -28,10 +28,6 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      # NOTE: deliberately NO gpg installation. tests/interop.rs gates on the
-      # presence of a real gpg binary and SKIPS cleanly when one is absent;
-      # the skip path itself is the tested behaviour, so the runners must not
-      # have gpg installed.
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -85,9 +81,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    # BLOCKING since the 0.5.x tidy-up: the warning debt is cleared, and a
-    # secrets tool whose CI tolerates warnings is a bad look at release time.
-    # Keep it this way: any warning is a failure.
+    # Clippy is blocking. Any warning is a failure.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -127,11 +121,11 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    # NON-BLOCKING: cargo audit currently flags advisories on the locked
-    # dependency tree (RUSTSEC-2023-0071 rsa Marvin Attack - no fixed upgrade
-    # available upstream; RUSTSEC-2026-0190 anyhow unsoundness; yanked spin).
-    # keep running so new advisories surface; make blocking once these are
-    # resolved or explicitly ignored in audit.toml.
+    # Non-blocking by design: cargo audit currently flags known advisories
+    # on the locked dependency tree (RUSTSEC-2023-0071 rsa Marvin Attack,
+    # no fixed upgrade available upstream; RUSTSEC-2026-0190 anyhow
+    # unsoundness; yanked spin). It keeps running so new advisories
+    # surface.
     continue-on-error: true
     steps:
       - name: Checkout code

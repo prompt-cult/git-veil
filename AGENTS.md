@@ -54,10 +54,10 @@ Otherwise CI-facing docs drift from the real CLI.
 
 git-veil's core and code speak RFC-standard cryptography only. **Ageisms**,
 the vocabulary the `age` tool uses for these values, are forbidden in `src/`
-outside user-surface string literals. The crypto terms are: X25519 public
-key, X25519 private key, principal (the keyring label), Ed25519 verifying
-key, Ed25519 signing key. The ageisms are: `recipient`, `identity`,
-`identity file`.
+outside user-surface string literals. The crypto terms are:
+X25519 public key, X25519 private key, principal (the keyring label),
+Ed25519 verifying key, Ed25519 signing key. The ageisms are: `recipient`,
+`identity`, `identity file`.
 
 The boundary:
 

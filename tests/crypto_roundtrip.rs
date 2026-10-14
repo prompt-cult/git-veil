@@ -31,7 +31,7 @@ fn test_age_multi_recipient_roundtrip() {
     let recipients = vec![r1, r2];
     let ciphertext = encrypt_to_x25519_public_keys(plaintext, &recipients).unwrap();
 
-    // Both identities can decrypt
+    // Both private keys can decrypt
     let d1 = decrypt_with_x25519_private_key(&ciphertext, &id1).unwrap();
     let d2 = decrypt_with_x25519_private_key(&ciphertext, &id2).unwrap();
     assert_eq!(d1, plaintext);

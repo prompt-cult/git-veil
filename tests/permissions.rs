@@ -1,6 +1,6 @@
 //! Key store permission tests: the gpg-style check, the git-style trust
 //! acknowledgment, and the 0600-at-creation guarantee for files git-veil
-//! writes holding private key material. Unix only - the check is a no-op
+//! writes holding private key material. Unix only. The check is a no-op
 //! elsewhere.
 
 #![cfg(unix)]
@@ -122,7 +122,8 @@ fn test_acknowledgment_unblocks_then_mode_change_refails() {
     cmd_trust_permissions(&ks.path).expect("trust-permissions");
     check_key_store_permissions(&ks.path, false).expect("acknowledged state passes");
 
-    // The acknowledgment file holds private-material-adjacent state: 0600
+    // The acknowledgment file holds private-material-adjacent state. It is
+    // mode 0600.
     let ack_mode = fs::metadata(ks.join("permissions-ack.json"))
         .unwrap()
         .permissions()
@@ -130,7 +131,7 @@ fn test_acknowledgment_unblocks_then_mode_change_refails() {
         & 0o777;
     assert_eq!(ack_mode, 0o600);
 
-    // A LATER change to anything else fails again - the ack pins the exact
+    // A later change to anything else fails again. The ack pins the exact
     // (path, mode) pair.
     fs::set_permissions(ks.join("identities.txt"), fs::Permissions::from_mode(0o640)).unwrap();
     let code = code_of(check_key_store_permissions(&ks.path, false).unwrap_err());
@@ -185,7 +186,7 @@ fn test_import_writes_identities_0600() {
 
     cmd_import(&repo.path, &["my.age".to_string()], &ks.path).expect("import");
 
-    // Private key material: 0600 at creation, regardless of umask
+    // Private key material. It is 0600 at creation, regardless of umask.
     let mode = fs::metadata(ks.join("identities.txt"))
         .unwrap()
         .permissions()

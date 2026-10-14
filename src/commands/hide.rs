@@ -20,11 +20,11 @@ use crate::{
 
 /// Computes the ciphertext path for a tracked file under `repo_root`.
 ///
-/// The ciphertext lives BESIDE the plaintext, named after git-secret's
-/// convention: the FULL original file name plus ".secret" (notes ->
-/// notes.secret, a.tar.gz -> a.tar.gz.secret, .env -> .env.secret,
-/// sub/dir/x -> sub/dir/x.secret). Shared by hide, reveal, cat and changes
-/// so the sides cannot drift apart.
+/// The ciphertext lives beside the plaintext, named after git-secret's
+/// convention: the full original file name plus ".secret" (notes becomes
+/// notes.secret, a.tar.gz becomes a.tar.gz.secret, .env becomes
+/// .env.secret, sub/dir/x becomes sub/dir/x.secret). Shared by hide,
+/// reveal, cat and changes so the sides cannot drift apart.
 pub(crate) fn encrypted_path_for(repo_root: &Path, file: &Path) -> PathBuf {
     repo_root.join(file).with_file_name(format!(
         "{}.secret",
@@ -32,10 +32,10 @@ pub(crate) fn encrypted_path_for(repo_root: &Path, file: &Path) -> PathBuf {
     ))
 }
 
-/// Defence in depth: the ciphertext must stay inside the repository root,
-/// exactly beside its plaintext - i.e. it must be `<plaintext>.secret`.
-/// Call this after computing the ciphertext path with `encrypted_path_for`;
-/// never re-invent per-call-site path math.
+/// Defence in depth: the ciphertext must stay inside the repository
+/// root, exactly beside its plaintext, as `<plaintext>.secret`. Call this
+/// after computing the ciphertext path with `encrypted_path_for`. Never
+/// re-invent per-call-site path math.
 pub(crate) fn ensure_ciphertext_beside_plaintext(
     repo_root: &Path,
     file: &Path,
@@ -66,11 +66,10 @@ pub fn cmd_hide(
     key_store: &Path,
     keep_plaintext: bool,
 ) -> Result<()> {
-    // Verify keyring signature first; the same call yields the repo id the
-    // intent gate needs and the keyring hide encrypts with.
+    // Verify the keyring signature first. The same call yields the repo id
+    // the intent gate needs and the keyring hide encrypts with.
     let (repo_id, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
-    // Load keyring
     let _ = &keyring;
 
     if keyring.entries.is_empty() {
@@ -88,21 +87,21 @@ pub fn cmd_hide(
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
-    // Orphaned-ciphertext gate (exit 42, runs before the empty-manifest
-    // early return - an emptied tracked.json is exactly the de-tracking
-    // attack shape). A committed `.secret` whose plaintext path is no
-    // longer tracked would be silently skipped by rotation: removeperson +
-    // hide never re-encrypts it, leaving a ciphertext a revoked
-    // collaborator can still decrypt. The gate reads the git index, not
-    // the manifest, as the source of what is established, because both are
-    // attacker-writable but the index is what gets pushed.
+    // Orphaned-ciphertext gate (exit 42). It runs before the
+    // empty-manifest early return, because an emptied tracked.json is
+    // exactly the de-tracking attack shape. A committed `.secret` whose
+    // plaintext path is no longer tracked would be silently skipped by
+    // rotation: removeperson + hide never re-encrypts it, leaving a
+    // ciphertext a revoked collaborator can still decrypt. The gate reads
+    // the git index, not the manifest, as the source of what is
+    // established. Both are attacker-writable, but the index is what gets
+    // pushed.
     let tracked_set: HashSet<&PathBuf> = tracked.files.iter().collect();
-    // core.quotePath=false + -z: the index listing arrives verbatim (no
-    // octal-UTF8 quoting, NUL-separated) so the plaintext-path reversal
-    // below sees the real names - with the default quoting, a committed
-    // unicode/space ciphertext name never matches any tracked entry and
-    // false-positives the orphan gate into a permanent exit-42 bricking
-    // (issue #23).
+    // core.quotePath=false plus -z: the index listing arrives verbatim, no
+    // octal-UTF8 quoting, NUL-separated, so the plaintext-path reversal
+    // below sees the real names. With the default quoting, a committed
+    // unicode or space ciphertext name never matches any tracked entry and
+    // false-positives the orphan gate into a permanent exit-42 bricking.
     let ls = Command::new("git")
         .current_dir(repo_root)
         .args([
@@ -122,14 +121,14 @@ pub fn cmd_hide(
         );
     }
     let mut orphans: Vec<String> = Vec::new();
-    // Plaintext paths whose ciphertext is already committed (established  -
-    // no intent needed to re-encrypt them).
-    // Issue #19: a committed ciphertext is established only when it PREDATES
-    // the manifest entry naming it. The index is attacker-writable, so mere
-    // presence proves nothing - a nomination and a dummy `<path>.secret`
+    // Plaintext paths whose ciphertext is already committed. They are
+    // established, so no intent is needed to re-encrypt them.
+    // A committed ciphertext is established only when it predates the
+    // manifest entry naming it. The index is attacker-writable, so mere
+    // presence proves nothing. A nomination and a dummy `<path>.secret`
     // landing in one commit would otherwise mark the path established and
     // ride past the intent gate. The happen-before result is cached per
-    // manifest content hash in the machine-local key store: the key store
+    // manifest content hash in the machine-local key store. The key store
     // either holds a baseline for this manifest version or it does not.
     let manifest_rel = ".git-veil/tracked.json";
     let manifest_content = fs::read_to_string(repo_root.join(manifest_rel)).unwrap_or_default();
@@ -143,10 +142,10 @@ pub fn cmd_hide(
         }
         let line = String::from_utf8_lossy(raw).to_string();
         // Reverse of the ciphertext naming rule: `<name>.secret` guards
-        // plaintext `<name>`. A committed file named exactly `.secret` has
-        // no plaintext path - it cannot correspond to ANY tracked path, so
+        // plaintext `<name>`. A committed file named exactly `.secret` has no
+        // plaintext path. It cannot correspond to any tracked path, so
         // refusing on it would let one attacker-committed junk file brick
-        // hide repo-wide (issue #23). Ignore it with a warning instead.
+        // hide repo-wide. Ignore it with a warning instead.
         let ciphertext = PathBuf::from(&line);
         let stem = ciphertext.file_name().and_then(|name| {
             name.to_string_lossy()
@@ -193,16 +192,16 @@ pub fn cmd_hide(
     }
 
     // Encryption-intent gate (exit 72, see "Encryption intent" in
-    // docs/design.md): tracked.json is committed and unsigned, so a repo
-    // writer can nominate a path. A tracked path whose ciphertext is NOT in
-    // the index must have been added on THIS machine (the intent log lives
-    // in the key store, outside any repo writer's reach) or hide refuses:
-    // first-encrypting an attacker-nominated path is exactly the
+    // docs/design.md). tracked.json is committed and unsigned, so a repo
+    // writer can nominate a path. A tracked path whose ciphertext is not
+    // in the index must have been added on this machine, or hide refuses.
+    // The intent log lives in the key store, outside any repo writer's
+    // reach. First-encrypting an attacker-nominated path is exactly the
     // exfiltration channel, and the gitignored-plaintext case would
     // otherwise be silent.
     let mut unintended: Vec<String> = Vec::new();
     for file in &tracked.files {
-        // Only paths that HAVE a plaintext can be first-encrypted - a path
+        // Only paths that have a plaintext can be first-encrypted. A path
         // with no plaintext has nothing to exfiltrate and is handled by the
         // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
         // lifecycle").
@@ -232,10 +231,10 @@ pub fn cmd_hide(
         return Ok(());
     }
 
-    // Ciphertext-ignored gate: a `.secret` swallowed by a broad ignore rule
-    // (e.g. a parent directory like `.tmp/`) would silently never reach the
-    // repository - add succeeded, but the ciphertext is untrackable. Refuse
-    // outright BEFORE encrypting anything (exit code 40).
+    // Ciphertext-ignored gate. A `.secret` swallowed by a broad ignore rule,
+    // such as a parent directory like `.tmp/`, would silently never reach
+    // the repository. Add succeeded, but the ciphertext is untrackable.
+    // Refuse outright before encrypting anything (exit code 40).
     let mut ignored_secrets: Vec<String> = Vec::new();
     for file in &tracked.files {
         let secret_relative = format!("{}.secret", file.to_string_lossy());
@@ -251,10 +250,10 @@ pub fn cmd_hide(
         ));
     }
 
-    // Plaintext-leak warning: the plaintext's only protection is its
-    // .gitignore entry, and add only guarantees it at add time - a rename
+    // Plaintext-leak warning. The plaintext's only protection is its
+    // .gitignore entry, and add only guarantees it at add time. A rename
     // or .gitignore edit can drift it. A blind `git add -A` would then
-    // commit the plaintext. Warning only (error code 41); hide proceeds.
+    // commit the plaintext. Warning only (error code 41). Hide proceeds.
     for file in &tracked.files {
         let relative_str = file.to_string_lossy();
         if repo_root.join(file).exists() && !is_gitignored(repo_root, &relative_str)? {
@@ -265,30 +264,30 @@ pub fn cmd_hide(
         }
     }
 
-    // Two-phase, all-or-nothing hide (compute-then-commit). PHASE 1 reads and
-    // validates every tracked plaintext and encrypts EVERY file to the full
-    // public key set, holding all ciphertexts in memory; ANY failure here
-    // aborts with nothing changed on disk - no mixed state where some files
-    // are hidden and others remain plaintext. Memory trade: secrets are
+    // Two-phase, all-or-nothing hide (compute-then-commit). Phase 1 reads
+    // and validates every tracked plaintext and encrypts every file to the
+    // full public key set, holding all ciphertexts in memory. Any failure
+    // here aborts with nothing changed on disk. There is no mixed state
+    // where some files are hidden and others remain plaintext. Secrets are
     // small config-scale files, so holding every ciphertext in memory is
-    // acceptable; hide is not a bulk-archival path.
+    // acceptable. Hide is not a bulk-archival path.
     let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
     for file in &tracked.files {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
 
-        // Lstat gate: a committed tracked.json can name a committed symlink
-        // pointing outside the repo; reading through it would exfiltrate the
+        // Lstat gate. A committed tracked.json can name a committed symlink
+        // pointing outside the repo. Reading through it would exfiltrate the
         // link target into the ciphertext written back to the repo.
         ensure_regular_file(repo_root, file)?;
 
-        // Skip-and-report (docs/design.md "Plaintext lifecycle"): a tracked
-        // path with no plaintext is the STEADY STATE of the delete-by-default
-        // lifecycle, never an error. With a ciphertext present (disk or
-        // committed) the file is already hidden; with neither, it was never
+        // Skip-and-report (docs/design.md "Plaintext lifecycle"). A tracked
+        // path with no plaintext is the steady state of the delete-by-default
+        // lifecycle, never an error. With a ciphertext present, on disk or
+        // committed, the file is already hidden. With neither, it was never
         // hidden and has nothing to hide. Either way there is nothing to
-        // encrypt - and nothing to exfiltrate - so the path is skipped.
+        // encrypt and nothing to exfiltrate, so the path is skipped.
         if !repo_root.join(file).exists() {
             let state =
                 if encrypted_path_for(repo_root, file).exists() || established.contains(file) {
@@ -304,7 +303,7 @@ pub fn cmd_hide(
         let plaintext = fs::read(repo_root.join(file))
             .with_context(|| format!("Failed to read file: {}", file.display()))?;
 
-        // Encrypt to EVERY key in the keyring: the collaboration promise is
+        // Encrypt to every key in the keyring. The collaboration promise is
         // that any collaborator can reveal, so the one ciphertext carries a
         // stanza per public key.
         let ciphertext = encrypt_to_x25519_public_keys(&plaintext, &public_keys)?;
@@ -356,11 +355,11 @@ pub fn cmd_hide(
         println!("Skipped: {line}");
     }
 
-    // Plaintext deletion is the DEFAULT (docs/design.md "Plaintext
-    // lifecycle"): the plaintext's only worktree protection is a
+    // Plaintext deletion is the default (docs/design.md "Plaintext
+    // lifecycle"). The plaintext's only worktree protection is a
     // .gitignore line, so it is deleted once every ciphertext is durably
     // on disk. --keep-plaintext opts out. The delete happens only after
-    // the full all-or-nothing write phase above succeeded - at worst both
+    // the full all-or-nothing write phase above succeeded. At worst both
     // copies exist, never neither.
     if !keep_plaintext {
         for (file, _, _) in &prepared {

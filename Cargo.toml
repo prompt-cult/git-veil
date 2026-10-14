@@ -50,7 +50,7 @@ hex = "0.4"
 # URL parsing
 regex = "1.10"
 
-# SHA-256 digest of accepted keyrings (fork detection, issue #20)
+# SHA-256 digest of accepted keyrings (fork detection)
 sha2 = "0.10"
 gix-ignore = "0.24.0"
 bstr = "1.13.1"
@@ -65,9 +65,9 @@ serial_test = "3.1"
 clap = { version = "4.5", features = ["derive", "string"] }
 clap_complete = "4"
 
-# cargo-binstall support (issue #10): release assets are raw binaries named
-# git-veil-<os>-<arch> with sidecar .sha256 files; no archive, no version in
-# the filename.
+# cargo-binstall support. Release assets are raw binaries named
+# git-veil-<os>-<arch> with sidecar .sha256 files. No archive, no version
+# in the filename.
 [package.metadata.binstall]
 pkg-url = "https://github.com/prompt-cult/git-veil/releases/download/v{ version }/{ name }-{ format }"
 bin-dir = "{ bin }{ binary-ext }"

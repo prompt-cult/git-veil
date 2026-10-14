@@ -14,7 +14,7 @@ struct StoreLine {
 }
 
 /// A key store file parsed into lines. `exists` is false when the store
-/// file is absent (fresh machine) - absent stores are never created.
+/// file is absent (fresh machine). Absent stores are never created.
 struct StoreContents {
     path: PathBuf,
     exists: bool,
@@ -23,11 +23,12 @@ struct StoreContents {
 
 /// Loads and parses the private key store (identities.txt).
 ///
-/// A non-comment line that is not a parseable X25519 private key is a hard
-/// error naming the corrupt line: the store is refused untouched. Silently
-/// skipping corrupt lines would let a successful removal rewrite the store
-/// without them - deleting key material removekey was never asked to touch
-/// (the same fail-closed rule every key store read applies).
+/// A non-comment line that is not a parseable X25519 private key is a
+/// hard error naming the corrupt line. The store is refused untouched.
+/// Silently skipping corrupt lines would let a successful removal
+/// rewrite the store without them, deleting key material removekey was
+/// never asked to touch. The same fail-closed rule applies to every key
+/// store read.
 fn load_private_key_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
@@ -56,10 +57,10 @@ fn load_private_key_store(path: &Path) -> Result<StoreContents> {
 
 /// Loads and parses the public key store (recipients.txt).
 ///
-/// The same fail-closed rule as every key store read: a non-comment line
-/// that is not a parseable X25519 public key is a hard error naming the
-/// corrupt line - the store is refused untouched, never rewritten from a
-/// partial parse.
+/// The same fail-closed rule as every key store read. A non-comment
+/// line that is not a parseable X25519 public key is a hard error
+/// naming the corrupt line. The store is refused untouched, never
+/// rewritten from a partial parse.
 fn load_public_key_store(path: &Path) -> Result<StoreContents> {
     if !path.exists() {
         return Ok(StoreContents {
@@ -85,11 +86,10 @@ fn load_public_key_store(path: &Path) -> Result<StoreContents> {
     })
 }
 
-/// Removes key material from the LOCAL key store: every line in
+/// Removes key material from the local key store. Every line in
 /// `<key_store>/identities.txt` and `<key_store>/recipients.txt` whose
 /// X25519 public key encoding exactly matches `identifier` is dropped.
-/// Keys are selected by public key string only; no
-/// fingerprint-as-identifier mode remains (issue #41).
+/// Keys are selected by public key string only.
 pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
     let private_keys_path = key_store.join("identities.txt");
     let public_keys_path = key_store.join("recipients.txt");

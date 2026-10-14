@@ -8,7 +8,7 @@ use crate::keyring::END_MARKER;
 /// Generates a new Ed25519 signing keypair.
 ///
 /// Returns (signing_key, verifying_key_string) where verifying_key_string is
-/// a hex-encoded Ed25519 public key.
+/// a hex-encoded Ed25519 verifying key.
 pub fn generate_signing_keypair() -> (SigningKey, String) {
     let mut rng = thread_rng();
     let signing_key = SigningKey::generate(&mut rng);
@@ -24,9 +24,9 @@ pub fn sign_keyring_content(keyring_content: &str, signing_key: &SigningKey) -> 
 
 /// SHA-256 hex digest of the canonical signed keyring content. Recorded in
 /// the per-machine baseline beside the freshness counter so that an
-/// equal-version keyring with DIFFERENT content (a curation fork - two
-/// machines both curating without pulling - issue #20) is refused rather
-/// than silently replacing the accepted collaborator set.
+/// equal-version keyring with different content, a curation fork from two
+/// machines both curating without pulling, is refused rather than
+/// silently replacing the accepted collaborator set.
 pub fn keyring_content_digest(keyring_content: &str) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(Sha256::digest(keyring_content.as_bytes()))

@@ -1,7 +1,7 @@
-//! Trust model tests for the possession-proof pin creation (issue #28):
-//! proof is the only direct pin-creation mode, the keyfile argument is a
-//! parse error, export-pin/import carry pins to store-less machines, and
-//! the three import consistency checks refuse every mismatch.
+//! Trust model tests for the possession-proof pin creation. Proof is
+//! the only direct pin-creation mode, the keyfile argument is a parse
+//! error, export-pin/import carry pins to store-less machines, and the
+//! three import consistency checks refuse every mismatch.
 
 use age::secrecy::ExposeSecret;
 use git_veil::cli::Cli;
@@ -108,13 +108,13 @@ impl Fixture {
 }
 
 // ---------------------------------------------------------------------------
-// The keyfile argument is gone: the parser rejects it
+// The parser rejects a keyfile argument
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_trust_keyfile_argument_is_a_parse_error() {
     use clap::Parser as _;
-    // `git-veil trust <repo-id> <keyfile>` - the old self-anchoring form  -
+    // `git-veil trust <repo-id> <keyfile>`, the self-anchoring form,
     // must not even parse.
     let result = Cli::try_parse_from(["git-veil", "trust", TEST_REPO_ID, "owner.verifying"]);
     assert!(
@@ -122,7 +122,7 @@ fn test_trust_keyfile_argument_is_a_parse_error() {
         "trust with a keyfile argument must be a parse error"
     );
 
-    // The two pin-creation paths parse; nothing else does.
+    // The two pin-creation paths parse. Nothing else does.
     assert!(Cli::try_parse_from(["git-veil", "trust", TEST_REPO_ID]).is_ok());
     assert!(
         Cli::try_parse_from(["git-veil", "trust", "--import", "/tmp/fara.pin"]).is_ok(),
@@ -141,7 +141,7 @@ fn test_trust_keyfile_argument_is_a_parse_error() {
 }
 
 // ---------------------------------------------------------------------------
-// Possession proof: match -> pin; no match -> refusal, no pin
+// Possession proof. A match writes the pin. No match refuses, no pin.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -172,8 +172,8 @@ fn test_trust_without_matching_seed_refuses() {
     let key_store = TempDir::new("no-seed-ks");
     init_git_repo(&repo.path);
 
-    // The repository's owner.verifying is keypair A's public half; the
-    // store holds keypair B's seed - possession of A is NOT proven.
+    // The repository's owner.verifying is keypair A's public half. The
+    // store holds keypair B's seed, so possession of A is not proven.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
     fs::write(
@@ -305,8 +305,8 @@ fn test_export_pin_without_matching_seed_refuses() {
     let elsewhere = TempDir::new("export-no-seed-out");
     init_git_repo(&repo.path);
 
-    // The repository's owner.verifying is keypair A's public half; the
-    // store holds keypair B's seed - export must refuse.
+    // The repository's owner.verifying is keypair A's public half. The
+    // store holds keypair B's seed, so export must refuse.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
     fs::write(
@@ -386,7 +386,7 @@ fn storeless(label: &str) -> TempDir {
 fn test_import_inside_repo_refuses() {
     let f = Fixture::new("import-inside");
 
-    // An attacker commits a bogus pin-file to the repository; the victim
+    // An attacker commits a bogus pin-file to the repository. The victim
     // is told to import it from the working tree.
     let in_repo = f.repo.join("bogus.pin");
     fs::write(
@@ -420,7 +420,7 @@ fn test_import_happy_path_on_storeless_machine() {
     )
     .expect("export-pin on the signing machine");
 
-    // The store-less machine has no signing key anywhere - import is its
+    // The store-less machine has no signing key anywhere. Import is its
     // only pin-creation path, and it must work.
     assert!(!fresh_store.path.join("signing-keys.txt").exists());
     cmd_trust_import(
@@ -448,7 +448,7 @@ fn test_import_repo_id_mismatch_refuses() {
     let fresh_store = storeless("import-repo-id");
     let elsewhere = TempDir::new("import-repo-id-out");
 
-    // A pin-file exported for a DIFFERENT repository.
+    // A pin-file exported for a different repository.
     let pin_file_path = elsewhere.join("other.pin");
     fs::write(
         &pin_file_path,
@@ -535,9 +535,9 @@ fn test_import_fingerprint_mismatch_refuses() {
     )
     .expect("export-pin");
 
-    // Tamper the committed metadata fingerprint (check c): the pin-file
-    // and the committed key still agree, but the recorded fingerprint  -
-    // the human verification token - does not.
+    // Tamper the committed metadata fingerprint (check c). The pin-file
+    // and the committed key still agree, but the recorded fingerprint,
+    // the human verification token, does not.
     let trust_path = f.repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "00".repeat(32));
@@ -576,7 +576,7 @@ fn test_import_missing_metadata_fingerprint_refuses() {
     )
     .expect("export-pin");
 
-    // Metadata predating the fingerprint field: the owner must refresh it
+    // Metadata without the fingerprint field. The owner must refresh it
     // by re-running trust on a seed-holding machine before anyone imports.
     let trust_path = f.repo.join(".git-veil/trust.json");
     let legacy = serde_json::json!({
@@ -627,8 +627,8 @@ fn test_no_pin_fails_closed() {
         message.contains("no trust pin exists on this machine"),
         "the error states the missing pin: {message}"
     );
-    // Public repository facts (issue #42): the refusal names the derived
-    // repository identity and the remote it came from.
+    // Public repository facts. The refusal names the derived repository
+    // id and the remote it came from.
     assert!(
         message.contains(TEST_REPO_ID),
         "the error names the derived repository identity: {message}"
@@ -700,8 +700,8 @@ fn test_empty_keyring_no_signature_ok() {
 
 // ---------------------------------------------------------------------------
 // reveal's no-pin error: states the missing pin and names the public facts
-// (the derived repository identity and the remote it came from), but prints
-// no command line and names no removed path
+// (the derived repository id and the remote it came from), but prints
+// no command line and no file path
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -749,7 +749,7 @@ fn test_reveal_no_pin_error_names_both_paths() {
 
 #[test]
 fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
-    // The REAL owner's machine: holds the real seed, no pin yet.
+    // The real owner's machine. It holds the real seed and has no pin yet.
     let real_store = TempDir::new("attacker-real-ks");
     let (real_signing_key, _real_verifying_hex) = generate_signing_keypair();
     fs::write(
@@ -758,8 +758,8 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     )
     .unwrap();
 
-    // The attacker's repository: self-consistent - its own signing key,
-    // its own committed owner.verifying, its own signed keyring, its own
+    // The attacker's repository is self-consistent. It has its own signing
+    // key, its own committed owner.verifying, its own signed keyring, its own
     // metadata fingerprint, and a bogus pin-file committed in-repo.
     let attacked = TempDir::new("attacker-repo");
     init_git_repo(&attacked.path);
@@ -793,8 +793,8 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     )
     .unwrap();
 
-    // The repository supplies its own trust anchor -> the proof fails:
-    // the real seed does not derive the attacker's key.
+    // The repository supplies its own trust anchor, so the proof fails.
+    // The real seed does not derive the attacker's key.
     let err = cmd_trust(
         &attacked.path,
         TEST_REPO_ID,
@@ -814,7 +814,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
         "no pin may be written for the attacker's repo"
     );
 
-    // And the committed bogus pin-file cannot be imported either: it lives
+    // The committed bogus pin-file cannot be imported either. It lives
     // inside the repository.
     let err = cmd_trust_import(
         &attacked.path,
@@ -828,11 +828,10 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
 }
 
 // ---------------------------------------------------------------------------
-// Repo rename / remote change: the existing trust record names a different
-// repo-id. The error states the suspicion and STOPS - no remedy is printed,
-// because the remedy is exactly what an attacker would want the operator to
-// run without thinking. The operator reads the docs and fixes it with their
-// brain engaged.
+// Repo rename / remote change: the existing trust record names a
+// different repo-id. The error states the suspicion and stops. No remedy
+// is printed, because the remedy is exactly what an attacker would want
+// the operator to run without thinking.
 // ---------------------------------------------------------------------------
 
 /// Changes the fixture's remote URL, as a GitHub rename does, so the
@@ -877,9 +876,9 @@ fn test_rename_suspicion_no_remedy_on_import() {
     let new_repo_id = "fara-moved+owner@github.com";
     let elsewhere = TempDir::new("rename-import-out");
 
-    // A pin-file for the RENAMED repo-id, carrying the repository's true
+    // A pin-file for the renamed repo-id, carrying the repository's true
     // committed key: check (a) passes, but the committed metadata still
-    // records the owner fingerprint under the OLD repo-id.
+    // records the owner fingerprint under the old repo-id.
     let pin_file_path = elsewhere.join("moved.pin");
     fs::write(
         &pin_file_path,
@@ -922,8 +921,8 @@ fn test_rename_suspicion_no_remedy_on_import() {
 }
 
 // ---------------------------------------------------------------------------
-// Stale-entry reconcile (issue #43): when trust writes the owner fingerprint
-// metadata it also reconciles trusted_keys - entries whose repository id no
+// Stale-entry reconcile. When trust writes the owner fingerprint
+// metadata it also reconciles trusted_keys. Entries whose repository id no
 // configured remote derives are pruned, the removal is printed, and entries
 // matching any configured remote are kept.
 // ---------------------------------------------------------------------------
@@ -957,7 +956,7 @@ fn test_reconcile_trusted_keys_removes_only_non_live_ids() {
         .is_some());
 }
 
-/// The observed-live scenario: the repository moved, the old id is a stale
+/// The observed-live scenario. The repository moved, the old id is a stale
 /// entry in the committed store, and the owner re-runs the possession proof
 /// under the new id. Drives the built binary so the printed removal can be
 /// asserted on stdout.
@@ -1005,7 +1004,7 @@ fn test_trust_after_a_move_prunes_the_stale_entry_and_prints_the_removal() {
         1,
         "the committed store names exactly the ids the remotes derive"
     );
-    // The reconcile is scoped to trusted_keys: the owner fingerprint
+    // The reconcile is scoped to trusted_keys. The owner fingerprint
     // metadata is not pruned by it.
     assert!(
         trust.get_owner_fingerprint(TEST_REPO_ID).is_some(),
@@ -1019,7 +1018,7 @@ fn test_trust_reconcile_keeps_one_entry_per_configured_remote() {
     let f = Fixture::new("prune-multi");
     let upstream_id = "fara-mirror+owner@github.com";
 
-    // A second configured remote: the repository is also pushed elsewhere.
+    // A second configured remote. The repository is also pushed elsewhere.
     let s = std::process::Command::new("git")
         .current_dir(&f.repo.path)
         .args([

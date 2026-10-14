@@ -5,12 +5,12 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
 
-/// SSH SCP-style: `user@host:owner/repo[.git][/][?]` - any SSH user (not just
-/// `git`). The user part must not contain `/` so that scheme URLs like
-/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The user,
-/// host and owner/repo groups additionally exclude `@` and `:` (where shape
-/// permits) so credential-shaped material can never land in the derived
-/// repository id (fails closed instead).
+/// SSH SCP-style: `user@host:owner/repo[.git][/][?]`, for any SSH user, not
+/// just `git`. The user part must not contain `/` so that scheme URLs like
+/// `ssh://git@host:2222/...` are never mistaken for SCP-style URLs. The
+/// user, host and owner/repo groups additionally exclude `@` and `:` where
+/// the shape permits, so credential-shaped material can never land in the
+/// derived repository id. The parse fails closed instead.
 static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[^@/]+@([^:/@]+):([^/@:]+)/([^/@:]+?)(?:\.git)?/?$")
         .expect("valid SCP-style SSH URL regex")
@@ -18,9 +18,9 @@ static SSH_SCP_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Scheme URL shared shape: `scheme://[user[:pass]@]host[:port]/owner/repo`.
 /// The optional userinfo (`user[:pass]@`) is a login credential and is
-/// stripped - it never becomes part of the repository id. The owner/repo
+/// stripped. It never becomes part of the repository id. The owner/repo
 /// groups exclude `@` and `:` so credential-shaped material can never land
-/// in the derived repository id (fails closed instead).
+/// in the derived repository id. The parse fails closed instead.
 static SCHEME_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(ssh|git|https)://(?:[^/@]+@)?([^/:@]+)(?::\d+)?/([^/@:]+)/([^/@:]+?)(?:\.git)?/?$",
@@ -43,7 +43,7 @@ fn normalize(repo: &str, owner: &str, service: &str) -> (String, String, String)
 /// All components are lowercased: one repository must yield one repo_id from
 /// any supported URL shape.
 ///
-/// Supports:
+/// Supported URL shapes.
 /// - GitHub SSH (SCP-style): `git@github.com:user/repo.git`
 /// - Other SSH users (SCP-style): `deploy@host.tld:org/repo.git`,
 ///   `person@git.sr.ht:~person/repo.git`
@@ -55,10 +55,10 @@ fn normalize(repo: &str, owner: &str, service: &str) -> (String, String, String)
 /// - GitLab HTTPS: `https://gitlab.com/org/project.git`
 /// - Codeberg SSH: `ssh://git@codeberg.org/user/repo.git`
 /// - git protocol: `git://github.com/owner/repo.git`
-/// - Port forms (port discarded, service stays the bare host):
-///   `ssh://git@codeberg.org:2222/user/repo.git`,
+/// - Port forms. The port is discarded and the service stays the bare
+///   host: `ssh://git@codeberg.org:2222/user/repo.git`,
 ///   `https://host:8443/user/repo.git`, `git://host:9418/owner/repo.git`
-/// - Trailing `.git` optional; trailing slashes tolerated
+/// - Trailing `.git` optional. Trailing slashes are tolerated
 ///
 /// Returns error for invalid formats.
 pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
@@ -76,9 +76,10 @@ pub fn parse_git_remote_url(url: &str) -> Result<(String, String, String)> {
         return Ok(normalize(&repo, &user, &service));
     }
 
-    // Never echo the failing URL: the user typed it, and echoing it risks
-    // surfacing embedded credentials (redaction is shape-dependent and
-    // cannot be made exhaustive). A fixed message carries no input material.
+    // Never echo the failing URL. The user typed it, and echoing it risks
+    // surfacing embedded credentials. Redaction is shape-dependent and
+    // cannot be made exhaustive, so a fixed message carries no input
+    // material.
     anyhow::bail!("invalid git remote URL format. Expected a supported GitHub GitLab or Codeberg shape. See the trust documentation.")
 }
 
@@ -107,21 +108,21 @@ pub fn get_remote_push_url(repo_path: &Path, remote_name: &str) -> Result<String
 
 /// Derives a repository ID from a push URL in the format `{repo}+{user}@{service}`.
 ///
-/// Example: `git@github.com:simbo1905/fara.git` → `fara+simbo1905@github.com`
+/// Example: `git@github.com:simbo1905/fara.git` yields `fara+simbo1905@github.com`
 pub fn derive_repo_id(push_url: &str) -> Result<String> {
     let (repo, user, service) = parse_git_remote_url(push_url)?;
     Ok(format!("{}+{}@{}", repo, user, service))
 }
 
 /// Derives the repository id of every configured remote's push URL
-/// (`git remote --verbose`): the set of repository ids this checkout
-/// currently points at - one id per remote, so a multi-remote repository
-/// contributes one entry per remote.
+/// (`git remote --verbose`). The result is the set of repository ids this
+/// checkout currently points at. One id per remote, so a multi-remote
+/// repository contributes one entry per remote.
 ///
 /// The `(push)` lines carry the effective push URLs (the pushurl when
 /// set, url rewriting applied). A remote with no fetch URL also prints a
-/// bare `name` line with no URL; bare lines and push URLs with no
-/// supported shape are skipped - trust records only ever hold ids derived
+/// bare `name` line with no URL. Bare lines and push URLs with no
+/// supported shape are skipped. Trust records only ever hold ids derived
 /// from supported shapes, so such a remote cannot correspond to any
 /// recorded entry.
 pub fn derive_configured_repo_ids(repo_path: &Path) -> Result<BTreeSet<String>> {
@@ -138,7 +139,7 @@ pub fn derive_configured_repo_ids(repo_path: &Path) -> Result<BTreeSet<String>> 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut ids = BTreeSet::new();
     for line in stdout.lines() {
-        // `name<TAB>url (push)`; multiple pushurls print one line each.
+        // `name<TAB>url (push)`. Multiple pushurls print one line each.
         let Some(head) = line.strip_suffix(" (push)") else {
             continue;
         };

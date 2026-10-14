@@ -22,7 +22,7 @@ fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
 /// are not counted as changed.
 ///
 /// The user-supplied paths are resolved to their repo-relative forms the
-/// same way cmd_cat resolves them (canonicalise-and-strip; relative paths
+/// same way cmd_cat resolves them (canonicalise-and-strip, relative paths
 /// resolve against `repo_root`), and must match entries in tracked.json.
 /// Tracked paths are stored repo-relative and are validated, so the
 /// ciphertext path can never escape the repository root.
@@ -33,7 +33,8 @@ pub fn cmd_changes(
     remote_name: &str,
     key_store: &Path,
 ) -> Result<Vec<PathBuf>> {
-    // Verify keyring signature first: never decrypt against an unverified keyring
+    // Verify the keyring signature first. Never decrypt against an
+    // unverified keyring.
     let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
@@ -77,8 +78,8 @@ pub fn cmd_changes(
 
     let mut changed = Vec::new();
     for file in &targets {
-        // Lstat gate: refuse if the tracked path is a committed symlink  -
-        // reading the on-disk plaintext through it would diff (and print)
+        // Lstat gate. Refuse if the tracked path is a committed symlink.
+        // Reading the on-disk plaintext through it would diff and print
         // the link target outside the repository.
         ensure_regular_file(repo_root, file)?;
 

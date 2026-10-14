@@ -18,12 +18,12 @@ pub fn cmd_removeperson(
     key_store: &Path,
     signing_key_selection: Option<&str>,
 ) -> Result<()> {
-    // Verify trust is established AND the existing keyring signature
-    // against the trusted key BEFORE any mutation. An unsigned keyring is
-    // only acceptable when it has zero entries (the fresh-init state); a
+    // Verify trust is established and the existing keyring signature
+    // against the trusted key before any mutation. An unsigned keyring is
+    // only acceptable when it has zero entries (the fresh-init state). A
     // keyring containing entries must already carry a valid signature
-    // from the trusted key, otherwise removeperson would launder trust
-    // by re-signing attacker-supplied content.
+    // from the trusted key, otherwise removeperson would launder trust by
+    // re-signing attacker-supplied content.
     let (repo_id, trusted_fingerprint, _) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
@@ -44,20 +44,20 @@ pub fn cmd_removeperson(
     // Remove entry (this clears signature)
     keyring.remove_entry(email_to_remove);
 
-    // Bump the monotonic freshness counter BEFORE signing: the bump is part
-    // of the signed payload, so a later `git revert` of this commit restores
-    // an old VERSION too and the per-machine baseline refuses it (docs/design.md
-    // "Keyring format and freshness").
+    // Bump the monotonic freshness counter before signing. The bump is
+    // part of the signed payload, so a later `git revert` of this commit
+    // restores an old version too and the per-machine baseline refuses it
+    // (docs/design.md "Keyring format and freshness").
     keyring.bump_version()?;
 
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();
 
-    // Re-sign with the TRUSTED key: removeperson curates the keyring exactly
-    // like tell does, so it must sign with the key verify_keyring checks
-    // against, never with any collaborator's key. Discovery selects the
-    // signing key whose owner key fingerprint matches the pinned
-    // fingerprint.
+    // Re-sign with the trusted key. Removeperson curates the keyring
+    // exactly like tell does, so it must sign with the key verify_keyring
+    // checks against, never with any collaborator's key. Discovery
+    // selects the signing key whose owner key fingerprint matches the
+    // pinned fingerprint.
     let signing_key = match signing_key_selection {
         Some(verifying_key_hex) => discover_signing_key_explicit(key_store, verifying_key_hex)?,
         None => discover_signing_key(key_store, &repo_id, &trusted_fingerprint)?,
@@ -66,7 +66,7 @@ pub fn cmd_removeperson(
     // Sign keyring content: sign exactly the bytes that verify_keyring will
     // extract, using the same canonicalization function so the two sides of
     // the sign/verify contract cannot drift apart. An empty keyring is a
-    // legitimate result (revoking the last collaborator); verify_keyring
+    // legitimate result (revoking the last collaborator). verify_keyring
     // accepts a signed keyring regardless of entry count.
     let content_to_sign = extract_content_to_verify_from_keyring(&keyring_without_sig)?;
     let sig_block = create_signature_block(&content_to_sign, &signing_key)?;

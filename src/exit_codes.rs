@@ -1,13 +1,14 @@
 //! Documented exit codes.
 //!
-//! Every deliberate failure exits with a code from this enum; failures
-//! without a more specific code exit 1, and clap usage errors exit 2. The
-//! `error-codes` subcommand prints the table below, and the codes are
+//! Every deliberate failure exits with a code from this enum. Failures
+//! without a more specific code exit 1, and clap usage errors exit 2.
+//! The `error-codes` subcommand prints the table below. The codes are
 //! public API: they are never renumbered, only appended.
 //!
-//! Codes are carried inside `anyhow` errors as a [`CodedError`] payload so
-//! command signatures stay `anyhow::Result` and `main` can still exit with
-//! the right status - no error-type rewrite across every command.
+//! Codes are carried inside `anyhow` errors as a [`CodedError`] payload.
+//! Command signatures stay `anyhow::Result`, and `main` still exits with
+//! the right status, so no error-type rewrite is needed across every
+//! command.
 
 use std::fmt;
 
@@ -37,7 +38,7 @@ pub enum ExitCode {
     UnsafeKeyStorePermissions = 30,
     /// A `.secret` ciphertext path is git-ignored (fatal in `hide`).
     CiphertextIgnored = 40,
-    /// Tracked plaintext on disk is not git-ignored (warning; exit stays 0).
+    /// Tracked plaintext on disk is not git-ignored (a warning, the exit code stays 0).
     PlaintextNotIgnored = 41,
     /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
     OrphanedCiphertext = 42,
@@ -60,7 +61,7 @@ pub enum ExitCode {
 }
 
 impl ExitCode {
-    /// Every code, in numeric order - the source for `git-veil error-codes`.
+    /// Every code, in numeric order. The source for `git-veil error-codes`.
     pub const ALL: &'static [ExitCode] = &[
         ExitCode::GeneralError,
         ExitCode::NoTrustRecord,
