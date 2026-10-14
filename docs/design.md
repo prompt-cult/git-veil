@@ -2,7 +2,7 @@
 
 This document is the specification of git-veil's mechanisms: what the code
 actually enforces, stated precisely enough to be re-verified. It is distinct
-from the README (an overview) and the tutorials under `docs/` (how-to journeys);
+from the README (an overview) and the tutorials under `docs/` (how-to guides);
 when prose elsewhere disagrees with this document or with the code, this
 document should be corrected first, then the prose. Each claim names the
 enforcing function; the named function, not any line number, is the contract.
@@ -515,6 +515,14 @@ plaintext's only protection in the worktree is a `.gitignore` line, so the
 normal loop is `reveal` → edit → `hide`, with the plaintext existing only
 while it is being edited. Consequences, stated honestly:
 
+- **The working set.** `hide` and `reveal` accept named paths: with FILE
+  arguments they act on exactly the named tracked files (an unknown or
+  untracked name refuses, exit 71); a bare invocation covers every tracked
+  file. The skip-and-report rule, the allowance gate and the code-41
+  warning apply to the working set. The orphan gate (exit 42) is a
+  bare-hide gate: a scoped hide re-encrypts only the files it names and
+  touches no other ciphertext, so an orphan it would not rotate is not
+  that invocation's problem.
 - **Skip-and-report, not error.** A tracked path whose plaintext is absent
   and whose ciphertext exists (on disk or committed) is skipped and reported
   as "already hidden" - re-running `hide` on a hidden repo does nothing and
@@ -663,16 +671,16 @@ ciphertext path or it does not.
 $$
 \begin{array}{ll}
 \multicolumn{2}{l}{\textbf{Algorithm 9} \quad \textsc{Hide} \text{ - the gate sequence before any encryption (} \texttt{cmd\_hide} \text{)}} \\
-\multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair}} \\
+\multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair; } W \text{ = the working set: the whole tracked manifest for a bare } \texttt{hide} \text{, exactly the named files otherwise}} \\
 1: & \textbf{upon } \textsc{Hide} \\
 2: & \quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4; yields } \mathit{repoId} \text{ and the pin fingerprint} \\
 3: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
 4: & \quad orphans \leftarrow \{ c \in index : \text{plaintext}(c) \notin tracked \} \\
-5: & \quad \textbf{if } orphans \ne \emptyset \textbf{ then refuse} \ . \ \text{exit 42, naming each orphan; a committed file named exactly .secret is warned and skipped} \\
+5: & \quad \textbf{if } orphans \ne \emptyset \text{ then refuse} \ . \ \text{exit 42, naming each orphan; a committed file named exactly .secret is warned and skipped; bare } \texttt{hide} \text{ only} \\
 6: & \quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \\
-7: & \quad \textbf{for all } p \in tracked \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
+7: & \quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
    & \quad\quad . \ \text{exit 72, naming the paths; the remedy is this document} \\
-8: & \quad \text{gates 40 and 41: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
+8: & \quad \text{gates 40 and 41 over } W \text{: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
 9: & \quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
 10: & \textbf{end upon}
 \end{array}
@@ -696,9 +704,9 @@ remains is the strongest position available without signing-key ceremony,
 which the #19 discussion rejected: the attacker is inside the circle and
 can sign whatever more we require. The gate refuses every path the user
 did not allow on this machine, and the refusal names the path. With
-file-scoped hide (a planned change) the surface collapses further: the
-victim must scope a hide at that exact path and dismiss a refusal naming
-that exact path.
+file-scoped hide the surface collapses further: `hide` covers exactly the
+files it names, so the ambush fires only when the victim hides at that
+exact path, and a scoped refusal names that exact path.
 
 Stated honestly, the remaining trade-offs: the allowance store is
 machine-local, so an owner who re-hides from a machine whose key store was
