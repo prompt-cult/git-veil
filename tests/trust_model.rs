@@ -658,7 +658,7 @@ fn test_hide_and_tell_fail_without_trust() {
     cmd_init(&repo.path, false).expect("init");
 
     assert!(
-        cmd_hide(&repo.path, "origin", &key_store.path, true).is_err(),
+        cmd_hide(&repo.path, "origin", &key_store.path, true, Vec::new()).is_err(),
         "hide should fail without trust"
     );
 

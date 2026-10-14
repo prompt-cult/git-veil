@@ -136,7 +136,14 @@ impl Fixture {
     }
 
     fn hide(&self) {
-        cmd_hide(&self.repo.path, "origin", &self.key_store.path, true).expect("hide");
+        cmd_hide(
+            &self.repo.path,
+            "origin",
+            &self.key_store.path,
+            true,
+            Vec::new(),
+        )
+        .expect("hide");
     }
 
     /// Stages everything the way the owner's commit would, so the git index
@@ -215,7 +222,7 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     );
 
     // And hide (like every gated command) refuses on the same check.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
         .expect_err("hide must refuse on the rolled-back keyring");
     assert_eq!(exit_code_of(&err), 14);
 
@@ -356,7 +363,7 @@ fn fix_nominated_path_refused_at_hide() {
 
     // Hide refuses with exit 72. No ciphertext is created and nothing is
     // exfiltrated.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
         .expect_err("hide must refuse a nominated path with no allowance and no ciphertext");
     assert_eq!(
         exit_code_of(&err),
@@ -384,7 +391,8 @@ fn fix_nominated_path_refused_at_hide() {
         &f.key_store.path,
     )
     .expect("victim allows the path deliberately");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide after the allowance");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
+        .expect("hide after the allowance");
 }
 
 #[test]
@@ -416,7 +424,7 @@ fn fix_committed_ciphertext_needs_no_allowance() {
 
     // The ciphertext is in the git index, so hide proceeds with no
     // allowance on this machine.
-    cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
+    cmd_hide(&f.repo.path, "origin", &fresh_store.path, true, Vec::new())
         .expect("an established ciphertext re-encrypts without a local allowance");
 }
 
@@ -642,7 +650,7 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
 
     // Hide refuses outright with exit 42 while the stale ciphertext is
     // committed but untracked. Rotation cannot skip it silently.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
         .expect_err("hide must refuse orphaned committed ciphertext");
     assert_eq!(
         exit_code_of(&err),
@@ -717,7 +725,7 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
     );
 
     // Hide refuses the orphan with exit 42 until it is resolved.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
         .expect_err("hide must refuse the kept-back orphaned ciphertext");
     assert_eq!(exit_code_of(&err), 42);
 }
@@ -1025,7 +1033,8 @@ fn fix_orphan_gate_survives_quoting_and_dot_secret() {
 
     // Hide proceeds. The unicode ciphertext maps back to its tracked
     // path, and the stemless junk file is warned about, not fatal.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide must not be bricked");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
+        .expect("hide must not be bricked");
     assert!(
         f.repo.join(unicode_name).exists(),
         "--keep-plaintext path: the unicode plaintext is intact"

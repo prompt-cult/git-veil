@@ -8,7 +8,10 @@ use crate::allowance::AllowanceStore;
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::tracked_files::{ensure_regular_file, get_git_config_email, validate_tracked_path};
+use crate::tracked_files::{
+    ensure_regular_file, get_git_config_email, resolve_repo_relative_input, validate_tracked_path,
+    PathResolveMode,
+};
 use crate::{
     encrypt_to_x25519_public_keys, parse_x25519_public_key, verify_keyring_against_trust,
     TrackedFiles,
@@ -51,7 +54,15 @@ pub(crate) fn ensure_ciphertext_beside_plaintext(
     Ok(())
 }
 
-/// Encrypts all tracked files to all keys in the keyring.
+/// Encrypts tracked files to all keys in the keyring.
+///
+/// With an empty `files`, hide covers every tracked file. With positional
+/// paths, hide covers exactly the named files: each is resolved the way
+/// add resolves paths (canonicalise, repo-relative, validated), and must
+/// already be tracked - an unknown or untracked name refuses with the
+/// path-safety code (71). The gates below then apply to that set only.
+/// There is no change detection: the caller names the file, the gate
+/// checks that file.
 ///
 /// Tracked paths are repo-relative (relative to `repo_root`) and are
 /// validated before any use, so a malicious committed tracked.json cannot
@@ -61,6 +72,7 @@ pub fn cmd_hide(
     remote_name: &str,
     key_store: &Path,
     keep_plaintext: bool,
+    files: Vec<String>,
 ) -> Result<()> {
     // Verify the keyring signature first. The same call yields the repo id
     // and the pin fingerprint the allowance gate keys on, plus the keyring
@@ -84,6 +96,39 @@ pub fn cmd_hide(
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
+
+    // The working set. Bare hide covers the whole manifest. With positional
+    // paths, hide covers exactly the named files: each is resolved like add
+    // resolves paths, and must already be tracked. No change detection.
+    let bare = files.is_empty();
+    let scoped: Vec<PathBuf> = if bare {
+        tracked.files.clone()
+    } else {
+        let mut seen: HashSet<PathBuf> = HashSet::new();
+        let mut named: Vec<PathBuf> = Vec::new();
+        for file in &files {
+            let relative = resolve_repo_relative_input(
+                repo_root,
+                file,
+                PathResolveMode::CanonicaliseRequireExists,
+                "hide",
+            )?;
+            if !tracked.files.contains(&relative) {
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!(
+                        "refusing to hide: {} is not a tracked path in .git-veil/tracked.json. \
+                         Track it with git-veil add first. Error code 71.",
+                        relative.to_string_lossy()
+                    ),
+                ));
+            }
+            if seen.insert(relative.clone()) {
+                named.push(relative);
+            }
+        }
+        named
+    };
 
     // Orphaned-ciphertext gate (exit 42). It runs before the
     // empty-manifest early return, because an emptied tracked.json is
@@ -149,7 +194,14 @@ pub fn cmd_hide(
             .expect("file_name is Some, so a parent exists")
             .join(stem);
         if !tracked_set.contains(&plaintext) {
-            orphans.push(line);
+            // Bare hide refuses (below). A scoped hide re-encrypts only the
+            // named tracked files and touches no other ciphertext, so an
+            // orphan it would not rotate is not that invocation's problem.
+            // A named file is tracked by construction, so a scoped hide can
+            // never rotate into its own orphan.
+            if bare {
+                orphans.push(line);
+            }
         } else {
             established.insert(plaintext);
         }
@@ -179,7 +231,7 @@ pub fn cmd_hide(
     // user. Re-encryption of an established ciphertext needs no allowance.
     let mut unintended: Vec<String> = Vec::new();
     let mut principal: Option<String> = None;
-    for file in &tracked.files {
+    for file in &scoped {
         // Only paths that have a plaintext can be first-encrypted. A path
         // with no plaintext has nothing to exfiltrate and is handled by the
         // skip-and-report semantics in phase 1 (docs/design.md "Plaintext
@@ -218,7 +270,7 @@ pub fn cmd_hide(
         ));
     }
 
-    if tracked.files.is_empty() {
+    if scoped.is_empty() {
         println!("No files tracked");
         return Ok(());
     }
@@ -228,7 +280,7 @@ pub fn cmd_hide(
     // the repository. Add succeeded, but the ciphertext is untrackable.
     // Refuse outright before encrypting anything (exit code 40).
     let mut ignored_secrets: Vec<String> = Vec::new();
-    for file in &tracked.files {
+    for file in &scoped {
         let secret_relative = format!("{}.secret", file.to_string_lossy());
         if is_gitignored(repo_root, &secret_relative)? {
             ignored_secrets.push(secret_relative);
@@ -246,7 +298,7 @@ pub fn cmd_hide(
     // .gitignore entry, and add only guarantees it at add time. A rename
     // or .gitignore edit can drift it. A blind `git add -A` would then
     // commit the plaintext. Warning only (error code 41). Hide proceeds.
-    for file in &tracked.files {
+    for file in &scoped {
         let relative_str = file.to_string_lossy();
         if repo_root.join(file).exists() && !is_gitignored(repo_root, &relative_str)? {
             println!(
@@ -265,7 +317,7 @@ pub fn cmd_hide(
     // acceptable. Hide is not a bulk-archival path.
     let mut prepared: Vec<(PathBuf, PathBuf, Vec<u8>)> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
-    for file in &tracked.files {
+    for file in &scoped {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
 

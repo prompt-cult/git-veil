@@ -10,6 +10,6 @@ fuzz_target!(|data: &[u8]| {
         let serialized = store.serialize().expect("serialize of a valid store");
         let reparsed =
             TrustStore::deserialize(&serialized).expect("re-serialize must re-parse");
-        assert_eq!(reparsed.trusted_keys, store.trusted_keys);
+        assert_eq!(reparsed.owner_fingerprints, store.owner_fingerprints);
     }
 });

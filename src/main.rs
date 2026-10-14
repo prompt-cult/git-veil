@@ -229,12 +229,14 @@ fn run() -> Result<()> {
             remote,
             key_store: opt,
             keep_plaintext,
+            files,
         } => {
             cmd_hide(
                 &repo_root,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
                 keep_plaintext,
+                files,
             )?;
         }
         Commands::Reveal {

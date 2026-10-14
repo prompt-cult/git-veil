@@ -3,8 +3,8 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
-    cmd_unhide, cmd_verify_keyring, exit_code_of, generate_signing_keypair,
+    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell,
+    cmd_trust, cmd_unhide, cmd_verify_keyring, exit_code_of, generate_signing_keypair,
     generate_x25519_private_key, x25519_public_key_encoding, Keyring,
 };
 use std::fs;
@@ -157,7 +157,8 @@ fn test_hide_all_or_nothing_missing_plaintext() {
     // A missing plaintext is a skip-and-report, not an error. The file
     // with a plaintext is encrypted, and by default its plaintext is
     // deleted after the ciphertext is durable.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false).expect("hide succeeds with skip");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, false, Vec::new())
+        .expect("hide succeeds with skip");
 
     assert!(
         !f.repo.join(".env").exists() && !f.repo.join(".env.secret").exists(),
@@ -187,7 +188,7 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
     f.add_file(".env", b"secret\n");
     f.add_file("config.yml", b"config\n");
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     // Delete one ciphertext before reveal
     fs::remove_file(f.repo.join(".env.secret")).unwrap();
@@ -232,7 +233,7 @@ fn test_multi_recipient_both_can_decrypt() {
     let plaintext = b"shared\n";
     f.add_file(".env", plaintext);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     // Alice reveals
     cmd_reveal(
@@ -245,7 +246,7 @@ fn test_multi_recipient_both_can_decrypt() {
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
     // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("re-hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("re-hide");
     cmd_reveal(&f.repo.path, "bob@example.com", "origin", &f.key_store.path).expect("bob reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 }
@@ -285,7 +286,7 @@ fn test_subdirectory_hide_reveal() {
     let plaintext = b"nested secret\n";
     f.add_file("config/secrets.yml", plaintext);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     // Both copies exist, matching git-secret, which does not delete the
     // plaintext by default.
@@ -321,7 +322,7 @@ fn test_cat_preserves_disk_state() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"cat test\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     let _ = cmd_cat(
         &f.repo.path,
@@ -357,7 +358,7 @@ fn test_unhide_isolates_single_file() {
     f.add_file(".env", b"first\n");
     f.add_file("config.yml", b"second\n");
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     cmd_unhide(
         &f.repo.path,
@@ -394,7 +395,7 @@ fn test_changes_binary_file() {
     let binary = vec![0u8, 1, 2, 3, 0, 255, 254];
     f.add_file("data.bin", &binary);
 
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     // Write different binary
     fs::write(f.repo.join("data.bin"), vec![0u8, 1, 2, 3, 0, 255, 253]).unwrap();
@@ -502,7 +503,7 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     .expect("add");
 
     // Hide fails closed before encrypting anything. Exit code 40.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).unwrap_err();
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).unwrap_err();
     let message = format!("{:#}", err);
     assert_eq!(
         exit_code_of(&err),
@@ -521,7 +522,7 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
     // Removing the broad rule makes hide succeed (the appended plaintext
     // ignore line .tmp/x.txt keeps protecting the plaintext)
     fs::write(f.repo.join(".gitignore"), ".tmp/x.txt\n").unwrap();
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
         .expect("hide after fixing .gitignore");
     assert!(f.repo.join(".tmp/x.txt.secret").exists());
 }
@@ -534,13 +535,14 @@ fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"API_KEY=1\n");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("hide");
 
     // Simulate .gitignore drift. The tracked plaintext is no longer ignored.
     fs::write(f.repo.join(".gitignore"), "").unwrap();
 
     // A warning (error code 41), not a refusal. Hide proceeds.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide still succeeds");
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
+        .expect("hide still succeeds");
     assert!(f.repo.join(".env.secret").exists());
 }
 
@@ -578,4 +580,179 @@ fn test_tell_fails_with_code_20_when_signing_key_missing() {
         !keyring.contains("bob@example.com"),
         "keyring unchanged on failure"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Positional hide: `git-veil hide <path>...` acts on exactly the named files
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_positional_hide_hides_only_named_files() {
+    let f = Fixture::new("positional-hide-only");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    f.add_file("config.yml", b"config\n");
+
+    // Scoped hide covers exactly the named file.
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("scoped hide");
+    assert!(
+        !f.repo.join(".env").exists(),
+        "the named plaintext is deleted by default after the ciphertext is durable"
+    );
+    assert!(
+        f.repo.join(".env.secret").exists(),
+        "the named file is encrypted"
+    );
+    assert!(
+        f.repo.join("config.yml").exists(),
+        "an unnamed plaintext is untouched"
+    );
+    assert!(
+        !f.repo.join("config.yml.secret").exists(),
+        "an unnamed file is never encrypted by a scoped hide"
+    );
+
+    // Bare hide keeps the whole-manifest behaviour.
+    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new()).expect("bare hide");
+    assert!(
+        f.repo.join("config.yml.secret").exists(),
+        "bare hide encrypts the remaining tracked files"
+    );
+}
+
+#[test]
+fn test_positional_hide_refuses_untracked_name_with_code_71() {
+    let f = Fixture::new("positional-hide-untracked");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    // On disk, but never passed to add, so not in the manifest.
+    fs::write(f.repo.join("stray.txt"), b"not tracked\n").unwrap();
+
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec!["stray.txt".to_string()],
+    )
+    .expect_err("an untracked name must refuse");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::UnsafePath as i32,
+        "an untracked name refuses with the path-safety code 71"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("stray.txt"),
+        "the refusal names the offending path: {message}"
+    );
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is hidden when the named set refuses"
+    );
+    assert!(
+        f.repo.join(".env").exists(),
+        "no plaintext is deleted when the named set refuses"
+    );
+}
+
+#[test]
+fn test_positional_hide_allow_gate_is_scoped_to_named_set() {
+    let f = Fixture::new("positional-hide-gate");
+
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    // Nominate two paths directly in the committed manifest, the way the
+    // exit-72 regression tests do. Neither has an allowance on this machine
+    // and neither has a committed ciphertext.
+    let secret_plaintext = b"FIRST_SECRET=1\n";
+    let other_plaintext = b"SECOND_SECRET=2\n";
+    fs::write(f.repo.join("prod-credentials"), secret_plaintext).unwrap();
+    fs::write(f.repo.join("other-credentials"), other_plaintext).unwrap();
+    fs::write(
+        f.repo.join(".gitignore"),
+        "prod-credentials\nother-credentials\n",
+    )
+    .unwrap();
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        "{\n  \"files\": [\n    \"prod-credentials\",\n    \"other-credentials\"\n  ]\n}",
+    )
+    .unwrap();
+
+    // Scoped hide of one nominated path refuses, and names only the path in
+    // the named set. The other nominated path stays out of the refusal.
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        vec!["other-credentials".to_string()],
+    )
+    .expect_err("the gate applies to the named set");
+    assert_eq!(
+        exit_code_of(&err),
+        72,
+        "the allowance gate applies to the named set with code 72"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("other-credentials"),
+        "the refusal names the offending path in the named set: {message}"
+    );
+    assert!(
+        !message.contains("prod-credentials"),
+        "the refusal must not name paths outside the named set: {message}"
+    );
+    assert!(
+        !f.repo.join("other-credentials.secret").exists(),
+        "no ciphertext is written for a refused path"
+    );
+
+    // Allowing only the named path unblocks the scoped hide. The other
+    // nominated path keeps its allowance-free state.
+    cmd_allow(
+        &f.repo.path,
+        vec!["other-credentials".to_string()],
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("allow the named path deliberately");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        vec!["other-credentials".to_string()],
+    )
+    .expect("scoped hide succeeds once the named path is allowed");
+    assert!(f.repo.join("other-credentials.secret").exists());
+    assert!(
+        f.repo.join("prod-credentials").exists(),
+        "the un-named nominated path is untouched"
+    );
+    assert!(
+        !f.repo.join("prod-credentials.secret").exists(),
+        "the un-named nominated path is never encrypted"
+    );
+
+    // Bare hide still refuses on the remaining un-allowed nomination: the
+    // scoped remedy did not silently widen the consent.
+    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true, Vec::new())
+        .expect_err("bare hide still gates on the whole manifest");
+    assert_eq!(exit_code_of(&err), 72, "bare hide keeps its own gate");
 }
