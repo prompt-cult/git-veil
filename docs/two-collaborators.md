@@ -81,13 +81,18 @@ git commit -m "Add alice to keyring and re-hide"
 git push
 ```
 
+A bare `hide` re-encrypts every tracked file. Every `.secret` in the
+commit changes, and the diff looks like you edited every secret when you
+edited a few. For rotation that is the right move. For day-to-day work,
+name the files instead; see Part 4.
+
 The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
 
 ```sh
 $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
-owner key fingerprint: ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
+owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 ```
 
@@ -104,7 +109,7 @@ $ git clone git@github.com:example/demo.git
 $ cd demo
 $ git config user.email alice@example.com
 $ git-veil import alice-age-identity.txt
-+ imported: age19302…daea (1a2b3c4d5e6f7a8b)
++ imported: age1k7fgmcxrthltagnlh6hljsdjel0yhwczvzlfysg4d8kmkpha9qnq20ehc3
 Summary: 1 imported, 0 skipped
 ```
 
@@ -140,6 +145,101 @@ files revealed
 $ git-veil cat .env        # peek to stdout. Touches no disk state.
 ```
 
+## Part 4 - name the files: churn and the allow gate
+
+### Ciphertext churn
+
+A bare `hide` re-encrypts every tracked file. Every `.secret` changes in
+the commit, so a commit where you edited one secret looks like you edited
+all of them. Reviewers cannot tell a one-file change from a repo-wide
+re-encryption without reading the command that made it. So the team habit
+is to name the files:
+
+```sh
+$ git-veil hide .env     # re-encrypt .env only; every other ciphertext is untouched
+Encrypted: .env
+Deleted plaintext: .env
+files hidden
+$ git-veil reveal .env   # restore .env only
+```
+
+The bare forms stay useful when you mean the whole manifest: a rotation
+after `tell` or `removeperson`, or a hide across a freshly revealed clone.
+
+### The exit-72 question
+
+`tracked.json` is committed and unsigned, so any repo writer can nominate
+a path in it. Before `hide` first-encrypts a path, it asks, as an error
+code and never as a blocking prompt: are you sure this file is one you
+want to share with the others in the keyring? The refusal is exit code 72
+and it names the paths.
+
+Here is the flow with real output. Alice nominated a second file and
+pushed the manifest before hiding it:
+
+```sh
+$ printf 'DEPLOY_HOST=staging.example.com\nDEPLOY_USER=alice\n' > deploy.env
+$ git-veil add deploy.env
+file not in .gitignore, adding: deploy.env
+added 1 files
+$ git add .gitignore .git-veil/tracked.json
+$ git commit -m "Track deploy.env"
+$ git push
+```
+
+The owner keeps his own `deploy.env` on disk. He pulls Alice's manifest
+change and runs a bare `hide`:
+
+```sh
+$ git-veil hide
+error: refusing to hide: paths are tracked but were never allowed for encryption on this machine. tracked.json may have been modified by someone else. Allow the paths deliberately if the tracking is wanted. Error code 72. The offending tracked paths:
+  deploy.env
+```
+
+Nothing was encrypted. The question is exactly the right one: `deploy.env`
+is a file the owner did not nominate on this machine, and hiding it would
+write its contents into a ciphertext every keyring member can read. He
+answers with `allow`, then names the file:
+
+```sh
+$ git-veil allow deploy.env
+allowed 1 files
+$ git-veil hide deploy.env
+Encrypted: deploy.env
+Deleted plaintext: deploy.env
+files hidden
+$ git add .gitignore .git-veil/tracked.json deploy.env.secret
+$ git commit -m "Allow deploy.env and hide it"
+$ git push
+```
+
+The answer is cached. It lives in the owner's key store, keyed to this
+clone's trust pin and his git user, so a later hide does not ask again:
+
+```sh
+$ git-veil hide
+Skipped: .env: already hidden because the plaintext is absent
+Skipped: deploy.env: already hidden because the plaintext is absent
+files hidden
+```
+
+Three facts keep the gate out of the way:
+
+- `add` implies `allow`. A path you added on this machine never asks.
+- Naming files keeps the question small: `git-veil hide deploy.env`
+  examines the named files only, and a refusal names only the offenders
+  among them. A scoped `hide` of files you named yourself never asks at
+  all.
+- The record keys on your git user (`git config user.email`). If you use
+  many checkouts and do not set a common git email on all of them, you
+  allow once per email.
+
+Two more facts: re-encryption of an established ciphertext needs no
+allowance, so a path whose `.secret` is already committed is re-encrypted
+by any machine holding the pin, which is why rotation on a fresh clone
+never asks; and `reveal` is never gated. Alice reveals the file the
+moment its ciphertext lands. Decryption needs only keyring membership.
+
 ## Who can decrypt what
 
 - Every `hide` produces one ciphertext. It carries one stanza for every
@@ -153,6 +253,9 @@ $ git-veil cat .env        # peek to stdout. Touches no disk state.
   transfers it out of band).
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
+- `hide` first-encrypts a path only after you allowed it on this machine
+  (exit code 72). `reveal` is never gated: decryption needs only keyring
+  membership.
 - The reveal error `user not found in the keyring. Check the principal,
   or ask the owner to add it` means the owner
   has not yet done Part 2's re-hide-and-push.

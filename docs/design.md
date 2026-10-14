@@ -2,7 +2,7 @@
 
 This document is the specification of git-veil's mechanisms: what the code
 actually enforces, stated precisely enough to be re-verified. It is distinct
-from the README (an overview) and the tutorials under `docs/` (how-to journeys);
+from the README (an overview) and the tutorials under `docs/` (how-to guides);
 when prose elsewhere disagrees with this document or with the code, this
 document should be corrected first, then the prose. Each claim names the
 enforcing function; the named function, not any line number, is the contract.
@@ -515,6 +515,14 @@ plaintext's only protection in the worktree is a `.gitignore` line, so the
 normal loop is `reveal` → edit → `hide`, with the plaintext existing only
 while it is being edited. Consequences, stated honestly:
 
+- **The working set.** `hide` and `reveal` accept named paths: with FILE
+  arguments they act on exactly the named tracked files (an unknown or
+  untracked name refuses, exit 71); a bare invocation covers every tracked
+  file. The skip-and-report rule, the allowance gate and the code-41
+  warning apply to the working set. The orphan gate (exit 42) is a
+  bare-hide gate: a scoped hide re-encrypts only the files it names and
+  touches no other ciphertext, so an orphan it would not rotate is not
+  that invocation's problem.
 - **Skip-and-report, not error.** A tracked path whose plaintext is absent
   and whose ciphertext exists (on disk or committed) is skipped and reported
   as "already hidden" - re-running `hide` on a hidden repo does nothing and
@@ -526,7 +534,7 @@ while it is being edited. Consequences, stated honestly:
   `reveal` (restores plaintexts), `removeperson`, `hide` (re-encrypts to the
   new ring, deletes plaintexts again). Documented here because it is the one
   workflow that changed shape with this default.
-- The intent gate (exit 72) and the code-41 plaintext-leak warning only
+- The allowance gate (exit 72) and the code-41 plaintext-leak warning only
   apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
 
@@ -543,7 +551,8 @@ ordering invariant).
 
 Ciphertext lives beside its plaintext as `<name>.secret` and is meant to be
 committed; plaintext is meant to be gitignored. The gates below run inside
-Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`):
+Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`,
+`src/allowance.rs`):
 
 1. **Add-time gitignore gate** (`ensure_gitignored`): like git-secret, `add`
    runs `git check-ignore` on the plaintext path and appends it to
@@ -598,9 +607,9 @@ Two mitigations close the hole:
    ciphertext is committed content, so deletion is recoverable from git
    history; the honest way to keep an untracked ciphertext around is now an
    explicit flag, not a default.
-2. **`hide` refuses orphaned ciphertext (exit 42).** Algorithm 9's step 2
-   enumerates ciphertext paths committed to the git index and refuses when
-   any of them does not correspond to a tracked path, naming each one. The
+2. **`hide` refuses orphaned ciphertext (exit 42).** Algorithm 9's steps 2
+   and 3 enumerate ciphertext paths committed to the git index and refuse
+   when any of them does not correspond to a tracked path, naming each one. The
    gate runs even when `tracked.json` is empty - that is exactly the
    de-tracking-then-rotate attack shape. The index is read verbatim
    (`git -c core.quotePath=false ls-files -z`) so unicode/space names map
@@ -615,73 +624,97 @@ until staged; a blind `git add -A` could sweep it into a commit. This is the
 same risk class as the code-41 plaintext-leak warning and is documented as
 such, not hidden.
 
-## Encryption intent (refusing nominated paths)
+## Allowance (first-encrypt consent, keyed to pin and principal)
 
 `tracked.json` is committed and unsigned: any repo writer can add a path to
 it. The victim's next `hide` would then encrypt a file the victim never
 added - typically a gitignored secret - to every keyring member, including
 the attacker's, and the ciphertext is committed in the ordinary flow. The
 plaintext being gitignored suppresses even the code-41 warning, so the
-exfiltration is silent. The manifest cannot distinguish "user intends to
-track this" from "attacker nominated it" - the manifest IS the attack
-surface - so intent is bound to the **victim's own action** instead:
-`add` records intent on the machine that ran it, appending the resolved
-repo-relative path to a machine-local intent log,
-`<key store>/local-adds/<sanitized repo id>` (one path per line;
-`LocalAdds`, src/intent.rs). The key store is outside the repository and
-permission-checked, so repo writers cannot write or poison it, and a
-`pull` cannot alter it. Algorithm 9 defines what `hide` then demands:
+exfiltration would be silent. The manifest cannot distinguish "the user
+intends to track this" from "an attacker nominated it": the manifest IS the
+attack surface. Consent is therefore bound to the user's own action on
+their own machine, recorded in the key store and keyed to the trust pin and
+the principal:
+
+- **The verb is `allow`.** `git-veil allow <path>` resolves the path
+  exactly like `add` (canonicalise, must exist, stored repo-relative) and
+  records it in the allowance store. The principal comes from git config
+  user.email.
+- **`add` implies `allow`.** The manifest nomination is the user's standing
+  instruction: one deliberate act writes the public repository fact and the
+  private consent together. A path the user added on this machine never
+  needs a second step.
+- **Keyed to (pin, principal), not manifest state.** The store is
+  `<key store>/allowances/<sanitized repo id>/<record key>`, one
+  repo-relative path per line (`AllowanceStore`, src/allowance.rs). The
+  record key is SHA-256 over the lowercase pin fingerprint, one colon, and
+  the principal, printed as 64 lowercase hex characters
+  (`allowance_record_key`). It is a record key that names a consent file,
+  not a key fingerprint, and is deliberately outside the single
+  fingerprint derivation. The record survives every manifest change:
+  once per clone per person per path, manifest churn never invalidates it.
+- **Re-encryption of an established ciphertext needs no allowance.** A
+  tracked path whose `<name>.secret` is committed to the git index is
+  established: any machine holding the pin re-encrypts it, which is what
+  keeps rotation working on a fresh clone. The gate exists solely for
+  first-encrypt.
+- **`removeperson` purges the removed principal's records** in the key
+  store of the machine running it - that store holds only this machine's
+  records, which is the honest scope. A revoked collaborator leaves no
+  ambient consent behind.
+
+Algorithm 9 states what `hide` demands before it encrypts anything. There
+is no history check and no cache: the git index either carries the
+ciphertext path or it does not.
 
 $$
 \begin{array}{ll}
 \multicolumn{2}{l}{\textbf{Algorithm 9} \quad \textsc{Hide} \text{ - the gate sequence before any encryption (} \texttt{cmd\_hide} \text{)}} \\
-\multicolumn{2}{l}{\textit{Machine state: } I \text{ = intent log;} \ C[\mathit{digest}] \text{ = the happen-before baseline cache}} \\
+\multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair; } W \text{ = the working set: the whole tracked manifest for a bare } \texttt{hide} \text{, exactly the named files otherwise}} \\
 1: & \textbf{upon } \textsc{Hide} \\
-2: & \quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4} \\
-3: & \quad \text{gates 40 and 41: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
-4: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
-5: & \quad orphans \leftarrow \{ c \in index : \text{plaintext}(c) \notin tracked \} \\
-6: & \quad \textbf{if } orphans \ne \emptyset \textbf{ then refuse} \ . \ \text{exit 42, naming each orphan; a committed file named exactly .secret is warned and skipped} \\
-7: & \quad digest \leftarrow \text{SHA-256 of } \texttt{tracked.json} \,; \ cache \leftarrow C[\mathit{digest}] \\
-8: & \quad \textbf{for all } p \in tracked \text{ with } \text{plaintext}(p) \text{ on disk and a committed ciphertext } c(p) \textbf{ do} \\
-9: & \quad\quad \textbf{if } p \in cache \textbf{ then } \mathit{established}(p) \quad . \ \text{the fast path} \\
-10: & \quad\quad \textbf{else if } \textsc{HappenBefore}(p, c(p)) \textbf{ then } cache \leftarrow cache \cup \{p\} \,; \mathit{established}(p) \\
-11: & \quad\quad \textbf{else if } p \notin I \textbf{ then refuse} \ . \ \text{exit 72, naming the paths; the remedy is this document} \\
-12: & \quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
-13: & \textbf{end upon} \\[2mm]
-\multicolumn{2}{l}{\textbf{function } \textsc{HappenBefore}(p, c) \ . \ \text{issue \#19; a committed ciphertext is established only when it predates the manifest entry}} \\
-a: & \quad \textbf{for all } k \in \text{commits touching } \texttt{tracked.json} \text{, newest first} \textbf{ do} \\
-b: & \quad\quad \textbf{if entry}(p) \in \text{manifest}@k \ \land \ \text{entry}(p) \notin \text{manifest}@{\text{parent}(k)} \textbf{ then} \\
-c: & \quad\quad\quad \textbf{return } c \in \text{tree}(\text{parent}(k)) \\
-d: & \quad \textbf{end for} \\
-e: & \quad \textbf{return false} \\
-f: & \textbf{end function}
+2: & \quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4; yields } \mathit{repoId} \text{ and the pin fingerprint} \\
+3: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
+4: & \quad orphans \leftarrow \{ c \in index : \text{plaintext}(c) \notin tracked \} \\
+5: & \quad \textbf{if } orphans \ne \emptyset \text{ then refuse} \ . \ \text{exit 42, naming each orphan; a committed file named exactly .secret is warned and skipped; bare } \texttt{hide} \text{ only} \\
+6: & \quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \\
+7: & \quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
+   & \quad\quad . \ \text{exit 72, naming the paths; the remedy is this document} \\
+8: & \quad \text{gates 40 and 41 over } W \text{: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
+9: & \quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
+10: & \textbf{end upon}
 \end{array}
 $$
 
-The happen-before result is cached per manifest version: the key store
-either holds a baseline for that manifest hash or it does not - there is no
-clone-versus-update distinction anywhere in the logic. Any manifest change
-(add, remove, reorder) changes the hash, which selects a fresh cache entry,
-so a remove-and-readd is re-checked against the re-add commit with no
-invalidation logic and no garbage collection. A path that fails the check
-is never cached: every `hide` re-runs the check and refuses again.
+The exit-72 refusal names the offending tracked paths. They are public
+repository facts, read in the committed `tracked.json`, so naming them
+buys no attacker anything and gives the operator the ability to act (the
+issue #42 message policy). The refusal is plain ASCII and prints no
+command line: the remedy is this document, read deliberately.
 
-Honest residual. The happen-before check raises the
-attacker's cost from one visible change to a crafted history: a dummy
-ciphertext committed BEFORE the nomination still predates the manifest
-entry and passes the check. The intent log remains the real anchor -
-every machine that wants to first-encrypt a path must have run `add`
-for it - and the check only removes the free ride a same-commit dummy
-otherwise gets. A stricter rule (for example binding the manifest hash
-into the signed keyring payload) is the follow-up direction.
+Residual, stated honestly. A ring-member repo writer can attempt the
+two-commit ambush: commit a dummy `<name>.secret` alongside the
+nomination. The index then carries the ciphertext path, step 6 reads the
+path as established, and the victim's next `hide` encrypts the real
+plaintext to the ring. The happen-before oracle that once opposed this is
+gone: it was not a barrier - a patient attacker commits the dummy before
+the nomination and passes it - and its per-manifest-hash baseline cache
+re-refused legitimate machines after every manifest reorganisation. What
+remains is the strongest position available without signing-key ceremony,
+which the #19 discussion rejected: the attacker is inside the circle and
+can sign whatever more we require. The gate refuses every path the user
+did not allow on this machine, and the refusal names the path. With
+file-scoped hide the surface collapses further: `hide` covers exactly the
+files it names, so the ambush fires only when the victim hides at that
+exact path, and a scoped refusal names that exact path.
 
-Stated honestly, the remaining trade-offs: the intent log is machine-local,
-so an owner who re-hides from a machine whose key store was restored must
-re-run `add` for any path without an established ciphertext; and a
-malicious collaborator can still make `hide` refuse (availability) by
-nominating junk paths - that is fail-closed by design, the same posture as
-the code-40 gate, and each refusal names the offending paths.
+Stated honestly, the remaining trade-offs: the allowance store is
+machine-local, so an owner who re-hides from a machine whose key store was
+restored must re-run `allow` for any path without an established
+ciphertext; and a malicious collaborator can still make `hide` refuse
+(availability) by nominating junk paths - that is fail-closed by design,
+the same posture as the code-40 gate, and each refusal names the offending
+paths.
 
 ## CODEOWNERS coverage for the trust-critical paths (suggested, never required)
 
@@ -800,4 +833,4 @@ codes are never renumbered, only appended.
 | 63   | SignatureVerificationFailed  | Keyring signature missing or invalid |
 | 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`) |
 | 71   | UnsafePath                   | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
-| 72   | UnintendedEncryption         | `hide` refuses to encrypt a file the user never added on this machine (see "Encryption intent") |
+| 72   | UnintendedEncryption         | `hide` refuses to first-encrypt a tracked path never allowed on this machine (see "Allowance") |

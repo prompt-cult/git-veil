@@ -22,6 +22,14 @@ the Rust [`rage`][rage] command-line tool.
 [age-cli]: https://github.com/FiloSottile/age
 [rage]: https://github.com/str4d/rage
 
+## Why
+
+The point of git-veil is that your secret material is backed up alongside
+the code. The ciphertexts are committed, so every clone carries the
+secrets, and the plaintext never has to leave your machine to reach a
+build box: a build or deployment script runs `git-veil reveal` on its own
+key and reads what it needs.
+
 ## Trust model
 
 Each repository has an ID derived from its git remote push URL. The remote
@@ -77,6 +85,10 @@ prints the full table with names and meanings; the specification is in
 
 ## Quick start (solo)
 
+Solo, git-veil is a backup of your secret material that lives alongside
+the code. Every clone carries the ciphertexts. A build or deployment
+script reveals on its own key.
+
 You need two keys before you start (see [Key setup](#key-setup) below):
 
 - an X25519 private key for encryption, made with `age-keygen`
@@ -96,10 +108,10 @@ git-veil export age1... --output me.pub         # print your public key as a fil
 git-veil tell example@github.com me.pub         # add yourself to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add .env                               # track the file (gitignores the plaintext name)
-git-veil hide                                   # encrypt: .env -> .env.secret (plaintext deleted)
+git-veil hide .env                              # encrypt: .env -> .env.secret (plaintext deleted)
 git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Add encrypted secrets"
-git-veil reveal                                 # decrypt back when you need the plaintext
+git-veil reveal .env                            # decrypt back when you need the plaintext
 ```
 
 The `.secret` ciphertext files are standard `age`-encrypted blobs. You can
@@ -112,6 +124,67 @@ age -d -i my-age-identity.txt .env.secret
 # The age CLI encrypted this file. git-veil decrypts it.
 echo "test" | age -r age1... -o .env.secret && git-veil cat .env
 ```
+
+## Name the file you are working with
+
+`git-veil hide` with no file names re-encrypts every tracked file, and
+`git-veil reveal` with no file names restores every plaintext. Solo, that
+is a convenience: the lock-everything move. The habit worth keeping from
+the start is to name the file, because it is the habit that matters when
+the repository gains collaborators:
+
+```sh
+git-veil reveal .env    # restore one file
+... edit .env ...
+git-veil hide .env      # re-encrypt one file; every other ciphertext is untouched
+```
+
+In a team, a bare `hide` re-encrypts every tracked file. Every ciphertext
+changes, and the commit looks like you edited every secret when you edited
+a few. Name the files explicitly; see
+[docs/two-collaborators.md](docs/two-collaborators.md).
+
+## The hide gate: allow
+
+`hide` encrypts to every key in the keyring, so everyone in the ring can
+decrypt. The tracked file list, `.git-veil/tracked.json`, is committed and
+unsigned, which means anyone with write access to the repository can
+nominate a path in it. Before it first-encrypts a path, `hide` stops and
+asks, as an error code and never as a blocking prompt: are you sure this
+file is one you want to share with the others in the keyring? The refusal
+is exit code 72, and it names the paths.
+
+You answer with `git-veil allow`:
+
+```sh
+$ git-veil hide
+error: refusing to hide: paths are tracked but were never allowed for encryption on this machine. tracked.json may have been modified by someone else. Allow the paths deliberately if the tracking is wanted. Error code 72. The offending tracked paths:
+  deploy.env
+$ git-veil allow deploy.env
+allowed 1 files
+$ git-veil hide deploy.env
+Encrypted: deploy.env
+Deleted plaintext: deploy.env
+files hidden
+```
+
+The answer is recorded in your key store, keyed to this clone's trust pin
+and your git user, so it is cached per clone per git username. Once
+recorded, an allowance survives manifest changes and never needs
+re-recording.
+
+Three things keep the gate out of the way:
+
+- Name your files. `git-veil add .env` records the allowance too, so a
+  path you added on this machine never asks.
+- Re-encryption needs no allowance. A tracked path whose `.secret`
+  ciphertext is already committed is established, and any machine holding
+  the pin re-encrypts it. That is what keeps rotation working on a fresh
+  clone.
+- Many checkouts with no common git email: the record keys on
+  `git config user.email`, so you allow once per email.
+
+`reveal` is never gated. Decryption needs only keyring membership.
 
 ## Installation
 
@@ -229,11 +302,12 @@ the workflow differ. One payoff is a smaller binary.
 | `export-pin`     | Export this repository's pin-file for import on a machine without the signing key |
 | `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
 | `removeperson`   | Remove a collaborator from the keyring and re-sign it                   |
-| `add`            | Track files for encryption (auto-gitignores plaintext names)           |
+| `add`            | Track files for encryption (auto-gitignores plaintext names; records the allowance on this machine) |
+| `allow`          | Allow files for encryption on this machine (answers `hide`'s exit-72 question, cached per clone per git user) |
 | `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt all tracked files to the keyring and DELETE the plaintexts (the default; `--keep-plaintext` keeps them; refuses when a `.secret` path is git-ignored) |
-| `reveal`         | Decrypt all tracked files back to plaintext                             |
+| `hide`           | Encrypt tracked files to the keyring and DELETE the plaintexts (all files by default; named files with FILE arguments; `--keep-plaintext` keeps them; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
+| `reveal`         | Decrypt tracked files back to plaintext (all files by default; named files with FILE arguments; never gated) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
 | `changes`        | Report where plaintext differs from the last hidden version             |

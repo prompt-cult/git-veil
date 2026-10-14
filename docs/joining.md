@@ -32,7 +32,7 @@ their machine, which holds the signing key:
 ```sh
 $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
-owner key fingerprint: ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
+owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com newcomer.pub
 added newcomer@example.com to the keyring
@@ -55,14 +55,25 @@ were told were not encrypted to your key:
 
 ```sh
 $ git-veil reveal
+keyring signature verified
+keys in keyring: 3
+Decrypted: .env
+Decrypted: deploy.env
+files revealed
 $ git-veil hide
 Encrypted: .env
+Encrypted: deploy.env
 Deleted plaintext: .env
+Deleted plaintext: deploy.env
 files hidden
-$ git add .git-veil/keyring .env.secret
+$ git add .git-veil/keyring .env.secret deploy.env.secret
 $ git commit -m "Add newcomer to keyring and re-hide"
 $ git push
 ```
+
+This re-encrypts every tracked file, which is what a rotation is for. For
+day-to-day work the owner names files instead; see
+[two-collaborators.md](two-collaborators.md).
 
 If the owner skips the re-hide, your reveal later fails with
 `decryption failed. This ciphertext was not encrypted to your key …`.
@@ -86,7 +97,7 @@ explicitly.
 
 ```sh
 $ git-veil import newcomer-age-identity.txt
-+ imported: age1pu5aefgjq753cqp6ayuamc2h0ynupzy96pt6rj4rvm42rd8z8aysnhk76u
++ imported: age192a9fdj0l2gv0wfhqvtv8hj8ha8gvdcpgx8rw2wsdnrkcsttr5jq8n7q3n
 Summary: 1 imported, 0 skipped
 ```
 
@@ -140,10 +151,11 @@ out-of-band anchor.
 $ git-veil list-keys
 keyring signature verified and made by the pinned trusted key
 Keys in keyring:
-  example@github.com ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
-  newcomer@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
+  example@github.com f16cbd29abdf10be29c866b943ec014d2b69312371f7f4a323e1caeccb6a35db
+  alice@example.com ef8782d2038bd96851a455eb183dd8a31edb6aca728857d74e493c973e71ca54
+  newcomer@example.com b99513f38695d87f9bd565735aa9070ce66b39930405fab69d5519a765cbaaa4
 
-Total: 2 keys
+Total: 3 keys
 ```
 
 What happened. The keyring signature verified against your fresh pin, and
@@ -154,8 +166,9 @@ Nothing on your side can fix that.
 ```sh
 $ git-veil reveal
 keyring signature verified
-keys in keyring: 2
+keys in keyring: 3
 Decrypted: .env
+Decrypted: deploy.env
 files revealed
 ```
 
@@ -189,6 +202,15 @@ meet as a newcomer:
 ## Daily use
 
 Identical to any other member. See [solo.md](solo.md) section 6 for the
-edit, `changes`, `hide`, commit, `reveal` cycle. Check with the owner
-before re-hiding a shared repo. `hide` encrypts to the whole current
-keyring, and deletes plaintexts by default. `--keep-plaintext` keeps them.
+edit, `changes`, `hide`, commit, `reveal` cycle, and name the files you
+work with: `git-veil hide .env` churns one ciphertext, while a bare
+`hide` re-encrypts every tracked file and churns them all.
+
+`hide` asks one question before it first-encrypts a path you did not add
+on this machine: exit code 72, naming the path. Answer it with
+`git-veil allow <path>`. Paths whose `.secret` ciphertext is already
+committed need no allowance, so re-hiding after a rotation never asks.
+`reveal` is never gated: decryption needs only keyring membership. Check
+with the owner before re-hiding a shared repo. `hide` encrypts to the
+whole current keyring, and deletes plaintexts by default.
+`--keep-plaintext` keeps them.

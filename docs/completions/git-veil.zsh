@@ -124,11 +124,20 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (add)
 _arguments "${_arguments_options[@]}" : \
-'--remote=[Git remote name (derives the repository id for the intent log)]:REMOTE:_default' \
+'--remote=[Git remote name (derives the repository id for the allowance store)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) to add:_default' \
+&& ret=0
+;;
+(allow)
+_arguments "${_arguments_options[@]}" : \
+'--remote=[Git remote name (derives the repository id for the allowance store)]:REMOTE:_default' \
+'--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'*::files -- File(s) to allow:_default' \
 && ret=0
 ;;
 (remove)
@@ -155,6 +164,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
+'*::files -- Tracked files to hide; no paths means every tracked file:_default' \
 && ret=0
 ;;
 (reveal)
@@ -165,6 +175,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
+'*::files -- Tracked files to reveal; no paths means every tracked file:_default' \
 && ret=0
 ;;
 (cat)
@@ -326,6 +337,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(allow)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (remove)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -416,10 +431,11 @@ _git-veil_commands() {
 'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
+'allow:Allow files for encryption on this machine' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
-'hide:Encrypt all tracked files to the keyring' \
-'reveal:Decrypt all tracked files back to plaintext' \
+'hide:Encrypt tracked files to the keyring' \
+'reveal:Decrypt tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
@@ -440,6 +456,11 @@ _git-veil_commands() {
 _git-veil__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil add commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__allow_commands] )) ||
+_git-veil__subcmd__allow_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil allow commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__cat_commands] )) ||
 _git-veil__subcmd__cat_commands() {
@@ -494,10 +515,11 @@ _git-veil__subcmd__help_commands() {
 'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'removeperson:Remove a collaborator from the keyring and re-sign it' \
 'add:Track files for encryption' \
+'allow:Allow files for encryption on this machine' \
 'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
-'hide:Encrypt all tracked files to the keyring' \
-'reveal:Decrypt all tracked files back to plaintext' \
+'hide:Encrypt tracked files to the keyring' \
+'reveal:Decrypt tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
 'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
@@ -518,6 +540,11 @@ _git-veil__subcmd__help_commands() {
 _git-veil__subcmd__help__subcmd__add_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help add commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__help__subcmd__allow_commands] )) ||
+_git-veil__subcmd__help__subcmd__allow_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil help allow commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__cat_commands] )) ||
 _git-veil__subcmd__help__subcmd__cat_commands() {

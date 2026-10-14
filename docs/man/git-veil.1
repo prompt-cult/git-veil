@@ -49,6 +49,9 @@ Remove a collaborator from the keyring and re\-sign it
 git\-veil\-add(1)
 Track files for encryption
 .TP
+git\-veil\-allow(1)
+Allow files for encryption on this machine
+.TP
 git\-veil\-remove(1)
 Untrack files (deletes the sibling .secret unless \-\-keep\-ciphertext)
 .TP
@@ -56,10 +59,10 @@ git\-veil\-list(1)
 List all tracked files
 .TP
 git\-veil\-hide(1)
-Encrypt all tracked files to the keyring
+Encrypt tracked files to the keyring
 .TP
 git\-veil\-reveal(1)
-Decrypt all tracked files back to plaintext
+Decrypt tracked files back to plaintext
 .TP
 git\-veil\-cat(1)
 Decrypt a single tracked file to stdout

@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
+use crate::allowance::AllowanceStore;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
@@ -75,6 +76,15 @@ pub fn cmd_removeperson(
     // Save keyring
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
+
+    // Purge the removed principal's allowance records in the key store
+    // this machine runs against (docs/design.md "Allowance"). The pin was
+    // verified equal to the committed fingerprint above, so it keys the
+    // same record the principal's commands wrote. Scope, stated honestly:
+    // this machine's key store only.
+    if AllowanceStore::purge(key_store, &repo_id, &trusted_fingerprint, email_to_remove)? {
+        println!("removed allowance record for {}", email_to_remove);
+    }
 
     println!("removed {} from the keyring", email_to_remove);
     Ok(())

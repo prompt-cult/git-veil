@@ -6,11 +6,12 @@ use std::process::ExitCode as StdExitCode;
 use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin, cmd_fingerprint,
-    cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys, cmd_remove, cmd_removekey,
-    cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust, cmd_trust_import,
-    cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami, default_key_store,
-    exit_code_of, get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
+    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin,
+    cmd_fingerprint, cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys, cmd_remove,
+    cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
+    cmd_trust_import, cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami,
+    default_key_store, exit_code_of, get_git_config_email, permissions_check_bypassed_from_env,
+    ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -27,10 +28,11 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 /// An explicit `--key-store` wins, then `$GIT_VEIL_HOME`, then
 /// `$HOME/.git-veil`. Resolved lazily so HOME-free subcommands
 /// (remove/list/clean/show-repo-id/error-codes) never fail on an unset
-/// HOME. add and list-keys are not in that set. add records the
-/// machine-local intent log in the key store (see "Encryption intent" in
-/// docs/design.md). list-keys verifies the keyring signature against the
-/// pinned key, so it consumes a key_store like every other gated command.
+/// HOME. add, allow and list-keys are not in that set: add and allow
+/// record the machine-local allowance store in the key store (see
+/// "Allowance" in docs/design.md), and list-keys verifies the keyring
+/// signature against the pinned key, so all three consume a key_store
+/// like every other gated command.
 ///
 /// Every resolved key store passes the permission gate before any key
 /// material is read (gpg checks ~/.gnupg the same way). Bypassed by the
@@ -212,6 +214,12 @@ fn run() -> Result<()> {
             &remote,
             &resolve_key_store(None, skip_permissions_check)?,
         )?,
+        Commands::Allow { files, remote } => cmd_allow(
+            &repo_root,
+            files,
+            &remote,
+            &resolve_key_store(None, skip_permissions_check)?,
+        )?,
         Commands::Remove {
             files,
             keep_ciphertext,
@@ -221,18 +229,21 @@ fn run() -> Result<()> {
             remote,
             key_store: opt,
             keep_plaintext,
+            files,
         } => {
             cmd_hide(
                 &repo_root,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
                 keep_plaintext,
+                files,
             )?;
         }
         Commands::Reveal {
             email,
             remote,
             key_store: opt,
+            files,
         } => {
             let email = resolve_email(&repo_root, email)?;
             cmd_reveal(
@@ -240,6 +251,7 @@ fn run() -> Result<()> {
                 &email,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
+                files,
             )?;
         }
         Commands::Cat {
