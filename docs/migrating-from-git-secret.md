@@ -4,7 +4,8 @@ git-veil is a git-secret work-alike. The mental model maps over almost one
 to one. Tracked files are encrypted in place to a per-repository keyring of
 collaborator keys. What does not map is the material itself. git-veil does
 not maintain compatibility with git-secret's cryptographic material. See the
-[README's compatibility statement](../README.md#compatibility-with-git-secret).
+[README's compatibility
+statement](https://github.com/prompt-cult/git-veil#compatibility-with-git-secret).
 
 The differences:
 

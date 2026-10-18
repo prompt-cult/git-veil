@@ -13,8 +13,9 @@ git's smudge/clean filter machinery. git-veil writes `age`-encrypted
 (age-encryption.org/v1) blobs into sibling `<name>.secret` files beside
 where the plaintext was. Neither tool
 can read the other's ciphertext. The same one-tool-per-repo rule stated in
-[README.md](../README.md#compatibility-with-git-secret) for git-secret
-applies to git-crypt. Migration therefore means:
+the [README's compatibility
+statement](https://github.com/prompt-cult/git-veil#compatibility-with-git-secret)
+for git-secret applies to git-crypt. Migration therefore means:
 
 > decrypt everything with git-crypt, then re-encrypt everything with git-veil.
 

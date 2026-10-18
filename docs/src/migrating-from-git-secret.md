@@ -1,0 +1,1 @@
+../migrating-from-git-secret.md
