@@ -27,8 +27,12 @@ use std::process::Command;
 /// The first vector's public key is a real age-keygen X25519 public key.
 /// The second's is a real openssl-generated Ed25519 verifying key, as the
 /// raw 32 verifying key bytes in lowercase hex. The expected values are the
-/// sha256sum output over exactly those bytes, so the code must equal
-/// coreutils.
+/// sha256sum output over exactly those bytes, so the code must equal the
+/// stock tools. Provenance, verified by hand for every vector:
+///
+/// - GNU coreutils 9.11 `sha256sum` over the printf bytes: both vectors.
+/// - uutils coreutils 0.9.0 `uu-sha256sum`, fed the same printf bytes
+///   (also cross-checked through `uu-printf`): both vectors.
 const GOLDEN_VECTORS: [(&str, &str, &str); 2] = [
     (
         "alice@example.com",
@@ -52,7 +56,46 @@ fn test_golden_vectors_match_coreutils() {
         assert_eq!(
             fingerprint_for_public_key(label, public_key),
             expected,
-            "the Rust derivation must equal the coreutils one-liner for {label}"
+            "the Rust derivation must equal the stock-tool one-liner for {label}"
+        );
+    }
+}
+
+/// The same derivation under uutils coreutils. Feeds the printf bytes of
+/// each golden vector to `uu-sha256sum` and demands the vector's hex.
+/// Skips cleanly when the uutils binary is absent, the way the interop
+/// suite skips when age or rage is absent.
+#[test]
+fn test_golden_vectors_match_uutils_sha256sum() {
+    let probe = Command::new("uu-sha256sum").arg("--version").output();
+    if probe.is_err() {
+        eprintln!("skipped: uu-sha256sum is not on PATH");
+        return;
+    }
+    if !probe.expect("probe ran").status.success() {
+        eprintln!("skipped: uu-sha256sum did not run cleanly");
+        return;
+    }
+    for (label, public_key, expected) in GOLDEN_VECTORS {
+        let mut child = Command::new("uu-sha256sum")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("uu-sha256sum spawned");
+        use std::io::Write;
+        child
+            .stdin
+            .as_mut()
+            .expect("stdin piped")
+            .write_all(format!("{label}:{public_key}").as_bytes())
+            .expect("wrote the printf bytes");
+        let out = child.wait_with_output().expect("uu-sha256sum ran");
+        assert!(out.status.success(), "uu-sha256sum exited zero");
+        let line = String::from_utf8(out.stdout).expect("output is utf8");
+        let digest = line.split_whitespace().next().expect("digest present");
+        assert_eq!(
+            digest, expected,
+            "uutils sha256sum must equal the Rust derivation for {label}"
         );
     }
 }
@@ -283,7 +326,7 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     TrustPinStore::write_pin(&key_store.path, TEST_REPO_ID, legacy).unwrap();
     let trust_path = repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
-    trust.add_trust(TEST_REPO_ID.to_string(), legacy.to_string());
+    trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), legacy.to_string());
     trust.save_to_file(&trust_path).unwrap();
     let pin_before = fs::read_to_string(&pin_path).unwrap();
     let record_before = fs::read_to_string(&trust_path).unwrap();
@@ -327,7 +370,7 @@ fn test_legacy_record_alone_refuses() {
     // record is a legacy 16-hex value.
     let trust_path = repo.join(".git-veil/trust.json");
     let mut trust = TrustStore::load_from_file(&trust_path).unwrap();
-    trust.add_trust(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
+    trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
     trust.save_to_file(&trust_path).unwrap();
 
     let err = cmd_verify_keyring(&repo.path, "origin", &key_store.path)

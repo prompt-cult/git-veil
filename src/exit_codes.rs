@@ -40,7 +40,9 @@ pub enum ExitCode {
     CiphertextIgnored = 40,
     /// Tracked plaintext on disk is not git-ignored (a warning, the exit code stays 0).
     PlaintextNotIgnored = 41,
-    /// A committed `.secret` ciphertext path is not tracked (fatal in `hide`).
+    /// A committed `.secret` ciphertext path is not tracked (the
+    /// whole-manifest pass refuses it; see docs/design.md "Orphaned
+    /// ciphertext").
     OrphanedCiphertext = 42,
     /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
     PlaintextTracked = 43,
@@ -56,7 +58,8 @@ pub enum ExitCode {
     Refused = 70,
     /// Path-safety refusal (symlink, outside repository, unsafe tracked path).
     UnsafePath = 71,
-    /// `hide` refuses to encrypt a path the user never added on this machine.
+    /// `hide` refuses to first-encrypt a tracked path that was never
+    /// allowed on this machine.
     UnintendedEncryption = 72,
 }
 
@@ -139,7 +142,7 @@ impl ExitCode {
                 "Tracked plaintext on disk is not git-ignored which is a warning only"
             }
             ExitCode::OrphanedCiphertext => {
-                "A committed ciphertext path is not tracked which hide refuses"
+                "A committed ciphertext path is not tracked; the whole-manifest pass refuses it"
             }
             ExitCode::PlaintextTracked => {
                 "The plaintext is tracked in git which reveal and unhide refuse"
@@ -150,12 +153,14 @@ impl ExitCode {
             ExitCode::EncryptionFailed => "Encryption failed",
             ExitCode::KeyParseFailure => "A key, keyring or signature could not be parsed",
             ExitCode::SignatureVerificationFailed => "Keyring signature missing or invalid",
-            ExitCode::Refused => "Policy refusal such as init over established trust",
+            ExitCode::Refused => {
+                "Policy refusal such as init over established trust or a ring-change pass not due"
+            }
             ExitCode::UnsafePath => {
                 "Path safety refusal such as a symlink or a path outside the repository"
             }
             ExitCode::UnintendedEncryption => {
-                "hide refuses to encrypt a file the user never added on this machine"
+                "hide refuses to first-encrypt a tracked path never allowed on this machine"
             }
         }
     }

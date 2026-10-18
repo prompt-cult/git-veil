@@ -3,6 +3,11 @@
 You keep secrets in a repository that only you can read back. You need one
 X25519 private key. You are the only entry in the keyring.
 
+The point of this setup: your secret material is backed up alongside the
+code. The ciphertexts are committed, so every clone carries the secrets.
+A build or deployment script on another machine reveals on its own key,
+with no plaintext ever travelling to it by another route.
+
 To follow this guide you need the binary built (`cargo build --release`; it
 lands at `target/release/git-veil`) and two standard tools for the one-time
 key creation below. `openssl` ships with macOS and every Linux. `age-keygen`
@@ -65,9 +70,13 @@ proves your seed against.
 
 ```sh
 $ git-veil init
-✓ git-veil initialized
+git-veil initialized
+suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
+add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
+owner.verifying @the-repository-owner
+.git-veil/ @the-repository-owner
 $ git-veil import my-age-identity.txt
-+ imported: age1axmf…q5xnw2s (1a2b3c4d5e6f7a8b)
++ imported: age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 Summary: 1 imported, 0 skipped
 $ git-veil show-repo-id
 Repository ID: demo+example@github.com
@@ -90,8 +99,9 @@ shows which principal decrypting commands will use. The principal comes from
 
 ```sh
 $ git-veil trust demo+example@github.com
-✓ Trusted key for demo+example@github.com (fingerprint: 1a2b3c4d…)
-✓ Pinned 1a2b3c4d… for demo+example@github.com on this machine
+trusted the repository owner key
+pinned this repository owner key on this machine
+warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
 What happened. There is no keyfile argument. A repository must never supply
@@ -116,8 +126,10 @@ for that flow.
 ## 4. Put yourself in the keyring
 
 ```sh
-$ git-veil tell example@github.com my-age-identity.txt
-✓ Added example@github.com to keyring
+$ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3 --output me.pub
+$ git-veil tell example@github.com me.pub
+added example@github.com to the keyring
+note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
 
 What happened. `hide` encrypts to every key in the signed keyring, so even
@@ -126,7 +138,15 @@ store file is `signing-keys.txt`. The key whose verifying fingerprint matches
 the pin `trust` wrote is the one used. `tell` verified the existing keyring
 signature against your pin, test-encrypted an in-memory canary to the new
 key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
-committed.
+committed. The collaborator key file is the exported public key. Its first
+content line must be the X25519 public key encoding.
+
+The note names the ring-change ceremony. A ring change stamps a pass as
+due on this machine, and one `hide --all` delivers it. On a fresh
+repository nothing is hidden yet, so there is nothing to deliver: the
+first `hide` of `.env` encrypts to the current ring from the start, and
+the pending stamp gates nothing but the pass itself. You can leave it
+undelivered. See [docs/design.md](design.md), "The ring-change ceremony".
 
 ## 5. Track, hide, commit
 
@@ -134,22 +154,24 @@ committed.
 $ printf 'API_KEY=hunter2\n' > .env
 $ git-veil add .env
 file not in .gitignore, adding: .env
-Added 1 file(s)
-$ git-veil hide
-✓ Keyring signature verified
-Signed by fingerprint: 1a2b3c4d…
-Repository ID: demo+example@github.com
-Keys in keyring: 1
+added 1 files
+$ git-veil hide .env
 Encrypted: .env
-✓ Files hidden
+Deleted plaintext: .env
+files hidden
 $ ls .env .env.secret
-.env	.env.secret
+ls: .env: No such file or directory
+.env.secret
 ```
 
 What happened. `add` gitignored the plaintext name for you, as git-secret
-does. `hide` encrypted `.env` to your key as `.env.secret` and deleted the
-plaintext. Pass `--keep-plaintext` to keep it. `reveal` brings the plaintext
-back. That is the only recovery.
+does. It also recorded the path in the allowance store in your key store:
+`add` implies `allow`, so the first `hide` runs without a question. (The
+question exists for paths someone else nominated; it is described in the
+[two-collaborators guide](two-collaborators.md).) `hide` encrypted `.env`
+to your key as `.env.secret` and deleted the plaintext. Pass
+`--keep-plaintext` to keep it. `reveal` brings the plaintext back. That is
+the only recovery.
 
 Two guards watch the working tree. If a tracked plaintext is on disk but not
 gitignored, `hide` prints a warning, error code 41, because a blind
@@ -169,28 +191,46 @@ decryptability contract.
 
 ## 6. The daily cycle
 
-Edit, check, hide, commit, reveal:
+Edit, check, hide, commit, reveal. Name the file you are working with:
 
 ```sh
 $ git-veil unhide .env          # decrypt one file in place
+Decrypted: .env
+file unhidden
 ... edit .env ...
-$ git-veil changes .env         # report the diff
+$ git-veil changes              # report the diff
 changed: .env
 - API_KEY=hunter2
-+ API_KEY=hunter3
-1 file(s) with changes
-$ git-veil hide                 # re-encrypt, plaintext deleted
++ API_KEY=hunter4
+
+1 files with changes
+$ git-veil hide .env            # re-encrypt one file; plaintext deleted
+Encrypted: .env
+Deleted plaintext: .env
+files hidden
 $ git add .env.secret && git commit -m "Rotate API key"
-$ git-veil reveal               # bring every tracked file back as plaintext
+$ git-veil reveal .env          # bring one file back
+keyring signature verified
+keys in keyring: 1
+Decrypted: .env
+files revealed
 ```
 
 What happened. `unhide` and `reveal` decrypt ciphertext back to the plaintext
-path and leave the `.secret` files in place. `changes` decrypts each
+path and leave the `.secret` files in place. `hide .env` re-encrypted one
+file and left every other tracked file alone. `changes` decrypts each
 ciphertext and diffs it against the plaintext beside it. Where there is no
 diff to show, it prints `unchanged: …`, `no hidden version: …` or
 `not present on disk (hidden): …`. To peek without disturbing anything,
 `git-veil cat .env` writes the plaintext to stdout only. Neither the
 plaintext nor the ciphertext on disk is touched.
+
+Every `hide` and `reveal` names its file(s); the bare form is gone. The
+command acts on exactly the paths you give it, so keep the naming habit:
+it is the habit that matters in a team, where a whole-manifest pass would
+touch every ciphertext and the commit would look like you edited every
+secret when you edited a few. See the
+[two-collaborators guide](two-collaborators.md).
 
 For the tightest solo posture, no plaintext lingers on disk. That is the
 default. `hide` deletes the plaintext. Pass `--keep-plaintext` if you want
@@ -212,7 +252,38 @@ EOF
 chmod +x .git/hooks/pre-commit
 ```
 
-## 7. Health checks
+## 7. A build or deployment script reveals on its own key
+
+The ciphertexts are committed, so a clone on a build box already carries
+every secret. Give the box its own X25519 private key and its own pin:
+
+- Import the box's private key: `git-veil import <key-file>`.
+- Pin the owner key with `trust --import` and a pin-file you export with
+  `git-veil export-pin`. That is the joining-user flow; see
+  [joining.md](joining.md).
+- Put the box's public key in the keyring with `git-veil tell`. The ring
+  change stamps a pass as due, so reveal the files (name them), then
+  deliver the pass with `git-veil hide --all`: every tracked ciphertext
+  with a plaintext on disk is re-encrypted to the ring, and the ciphertexts
+  then carry a stanza for the box. One pass consumes the stamp.
+
+The script then reads what it needs straight from the committed
+ciphertexts:
+
+```sh
+git-veil cat .env    # plaintext to stdout, no disk state touched
+```
+
+or restores the file in place before the step that needs it:
+
+```sh
+git-veil reveal .env
+```
+
+`cat` and `reveal` are never gated by the allowance check. Decryption
+needs only keyring membership, so no `allow` step is needed on the box.
+
+## 8. Health checks
 
 ```sh
 git-veil verify-keyring   # exit 0 only if the signature matches your pin

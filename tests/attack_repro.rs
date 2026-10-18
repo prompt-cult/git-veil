@@ -1,14 +1,14 @@
 //! Attack reproduction tests and fix regressions.
 //!
-//! The tests below assert the refusals (exit codes 14, 42, 72) plus the
+//! The tests below assert the refusals (exit codes 14, 71, 72) plus the
 //! migration and normal-flow semantics of each fix.
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_remove, cmd_removeperson,
-    cmd_reveal, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide, cmd_verify_keyring,
-    decrypt_with_x25519_private_key, exit_code_of, generate_signing_keypair,
-    generate_x25519_private_key, x25519_public_key_encoding, TrackedFiles,
+    cmd_add, cmd_allow, cmd_export_pin, cmd_hide, cmd_hide_all, cmd_import, cmd_init, cmd_remove,
+    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide,
+    cmd_verify_keyring, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
+    x25519_public_key_encoding, TrackedFiles,
 };
 
 use std::fs;
@@ -136,11 +136,30 @@ impl Fixture {
     }
 
     fn hide(&self) {
-        cmd_hide(&self.repo.path, "origin", &self.key_store.path, true).expect("hide");
+        cmd_hide(
+            &self.repo.path,
+            "origin",
+            &self.key_store.path,
+            true,
+            self.tracked_names(),
+        )
+        .expect("hide");
+    }
+
+    /// The tracked file names, as the required-form hide and reveal calls
+    /// name them. Tests that act on the whole tracked set name the whole
+    /// tracked set explicitly: the bare form is gone (issue 50).
+    fn tracked_names(&self) -> Vec<String> {
+        TrackedFiles::load(&self.repo.path.join(".git-veil/tracked.json"))
+            .unwrap()
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
     }
 
     /// Stages everything the way the owner's commit would, so the git index
-    /// (which the orphan gate and later the intent gate read) reflects the
+    /// (which the orphan gate reads) reflects the
     /// committed state. The plaintext is gitignored, so this stages only
     /// ciphertext and .git-veil state.
     fn stage_all(&self) {
@@ -152,8 +171,7 @@ impl Fixture {
         assert!(s.success());
     }
 
-    /// Commits the staged state, so the git history exists for the
-    /// happen-before check.
+    /// Commits the staged state.
     fn commit_all(&self, message: &str) {
         self.stage_all();
         let s = std::process::Command::new("git")
@@ -216,8 +234,14 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     );
 
     // And hide (like every gated command) refuses on the same check.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
-        .expect_err("hide must refuse on the rolled-back keyring");
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect_err("hide must refuse on the rolled-back keyring");
     assert_eq!(exit_code_of(&err), 14);
 
     // The stale v1 ciphertext on disk is untouched. Carol still decrypts
@@ -327,15 +351,16 @@ fn fix_malformed_version_lines_are_parse_failures() {
 // ---------------------------------------------------------------------------
 // Regression: nominated paths are refused at hide time (exit 72).
 //
-// `add` records intent in a machine-local log in the key store. Hide
-// refuses to first-encrypt any tracked path that has neither a committed
-// ciphertext nor recorded intent. See "Encryption intent" in
-// docs/design.md.
+// tracked.json is committed and unsigned, so a repo writer can nominate a
+// path. Hide refuses to first-encrypt a tracked path that has a plaintext
+// on disk, no committed ciphertext in the index, and no allowance on this
+// machine. The allowance record lives in the key store, keyed to the trust
+// pin and the principal. See "Allowance" in docs/design.md.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn fix_nominated_path_refused_at_hide() {
-    let f = Fixture::new("tracked-nomination");
+    let f = Fixture::new("nominated-path");
 
     // The attacker is a legitimate keyring member (repo write access).
     let _mallory = f.add_collab("mallory@example.com");
@@ -356,8 +381,14 @@ fn fix_nominated_path_refused_at_hide() {
 
     // Hide refuses with exit 72. No ciphertext is created and nothing is
     // exfiltrated.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
-        .expect_err("hide must refuse a nominated path with no intent and no ciphertext");
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect_err("hide must refuse a nominated path with no allowance and no ciphertext");
     assert_eq!(
         exit_code_of(&err),
         72,
@@ -374,25 +405,31 @@ fn fix_nominated_path_refused_at_hide() {
         "no ciphertext may be written for a nominated path"
     );
 
-    // Remedy. The tracking is wanted, so the victim adds the path
-    // deliberately. This binds intent on the machine, and hide then
-    // proceeds.
-    cmd_add(
+    // Remedy. The tracking is wanted, so the victim allows the path
+    // deliberately. This records the allowance on the machine, and hide
+    // then proceeds.
+    cmd_allow(
         &f.repo.path,
         vec!["prod-credentials".to_string()],
         "origin",
         &f.key_store.path,
     )
-    .expect("victim re-adds deliberately");
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide after intent");
+    .expect("victim allows the path deliberately");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide after the allowance");
 }
 
 #[test]
-fn fix_established_ciphertext_needs_no_intent() {
-    // Rotation flow under the happen-before rule. The manifest entry and
-    // the ciphertext land in one commit, so a machine without a baseline for
-    // this manifest version must record its own intent via a deliberate add
-    // before hide first-encrypts. The gate fails closed.
+fn fix_committed_ciphertext_needs_no_allowance() {
+    // Rotation flow. The ciphertext is committed, so the path is
+    // established: any machine with the pin re-encrypts it without a local
+    // allowance. This is what keeps rotation working on a fresh clone.
     let f = Fixture::new("established-ciphertext");
 
     let _carol = f.add_collab("carol@example.com");
@@ -400,9 +437,9 @@ fn fix_established_ciphertext_needs_no_intent() {
     f.hide();
     f.commit_all("owner commits manifest and ciphertext together");
 
-    // Simulate another machine: a new key store with no intent log and no
-    // baseline for this manifest version. The ciphertext is committed, but
-    // it does not predate the manifest entry, so hide refuses with 72.
+    // Simulate another machine: a new key store with no allowance records.
+    // The pin travels by export-pin, the way a fresh clone establishes
+    // trust.
     let fresh_store = TempDir::new("established-fresh-ks");
     let pin_file = fresh_store.join("fara.pin");
     cmd_export_pin(
@@ -415,171 +452,168 @@ fn fix_established_ciphertext_needs_no_intent() {
     .expect("export-pin");
     cmd_trust_import(&f.repo.path, &pin_file, "origin", &fresh_store.path, false).expect("import");
 
-    let err = cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
-        .expect_err("a machine with no baseline and no intent must refuse first-encryption");
-    assert_eq!(
-        exit_code_of(&err),
-        72,
-        "the intent gate must fire when the ciphertext does not predate the manifest entry"
-    );
-    // The committed ciphertext is untouched. Hide simply did not proceed.
-
-    // The remedy is deliberate. The machine records its own intent via
-    // add, and hide then proceeds.
-    cmd_add(
+    // The ciphertext is in the git index, so hide proceeds with no
+    // allowance on this machine.
+    cmd_hide(
         &f.repo.path,
-        vec!["secrets.env".to_string()],
         "origin",
         &fresh_store.path,
+        true,
+        f.tracked_names(),
     )
-    .expect("deliberate add on the second machine");
-    cmd_hide(&f.repo.path, "origin", &fresh_store.path, true)
-        .expect("hide proceeds after the machine binds its own intent");
-}
-
-// ---------------------------------------------------------------------------
-// Regression: the hungry hippo attack
-//
-// A committed ciphertext is established only when it predates the
-// manifest entry naming it. A nomination and a dummy in one commit fail the
-// happen-before check, the intent gate runs, and the victim refuses with 72.
-// ---------------------------------------------------------------------------
-
-#[test]
-fn fix_dummy_ciphertext_in_one_commit_no_longer_established() {
-    let f = Fixture::new("hungry-hippo");
-
-    let _mallory = f.add_collab("mallory@example.com");
-
-    // Victim's private file. It is gitignored and never passed to add on
-    // this machine.
-    let secret_plaintext = b"AWS_SECRET_ACCESS_KEY=AKIA...\n";
-    fs::write(f.repo.join("prod-credentials"), secret_plaintext).unwrap();
-    fs::write(f.repo.join(".gitignore"), "prod-credentials\n").unwrap();
-
-    // Attack: one commit carries the nomination and a valid dummy
-    // ciphertext. It is a real age ciphertext to the ring. Mallory is a
-    // ring member, so any decrypt-with-mallory repair would pass too.
-    let dummy = b"dummy ciphertext bytes\n";
-    fs::write(f.repo.join("prod-credentials.secret"), dummy).unwrap();
-    fs::write(
-        f.repo.join(".git-veil/tracked.json"),
-        "{\n  \"files\": [\n    \"prod-credentials\"\n  ]\n}",
-    )
-    .unwrap();
-    f.commit_all("attacker commits nomination and dummy together");
-
-    // The victim's store has no intent and no baseline for this manifest
-    // version.
-    let victim_store = TempDir::new("hungry-hippo-victim-ks");
-    let pin_file = victim_store.join("fara.pin");
-    cmd_export_pin(
-        &f.repo.path,
-        TEST_REPO_ID,
-        &pin_file,
-        "origin",
-        &f.key_store.path,
-    )
-    .expect("export-pin");
-    cmd_trust_import(&f.repo.path, &pin_file, "origin", &victim_store.path, false).expect("import");
-
-    let err = cmd_hide(&f.repo.path, "origin", &victim_store.path, true)
-        .expect_err("hide must refuse: the dummy does not predate the manifest entry");
-    assert_eq!(exit_code_of(&err), 72);
-    assert_eq!(
-        fs::read(f.repo.join("prod-credentials")).unwrap(),
-        secret_plaintext,
-        "the plaintext must be untouched"
-    );
+    .expect("an established ciphertext re-encrypts without a local allowance");
 }
 
 #[test]
-fn happen_before_passes_when_ciphertext_predates_the_readd() {
-    let f = Fixture::new("happen-before-readd");
+fn fix_add_implies_allow() {
+    // The manifest nomination is the user's standing instruction: add on
+    // this machine records the allowance, and hide never refuses the path
+    // the user themselves added here.
+    use git_veil::{AllowanceStore, TrustPinStore};
+    let f = Fixture::new("add-implies-allow");
     let _carol = f.add_collab("carol@example.com");
 
-    // Owner tracks and hides a file. The ciphertext is committed in one
-    // commit with the manifest entry.
     f.add_file("secrets.env", b"TOKEN=v1\n");
-    f.hide();
-    f.commit_all("commit one: manifest entry and ciphertext together");
 
-    // The path is removed from the manifest in a second commit. The
-    // committed ciphertext stays.
-    cmd_remove(&f.repo.path, vec!["secrets.env".to_string()], true).expect("remove");
-    f.commit_all("commit two: entry removed, ciphertext stays");
-
-    // A machine with its own store, no intent, imports the pin.
-    let other_store = TempDir::new("happen-before-readd-ks");
-    let pin_file = other_store.join("fara.pin");
-    cmd_export_pin(
-        &f.repo.path,
-        TEST_REPO_ID,
-        &pin_file,
-        "origin",
+    // The allowance record exists on this machine, keyed to the pin and
+    // the owner's principal.
+    let pin = TrustPinStore::read_pin(&f.key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .expect("the fixture established a pin");
+    assert!(AllowanceStore::contains(
         &f.key_store.path,
-    )
-    .expect("export-pin");
-    cmd_trust_import(&f.repo.path, &pin_file, "origin", &other_store.path, false).expect("import");
+        TEST_REPO_ID,
+        &pin,
+        "owner@example.com",
+        Path::new("secrets.env")
+    ));
 
-    // The path is re-added on the owner machine in a third commit. The
-    // re-added entry's introducing commit has the ciphertext in its parent
-    // tree, so the happen-before check holds.
-    f.add_file("secrets.env", b"TOKEN=v2\n");
-    f.commit_all("commit three: entry re-added, ciphertext predates it");
-
-    // On the other machine, no intent was ever recorded here, yet the
-    // ciphertext predates the re-added manifest entry, so the path is
-    // established and hide re-encrypts without local intent.
-    cmd_hide(&f.repo.path, "origin", &other_store.path, true)
-        .expect("the ciphertext predates the re-added entry, so hide proceeds");
-
-    // The machine-local baseline now records the proven path for this
-    // manifest version, and a second hide takes the fast path.
-    let manifest_content = fs::read_to_string(f.repo.join(".git-veil/tracked.json")).unwrap();
-    let digest = git_veil::manifest_digest(&manifest_content);
-    let baseline = git_veil::baseline_path(&other_store.path, TEST_REPO_ID, &digest);
-    assert!(
-        baseline.exists(),
-        "the happen-before result must be cached per manifest version"
-    );
-    let recorded = fs::read_to_string(&baseline).unwrap();
-    assert_eq!(recorded.trim(), "secrets.env");
-    cmd_hide(&f.repo.path, "origin", &other_store.path, true)
-        .expect("second hide takes the cached fast path");
+    // And hide does not refuse: no exit 72 for the path added here.
+    f.hide();
 }
 
 // ---------------------------------------------------------------------------
-// Regression: de-tracking cannot defeat rotation
+// Regression: the allowance store is keyed per pin and principal
 //
-// Hide's orphaned-ciphertext gate (exit 42, see "Orphaned ciphertext" in
-// docs/design.md) refuses to run while a committed .secret exists for an
-// untracked path, so the de-tracking-then-rotate attack fails loudly.
-// `git-veil remove` deletes the sibling ciphertext by default.
+// One record file per (repo id, pin fingerprint, principal) triple, one
+// repo-relative path per line. Purge removes a principal's record so a
+// revoked collaborator leaves no ambient consent.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fix_detracking_orphan_ciphertext_refuses_hide() {
-    let f = Fixture::new("detrack-rotation");
+fn allowance_store_is_keyed_per_pin_and_principal() {
+    use git_veil::{allowance_record_key, AllowanceStore, TrustPinStore};
 
-    let carol = f.add_collab("carol@example.com");
-    let plaintext = b"API_KEY=live-key\n";
-    f.add_file("api.key", plaintext);
-    f.hide();
-    assert!(f.repo.join("api.key.secret").exists());
-    // The orphan gate reads the git index, which is what gets pushed. Stage
-    // the ciphertext the way the owner's commit would.
-    f.stage_all();
+    let ks = TempDir::new("allowance-store");
+    let rel = Path::new("secrets.env");
 
-    // Attack: a repo writer de-tracks the file before the rotation.
-    // tracked.json is committed and unsigned.
-    fs::write(
-        f.repo.join(".git-veil/tracked.json"),
-        "{\n  \"files\": []\n}",
+    AllowanceStore::record(&ks.path, "repo-a", "PIN1", "alice@example.com", rel).unwrap();
+    assert!(AllowanceStore::contains(
+        &ks.path,
+        "repo-a",
+        "PIN1",
+        "alice@example.com",
+        rel
+    ));
+    // A different principal, a different pin: both key their own records.
+    assert!(!AllowanceStore::contains(
+        &ks.path,
+        "repo-a",
+        "PIN1",
+        "bob@example.com",
+        rel
+    ));
+    assert!(!AllowanceStore::contains(
+        &ks.path,
+        "repo-a",
+        "PIN2",
+        "alice@example.com",
+        rel
+    ));
+    // The pin fingerprint is canonicalised to lowercase before hashing.
+    assert!(AllowanceStore::contains(
+        &ks.path,
+        "repo-a",
+        "pin1",
+        "alice@example.com",
+        rel
+    ));
+    // Repositories are isolated.
+    assert!(!AllowanceStore::contains(
+        &ks.path,
+        "repo-b",
+        "PIN1",
+        "alice@example.com",
+        rel
+    ));
+
+    // Record shape: one repo-relative path per line, at the documented
+    // path under the key store.
+    AllowanceStore::record(
+        &ks.path,
+        "repo-a",
+        "PIN1",
+        "alice@example.com",
+        Path::new("other.env"),
     )
     .unwrap();
+    let record = ks
+        .path
+        .join("allowances")
+        .join(TrustPinStore::sanitize_repo_id("repo-a"))
+        .join(allowance_record_key("pin1", "alice@example.com"));
+    let content = fs::read_to_string(&record).unwrap();
+    assert_eq!(
+        content.lines().collect::<Vec<_>>(),
+        vec!["secrets.env", "other.env"],
+        "one repo-relative path per line"
+    );
 
-    // Owner rotates: revoke carol, onboard dave, re-hide.
+    // Purge removes the principal's record and reports honestly.
+    assert!(AllowanceStore::purge(&ks.path, "repo-a", "PIN1", "alice@example.com").unwrap());
+    assert!(!AllowanceStore::contains(
+        &ks.path,
+        "repo-a",
+        "PIN1",
+        "alice@example.com",
+        rel
+    ));
+    assert!(!AllowanceStore::purge(&ks.path, "repo-a", "PIN1", "alice@example.com").unwrap());
+}
+
+#[test]
+fn fix_removeperson_purges_the_removed_principal_allowance() {
+    let f = Fixture::new("purge-allowance");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("secrets.env", b"TOKEN=x\n");
+    f.hide();
+
+    // Simulate a machine whose key store also holds carol's consent
+    // (carol worked here under her principal). Her record is keyed to the
+    // same pin this repo is pinned with.
+    use git_veil::{AllowanceStore, TrustPinStore};
+    let pin = TrustPinStore::read_pin(&f.key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .expect("the fixture established a pin");
+    let rel = Path::new("secrets.env");
+    AllowanceStore::record(
+        &f.key_store.path,
+        TEST_REPO_ID,
+        &pin,
+        "carol@example.com",
+        rel,
+    )
+    .unwrap();
+    assert!(AllowanceStore::contains(
+        &f.key_store.path,
+        TEST_REPO_ID,
+        &pin,
+        "carol@example.com",
+        rel
+    ));
+
+    // The owner revokes carol. The purge takes her allowance record with
+    // the keyring entry, on this machine's key store.
     cmd_removeperson(
         &f.repo.path,
         "carol@example.com",
@@ -588,46 +622,29 @@ fn fix_detracking_orphan_ciphertext_refuses_hide() {
         None,
     )
     .expect("removeperson");
-    let _dave = f.add_collab("dave@example.com");
-
-    // Hide refuses outright with exit 42 while the stale ciphertext is
-    // committed but untracked. Rotation cannot skip it silently.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
-        .expect_err("hide must refuse orphaned committed ciphertext");
-    assert_eq!(
-        exit_code_of(&err),
-        42,
-        "orphaned ciphertext must exit with the documented code 42"
-    );
-    // The committed ciphertext path lives in the git index. It is a public
-    // repository fact, so the refusal names it.
     assert!(
-        err.to_string().contains("api.key.secret"),
-        "exit 42 names the offending committed ciphertext path: {err}"
+        !AllowanceStore::contains(
+            &f.key_store.path,
+            TEST_REPO_ID,
+            &pin,
+            "carol@example.com",
+            rel
+        ),
+        "the removed principal must leave no ambient consent"
     );
 
-    // Remedy, because de-tracking was intentional: delete the stale
-    // ciphertext.
-    fs::remove_file(f.repo.join("api.key.secret")).unwrap();
-    // Re-track the file (the manifest was emptied by the attack), stage,
-    // and hide to the new ring.
-    f.add_file("api.key", plaintext);
-    f.stage_all();
-    f.hide();
-
-    // The revoked collaborator can no longer decrypt the live ciphertext.
-    let ciphertext = fs::read(f.repo.join("api.key.secret")).unwrap();
-    assert!(
-        decrypt_with_x25519_private_key(&ciphertext, &carol).is_err(),
-        "revoked carol must not decrypt the post-rotation ciphertext"
-    );
+    // The owner's own allowance is untouched.
+    assert!(AllowanceStore::contains(
+        &f.key_store.path,
+        TEST_REPO_ID,
+        &pin,
+        "owner@example.com",
+        rel
+    ));
 }
 
 // ---------------------------------------------------------------------------
 // Regression: `remove` deletes the sibling ciphertext by default
-//
-// The explicit --keep-ciphertext flag keeps an untracked ciphertext, and
-// hide then refuses the orphan.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -653,7 +670,7 @@ fn fix_remove_deletes_ciphertext_by_default() {
 }
 
 #[test]
-fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
+fn fix_remove_keep_ciphertext_leaves_the_orphan_in_place() {
     let f = Fixture::new("remove-keep");
     let _carol = f.add_collab("carol@example.com");
     f.add_file("api.key", b"API_KEY=x\n");
@@ -666,10 +683,63 @@ fn fix_remove_keep_ciphertext_trips_the_orphan_gate() {
         "--keep-ciphertext leaves the ciphertext in place"
     );
 
-    // Hide refuses the orphan with exit 42 until it is resolved.
-    let err = cmd_hide(&f.repo.path, "origin", &f.key_store.path, true)
-        .expect_err("hide must refuse the kept-back orphaned ciphertext");
-    assert_eq!(exit_code_of(&err), 42);
+    // The kept-back ciphertext is an untracked orphan. A scoped hide never
+    // rotates it: hide acts only on the files it names (issue 50), so the
+    // name is refused. The ring-change ceremony owns the whole-manifest
+    // pass and the orphan gate that guards it.
+    let err = cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        vec!["api.key".to_string()],
+    )
+    .expect_err("hide refuses a name outside the manifest");
+    assert_eq!(exit_code_of(&err), 71);
+}
+
+// ---------------------------------------------------------------------------
+// Regression: the ring-change ceremony refuses a committed-but-untracked
+// ciphertext (exit 42)
+//
+// The de-tracking attack: a repo writer untracks a path while its
+// ciphertext stays committed. The ceremony rotates the whole manifest, so
+// it is exactly the pass that would silently skip the orphan and leave it
+// decryptable by a removed collaborator. The orphan gate refuses the pass.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fix_ceremony_refuses_a_committed_untracked_ciphertext() {
+    let f = Fixture::new("ceremony-orphan");
+    let _carol = f.add_collab("carol@example.com");
+    f.add_file("api.key", b"API_KEY=x\n");
+    f.hide();
+    f.stage_all();
+
+    // De-track the path while its ciphertext stays committed (the
+    // --keep-ciphertext shape, as a repo writer or a careless owner would
+    // produce), then stage the manifest change so the index reflects it.
+    cmd_remove(&f.repo.path, vec!["api.key".to_string()], true).expect("remove");
+    f.stage_all();
+
+    // The stamp is due (tell stamped the ring change; the scoped hide never
+    // consumed it), so the refusal is the orphan gate, not the stamp gate.
+    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, true)
+        .expect_err("the ceremony must refuse a committed orphan");
+    assert_eq!(
+        exit_code_of(&err),
+        42,
+        "the orphan gate refuses the whole-manifest pass"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("api.key.secret"),
+        "the refusal names the orphan: {message}"
+    );
+    assert!(
+        f.repo.join("api.key.secret").exists(),
+        "nothing is rotated on refusal"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -740,6 +810,7 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
         "victim@example.com",
         "origin",
         &f.key_store.path,
+        f.tracked_names(),
     )
     .expect_err("reveal must refuse a git-tracked plaintext");
     assert_eq!(
@@ -798,6 +869,7 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
         "owner@example.com",
         "origin",
         &f.key_store.path,
+        f.tracked_names(),
     )
     .expect("reveal of a gitignored tracked plaintext must work");
     assert_eq!(fs::read(f.repo.join("secrets.env")).unwrap(), secret);
@@ -944,6 +1016,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
         "victim@example.com",
         "origin",
         &f.key_store.path,
+        f.tracked_names(),
     )
     .expect_err("exit-43 gate must refuse the case-variant spelling");
     assert_eq!(exit_code_of(&err), 43);
@@ -954,12 +1027,11 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     );
 }
 
-/// The orphan gate does not false-positive on core.quotePath-quoted
-/// unicode names, because the index is read verbatim, nor on an
-/// attacker-committed file named exactly `.secret`. That file is
-/// warned about and ignored.
+/// Hide does not false-positive on core.quotePath-quoted unicode names,
+/// because the index is read verbatim, nor on an attacker-committed file
+/// named exactly `.secret`. That file is warned about and ignored.
 #[test]
-fn fix_orphan_gate_survives_quoting_and_dot_secret() {
+fn fix_hide_survives_quoting_and_dot_secret_in_index() {
     let f = Fixture::new("orphan-brick");
     let _carol = f.add_collab("carol@example.com");
 
@@ -975,7 +1047,14 @@ fn fix_orphan_gate_survives_quoting_and_dot_secret() {
 
     // Hide proceeds. The unicode ciphertext maps back to its tracked
     // path, and the stemless junk file is warned about, not fatal.
-    cmd_hide(&f.repo.path, "origin", &f.key_store.path, true).expect("hide must not be bricked");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide must not be bricked");
     assert!(
         f.repo.join(unicode_name).exists(),
         "--keep-plaintext path: the unicode plaintext is intact"

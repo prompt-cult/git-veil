@@ -1,4 +1,5 @@
 pub mod add;
+pub mod allow;
 pub mod cat;
 pub mod changes;
 pub mod clean;

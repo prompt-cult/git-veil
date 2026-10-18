@@ -194,7 +194,19 @@ impl TestRepo {
             "origin",
             &self.key_store.path,
         )
-        .expect("add file");
+        .expect("add");
+    }
+
+    /// The tracked file names, as the required-form hide and reveal calls
+    /// name them. Tests that act on the whole tracked set name the whole
+    /// tracked set explicitly: the bare form is gone (issue 50).
+    fn tracked_names(&self) -> Vec<String> {
+        TrackedFiles::load(&self.repo.path.join(".git-veil/tracked.json"))
+            .unwrap()
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()
     }
 }
 
@@ -227,7 +239,7 @@ fn test_init_refuses_reinit_with_trust() {
     cmd_init(&repo.path, false).expect("first init");
 
     let mut trust = TrustStore::new();
-    trust.add_trust("test+user@github.com".to_string(), "abc123".to_string());
+    trust.set_owner_fingerprint("test+user@github.com".to_string(), "abc123".to_string());
     trust
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
@@ -352,6 +364,57 @@ fn test_remove_untracks_file() {
 }
 
 // ---------------------------------------------------------------------------
+// allow
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_allow_parses_files_and_remote() {
+    let cli = Cli::try_parse_from(["git-veil", "allow", ".env", "--remote", "upstream"])
+        .expect("allow parses");
+    match cli.command {
+        Commands::Allow { files, remote } => {
+            assert_eq!(files, vec![".env".to_string()]);
+            assert_eq!(remote, "upstream");
+        }
+        _ => panic!("expected the Allow subcommand"),
+    }
+}
+
+#[test]
+fn test_allow_requires_a_file_argument() {
+    let err = Cli::try_parse_from(["git-veil", "allow"]).unwrap_err();
+    assert!(
+        err.use_stderr(),
+        "allow without files must be a usage error"
+    );
+}
+
+#[test]
+fn test_add_implies_allow_hide_does_not_refuse() {
+    // The full pipeline: init -> trust -> tell -> add -> hide. add records
+    // the allowance on this machine, so hide first-encrypts without an
+    // exit-72 refusal. Without the allowance this hide would refuse: the
+    // ciphertext is not in the git index yet.
+    let fixture = TestRepo::new("add-implies-allow");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    let plaintext = b"SECRET=value\n";
+    fixture.add_file(".env", plaintext);
+
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide must not refuse a path the user added on this machine");
+    assert!(fixture.repo.join(".env.secret").exists());
+}
+
+// ---------------------------------------------------------------------------
 // hide + reveal
 // ---------------------------------------------------------------------------
 
@@ -365,7 +428,14 @@ fn test_hide_reveal_roundtrip() {
     let plaintext = b"SECRET=value\nAPI_KEY=abc123\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     // Both copies exist, matching git-secret, which does not delete the
     // plaintext by default.
@@ -383,6 +453,7 @@ fn test_hide_reveal_roundtrip() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        fixture.tracked_names(),
     )
     .expect("reveal");
 
@@ -405,7 +476,14 @@ fn test_hide_creates_valid_age_ciphertext() {
 
     fixture.add_file(".env", b"test data\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     // age ciphertext starts with the age header bytes
     let ciphertext = fs::read(fixture.repo.join(".env.secret")).unwrap();
@@ -415,15 +493,6 @@ fn test_hide_creates_valid_age_ciphertext() {
         ciphertext.starts_with(b"age-encryption.org"),
         "should be age format"
     );
-}
-
-#[test]
-fn test_hide_no_tracked_files_is_ok() {
-    let fixture = TestRepo::new("hide-empty");
-    fixture.add_collaborator("alice@example.com");
-
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true)
-        .expect("hide with no tracked files");
 }
 
 #[test]
@@ -465,7 +534,13 @@ fn test_hide_no_keys_fails() {
     )
     .expect("add");
 
-    let result = cmd_hide(&repo.path, "origin", &key_store.path, true);
+    let result = cmd_hide(
+        &repo.path,
+        "origin",
+        &key_store.path,
+        true,
+        vec![".env".to_string()],
+    );
     assert!(result.is_err(), "hide with no keys should fail");
 }
 
@@ -483,7 +558,14 @@ fn test_cat_decrypts_to_stdout() {
     let plaintext = b"cat me\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     let result = cmd_cat(
         &fixture.repo.path,
@@ -514,7 +596,14 @@ fn test_cat_untracked_file_fails() {
     fixture.import_identity(&collab_identity, "alice.age");
 
     fixture.add_file(".env", b"secret\n");
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     fs::write(fixture.repo.join("other.txt"), b"other\n").unwrap();
     let result = cmd_cat(
@@ -541,7 +630,14 @@ fn test_unhide_single_file() {
     fixture.add_file(".env", b"unhide me\n");
     fixture.add_file("config.yml", b"keep hidden\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     cmd_unhide(
         &fixture.repo.path,
@@ -577,7 +673,14 @@ fn test_changes_detects_modification() {
 
     fixture.add_file(".env", b"ORIGINAL=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     fs::write(fixture.repo.join(".env"), b"MODIFIED=different\n").unwrap();
 
@@ -603,7 +706,14 @@ fn test_changes_no_modification() {
 
     fixture.add_file(".env", b"SAME=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     fs::write(fixture.repo.join(".env"), b"SAME=value\n").unwrap();
 
@@ -1071,13 +1181,21 @@ fn test_multi_recipient_hide_reveal() {
     let plaintext = b"shared secret\n";
     fixture.add_file(".env", plaintext);
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     cmd_reveal(
         &fixture.repo.path,
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        fixture.tracked_names(),
     )
     .expect("alice reveal");
 
@@ -1085,13 +1203,21 @@ fn test_multi_recipient_hide_reveal() {
     assert_eq!(revealed, plaintext);
 
     // Re-hide for bob (plaintext still exists, hide does not delete it)
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("re-hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("re-hide");
 
     cmd_reveal(
         &fixture.repo.path,
         "bob@example.com",
         "origin",
         &fixture.key_store.path,
+        fixture.tracked_names(),
     )
     .expect("bob reveal");
 
@@ -1135,7 +1261,14 @@ fn test_full_lifecycle() {
     fixture.add_file(".env", b"ENV=production\n");
     fixture.add_file("config/secrets.yml", b"api_key: abc123\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     // Both copies exist, matching git-secret, which does not delete the
     // plaintext by default.
@@ -1149,6 +1282,7 @@ fn test_full_lifecycle() {
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        fixture.tracked_names(),
     )
     .expect("reveal");
 
@@ -1193,7 +1327,14 @@ fn test_hide_keep_plaintext_leaves_both_copies() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     assert!(
         fixture.repo.join(".env").exists(),
@@ -1214,8 +1355,14 @@ fn test_hide_deletes_plaintext_by_default() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
-        .expect("hide (default deletes plaintext)");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        false,
+        fixture.tracked_names(),
+    )
+    .expect("hide (default deletes plaintext)");
 
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -1228,24 +1375,41 @@ fn test_hide_deletes_plaintext_by_default() {
 }
 
 #[test]
-fn test_hide_skips_missing_plaintext_instead_of_erroring() {
-    let fixture = TestRepo::new("hide-skip-missing");
+fn test_hide_of_an_already_hidden_name_refuses_at_resolution() {
+    let fixture = TestRepo::new("hide-already-hidden");
 
     let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&collab_identity, "alice.age");
 
     fixture.add_file(".env", b"SECRET=value\n");
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("hide");
     assert!(!fixture.repo.join(".env").exists());
 
-    // Steady state of the delete-by-default lifecycle. The plaintext is
-    // absent and the ciphertext is committed, so re-hiding is a
-    // skip-and-report, not an error.
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, false)
-        .expect("re-hide with absent plaintext must succeed (skip-and-report)");
+    // The plaintext is deleted, so the name no longer exists on disk.
+    // Naming it refuses: hide resolves paths the way add does. Reveal
+    // restores the plaintext, then hide re-encrypts.
+    let err = cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect_err("an absent plaintext does not resolve");
+    assert!(
+        format!("{:#}", err).contains(".env"),
+        "the refusal names the unresolvable path"
+    );
     assert!(
         fixture.repo.join(".env.secret").exists(),
-        "ciphertext untouched by the skip"
+        "ciphertext untouched by the refusal"
     );
 }
 
@@ -1258,13 +1422,21 @@ fn test_reveal_does_not_delete_ciphertext() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     cmd_reveal(
         &fixture.repo.path,
         "alice@example.com",
         "origin",
         &fixture.key_store.path,
+        fixture.tracked_names(),
     )
     .expect("reveal");
 
@@ -1287,7 +1459,14 @@ fn test_unhide_does_not_delete_ciphertext() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     cmd_unhide(
         &fixture.repo.path,
@@ -1354,7 +1533,14 @@ fn test_cat_does_not_touch_disk() {
 
     fixture.add_file(".env", b"SECRET=value\n");
 
-    cmd_hide(&fixture.repo.path, "origin", &fixture.key_store.path, true).expect("hide");
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
 
     let _ = cmd_cat(
         &fixture.repo.path,

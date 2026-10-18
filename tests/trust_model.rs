@@ -153,7 +153,7 @@ fn test_trust_proof_writes_pin_and_verifies() {
         .expect("proof must write the pin");
     let trust = TrustStore::load_from_file(&f.repo.join(".git-veil/trust.json")).unwrap();
     assert_eq!(
-        trust.get_trusted_fingerprint(TEST_REPO_ID).unwrap(),
+        trust.get_owner_fingerprint(TEST_REPO_ID).unwrap(),
         pin,
         "the committed record and the pin must agree"
     );
@@ -615,7 +615,7 @@ fn test_no_pin_fails_closed() {
 
     // Committed trust.json entry, but no local pin.
     let mut trust = TrustStore::new();
-    trust.add_trust(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
+    trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
     trust
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
@@ -658,7 +658,14 @@ fn test_hide_and_tell_fail_without_trust() {
     cmd_init(&repo.path, false).expect("init");
 
     assert!(
-        cmd_hide(&repo.path, "origin", &key_store.path, true).is_err(),
+        cmd_hide(
+            &repo.path,
+            "origin",
+            &key_store.path,
+            true,
+            vec![".env".to_string()]
+        )
+        .is_err(),
         "hide should fail without trust"
     );
 
@@ -712,13 +719,19 @@ fn test_reveal_no_pin_error_names_both_paths() {
     cmd_init(&repo.path, false).expect("init");
 
     let mut trust = TrustStore::new();
-    trust.add_trust(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
+    trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
     trust
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
 
-    let err = cmd_reveal(&repo.path, "owner@example.com", "origin", &key_store.path)
-        .expect_err("reveal without a pin must fail");
+    let err = cmd_reveal(
+        &repo.path,
+        "owner@example.com",
+        "origin",
+        &key_store.path,
+        vec![".env".to_string()],
+    )
+    .expect_err("reveal without a pin must fail");
     let message = err.to_string();
     assert!(
         message.contains("no trust pin exists on this machine"),
@@ -772,7 +785,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     )
     .unwrap();
     let mut trust = TrustStore::new();
-    trust.add_trust(
+    trust.set_owner_fingerprint(
         TEST_REPO_ID.to_string(),
         owner_key_fingerprint(TEST_REPO_ID, &attacker_signing_key.verifying_key()),
     );
@@ -928,32 +941,26 @@ fn test_rename_suspicion_no_remedy_on_import() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_reconcile_trusted_keys_removes_only_non_live_ids() {
+fn test_reconcile_owner_fingerprints_removes_only_non_live_ids() {
     let mut store = TrustStore::new();
-    store.add_trust("a+owner@github.com".to_string(), "f".to_string());
-    store.add_trust("b+owner@github.com".to_string(), "f".to_string());
-    store.add_trust("c+owner@github.com".to_string(), "f".to_string());
+    store.set_owner_fingerprint("a+owner@github.com".to_string(), "f".to_string());
+    store.set_owner_fingerprint("b+owner@github.com".to_string(), "f".to_string());
+    store.set_owner_fingerprint("c+owner@github.com".to_string(), "f".to_string());
 
     let live = std::collections::BTreeSet::from([
         "a+owner@github.com".to_string(),
         "c+owner@github.com".to_string(),
     ]);
-    let pruned = store.reconcile_trusted_keys(&live);
+    let pruned = store.reconcile_owner_fingerprints(&live);
 
     assert_eq!(
         pruned,
         vec!["b+owner@github.com".to_string()],
         "the pruned ids are returned in sorted order"
     );
-    assert!(store
-        .get_trusted_fingerprint("a+owner@github.com")
-        .is_some());
-    assert!(store
-        .get_trusted_fingerprint("b+owner@github.com")
-        .is_none());
-    assert!(store
-        .get_trusted_fingerprint("c+owner@github.com")
-        .is_some());
+    assert!(store.get_owner_fingerprint("a+owner@github.com").is_some());
+    assert!(store.get_owner_fingerprint("b+owner@github.com").is_none());
+    assert!(store.get_owner_fingerprint("c+owner@github.com").is_some());
 }
 
 /// The observed-live scenario. The repository moved, the old id is a stale
@@ -992,25 +999,18 @@ fn test_trust_after_a_move_prunes_the_stale_entry_and_prints_the_removal() {
 
     let trust = TrustStore::load_from_file(&f.repo.join(".git-veil/trust.json")).unwrap();
     assert!(
-        trust.get_trusted_fingerprint(TEST_REPO_ID).is_none(),
+        trust.get_owner_fingerprint(TEST_REPO_ID).is_none(),
         "the stale entry left by the move is gone"
     );
     assert!(
-        trust.get_trusted_fingerprint(new_repo_id).is_some(),
+        trust.get_owner_fingerprint(new_repo_id).is_some(),
         "the entry matching the configured remote is kept"
     );
     assert_eq!(
-        trust.trusted_keys.len(),
+        trust.owner_fingerprints.len(),
         1,
         "the committed store names exactly the ids the remotes derive"
     );
-    // The reconcile is scoped to trusted_keys. The owner fingerprint
-    // metadata is not pruned by it.
-    assert!(
-        trust.get_owner_fingerprint(TEST_REPO_ID).is_some(),
-        "owner_fingerprints is outside the reconcile scope"
-    );
-    assert!(trust.get_owner_fingerprint(new_repo_id).is_some());
 }
 
 #[test]
@@ -1034,7 +1034,7 @@ fn test_trust_reconcile_keeps_one_entry_per_configured_remote() {
     // The committed store records one entry per configured remote.
     let trust_path = f.repo.join(".git-veil/trust.json");
     let mut store = TrustStore::load_from_file(&trust_path).unwrap();
-    store.add_trust(upstream_id.to_string(), "ab".repeat(32));
+    store.set_owner_fingerprint(upstream_id.to_string(), "ab".repeat(32));
     store.save_to_file(&trust_path).unwrap();
 
     cmd_trust(
@@ -1048,12 +1048,12 @@ fn test_trust_reconcile_keeps_one_entry_per_configured_remote() {
 
     let store = TrustStore::load_from_file(&trust_path).unwrap();
     assert!(
-        store.get_trusted_fingerprint(TEST_REPO_ID).is_some(),
+        store.get_owner_fingerprint(TEST_REPO_ID).is_some(),
         "the origin entry is kept"
     );
     assert!(
-        store.get_trusted_fingerprint(upstream_id).is_some(),
+        store.get_owner_fingerprint(upstream_id).is_some(),
         "the upstream entry is kept: a multi-remote repository keeps one entry per remote"
     );
-    assert_eq!(store.trusted_keys.len(), 2);
+    assert_eq!(store.owner_fingerprints.len(), 2);
 }

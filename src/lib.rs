@@ -3,14 +3,13 @@
 //! age encryption (age-encryption.org/v1) + Ed25519 signing (RFC 8032).
 
 mod age_crypto;
+mod allowance;
 pub mod cli;
 mod codeowners;
 mod commands;
 mod exit_codes;
 mod fingerprint;
 mod fs_atomic;
-mod happen_before;
-mod intent;
 mod key_discovery;
 mod keyring;
 mod permissions;
@@ -28,19 +27,21 @@ pub use age_crypto::{
     load_x25519_public_keys_from_store, parse_x25519_private_key, parse_x25519_public_key,
     x25519_public_key_encoding,
 };
+pub use allowance::{allowance_record_key, AllowanceStore};
 pub use codeowners::{
     covers_trust_critical_paths, find as find_codeowners, is_suppressed as codeowners_suppressed,
     record_suppression as record_codeowners_suppression, suggestion_text as codeowners_suggestion,
     warning_text as codeowners_warning,
 };
 pub use commands::add::cmd_add;
+pub use commands::allow::cmd_allow;
 pub use commands::cat::cmd_cat;
 pub use commands::changes::cmd_changes;
 pub use commands::clean::cmd_clean;
 pub use commands::export::{cmd_export, export_public_key};
 pub use commands::export_pin::cmd_export_pin;
 pub use commands::fingerprint::cmd_fingerprint;
-pub use commands::hide::cmd_hide;
+pub use commands::hide::{cmd_hide, cmd_hide_all};
 pub use commands::import::cmd_import;
 pub use commands::init::cmd_init;
 pub use commands::list::cmd_list;
@@ -58,11 +59,6 @@ pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
 pub use fingerprint::{fingerprint_for_public_key, is_legacy_pin_shape, owner_key_fingerprint};
 pub use fs_atomic::{write_atomic, write_atomic_mode};
-pub use happen_before::{
-    baseline_path, ciphertext_predates_manifest_entry, manifest_digest, read_baseline,
-    record_baseline,
-};
-pub use intent::LocalAdds;
 pub use key_discovery::{
     discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key,
     load_signing_keys,
@@ -82,4 +78,4 @@ pub use signing::{
     sign_keyring_content, verify_keyring_signature,
 };
 pub use tracked_files::{get_git_config_email, validate_tracked_path, TrackedFiles};
-pub use trust_store::{TrustPinStore, TrustStore};
+pub use trust_store::{RingPassStore, TrustPinStore, TrustStore};

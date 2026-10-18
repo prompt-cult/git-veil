@@ -2,9 +2,11 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
-use crate::intent::LocalAdds;
-use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, TrackedFiles};
-use crate::{derive_repo_id, get_remote_push_url};
+use crate::allowance::AllowanceStore;
+use crate::commands::allow::resolve_allowance_anchor;
+use crate::tracked_files::{
+    get_git_config_email, resolve_repo_relative_input, PathResolveMode, TrackedFiles,
+};
 
 /// Adds files to the tracked files list.
 ///
@@ -15,10 +17,11 @@ use crate::{derive_repo_id, get_remote_push_url};
 ///
 /// Like git-secret, files not already in .gitignore are auto-added to it.
 ///
-/// Each path is also recorded in the machine-local intent log in the key
-/// store (src/intent.rs): tracked.json is committed and attacker-writable,
-/// so hide refuses to first-encrypt a path that neither has a committed
-/// ciphertext nor was added on this machine. See "Encryption intent" in
+/// The manifest nomination is also the user's standing instruction, so each
+/// path is recorded in the machine-local allowance store in the key store
+/// (src/allowance.rs): tracked.json is committed and attacker-writable, so
+/// hide refuses to first-encrypt a path that neither has a committed
+/// ciphertext nor was allowed on this machine. See "Allowance" in
 /// docs/design.md.
 pub fn cmd_add(
     repo_root: &Path,
@@ -29,8 +32,10 @@ pub fn cmd_add(
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
 
-    let push_url = get_remote_push_url(repo_root, remote_name)?;
-    let repo_id = derive_repo_id(&push_url)?;
+    let (repo_id, pin) = resolve_allowance_anchor(repo_root, remote_name, key_store)?;
+    let principal = get_git_config_email(repo_root).context(
+        "add records the allowance with the manifest nomination, which needs your git config user.email",
+    )?;
 
     let mut count = 0;
     for file in &files {
@@ -56,7 +61,7 @@ pub fn cmd_add(
         }
 
         tracked.add(relative.clone());
-        LocalAdds::record(key_store, &repo_id, &relative)?;
+        AllowanceStore::record(key_store, &repo_id, &pin, &principal, &relative)?;
         count += 1;
     }
 

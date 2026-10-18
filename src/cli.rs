@@ -390,10 +390,11 @@ repo-relative). Nothing is encrypted yet - hide does that. Files must
 exist, and a symlink must resolve inside the repository, so hide can
 never be tricked into reading or deleting a file outside the repo.
 
-Each added path is recorded in the machine-local intent log in your key
-store: hide refuses to first-encrypt a tracked path that was never added
-on this machine (exit code 72), so a tracked.json modified by someone
-else cannot silently nominate your files for encryption.
+The manifest nomination is also your standing instruction, so each added
+path is recorded in the machine-local allowance store in your key store:
+hide refuses to first-encrypt a tracked path that was never allowed on
+this machine (exit code 72), so a tracked.json modified by someone else
+cannot silently nominate your files for encryption.
 
 Typical flow: init -> trust -> tell (once per collaborator) -> add -> hide.
 
@@ -405,7 +406,39 @@ EXAMPLES
         /// File(s) to add
         #[arg(required = true)]
         files: Vec<String>,
-        /// Git remote name (derives the repository id for the intent log)
+        /// Git remote name (derives the repository id for the allowance store)
+        #[arg(long, default_value = "origin")]
+        remote: String,
+    },
+
+    /// Allow files for encryption on this machine
+    #[command(after_long_help = "\
+Records paths in the machine-local allowance store in your key store:
+this repository, anchored by the trust pin, and this git user, have
+allowed these paths for encryption. tracked.json is committed and
+unsigned, so any repo writer can nominate a path in it; hide refuses to
+first-encrypt a tracked path that was never allowed on this machine
+(exit code 72). Once recorded, an allowance survives manifest changes
+and never needs re-recording. removeperson purges the allowance record
+of a removed principal.
+
+allow resolves paths exactly like add: the file must exist and resolve
+inside the repository. add records the allowance too, so allow is only
+needed for a path someone else nominated, or to allow a path under a
+principal the manifest nomination did not run for.
+
+allow reads your principal from git config user.email and requires an
+established trust pin (git-veil trust) on this machine.
+
+EXAMPLES
+  $ git-veil allow .env
+  $ git-veil allow config/credentials.yml notes.md
+")]
+    Allow {
+        /// File(s) to allow
+        #[arg(required = true)]
+        files: Vec<String>,
+        /// Git remote name (derives the repository id for the allowance store)
         #[arg(long, default_value = "origin")]
         remote: String,
     },
@@ -439,28 +472,28 @@ EXAMPLES
 
     /// List all tracked files
     #[command(after_long_help = "\
-Prints every file tracked in .git-veil/tracked.json. Tracking records
-intent only: whether the plaintext or its .secret ciphertext currently
-exists on disk is not checked.
+Prints every file tracked in .git-veil/tracked.json. Whether the
+plaintext or its .secret ciphertext currently exists on disk is not
+checked.
 
 EXAMPLES
   $ git-veil list
 ")]
     List,
 
-    /// Encrypt all tracked files to the keyring
+    /// Encrypt named tracked files to the keyring
     #[command(after_long_help = "\
-Encrypts every tracked file to every key in the keyring and leaves
+Encrypts each named tracked file to every key in the keyring and leaves
 <name>.secret beside where the plaintext was (notes -> notes.secret).
 You gitignore the PLAINTEXT filenames and commit the .secret files:
 a fresh clone carrying only ciphertext stays decryptable by every
 keyring member via reveal.
 
 hide is TWO-PHASE and ALL-OR-NOTHING: phase 1 reads and validates every
-tracked plaintext and encrypts EVERY file to the full public key set in
-memory - if any plaintext is missing, unreadable or cannot be encrypted,
-hide aborts having changed NOTHING on disk. Phase 2 (only after every
-encryption succeeded) writes each .secret atomically.
+named plaintext and encrypts EVERY named file to the full public key set
+in memory - if any plaintext is missing, unreadable or cannot be
+encrypted, hide aborts having changed NOTHING on disk. Phase 2 (only
+after every encryption succeeded) writes each .secret atomically.
 
 hide only works after the repository is initialized (git-veil init), the
 owner's key is trusted on this machine (git-veil trust), collaborators are
@@ -473,15 +506,42 @@ itself git-ignored - e.g. swallowed by a parent-directory rule like
 .tmp/ - because that ciphertext would silently never reach the
 repository. It WARNS (error code 41) when a tracked plaintext exists on
 disk but is not git-ignored, since a blind `git add -A` would then commit
-it. The plaintext is DELETED by default once every ciphertext is durably
+it. It also REFUSES (exit code 72) a tracked path that has a plaintext on
+disk, no committed ciphertext in the git index, and no allowance on this
+machine: tracked.json is committed and unsigned, so a path added by
+someone else is refused until you allow it here. The allowance is
+recorded by add on this machine, or deliberately with git-veil allow.
+The plaintext is DELETED by default once every ciphertext is durably
 written - the normal loop is reveal (restore plaintexts) -> edit -> hide.
---keep-plaintext leaves the plaintexts beside their ciphertexts. Tracked
-paths whose plaintext is absent are skipped and reported, never an error.
+--keep-plaintext leaves the plaintexts beside their ciphertexts. Each
+named file must exist when you name it (hide resolves paths the way add
+does); once a plaintext is hidden, reveal restores it before hide can
+re-encrypt it.
+
+hide covers exactly the named files: each is resolved the way add
+resolves paths, and must already be tracked - an unknown or untracked
+name refuses (error code 71). The allowance check (error code 72) then
+applies to the named files only, and names only the offenders among
+them. You name the file, the gate checks that file.
+
+THE RING-CHANGE PASS. hide --all re-encrypts EVERY tracked file to the
+current keyring. It is the one whole-manifest operation, and it is
+gated: tell and removeperson stamp the keyring change on this machine
+when they re-sign the keyring, and one hide --all consumes that stamp.
+Without a stamp for this repository on this machine, or when the
+committed keyring no longer matches the stamped version and digest,
+hide --all refuses (exit code 70) and names the repository id. A scoped
+hide never needs the stamp and never consumes it. The pass also refuses
+(error code 42) a committed ciphertext whose path is no longer tracked,
+and a tracked first-encrypt still needs its allowance (error code 72).
+A tracked path with no plaintext on disk is skipped with a note.
 
 EXAMPLES
-  $ git-veil hide    # encrypt and delete plaintexts (the default)
-  $ git-veil hide --keep-plaintext
-  $ git-veil hide --remote upstream
+  $ git-veil hide .env    # encrypt .env and delete the plaintext (the default)
+  $ git-veil hide .env --keep-plaintext
+  $ git-veil hide .env --remote upstream
+  $ git-veil hide .env config.yml    # encrypt exactly the named files
+  $ git-veil hide --all    # the ring-change pass, after tell or removeperson
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
 ")]
     Hide {
@@ -494,28 +554,42 @@ EXAMPLES
         /// Leave plaintext files beside their ciphertexts instead of deleting them
         #[arg(long)]
         keep_plaintext: bool,
+        /// Run the ring-change pass: re-encrypt every tracked file to the current keyring.
+        /// Gated on the ring-change stamp that tell and removeperson write on this machine
+        #[arg(long, conflicts_with = "files")]
+        all: bool,
+        /// Tracked files to hide
+        #[arg(value_name = "FILE", required_unless_present = "all")]
+        files: Vec<String>,
     },
 
-    /// Decrypt all tracked files back to plaintext
+    /// Decrypt named tracked files back to plaintext
     #[command(after_long_help = "\
-Decrypts every tracked file back to its plaintext path, using your X25519
-private key from the local key store. The keyring signature is verified
-against the pinned trusted key before any decryption. Your principal
-comes from git config user.email or --email; a missing private key exits
-with code 21 and the create-and-back-up recipe.
+Decrypts each named tracked file back to its plaintext path, using your
+X25519 private key from the local key store. The keyring signature is
+verified against the pinned trusted key before any decryption. Your
+principal comes from git config user.email or --email; a missing private
+key exits with code 21 and the create-and-back-up recipe.
 
-reveal is the inverse of hide for all files; unhide does one file;
-cat prints one file without touching disk state.
+reveal covers exactly the named files: each must already be tracked -
+an unknown or untracked name refuses (error code 71). Reveal is never
+gated by the encryption allowance: decryption needs only keyring
+membership, so a named path is revealed without any allow step.
 
-reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY tracked file must have its
-.secret ciphertext present and decrypt successfully. Phase 1 verifies and
-decrypts all files in memory - if any ciphertext is missing or cannot be
-decrypted, reveal refuses WITHOUT changing anything on disk. Phase 2
-(only after every decryption succeeded) writes each plaintext atomically.
+reveal is the inverse of hide; unhide does one file; cat prints one
+file without touching disk state.
+
+reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY file in the working set
+must have its .secret ciphertext present and decrypt successfully.
+Phase 1 verifies and decrypts all files in memory - if any ciphertext
+is missing or cannot be decrypted, reveal refuses WITHOUT changing
+anything on disk. Phase 2 (only after every decryption succeeded)
+writes each plaintext atomically.
 
 EXAMPLES
-  $ git-veil reveal
-  $ git-veil reveal --email alice@example.com
+  $ git-veil reveal .env    # restore only .env, leave every other file hidden
+  $ git-veil reveal .env --email alice@example.com
+  $ git-veil reveal .env config.yml    # restore exactly the named files
 ")]
     Reveal {
         /// Your email address
@@ -527,6 +601,9 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long)]
         key_store: Option<PathBuf>,
+        /// Tracked files to reveal
+        #[arg(value_name = "FILE", required = true)]
+        files: Vec<String>,
     },
 
     /// Decrypt a single tracked file to stdout

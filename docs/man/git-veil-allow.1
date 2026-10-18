@@ -1,0 +1,40 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-allow 1  "git-veil-allow " 
+.SH NAME
+git\-veil\-allow \- Allow files for encryption on this machine
+.SH SYNOPSIS
+\fBgit\-veil allow\fR [\fB\-\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+.SH DESCRIPTION
+Allow files for encryption on this machine
+.SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name (derives the repository id for the allowance store)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIFILES\fR>
+File(s) to allow
+.SH EXTRA
+Records paths in the machine\-local allowance store in your key store:
+this repository, anchored by the trust pin, and this git user, have
+allowed these paths for encryption. tracked.json is committed and
+unsigned, so any repo writer can nominate a path in it; hide refuses to
+first\-encrypt a tracked path that was never allowed on this machine
+(exit code 72). Once recorded, an allowance survives manifest changes
+and never needs re\-recording. removeperson purges the allowance record
+of a removed principal.
+
+allow resolves paths exactly like add: the file must exist and resolve
+inside the repository. add records the allowance too, so allow is only
+needed for a path someone else nominated, or to allow a path under a
+principal the manifest nomination did not run for.
+
+allow reads your principal from git config user.email and requires an
+established trust pin (git\-veil trust) on this machine.
+
+EXAMPLES
+  $ git\-veil allow .env
+  $ git\-veil allow config/credentials.yml notes.md
