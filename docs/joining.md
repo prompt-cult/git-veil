@@ -51,8 +51,8 @@ call is ideal. Compare it with the fingerprint recorded in the repository's
 committed `.git-veil/trust.json` before you import (step 4).
 
 Then, and this is critical, the owner delivers the ring-change pass. The
-ring changed, so every tracked ciphertext still carries ciphertext
-encrypted to the old ring:
+keyring changed, so every tracked ciphertext is encrypted to a keyring
+that does not include you:
 
 ```sh
 $ git-veil reveal .env deploy.env
@@ -109,8 +109,7 @@ Summary: 1 imported, 0 skipped
 What happened. Your X25519 private key, the `AGE-SECRET-KEY-1...` line,
 sits in the per-machine key store `$HOME/.git-veil/identities.txt`. It is
 never committed, and it is created mode 0600. Import only your own key. The
-owner's public half arrives with the clone as the committed
-`owner.verifying` file arrives with the clone inside `.git-veil/` as
+owner's public half arrives with the clone inside `.git-veil/` as
 `.git-veil/owner.verifying`. The pin-file from the team (step 4) is what lets
 you pin it. If you have not created a private key yet, exit code 21 prints
 the `age-keygen` recipe. Back the private key up. Without it the
@@ -199,8 +198,8 @@ meet as a newcomer:
    pushed the updated keyring. Run `git pull` first.
 - `decryption failed. This ciphertext was not encrypted to your key and
    no stanza in it is addressed to your X25519 public key` (exit code 60).
-   The owner told you but did not deliver the ring-change pass, or you
-   are on an old commit.
+   The owner told you but did not deliver the ring-change pass, or your
+   clone is missing the re-encrypted ciphertexts.
    Run `git pull`.
 - `no X25519 private key …` (exit code 21). Your key store lacks your
    private key. The message prints the creation and backup recipe. Redo

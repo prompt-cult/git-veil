@@ -241,7 +241,7 @@ diff to show, it prints `unchanged: …`, `no hidden version: …` or
 `git-veil cat .env` writes the plaintext to stdout only. Neither the
 plaintext nor the ciphertext on disk is touched.
 
-Every `hide` and `reveal` names its file(s); the bare form is gone. The
+Every `hide` and `reveal` names its file(s); there is no bare form. The
 command acts on exactly the paths you give it, so keep the naming habit:
 it is the habit that matters in a team, where a whole-manifest pass would
 touch every ciphertext and the commit would look like you edited every

@@ -76,10 +76,10 @@ this machine before touching anything. The refusals, and what to do:
   `git-veil trust --import <pin-file>` (without it).
 - **Exit 70, no committed verifying key.** The message names
   `.git-veil/owner.verifying`. Either the owner has not created and
-  committed it yet (step 1 of the [Solo guide](solo.md)), or this is a
-  repository from the earlier alpha that kept the file at the repository
-  root. The root-level `owner.verifying` is not read. Move it into place
-  and commit:
+  committed it yet (step 1 of the [Solo guide](solo.md)), or the file
+  sits at the repository root. The tool reads the verifying key only
+  from `.git-veil/owner.verifying`; a file at the repository root is
+  not read. Move it into place and commit:
 
   ```sh
   git mv owner.verifying .git-veil/owner.verifying && git commit -m "Move owner.verifying into .git-veil"
@@ -100,8 +100,8 @@ this machine before touching anything. The refusals, and what to do:
   freshness baseline. If the rollback is genuinely yours (a branch
   rewound), re-run `trust` to reset the baseline.
 
-A trust record in the retired 16-hex-character fingerprint format is
-refused as hostile: re-establish trust with `trust`.
+A trust record whose fingerprint is 16 hex characters is refused as
+hostile: re-establish trust with `trust`.
 
 ## The newcomer's failure shapes
 

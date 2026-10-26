@@ -200,7 +200,7 @@ Both paths refuse a pin-file path inside the repository worktree (exit
 71), so the file always travels out of band, the same model as
 `known_hosts` provisioning. The pin lives in the key store, never
 committed; every machine, including the owner's fresh clones, pins for
-itself. A pin or trust record in the retired 16-hex-character fingerprint
+itself. A pin or trust record in the 16-hex-character fingerprint
 format is refused as hostile until trust is re-established (exit 70).
 
 `--suppress-codeowners` records the CODEOWNERS warning's suppression in
@@ -210,11 +210,9 @@ carry a CODEOWNERS file.
 Requires [init](#init) first: it creates the `.git-veil/` directory that
 holds the verifying key the proof reads, and every trust command must run
 at the repository worktree root. The verifying key lives at
-`.git-veil/owner.verifying`, committed. A root-level `owner.verifying`
-from the earlier alpha is not read: move it into place with
-`git mv owner.verifying .git-veil/owner.verifying` and commit; the
-fingerprint is location-independent, so existing pins stay valid. Typical
-next step: [tell](#tell).
+`.git-veil/owner.verifying`, committed. A root-level `owner.verifying` is
+not read: the verifying key is read only from
+`.git-veil/owner.verifying`. Typical next step: [tell](#tell).
 
 ```sh
 $ git-veil show-repo-id                        # get the repo id to pass here
@@ -224,8 +222,9 @@ $ git-veil trust --import ~/demo.pin           # pin-file from export-pin
 
 Exit codes: 13 (repo id does not match the remote), 20 (no matching
 signing seed), 62 (a seed line could not be parsed), 70 (import checks
-failed, ambiguous store, hostile legacy format, missing or unreadable
-verifying key), 71 (pin-file inside the repository), 30.
+failed, ambiguous store, a trust record in the 16-hex-character
+fingerprint format is refused, missing or unreadable verifying key), 71
+(pin-file inside the repository), 30.
 
 ### `export-pin`
 
@@ -306,8 +305,8 @@ $ git-veil verify-keyring
 
 Exit codes: 10 (no committed trust record), 11 (no local pin), 12 (the
 committed record disagrees with the pin), 14 (keyring rollback below the
-freshness baseline), 63 (signature missing or invalid), 70 (hostile legacy
-format), 30.
+freshness baseline), 63 (signature missing or invalid), 70 (a trust
+record in the 16-hex-character fingerprint format is refused), 30.
 
 ### `trust-permissions`
 

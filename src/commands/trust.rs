@@ -1,5 +1,5 @@
 //! Pin creation. Possession proof is the only way to create a pin
-//! directly, and the keyfile argument is gone. A repository must never
+//! directly, and no keyfile argument is accepted. A repository must never
 //! be able to supply its own trust anchor.
 //!
 //! Two pin-creation paths exist, and nothing else.
@@ -35,23 +35,37 @@ use crate::{
     import_x25519_public_key_to_store, TrustPinStore, TrustStore,
 };
 
-/// The repository's committed owner verifying key. Line 1 is the 64-hex
-/// Ed25519 verifying key. Line 2, when present, is the owner's X25519
-/// public key encoding (imported into the key store as a convenience).
-pub(crate) const OWNER_VERIFYING: &str = "owner.verifying";
+/// The repository's committed owner verifying key, inside the .git-veil
+/// state directory. Line 1 is the 64-hex Ed25519 verifying key. Line 2,
+/// when present, is the owner's X25519 public key encoding (imported into
+/// the key store as a convenience).
+pub(crate) const OWNER_VERIFYING: &str = ".git-veil/owner.verifying";
 
-/// Reads and parses the repository's committed `owner.verifying`.
+/// Reads and parses the repository's committed owner verifying key at
+/// `.git-veil/owner.verifying`.
+///
+/// Requires the command to run at the repository worktree root (the caller
+/// resolves repo_root from the current directory) and the `.git-veil/`
+/// state directory to exist, which `git-veil init` creates. A root-level
+/// `owner.verifying` is not read.
 ///
 /// Returns the verifying key, its hex form, and the optional X25519 public
 /// key encoding from the second line.
 pub(crate) fn read_owner_verifying(
     repo_root: &Path,
 ) -> Result<(VerifyingKey, String, Option<String>)> {
-    let path = repo_root.join(OWNER_VERIFYING);
+    let state_dir = repo_root.join(".git-veil");
+    if !state_dir.is_dir() {
+        return Err(coded(
+            ExitCode::Refused,
+            "this directory has no .git-veil state. Run git-veil init at the repository worktree root first.".to_string(),
+        ));
+    }
+    let path = state_dir.join("owner.verifying");
     let content = fs::read_to_string(&path).map_err(|_| {
         coded(
             ExitCode::Refused,
-            "this repository has no committed owner verifying key file. The owner must create and commit it. See the setup documentation.".to_string(),
+            "this repository has no committed owner verifying key file at .git-veil/owner.verifying. The owner must create and commit it. See the setup documentation.".to_string(),
         )
     })?;
     let mut lines = content.lines();
@@ -200,7 +214,7 @@ fn write_pin_state(
     if let Some(previous) = TrustPinStore::read_pin(key_store, repo_id)? {
         if !previous.eq_ignore_ascii_case(&fingerprint) {
             println!(
-                "replacing the previously pinned fingerprint {} for {} with {}",
+                "replacing the pinned fingerprint {} for {} with {}",
                 previous, repo_id, fingerprint
             );
         }
@@ -220,7 +234,7 @@ fn write_pin_state(
         trust_store.set_owner_fingerprint(repo_id.to_string(), fingerprint.clone());
 
         // Reconcile the committed store. A repository move or rename leaves
-        // entries for ids no configured remote derives any more. Entries
+        // entries for ids that no configured remote derives. Entries
         // matching any configured remote are kept, one per remote. The
         // pruned ids are public repository facts, so the removal names
         // them.
@@ -320,8 +334,7 @@ pub fn cmd_trust_import(
     // owner fingerprint recorded in the committed .git-veil/ metadata. The
     // fingerprint is the single documented derivation with the repository id
     // as the label, over the public half and never the seed. An absent
-    // field is a refusal. The metadata predates this rule and must be
-    // refreshed by the owner.
+    // field is a refusal. The owner must refresh the trust metadata.
     let trust_path = repo_root.join(".git-veil/trust.json");
     let trust_store = TrustStore::load_from_file(&trust_path)?;
     let recorded = match trust_store.get_owner_fingerprint(&repo_id) {
