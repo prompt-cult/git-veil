@@ -74,6 +74,19 @@ this machine before touching anything. The refusals, and what to do:
   repository. A fresh clone always starts here, even the owner's. Run
   `git-veil trust <repo-id>` (with the signing seed) or
   `git-veil trust --import <pin-file>` (without it).
+- **Exit 70, no committed verifying key.** The message names
+  `.git-veil/owner.verifying`. Either the owner has not created and
+  committed it yet (step 1 of the [Solo guide](solo.md)), or this is a
+  repository from the earlier alpha that kept the file at the repository
+  root. The root-level `owner.verifying` is not read. Move it into place
+  and commit:
+
+  ```sh
+  git mv owner.verifying .git-veil/owner.verifying && git commit -m "Move owner.verifying into .git-veil"
+  ```
+
+  The fingerprint derivation is location-independent, so every existing
+  pin stays valid and no machine needs to re-run `trust`.
 - **Exit 10, no committed record.** The repository's committed
   `.git-veil/trust.json` has no entry for this repository id. The owner
   must run `trust` on a machine holding the signing key and commit the

@@ -91,14 +91,13 @@ one map (`TrustStore`, src/trust_store.rs):
 
 - `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` - the
   fingerprint of the repository's committed owner verifying key
-  (`owner.verifying`) under the single derivation (see "Fingerprints": the
+  (`.git-veil/owner.verifying`) under the single derivation (see "Fingerprints": the
   repository id is the label). Every gated command compares it against the
   local pin, pin-file import uses it as the witness, and `export-pin`
   prints it as the human out-of-band token. Under the single derivation
   these were once two maps carrying the same value; the schema carries
   one. A legacy file with only `trusted_keys` loads empty and every gated
   command refuses until the owner re-runs `trust`.
-
 Both fields default to absent when missing (pre-0.6 files parse cleanly);
 the file is written pretty-printed and atomically
 (`TrustStore::save_to_file`); a missing file reads as an empty store
@@ -118,6 +117,28 @@ so the name can never escape the pin directory (`TrustPinStore::sanitize_repo_id
 The pin is written only by the two pin-creation paths below; a
 fresh clone has no pin, which is why trust must be re-established per machine.
 
+### The verifying key file lives in .git-veil
+
+The repository's owner verifying key file lives at `.git-veil/owner.verifying`
+and is committed. Line 1 is the 64-hex Ed25519 verifying key. Line 2, when
+present, is the owner's X25519 public key encoding (imported into the key
+store as a convenience during the possession proof). The file is public
+material; committing it is safe and required.
+
+Two placement rules bind every command that reads it:
+
+- The command must run at the git repository worktree root, the same root
+  the remote-derived repository id is resolved from.
+- The `.git-veil/` state directory must exist: `git-veil init` creates it.
+  A read of the verifying key without the state directory refuses and says
+  to run `git-veil init` first.
+
+The earlier alpha kept the file at the repository root. That location is
+not read: a root-level `owner.verifying` is ignored. Move it into place
+with `git mv owner.verifying .git-veil/owner.verifying` and commit. The
+fingerprint derivation is location-independent, so every existing pin
+stays valid and no machine needs to re-run `trust`.
+
 ### Pin creation (possession proof only)
 
 A repository can never supply its own trust anchor: there is no keyfile
@@ -134,8 +155,8 @@ $$
 1: & \textbf{upon } \textsc{Trust}(\mathit{providedId}) \\
 2: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
 3: & \quad \textbf{guard } \mathit{providedId} = \mathit{derivedId} \quad \textbf{else refuse} \ . \ \text{exit 13} \\
-4: & \quad \mathit{cand} \leftarrow \text{line 1 of the committed } \texttt{owner.verifying} \quad . \ \text{64-hex Ed25519 verifying key} \\
-5: & \quad \textbf{if line 2 of } \texttt{owner.verifying} \text{ starts with the bech32 encoding then import it into } S \\
+4: & \quad \mathit{cand} \leftarrow \text{line 1 of the committed } \texttt{.git-veil/owner.verifying} \quad . \ \text{64-hex Ed25519 verifying key} \\
+5: & \quad \textbf{if line 2 of } \texttt{.git-veil/owner.verifying} \text{ starts with the bech32 encoding then import it into } S \\
 6: & \quad \textbf{function } \textsc{ProvePossession}(\mathit{cand}) \\
 7: & \quad\quad seeds \leftarrow \text{lines of } \texttt{signing-keys.txt} \quad . \ \text{a present-but-garbage line is a parse refusal, exit 62} \\
 8: & \quad\quad M \leftarrow \{ s \in seeds : \text{verifying}(s) = \mathit{cand} \} \\
@@ -146,7 +167,7 @@ $$
 13: & \quad \textsc{ProvePossession}(\mathit{cand}) \\
 14: & \quad \text{append } \mathit{cand} \text{ to } \texttt{verifying-keys.txt} \\
 15: & \quad \mathit{fp} \leftarrow \textsc{Fingerprint}(\mathit{derivedId}, \mathit{cand}) \\
-16: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside owner.verifying} \\
+16: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside the verifying key in .git-veil} \\
 17: & \quad \textsc{Reconcile}(T) \\
 18: & \quad P[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the machine pin, outside the repository} \\
 19: & \quad B[\mathit{derivedId}] \leftarrow \bot \quad . \ \text{re-pinning is the recovery ceremony, so the baseline resets with it} \\
@@ -180,7 +201,7 @@ $$
 8: & \quad (\mathit{pinId}, \mathit{pinVK}) \leftarrow \text{parse the pin-file} \\
 9: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
 10: & \quad \textbf{check (a): } \mathit{pinId} = \mathit{derivedId} \\
-11: & \quad \textbf{check (b): } \mathit{pinVK} = \text{the committed } \texttt{owner.verifying} \\
+11: & \quad \textbf{check (b): } \mathit{pinVK} = \text{the committed } \texttt{.git-veil/owner.verifying} \\
 12: & \quad \textbf{check (c): } \textsc{Fingerprint}(\mathit{pinId}, \mathit{pinVK}) = T.\mathit{ownerFingerprints}[\mathit{derivedId}] \\
    & \quad\quad . \ \text{an absent metadata field refuses: the owner must refresh it on a seed-holding machine} \\
 13: & \quad \textbf{if any check fails then refuse} \ . \ \text{exit 70; one of the two channels is compromised} \\
@@ -260,9 +281,9 @@ repository identities - may be named, since refusing to name them buys no
 security and costs the operator the ability to act.
 
 So an attacker who rewrites `trust.json` - or commits a self-consistent
-`owner.verifying`, signed keyring, metadata fingerprint and bogus pin-file -
-achieves nothing on a machine that holds the real seed: the proof fails, and
-an in-repo pin-file is refused by the path gate. Algorithm 2 writes
+`.git-veil/owner.verifying`, signed keyring, metadata fingerprint and bogus
+pin-file - achieves nothing on a machine that holds the real seed: the proof
+fails, and an in-repo pin-file is refused by the path gate. Algorithm 2 writes
 trust.json *before* the pin, so a death between the two writes leaves a
 mismatch, never a silently accepted changed anchor. Re-pinning over a
 different existing fingerprint prints a loud `replacing the previously
@@ -290,12 +311,13 @@ value with stock OS tools:
 
 ```sh
 printf '%s:%s' 'alice@example.com' "$(age-keygen -y private-key.txt)" | sha256sum
-printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
+printf '%s:%s' 'demo+example@github.com' "$(head -n 1 .git-veil/owner.verifying)" | sha256sum
 ```
 
 Use `printf`, never `echo` (echo appends a newline and hashes different
 bytes). Exactly one colon separates label and key. The digest is lowercase
-hex. `owner.verifying` line 1 is the verifying key; `head -n 1` selects it
+hex. `.git-veil/owner.verifying` line 1 is the verifying key; `head -n 1`
+selects it
 because the file may carry the owner's X25519 public key (`age` recipient)
 on line 2.
 
@@ -783,7 +805,8 @@ harmless.
 - **Matching reuses the gitignore matcher** (gix-ignore, the gitoxide
   matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
   character ranges, no escape handling), so the matcher answers whether a
-  pattern covers `owner.verifying` and the `.git-veil/` directory,
+  pattern covers the `.git-veil/` directory (which now carries the
+  verifying key beside the keyring it protects),
   last-match-wins. Owner strings are not validated - only the question
   does any pattern match these paths is answered. Gitea and Forgejo use a
   different pattern language; the gitignore matcher may produce false

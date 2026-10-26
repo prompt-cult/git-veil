@@ -53,6 +53,6 @@ What makes it safe to share:
   path. Send the file over ssh, and read the printed owner fingerprint to
   the importer so they can compare it with the committed
   `.git-veil/trust.json`.
-- **Protect the trust anchor.** A CODEOWNERS file covering
-  `owner.verifying` and `.git-veil/` makes trust-anchor changes review
+- **Protect the trust anchor.** A CODEOWNERS file covering `.git-veil/`
+  makes trust-anchor changes review
   gated on the platform. `init` and `trust` remind you.

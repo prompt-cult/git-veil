@@ -39,8 +39,8 @@ Run `git-veil show-repo-id` to print your repository's ID.
 The repository owner's signing key is pinned on each machine. A repository
 can never supply its own trust anchor. The only way to create a pin directly
 is a possession proof. `git-veil trust <repo-id>` checks the repository's
-committed `owner.verifying` against the verifying key derived from a seed in
-your local signing key store. If no seed matches, trust refuses.
+committed `.git-veil/owner.verifying` against the verifying key derived from
+a seed in your local signing key store. If no seed matches, trust refuses.
 
 Machines without the signing key get their pin by import. A machine that
 holds a seed runs `git-veil export-pin <repo-id> --output <pin-file>`. The
@@ -109,7 +109,7 @@ git-veil tell example@github.com me.pub         # add yourself to the signed key
 printf 'API_KEY=hunter2\n' > .env
 git-veil add .env                               # track the file (gitignores the plaintext name)
 git-veil hide .env                              # encrypt: .env -> .env.secret (plaintext deleted)
-git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
+git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
 git-veil reveal .env                            # decrypt back when you need the plaintext
 ```
@@ -257,7 +257,8 @@ skipped.
 
 The repository owner also needs an Ed25519 keypair for signing the keyring.
 This key is not an `age` key, and no `age` tool makes it. You make it with
-`openssl`, and you back it up:
+`openssl`, and you back it up. Run this in the repository root, after
+`git-veil init` has created the `.git-veil/` directory:
 
 ```sh
 umask 077
@@ -267,9 +268,10 @@ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key. Commit this file. git-veil trust checks your seed against it.
+# The verifying key, into the repository's .git-veil/ directory. Commit it.
+# git-veil trust checks your seed against it.
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > owner.verifying
+  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
 ```
 
 The signing-key file format is one 64-hex-character Ed25519 seed per line in
@@ -278,7 +280,8 @@ verifying fingerprint is pinned for the repository. Commands that
 need a missing key exit with a documented code (`git-veil error-codes`)
 after printing how to create and back it up.
 
-`owner.verifying` holds the 64-hex public half. Commit it to the repository.
+`.git-veil/owner.verifying` holds the 64-hex public half. Commit it to the
+repository beside the rest of the `.git-veil/` state.
 `git-veil trust` checks your seed against it, and `trust --import`
 cross-checks it. Committing it is safe. It is public material, and on its own
 it can never pin anything.

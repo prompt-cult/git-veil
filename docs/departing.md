@@ -1,4 +1,4 @@
-# Departing: removing a collaborator
+# Departing a team repository
 
 A collaborator (`bob@example.com`) leaves the team. The owner removes him
 from the keyring with `removeperson`. In the following, `age` refers to the

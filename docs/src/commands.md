@@ -60,12 +60,13 @@ git-veil init [-q | --quiet]
 ```
 
 Initialises git-veil state: a `.git-veil/` directory holding `keyring`,
-`trust.json` and `tracked.json`. Nothing is encrypted yet; `trust`, `tell`,
-`add` and `hide` all require this state.
+`trust.json`, `tracked.json` and, once the owner has run the key recipe,
+`owner.verifying`, the verifying key they all protect. Nothing is
+encrypted yet; `trust`, `tell`, `add` and `hide` all require this state.
 
 - `-q`, `--quiet` suppresses the CODEOWNERS suggestion and other
   non-error output. The suggestion is worth acting on: protect
-  `owner.verifying` and `.git-veil/` with a CODEOWNERS file so trust-anchor
+  `.git-veil/` with a CODEOWNERS file so trust-anchor
   changes are review gated on the platform.
 - `init` never touches `.gitignore`. The `.secret` ciphertexts are meant
   to be committed, so gitignoring them would defeat the fresh-clone
@@ -181,8 +182,8 @@ argument: a repository must never supply its own trust anchor. Exactly two
 paths create a pin.
 
 1. **Possession proof** (default). `trust <repo_id>` reads the committed
-   `owner.verifying` (64 hex characters on line 1) and checks it against
-   the verifying key derived from every seed in
+   `.git-veil/owner.verifying` (64 hex characters on line 1) and checks it
+   against the verifying key derived from every seed in
    `<key store>/signing-keys.txt`. An exact match is the proof that this
    machine holds the signing key, and the pin is written. No match is a
    refusal: pins are created only on machines holding the signing key.
@@ -191,9 +192,9 @@ paths create a pin.
    [`export-pin`](#export-pin) on a machine that proved possession. Three
    mandatory consistency checks: the pin-file's repo id must match the one
    derived from the remote; its verifying key must exactly match the
-   committed `owner.verifying`; and its owner key fingerprint must match
-   the fingerprint recorded in `.git-veil/trust.json`. Any mismatch is a
-   refusal: one of the two channels is compromised. Exit 70.
+   committed `.git-veil/owner.verifying`; and its owner key fingerprint
+   must match the fingerprint recorded in `.git-veil/trust.json`. Any
+   mismatch is a refusal: one of the two channels is compromised. Exit 70.
 
 Both paths refuse a pin-file path inside the repository worktree (exit
 71), so the file always travels out of band, the same model as
@@ -206,7 +207,14 @@ format is refused as hostile until trust is re-established (exit 70).
 the key store next to the pin, for repositories that genuinely cannot
 carry a CODEOWNERS file.
 
-Requires [init](#init) first. Typical next step: [tell](#tell).
+Requires [init](#init) first: it creates the `.git-veil/` directory that
+holds the verifying key the proof reads, and every trust command must run
+at the repository worktree root. The verifying key lives at
+`.git-veil/owner.verifying`, committed. A root-level `owner.verifying`
+from the earlier alpha is not read: move it into place with
+`git mv owner.verifying .git-veil/owner.verifying` and commit; the
+fingerprint is location-independent, so existing pins stay valid. Typical
+next step: [tell](#tell).
 
 ```sh
 $ git-veil show-repo-id                        # get the repo id to pass here
@@ -216,8 +224,8 @@ $ git-veil trust --import ~/demo.pin           # pin-file from export-pin
 
 Exit codes: 13 (repo id does not match the remote), 20 (no matching
 signing seed), 62 (a seed line could not be parsed), 70 (import checks
-failed, ambiguous store, hostile legacy format), 71 (pin-file inside the
-repository), 30.
+failed, ambiguous store, hostile legacy format, missing or unreadable
+verifying key), 71 (pin-file inside the repository), 30.
 
 ### `export-pin`
 
@@ -271,7 +279,7 @@ A clean host reproduces the exact value with stock OS tools:
 
 ```sh
 printf '%s:%s' 'alice@example.com' "$(age-keygen -y identity.txt)" | sha256sum
-printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
+printf '%s:%s' 'demo+example@github.com' "$(head -n 1 .git-veil/owner.verifying)" | sha256sum
 ```
 
 Use `printf`, never `echo` (`echo` appends a newline and hashes different
@@ -781,10 +789,12 @@ Exit codes: none.
 git-veil clean [--yes]
 ```
 
-Removes the `.git-veil/` state directory: keyring, trust.json and
-tracked.json. `.gitignore` is never rewritten, and the in-place
+Removes the `.git-veil/` state directory: keyring, trust.json,
+tracked.json and the committed `owner.verifying` verifying key that lives
+beside them. `.gitignore` is never rewritten, and the in-place
 `.secret` ciphertext files are ordinary committable files that `clean`
-does not disown.
+does not disown. Everything `clean` removes is recoverable from git
+history on a branch that carries the commits.
 
 The `.secret` ciphertexts can be the only remaining copy of a secret, so
 a clean that would destroy tracked state or ciphertext refuses unless
