@@ -31,7 +31,7 @@ Rust `rage` library to work with the keys.
 
 | Crypto term (git-veil core and code) | ageism (`age` vocabulary) |
 |--------------------------------------|-----------------------------------|
-| X25519 public key - bech32-encoded per the `age` spec encoding (`age1...`); X25519 per RFC 7748 | recipient |
+| X25519 public key - bech32-encoded per the `age` spec encoding, an `age1xxxx` string; X25519 per RFC 7748 | recipient |
 | X25519 private key - bech32-encoded per the `age` spec encoding (`AGE-SECRET-KEY-1...`) | identity, identity file |
 | principal - the keyring label (a collaborator's email) | - (`age` has no word for it) |
 | Ed25519 verifying key - the public half of the keyring signing key | - (already standard vocabulary) |
@@ -299,8 +299,8 @@ $$
 
 printed as 64 lowercase hex characters. The label is the principal label
 for a keyring principal, or the repository id for the owner key. The
-public key encoding $enc(k)$ is the bech32 X25519 public key (`age1...`) or
-the 64 hex character Ed25519 verifying key. Both inputs are used verbatim -
+public key encoding $enc(k)$ is the bech32 X25519 public key, an `age1xxxx`
+string, or the 64 hex character Ed25519 verifying key. Both inputs are used verbatim -
 no trimming, no case folding - so the construction is reproducible outside
 the tool.
 

@@ -54,7 +54,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- X25519 public key encoding (age1...) of the key to export:_default' \
+':identifier -- X25519 public key encoding (age1xxxx) of the key to export:_default' \
 && ret=0
 ;;
 (removekey)
@@ -64,7 +64,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':identifier -- Exact X25519 public key encoding (age1...) of the key to remove:_default' \
+':identifier -- Exact X25519 public key encoding (age1xxxx) of the key to remove:_default' \
 && ret=0
 ;;
 (trust)
@@ -96,7 +96,7 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':label -- Principal label (keyring principal) or repository id (owner key):_default' \
-':public_key -- Public key encoding\: bech32 X25519 public key (age1...) or 64-hex Ed25519 verifying key:_default' \
+':public_key -- Public key encoding\: bech32 X25519 public key (age1xxxx) or 64-hex Ed25519 verifying key:_default' \
 && ret=0
 ;;
 (tell)
@@ -108,7 +108,7 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Collaborator'\''s email:_default' \
-':public_key -- Path to a file containing the collaborator'\''s X25519 public key encoding (age1...):_default' \
+':public_key -- The collaborator'\''s bech32 X25519 public key encoding (age1xxxx), pasted literally:_default' \
 && ret=0
 ;;
 (removeperson)

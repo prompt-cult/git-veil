@@ -34,7 +34,7 @@ $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
 owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
-$ git-veil tell newcomer@example.com newcomer.pub
+$ git-veil tell newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
 note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
@@ -42,8 +42,8 @@ note: the keyring changed on this machine. A ring-change pass is due: every trac
 Send the owner your X25519 public key first. Create an X25519 private key
 (`age` identity) as in step 1 of [solo.md](solo.md). git-veil has no key
 generation. Import the key with `git-veil import newcomer-age-identity.txt`.
-Send the `age1...` public key line it printed, or run
-`git-veil export age1... --output newcomer.pub`.
+Send the `age1xxxx` public key line it printed. `git-veil export age1xxxx`
+prints it again.
 
 The owner then transfers `/tmp/demo.pin` to you out of band, for example
 with `scp`. The owner reads you the printed owner key fingerprint. A voice

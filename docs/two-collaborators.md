@@ -34,8 +34,8 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 
 git-veil import my-age-identity.txt
 git-veil trust demo+example@github.com  # possession proof. The seed must match .git-veil/owner.verifying
-git-veil export age1... --output me.pub
-git-veil tell example@github.com me.pub    # the owner must be in the keyring too
+git-veil export age1xxxx
+git-veil tell example@github.com age1xxxx    # the owner must be in the keyring too
 git-veil add .env && git-veil hide .env
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
 git push
@@ -43,30 +43,30 @@ git push
 
 ## Part 2 - the key handoff (the only manual exchange)
 
-Public keys travel as plain text files over any channel you
+Public keys travel as plain text over any channel you
 both trust. Alice creates her X25519 private key (`age` identity)
 exactly as in step 1 of [solo.md](solo.md), imports it into her key
 store, and sends the public key encoding to the owner:
 
 ```sh
-age-keygen -o alice-age-identity.txt      # prints the age1... public key line
+age-keygen -o alice-age-identity.txt      # prints the age1xxxx public key line
 git-veil import alice-age-identity.txt
-git-veil export age1... --output alice.pub   # or just send the printed public key line
+git-veil export age1xxxx                  # prints the public key line again, to copy
 ```
 
-The owner verifies out of band that `alice.pub` really is Alice's key.
+The owner verifies out of band that the pasted string really is Alice's key.
 Read the public key encoding or its fingerprint to her over a voice call,
 or use any channel an attacker cannot rewrite. Then the owner adds her to
 the keyring:
 
 ```sh
-$ git-veil tell alice@example.com alice.pub
+$ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
 
 What happened. The keyring signature was verified against the pinned owner
-key before the change. A canary was test-encrypted to `alice.pub`, so a key
+key before the change. A canary was test-encrypted to the pasted key, so a key
 that cannot encrypt is never signed in. The keyring was re-signed with the
 owner's Ed25519 key. Telling the same email twice updates the entry instead
 of duplicating it.

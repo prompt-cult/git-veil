@@ -11,8 +11,9 @@ use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add, cmd_cat, cmd_changes, cmd_clean, cmd_hide, cmd_import, cmd_init, cmd_list_keys,
     cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
-    cmd_unhide, cmd_verify_keyring, cmd_whoami, export_public_key, generate_signing_keypair,
-    generate_x25519_private_key, x25519_public_key_encoding, Keyring, TrackedFiles, TrustStore,
+    cmd_unhide, cmd_verify_keyring, cmd_whoami, exit_code_of, export_public_key,
+    generate_signing_keypair, generate_x25519_private_key, x25519_public_key_encoding, ExitCode,
+    Keyring, TrackedFiles, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -146,19 +147,16 @@ impl TestRepo {
         }
     }
 
-    /// Generates a collaborator key, writes the X25519 public key encoding
-    /// to a file, and runs tell to add them to the keyring.
+    /// Generates a collaborator key and runs tell to add them to the
+    /// keyring, passing the literal X25519 public key encoding.
     fn add_collaborator(&self, email: &str) -> (age::x25519::Identity, String) {
         let collab_identity = generate_x25519_private_key();
         let collab_recipient = x25519_public_key_encoding(&collab_identity);
 
-        let key_file = self.repo.join(&format!("{}.recipient", email));
-        fs::write(&key_file, &collab_recipient).expect("write collab recipient file");
-
         cmd_tell(
             &self.repo.path,
             email,
-            &format!("{}.recipient", email),
+            &collab_recipient,
             "origin",
             &self.key_store.path,
             None,
@@ -275,21 +273,98 @@ fn test_tell_adds_collaborator() {
 fn test_tell_canary_encrypts_before_signing() {
     let fixture = TestRepo::new("tell-canary");
 
-    fs::write(
-        fixture.repo.join("bad.recipient"),
-        "not-a-valid-recipient\n",
-    )
-    .unwrap();
-
     let result = cmd_tell(
         &fixture.repo.path,
         "bob@example.com",
-        "bad.recipient",
+        "not-a-valid-recipient",
         "origin",
         &fixture.key_store.path,
         None,
     );
     assert!(result.is_err(), "tell with bad key should fail");
+}
+
+#[test]
+fn test_tell_with_literal_key_succeeds() {
+    let fixture = TestRepo::new("tell-literal");
+
+    let identity = generate_x25519_private_key();
+    let recipient = x25519_public_key_encoding(&identity);
+    cmd_tell(
+        &fixture.repo.path,
+        "carol@example.com",
+        &recipient,
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect("tell with a literal key");
+
+    let keyring_text = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
+    assert_eq!(keyring.entries.len(), 1);
+    assert_eq!(keyring.entries[0].email, "carol@example.com");
+    assert_eq!(keyring.entries[0].public_key, recipient);
+    assert!(keyring.signature.is_some(), "keyring should be signed");
+}
+
+#[test]
+fn test_tell_with_path_argument_refuses() {
+    let fixture = TestRepo::new("tell-path");
+
+    let err = cmd_tell(
+        &fixture.repo.path,
+        "alice@example.com",
+        "alice.pub",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect_err("tell with a path-shaped argument must refuse");
+    assert_eq!(
+        exit_code_of(&err),
+        ExitCode::KeyParseFailure as i32,
+        "the refusal exits with the documented key-parse code"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("not a valid X25519 public key encoding"),
+        "the refusal names the key requirement: {message}"
+    );
+    assert!(
+        message.contains("Paste the bech32 public key"),
+        "the refusal states the remedy: {message}"
+    );
+    let keyring_text = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+    assert!(
+        !keyring_text.contains("alice@example.com"),
+        "keyring unchanged on refusal"
+    );
+}
+
+#[test]
+fn test_tell_with_malformed_key_refuses() {
+    let fixture = TestRepo::new("tell-malformed");
+
+    let err = cmd_tell(
+        &fixture.repo.path,
+        "bob@example.com",
+        "definitely-not-a-key",
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect_err("tell with a malformed key must refuse");
+    assert_eq!(
+        exit_code_of(&err),
+        ExitCode::KeyParseFailure as i32,
+        "the refusal exits with the documented key-parse code"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("not a valid X25519 public key encoding"),
+        "the refusal names the key requirement: {message}"
+    );
 }
 
 #[test]

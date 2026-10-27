@@ -74,7 +74,7 @@ public key encoding. The private key is usually the only one in his
 store, so `--yes` confirms its removal:
 
 ```sh
-git-veil removekey age1... --yes
+git-veil removekey age1xxxx --yes
 ```
 
 This is destructive and local-only. It does not touch any repository,

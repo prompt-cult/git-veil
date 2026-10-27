@@ -119,7 +119,7 @@ git-veil export <identifier> [--output <file>] [--key-store <dir>]
 ```
 
 Prints, or with `--output` writes, the X25519 public key encoding
-(`age1...`) for the given key, read from the local key store on this
+(`age1xxxx`) for the given key, read from the local key store on this
 machine. This is the key handoff between collaborators: each collaborator
 runs `export` on their own machine and sends the public key encoding to
 the owner, who adds it to the keyring with `tell`. It cannot export a
@@ -132,7 +132,7 @@ about.
 - Touches no repository state and needs no `init` or `trust`.
 
 ```sh
-$ git-veil export age1axmf... --output alice.pub
+$ git-veil export age1xxxx
 ```
 
 Exit codes: 30 (unsafe key store permissions), 1 (no matching key in the
@@ -161,7 +161,7 @@ encoding exactly matches the identifier is removed.
   number and the corrupt line, so you can delete exactly it.
 
 ```sh
-$ git-veil removekey age1axmf... --yes
+$ git-veil removekey age1xxxx --yes
 ```
 
 Exit codes: 30, 1 (the `--yes` guard, or a corrupt store).
@@ -270,7 +270,7 @@ FP = SHA-256( UTF8(label) + ":" + UTF8(public-key-encoding) )
 
 as 64 lowercase hex characters. The label is the principal for a keyring
 entry, or the repository id for the owner key. The public key encoding is
-the bech32 X25519 public key (`age1...`) or the 64-hex Ed25519 verifying
+the bech32 X25519 public key (`age1xxxx`) or the 64-hex Ed25519 verifying
 key. Both arguments are used verbatim.
 
 This is a pure function: no repository, no key store, no pin, no network.
@@ -359,14 +359,15 @@ re-signs the keyring with the owner's Ed25519 signing key.
   [The ring-change pass](#the-ring-change-pass) and
   [Two collaborators](two-collaborators.md).
 
-The public key file's first content line must be the X25519 public key
-encoding; [`export`](#export) writes exactly that.
+The second argument is the collaborator's X25519 public key encoding
+itself, the `age1xxxx` string pasted as text. [`export`](#export) prints
+exactly that string.
 
 Requires [init](#init), an established pin ([trust](#trust)) and the
 signing key in the local key store.
 
 ```sh
-$ git-veil tell alice@example.com alice.pub
+$ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```

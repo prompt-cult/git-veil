@@ -86,7 +86,7 @@ pub fn default_key_store() -> Result<PathBuf> {
         })
 }
 
-/// Parses a bech32 X25519 public key encoding (`age1...`) into an
+/// Parses a bech32 X25519 public key encoding (`age1xxxx`) into an
 /// [`X25519PublicKey`].
 pub fn parse_x25519_public_key(s: &str) -> Result<X25519PublicKey> {
     s.trim().parse::<X25519PublicKey>().map_err(|e| {

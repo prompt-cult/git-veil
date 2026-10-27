@@ -101,12 +101,10 @@ impl Fixture {
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
         let id = generate_x25519_private_key();
         let r = x25519_public_key_encoding(&id);
-        let fname = format!("{}.recipient", email);
-        fs::write(self.repo.join(&fname), &r).unwrap();
         cmd_tell(
             &self.repo.path,
             email,
-            &fname,
+            &r,
             "origin",
             &self.key_store.path,
             None,
@@ -509,11 +507,10 @@ fn test_tell_updates_existing_email() {
     // Tell again with a new key for the same email
     let id2 = generate_x25519_private_key();
     let r2 = x25519_public_key_encoding(&id2);
-    fs::write(f.repo.join("alice2.recipient"), &r2).unwrap();
     cmd_tell(
         &f.repo.path,
         "alice@example.com",
-        "alice2.recipient",
+        &r2,
         "origin",
         &f.key_store.path,
         None,
@@ -664,12 +661,11 @@ fn test_tell_fails_with_code_20_when_signing_key_missing() {
 
     let id = git_veil::generate_x25519_private_key();
     let r = git_veil::x25519_public_key_encoding(&id);
-    fs::write(f.repo.join("bob.recipient"), &r).unwrap();
 
     let err = cmd_tell(
         &f.repo.path,
         "bob@example.com",
-        "bob.recipient",
+        &r,
         "origin",
         &f.key_store.path,
         None,

@@ -92,7 +92,7 @@ EXAMPLES
     /// Export an X25519 public key from the local key store
     #[command(after_long_help = "\
 Prints - or with --output writes - the X25519 public key (\"age\"
-recipient), bech32-encoded (age1...), for the given key, read from the
+recipient), bech32-encoded (age1xxxx), for the given key, read from the
 local key store on this machine ($GIT_VEIL_HOME or $HOME/.git-veil). This
 is the key handoff between collaborators without any external tool: the
 local store only holds keys THIS machine knows about (your imported
@@ -111,11 +111,11 @@ are selected by public key string only.
 export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
-  $ git-veil export age1axmf...                     # to stdout
-  $ git-veil export age1axmf... --output alice.pub  # hand-off file
+  $ git-veil export age1xxxx                     # to stdout
+  $ git-veil export age1xxxx --output alice.pub  # hand-off file
 ")]
     Export {
-        /// X25519 public key encoding (age1...) of the key to export
+        /// X25519 public key encoding (age1xxxx) of the key to export
         identifier: String,
         /// Write the public key encoding to this file instead of stdout
         #[arg(long)]
@@ -152,12 +152,12 @@ removekey never rewrites a store it could not fully parse. On success a
 per-store summary prints the public key encodings removed.
 
 EXAMPLES
-  $ git-veil removekey age1axmf...                 # exact public key encoding
-  $ git-veil removekey age1axmf... --yes           # confirm only-private-key removal
-  $ git-veil removekey age1axmf... --key-store /path/to/store
+  $ git-veil removekey age1xxxx                 # exact public key encoding
+  $ git-veil removekey age1xxxx --yes           # confirm only-private-key removal
+  $ git-veil removekey age1xxxx --key-store /path/to/store
 ")]
     RemoveKey {
-        /// Exact X25519 public key encoding (age1...) of the key to remove
+        /// Exact X25519 public key encoding (age1xxxx) of the key to remove
         identifier: String,
         /// Confirm destructive removal: required when the target is the only
         /// private key in the store.
@@ -282,7 +282,7 @@ printed as 64 lowercase hex characters.
 
 label is the principal label for a keyring principal, or the repository
 id for the owner key. public-key-encoding is the bech32 X25519 public
-key (age1...) or the 64 hex character Ed25519 verifying key. Both
+key (age1xxxx) or the 64 hex character Ed25519 verifying key. Both
 arguments are used verbatim - no trimming, no case folding.
 
 This is a pure function: no repository, no key store, no pin, no
@@ -296,20 +296,24 @@ bytes). Exactly one colon separates label and key. The digest is
 lowercase hex.
 
 EXAMPLES
-  $ git-veil fingerprint alice@example.com age1axmf...
+  $ git-veil fingerprint alice@example.com age1xxxx
   $ git-veil fingerprint demo+example@github.com 3f1a9c...64hex
 ")]
     Fingerprint {
         /// Principal label (keyring principal) or repository id (owner key)
         label: String,
-        /// Public key encoding: bech32 X25519 public key (age1...) or 64-hex Ed25519 verifying key
+        /// Public key encoding: bech32 X25519 public key (age1xxxx) or 64-hex Ed25519 verifying key
         public_key: String,
     },
 
     /// Add a collaborator's X25519 public key to the keyring and re-sign it
     #[command(after_long_help = "\
 Adds a collaborator's X25519 public key to the repository keyring and
-re-signs the keyring with the owner's Ed25519 signing key. The existing
+re-signs the keyring with the owner's Ed25519 signing key. The second
+argument is the collaborator's bech32 X25519 public key encoding
+(age1xxxx), pasted literally: the encoding git-veil export prints on the
+collaborator's machine, or age-keygen -y prints from their key file. A
+file name is not a valid key encoding and is refused. The existing
 keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test-encrypted to the new key so a key that
 cannot encrypt is never signed into the ring.
@@ -327,12 +331,12 @@ this machine, and the signing key in the local key store. Next steps:
 add files, then hide.
 
 EXAMPLES
-  $ git-veil tell alice@example.com alice.pub
+  $ git-veil tell alice@example.com age1xxxx
 ")]
     Tell {
         /// Collaborator's email
         email: String,
-        /// Path to a file containing the collaborator's X25519 public key encoding (age1...)
+        /// The collaborator's bech32 X25519 public key encoding (age1xxxx), pasted literally
         public_key: String,
         /// Git remote name
         #[arg(long, default_value = "origin")]

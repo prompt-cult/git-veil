@@ -19,10 +19,10 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIIDENTIFIER\fR>
-X25519 public key encoding (age1...) of the key to export
+X25519 public key encoding (age1xxxx) of the key to export
 .SH EXTRA
 Prints \- or with \-\-output writes \- the X25519 public key ("age"
-recipient), bech32\-encoded (age1...), for the given key, read from the
+recipient), bech32\-encoded (age1xxxx), for the given key, read from the
 local key store on this machine ($GIT_VEIL_HOME or $HOME/.git\-veil). This
 is the key handoff between collaborators without any external tool: the
 local store only holds keys THIS machine knows about (your imported
@@ -41,5 +41,5 @@ are selected by public key string only.
 export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
-  $ git\-veil export age1axmf...                     # to stdout
-  $ git\-veil export age1axmf... \-\-output alice.pub  # hand\-off file
+  $ git\-veil export age1xxxx                     # to stdout
+  $ git\-veil export age1xxxx \-\-output alice.pub  # hand\-off file

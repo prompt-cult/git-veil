@@ -16,7 +16,7 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 Principal label (keyring principal) or repository id (owner key)
 .TP
 <\fIPUBLIC_KEY\fR>
-Public key encoding: bech32 X25519 public key (age1...) or 64\-hex Ed25519 verifying key
+Public key encoding: bech32 X25519 public key (age1xxxx) or 64\-hex Ed25519 verifying key
 .SH EXTRA
 Computes and prints the single fingerprint derivation every git\-veil
 fingerprint uses:
@@ -27,7 +27,7 @@ printed as 64 lowercase hex characters.
 
 label is the principal label for a keyring principal, or the repository
 id for the owner key. public\-key\-encoding is the bech32 X25519 public
-key (age1...) or the 64 hex character Ed25519 verifying key. Both
+key (age1xxxx) or the 64 hex character Ed25519 verifying key. Both
 arguments are used verbatim \- no trimming, no case folding.
 
 This is a pure function: no repository, no key store, no pin, no
@@ -41,5 +41,5 @@ bytes). Exactly one colon separates label and key. The digest is
 lowercase hex.
 
 EXAMPLES
-  $ git\-veil fingerprint alice@example.com age1axmf...
+  $ git\-veil fingerprint alice@example.com age1xxxx
   $ git\-veil fingerprint demo+example@github.com 3f1a9c...64hex

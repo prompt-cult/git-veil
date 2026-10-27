@@ -20,7 +20,7 @@ const TELL_CANARY: &[u8] = b"git-veil tell canary";
 pub fn cmd_tell(
     repo_root: &Path,
     email: &str,
-    collaborator_key_path: &str,
+    collaborator_key: &str,
     remote_name: &str,
     key_store: &Path,
     signing_key_selection: Option<&str>,
@@ -34,19 +34,17 @@ pub fn cmd_tell(
     let (repo_id, trusted_fingerprint, _) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
-    // Read and parse the collaborator key file. Relative paths resolve
-    // against repo_root. The first content line holds the X25519 public
-    // key encoding. Blank lines and # comment lines are skipped, the
-    // same leniency the key store reads apply, so a hand-shared file
-    // with a leading comment parses.
-    let key_content = fs::read_to_string(repo_root.join(collaborator_key_path))
-        .with_context(|| "failed to read the collaborator key file".to_string())?;
-    let public_key_str = key_content
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty() && !line.starts_with('#'))
-        .unwrap_or("");
-    let collaborator_public_key = parse_x25519_public_key(public_key_str)?;
+    // The second argument is the collaborator's bech32 X25519 public key
+    // encoding, pasted literally. It is validated by parsing before any
+    // keyring mutation, and the trimmed encoding is what the keyring
+    // stores.
+    let public_key_str = collaborator_key.trim();
+    let collaborator_public_key = parse_x25519_public_key(public_key_str).map_err(|_| {
+        coded(
+            ExitCode::KeyParseFailure,
+            "The second argument is not a valid X25519 public key encoding. Paste the bech32 public key printed by git-veil export or age-keygen -y.",
+        )
+    })?;
 
     // Test-encrypt a canary to the collaborator key to verify it can
     // actually encrypt, before any keyring mutation. A

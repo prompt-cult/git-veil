@@ -392,11 +392,10 @@ fn test_list_keys_prints_the_binding_fingerprint_per_principal() {
     for email in ["alice@example.com", "bob@example.com"] {
         let identity = generate_x25519_private_key();
         let recipient = x25519_public_key_encoding(&identity);
-        fs::write(repo.join(&format!("{email}.recipient")), &recipient).unwrap();
         cmd_tell(
             &repo.path,
             email,
-            &format!("{email}.recipient"),
+            &recipient,
             "origin",
             &key_store.path,
             None,

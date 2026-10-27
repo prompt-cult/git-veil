@@ -176,16 +176,16 @@ Each collaborator, on their machine, creates their own X25519 private key
 
 ```sh
 $ age-keygen -o alice-age-identity.txt
-# public key: age1...        # this line goes to the owner
+# public key: age1xxxx      # this line goes to the owner
 $ git-veil import alice-age-identity.txt
 ```
 
-The owner then adds each one. The collaborator key file's first content
-line must be the X25519 public key encoding, so each collaborator exports
-it with `git-veil export`:
+The owner then adds each one. The `tell` argument after the email is the
+X25519 public key encoding itself, pasted as text, so each collaborator
+sends the `age1xxxx` line their `git-veil export` prints:
 
 ```sh
-$ git-veil tell alice@example.com alice.pub
+$ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
@@ -193,7 +193,7 @@ note: the keyring changed on this machine. A ring-change pass is due: every trac
 What happened. This is the git-secret `tell` split into two steps.
 First the key hand-off, then ring membership. The reason is difference 1.
 There is no shared gpg keychain for `tell` to look keys up in. The public
-key arrives as an explicit file, and the owner's `tell` signs it into
+key arrives as pasted text, and the owner's `tell` signs it into
 the keyring. In this section `age` is the open source `age` encryption
 tooling. It is installed separately, and `git-veil` uses the Rust `rage`
 library to work with the keys. Collaborators who want a head start can

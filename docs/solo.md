@@ -44,7 +44,7 @@ umask 077   # everything created below stays private to you
 # The X25519 private key, for encryption and decryption.
 age-keygen -o my-age-identity.txt
 # Output includes:
-#   # public key: age1...    your X25519 public key. Share it.
+#   # public key: age1xxxx    your X25519 public key. Share it.
 #   AGE-SECRET-KEY-1...      your X25519 private key. Keep it secret.
 
 # The Ed25519 signing key, for signing the keyring. Made with openssl, not age.
@@ -142,8 +142,8 @@ for that flow.
 ## 4. Put yourself in the keyring
 
 ```sh
-$ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3 --output me.pub
-$ git-veil tell example@github.com me.pub
+$ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
+$ git-veil tell example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 added example@github.com to the keyring
 note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
 ```
@@ -154,8 +154,8 @@ store file is `signing-keys.txt`. The key whose verifying fingerprint matches
 the pin `trust` wrote is the one used. `tell` verified the existing keyring
 signature against your pin, test-encrypted an in-memory canary to the new
 key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
-committed. The collaborator key file is the exported public key. Its first
-content line must be the X25519 public key encoding.
+committed. The `tell` argument after the email is the X25519 public key
+encoding itself, pasted as text. `export` prints exactly that string.
 
 The note names the ring-change ceremony. A ring change stamps a pass as
 due on this machine, and one `hide --all` delivers it. On a fresh
