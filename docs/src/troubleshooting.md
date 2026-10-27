@@ -22,13 +22,13 @@ public API: they are never renumbered, only appended.
 | 30 | UnsafeKeyStorePermissions | Key store directory or private key file is group/world accessible |
 | 40 | CiphertextIgnored | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41 | PlaintextNotIgnored | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
-| 42 | OrphanedCiphertext | A committed `.secret` ciphertext path is not tracked; the whole-manifest pass refuses it |
+| 42 | OrphanedCiphertext | A committed `.secret` ciphertext path is not tracked; `rotate` refuses it |
 | 43 | PlaintextTracked | The plaintext is tracked in git, which `reveal` and `unhide` refuse |
 | 60 | DecryptionFailed | Ciphertext could not be decrypted with the local private key |
 | 61 | EncryptionFailed | Encryption failed |
 | 62 | KeyParseFailure | A key, keyring or signature could not be parsed |
 | 63 | SignatureVerificationFailed | Keyring signature missing or invalid |
-| 70 | Refused | Policy refusal (init over established trust, `clean` without `--yes`) |
+| 70 | Refused | Policy refusal (init over established trust, `clean` without `--yes`, `rotate` without a due ring-change stamp) |
 | 71 | UnsafePath | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
 | 72 | UnintendedEncryption | `hide` refuses to first-encrypt a tracked path never allowed on this machine |
 
@@ -134,13 +134,24 @@ half-encrypted tree:
 - **Exit 40**. The `.secret` ciphertext path is itself git-ignored, for
   example swallowed by a parent rule like `.tmp/`. Fix the ignore rules
   so the ciphertext will be committed.
-- **Exit 42**. A committed `.secret` path is no longer tracked. Untrack
-  it deliberately with `git-veil remove`, or re-track it with `add`.
 - **Exit 41**, a warning only. A tracked plaintext is on disk but not
   gitignored; a blind `git add -A` would commit it. Gitignore the
   plaintext name.
 - **Exit 71**. A named file is not tracked, or a path is unsafe (a
   symlink escaping the repository, a path outside it).
+
+## The rotate refusals
+
+`rotate` refuses before it re-encrypts anything, so a refusal never
+leaves a half-rotated tree:
+
+- **Exit 70**. The ring-change pass is not due, or the stamp is stale:
+  the committed keyring no longer matches the ring change this machine
+  stamped. The pass exists to turn a ring change into ciphertext, and
+  one pass consumes one change. Run `git-veil rotate` only after `tell`
+  or `removeperson`; see [Commands - rotate](commands.md#rotate).
+- **Exit 42**. A committed `.secret` path is no longer tracked. Untrack
+  it deliberately with `git-veil remove`, or re-track it with `add`.
 
 ## Decryption and rotation (exit 60)
 
@@ -148,7 +159,9 @@ Exit 60 means no stanza in the ciphertext is addressed to your X25519
 public key. The common causes, in order:
 
 1. You are on an old commit. `git pull`.
-2. The owner has not delivered the ring-change pass.
+2. The owner has not delivered the ring-change pass. The owner runs
+   `git-veil rotate`, then commits and pushes the fresh ciphertexts. See
+   [Commands - rotate](commands.md#rotate).
 
 Remember that a removed collaborator can still decrypt every ciphertext
 written while they were a member, straight out of git history. Rotation of

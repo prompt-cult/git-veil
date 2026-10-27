@@ -1,0 +1,49 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH git-veil-rotate 1  "git-veil-rotate " 
+.SH NAME
+git\-veil\-rotate \- Re\-encrypt every tracked ciphertext to the current keyring
+.SH SYNOPSIS
+\fBgit\-veil rotate\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Re\-encrypt every tracked ciphertext to the current keyring
+.SH OPTIONS
+.TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH EXTRA
+Re\-encrypts every tracked ciphertext to the current keyring: each
+<name>.secret on disk is decrypted in memory and re\-encrypted to the
+full current keyring, then written back atomically. This is the
+ring\-change pass: run it after tell or removeperson so the committed
+ciphertext reflects the updated keyring.
+
+rotate is TWO\-PHASE and ALL\-OR\-NOTHING: phase 1 decrypts and re\-encrypts
+every working\-set ciphertext in memory \- if any ciphertext is missing or
+cannot be rotated, rotate aborts having changed NOTHING on disk. Phase 2
+(only after every re\-encryption succeeded) writes each .secret atomically.
+
+rotate NEVER TOUCHES PLAINTEXTS. The ciphertext is the input: no
+plaintext is read, written, deleted or compared, and none is left on
+disk by the pass. An edited\-not\-yet\-hidden plaintext is orthogonal to
+the pass; hide encrypts it later.
+
+The pass is gated. tell and removeperson stamp the keyring change on
+this machine when they re\-sign the keyring, and one rotate consumes
+that stamp. Without a stamp for this repository on this machine, or
+when the committed keyring does not match the stamped version and
+digest, rotate refuses (exit code 70) and names the repository id. It
+also refuses (error code 42) a committed ciphertext whose path is no
+longer tracked: the pass covers the whole manifest, and an untracked
+ciphertext would silently stay decryptable by removed collaborators.
+A tracked path with no .secret ciphertext on disk is skipped with a
+note.
+
+EXAMPLES
+  $ git\-veil rotate    # the ring\-change pass, after tell or removeperson

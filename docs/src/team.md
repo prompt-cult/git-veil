@@ -19,6 +19,10 @@ What makes it safe to share:
   first-encrypt a path you never allowed on this machine (exit 72), and
   you answer with `git-veil allow`. See
   [Commands - allow](commands.md#allow).
+- **A ring-change pass.** `tell` and `removeperson` re-sign the keyring
+  but change no ciphertext. `git-veil rotate` delivers the change: it
+  re-encrypts every tracked ciphertext to the current ring, in memory.
+  One pass consumes one change. See [Commands - rotate](commands.md#rotate).
 
 ## The flows
 

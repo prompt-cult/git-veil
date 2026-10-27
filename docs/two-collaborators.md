@@ -62,7 +62,7 @@ the keyring:
 ```sh
 $ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 What happened. The keyring signature was verified against the pinned owner
@@ -73,6 +73,20 @@ of duplicating it.
 
 Important. Telling Alice does not change ciphertext that already exists.
 Files hidden before she was told were encrypted only to the owner's key.
+To bring her in, the owner delivers the ring-change pass with `git-veil
+rotate`: no reveal step, and the ciphertexts never leave the committed
+state mid-ceremony.
+
+```sh
+git-veil rotate
+git add .git-veil/keyring .env.secret
+git commit -m "Add alice to keyring and re-encrypt"
+git push
+```
+
+The commit carries a fresh `.secret` for each tracked file, now encrypted
+to Alice's key too. See [Commands - rotate](commands.md#rotate). For
+day-to-day work, name only the files you touched; see Part 4.
 
 The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
@@ -147,6 +161,10 @@ Deleted plaintext: .env
 files hidden
 $ git-veil reveal .env   # restore .env only
 ```
+
+A rotation after `tell` or `removeperson` is different work: the
+ring-change pass, delivered with `git-veil rotate`. See
+[Commands - rotate](commands.md#rotate).
 
 ### The exit-72 question
 

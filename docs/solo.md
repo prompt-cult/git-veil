@@ -145,7 +145,7 @@ for that flow.
 $ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 $ git-veil tell example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 added example@github.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 What happened. `hide` encrypts to every key in the signed keyring, so even
@@ -157,9 +157,10 @@ key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
 committed. The `tell` argument after the email is the X25519 public key
 encoding itself, pasted as text. `export` prints exactly that string.
 
-On a fresh
-repository nothing is hidden yet: the
-first `hide` of `.env` encrypts to the current ring from the start.
+The note stamps a ring-change pass as due on this machine. On a fresh
+repository nothing is hidden yet, so the first `hide` of `.env` encrypts
+to the current ring from the start, and you can leave the pass
+undelivered. See [Commands - rotate](commands.md#rotate).
 
 ## 5. Track, hide, commit
 
@@ -274,7 +275,10 @@ every secret. Give the box its own X25519 private key and its own pin:
 - Pin the owner key with `trust --import` and a pin-file you export with
   `git-veil export-pin`. That is the joining-user flow; see
   [joining.md](joining.md).
-- Put the box's public key in the keyring with `git-veil tell`.
+- Put the box's public key in the keyring with `git-veil tell`, then
+  deliver the ring-change pass with `git-veil rotate`: the box's
+  ciphertexts carry a stanza for the box after one rotate. See
+  [Commands - rotate](commands.md#rotate).
 
 The script then reads what it needs straight from the committed
 ciphertexts:

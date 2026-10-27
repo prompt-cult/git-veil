@@ -187,7 +187,7 @@ sends the `age1xxxx` line their `git-veil export` prints:
 ```sh
 $ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 What happened. This is the git-secret `tell` split into two steps.
@@ -270,7 +270,10 @@ Checklist:
       plaintext (diff against the step-1 copy)
 - [ ] Post-reveal state matches git-secret's: plaintexts on disk, the
       `.secret` files still in place and still tracked by git
-- [ ] Anyone leaving the team: `removeperson`,
+- [ ] If someone was added to the git-secret keyring but is missing here: the
+      owner runs `git-veil tell` for them, then delivers the ring-change
+      pass with `git-veil rotate` (see [docs/joining.md](joining.md))
+- [ ] Anyone leaving the team: `removeperson` then `git-veil rotate`,
       and rotate the secrets they ever saw - the same
       forward-looking-revocation rules as git-secret apply (see
       [docs/departing.md](departing.md))
@@ -280,7 +283,7 @@ Checklist:
 | git-secret                              | git-veil                        | Notes |
 |-----------------------------------------|---------------------------------|-------|
 | `git secret init`                       | `git-veil init` + `git-veil trust` | Setup splits in two: `init` creates `.git-veil/`, `trust` pins the owner's key per machine (git-secret had no pin step) |
-| `git secret tell`                       | `git-veil import` + `git-veil tell` | Two steps, because there is no gpg keychain for `tell` to find keys in - public keys arrive as files; `import` is for *your own* X25519 private key (per machine) |
+| `git secret tell`                       | `git-veil import` + `git-veil tell` | Two steps, because there is no gpg keychain for `tell` to find keys in - public keys arrive as files; `import` is for *your own* X25519 private key (per machine). After `tell`, run `git-veil rotate` once to re-encrypt existing ciphertext to the new ring |
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
 | `git secret add`                        | `git-veil add`                  | Both append the plaintext name to `.gitignore` when not already ignored; git-veil additionally warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove`               | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
@@ -289,7 +292,7 @@ Checklist:
 | `git secret cat`                        | `git-veil cat`                  | Both print one file to stdout without touching disk state |
 | `git secret changes`                    | `git-veil changes`              | Both compare on-disk plaintext with the last hidden version |
 | `git secret list`                       | `git-veil list`                 | git-secret reads `.gitsecret/paths/mapping.cfg`; git-veil reads `.git-veil/tracked.json` |
-| `git secret removeperson`               | `git-veil removeperson`         | Both remove a member from the repo keyring; both are forward-looking only - see [docs/departing.md](departing.md) |
+| `git secret removeperson`               | `git-veil removeperson` + `git-veil rotate` | Both remove a member from the repo keyring; both are forward-looking only. `rotate` re-encrypts every tracked ciphertext to the current ring - see [docs/departing.md](departing.md) |
 | `git secret killperson` (≤ 0.4.0)       | `git-veil removeperson`         | `killperson` was renamed to `removeperson` in git-secret 0.5.0; it always meant "delete from the repo's inner keyring", not from your gpg keyring |
 | *(departing user's own key)*            | `git-veil removekey`            | git-secret has no equivalent: your private key lived in `~/.gnupg` and you managed it with `gpg` yourself. `removekey` is the local-store housekeeping step (local-only, destructive) |
 | `git secret clean`                      | *(no bulk equivalent)*          | git-secret `clean` deletes all `*.secret` files repo-wide; git-veil deletes one file's ciphertext with `unhide <file>` - there is no repo-wide ciphertext deletion |

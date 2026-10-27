@@ -24,7 +24,11 @@ Remove bob, then deliver the ring-change pass:
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
+$ git-veil rotate
+Rotated: .env
+files rotated
+ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
 $ git add .git-veil/keyring .env.secret
 $ git commit -m "Remove bob from keyring and re-encrypt"
 $ git push
@@ -34,10 +38,12 @@ What happened. The keyring signature was verified against the pinned owner
 key before the change. removeperson fails closed on a tampered or unsigned
 keyring, and on an email that is not in the ring. Bob's entry was dropped,
 the ring re-signed with the owner's key, and a due pass stamped in the
-owner's key store.
+owner's key store. `rotate` re-encrypted every tracked ciphertext to the
+current ring and consumed the stamp: one pass per ring change. See
+[Commands - rotate](commands.md#rotate).
 
-The pass replaces ciphertext only for files whose plaintext was on
-disk. It does not scrub git history. Every previous version of
+The pass re-encrypts tracked ciphertexts. It does not scrub git history.
+Every previous version of
 `.env.secret` remains in old commits, encrypted to bob's key. If the
 secrets must truly be gone from bob's reach, rotate them. See step 3.
 Rewriting history with `git filter-repo` is an additional, separate
@@ -121,6 +127,7 @@ unreadable.
 ## Checklist
 
 - [ ] Owner: `removeperson <email>`. It fails if the email is not in the ring
+- [ ] Owner: deliver the ring-change pass with `git-veil rotate`, commit `.git-veil/keyring` and the re-encrypted `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
 - [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up X25519 private key

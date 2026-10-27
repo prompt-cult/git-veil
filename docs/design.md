@@ -538,7 +538,9 @@ while it is being edited. Consequences, stated honestly:
 
 - **The working set.** `hide` and `reveal` require named paths: they act
   on exactly the named tracked files (an unknown or untracked name
-  refuses, exit 71). There is no bare whole-manifest form. Hide
+  refuses, exit 71). There is no bare whole-manifest form. The one
+  whole-manifest pass is the ring-change ceremony's `rotate` (see "The
+  ring-change ceremony"). Hide
   resolves names the way `add` does, so a named plaintext must exist when
   you name it; reveal resolves with the lexical strip, so a name need not
   exist on disk. The allowance gate and the code-41 warning apply to the
@@ -610,7 +612,8 @@ Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`,
 de-facto revocation boundary: if a path is removed from `tracked.json`, the
 old ciphertext is never re-encrypted, so after a `removeperson` rotation the
 stale `.secret` stays decryptable by the removed collaborator - silently,
-on any run of `hide` that does not carry the orphan gate. Since
+because no scoped `hide` runs the orphan gate; only the ring-change pass
+does. Since
 `tracked.json` is committed and unsigned repo content, any repo writer can
 cause the manifest deletion in the first place.
 
@@ -622,6 +625,18 @@ Two mitigations close the hole:
    ciphertext is committed content, so deletion is recoverable from git
    history; the honest way to keep an untracked ciphertext around is the
    explicit `--keep-ciphertext` flag, not a default.
+2. **The orphan gate travels with the ring-change pass.** Every `hide`
+   names its files, and a named file is tracked by construction, so a
+   scoped hide can never rotate into its own orphan and no orphan refusal
+   runs on it. The gate lives on `rotate`, the ring-change ceremony (see
+   "The ring-change ceremony"): it enumerates ciphertext paths committed
+   to the git index and refuses (exit 42) when any of them does not
+   correspond to a tracked path, naming each one. The index is read
+   verbatim (`git -c core.quotePath=false ls-files -z`) so unicode/space
+   names map back to their tracked paths; a committed file named exactly
+   `.secret` (no plaintext stem - it cannot correspond to any tracked
+   path) is warned about and ignored rather than fatal, so one junk file
+   cannot brick the pass.
 
 Scope, stated honestly: the gate reads the git **index**, so it catches
 committed (staged) ciphertexts - the exfiltration channel. An uncommitted
@@ -633,7 +648,9 @@ such, not hidden.
 ## The ring-change ceremony
 
 After `tell` or `removeperson` re-signs the keyring, every tracked
-`.secret` still holds ciphertext encrypted to the previous ring.
+`.secret` still holds ciphertext encrypted to the previous ring. The door
+that delivers the pass is `git-veil rotate`: the one command that turns a
+ring change into ciphertext, and the only whole-manifest pass.
 
 - **The stamp.** `tell` and `removeperson` write a ring-change stamp
   into the key store after they write the re-signed keyring. The stamp
@@ -641,10 +658,31 @@ After `tell` or `removeperson` re-signs the keyring, every tracked
   keyring version they signed and the SHA-256 digest of that signed
   content (`RingPassStore`, src/trust_store.rs). It is machine-local and
   outside the repository, so no committed file can forge or clear it.
+- **The gate.** `rotate` verifies that the committed keyring's version
+  and content digest match the stamp: the ring changed on this machine
+  and no pass has consumed the change yet. Without a due stamp, or with
+  a committed keyring that no longer matches one, `rotate` refuses with
+  exit code 70 and names the repository id. A scoped `hide` never
+  consults or consumes the stamp.
+- **The pass.** `rotate` decrypts each tracked ciphertext in memory and
+  re-encrypts it to the current ring, two-phase and all-or-nothing
+  (Algorithm 8). The ciphertext is the input: plaintexts are never read,
+  written, deleted or compared, so a stale on-disk plaintext cannot
+  enter the data path and no reveal step exists in the ceremony. A
+  tracked path with no `.secret` on disk is skipped with a note. There
+  is no allowance question: every rotated ciphertext is committed to the
+  git index, so it is established. The orphan gate runs over the whole
+  git index before anything is re-encrypted, refusing any committed
+  ciphertext whose path is no longer tracked (exit 42). When the pass
+  completes, the stamp is cleared: one pass per ring change.
+- **The notice.** `tell` and `removeperson` print one plain line when
+  they stamp: `note: the keyring has changed. To re-encrypt to the
+  updated keyring, run the rotate command.` The line states the fact and
+  names the follow-up command.
 - **reveal needs no ceremony.** An old ciphertext decrypts against the
   ring entry it was written to, so decryption keeps working while a pass
   is pending. The new ring matters only for encryption, which makes the
-  ceremony a hide-side concern.
+  ceremony a rotate-side concern.
 
 ## Allowance (first-encrypt consent, keyed to pin and principal)
 
@@ -845,12 +883,12 @@ codes are never renumbered, only appended.
 | 30   | UnsafeKeyStorePermissions    | Key store directory or private key file is group/world accessible |
 | 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
-| 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; the whole-manifest pass refuses (see "Orphaned ciphertext") |
+| 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `rotate` refuses (see "Orphaned ciphertext") |
 | 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`/`unhide`; see "Ignore safety" gate 4) |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local private key |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
 | 63   | SignatureVerificationFailed  | Keyring signature missing or invalid |
-| 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`) |
+| 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`, `rotate` without a due ring-change stamp) |
 | 71   | UnsafePath                   | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
 | 72   | UnintendedEncryption         | `hide` refuses to first-encrypt a tracked path never allowed on this machine (see "Allowance") |

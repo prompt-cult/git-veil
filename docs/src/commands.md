@@ -19,7 +19,8 @@ Three contracts cover every command:
   table; the specification lives in the
   [Design specification](design.md).
 - **Named paths.** `hide` and `reveal` act on exactly the paths you give
-  them. There is no bare whole-manifest form.
+  them. There is no bare whole-manifest form. The one whole-manifest pass
+  is the ring-change ceremony, [rotate](#rotate).
 
 ## Global flags and environment
 
@@ -352,6 +353,8 @@ re-signs the keyring with the owner's Ed25519 signing key.
   and prints the create-and-back-up recipe.
 - Telling the same email twice updates the entry instead of duplicating
   it.
+- After re-signing, the ring-change pass is due on this machine, and
+  [rotate](#rotate) delivers it.
 
 The second argument is the collaborator's X25519 public key encoding
 itself, the `age1xxxx` string pasted as text. [`export`](#export) prints
@@ -363,7 +366,7 @@ signing key in the local key store.
 ```sh
 $ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 Exit codes: 20 (missing signing key), 61 (the canary would not encrypt),
@@ -379,7 +382,9 @@ git-veil removeperson <email> [--remote <name>]
 Removes a collaborator's entry from the keyring and re-signs it with the
 owner's Ed25519 signing key. The existing keyring signature is verified
 against the pinned trusted key before any modification, and removal
-stamps the ring-change pass as due exactly as `tell` does.
+stamps the ring-change pass as due exactly as `tell` does: after
+re-signing, the pass is due on this machine, and [rotate](#rotate)
+delivers it.
 
 Removal is forward-looking only. Ciphertexts hidden while the person was a
 member were encrypted to their key, so rotate the underlying secrets if
@@ -392,7 +397,7 @@ not in the ring.
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 Exit codes: 20 (missing signing key), 22 (email not in the ring), plus the
@@ -500,10 +505,11 @@ file does not need to exist.
 
 By default the sibling `<name>.secret` ciphertext is deleted too. A
 de-tracked but committed ciphertext would otherwise be silently skipped by
-the next [hide](#hide) and stay decryptable by collaborators removed in a
-later rotation: `hide` refuses such orphans with exit code 42. Deletion is
+a scoped [hide](#hide) and stay decryptable by collaborators removed in a
+later rotation: the ring-change pass, [rotate](#rotate), refuses such
+orphans with exit code 42. Deletion is
 recoverable from git history. Pass `--keep-ciphertext` to leave the
-ciphertext in place; `hide` will refuse it as an orphan until it is
+ciphertext in place; `rotate` will refuse it as an orphan until it is
 removed or the path is re-tracked.
 
 ```sh
@@ -577,6 +583,60 @@ files hidden
 Exit codes: 40 (ciphertext git-ignored), 41 (warning: plaintext not
 git-ignored), 71 (unknown or unsafe path), 72 (no allowance), plus the
 crypto codes 60/61/63 and the gated-chain codes, plus 30.
+
+### `rotate`
+
+```sh
+git-veil rotate [--remote <name>] [--key-store <dir>]
+```
+
+Delivers the due ring-change pass: re-encrypts every tracked ciphertext
+to the current keyring. Each `.secret` file is decrypted in memory and
+re-encrypted to every key in the keyring, in memory. The ciphertext is
+the input: plaintexts are never read, written, deleted or compared, and
+no plaintext is left on disk. There is no reveal step in the ceremony,
+and a stale on-disk plaintext cannot enter the data path.
+
+- **The stamp gate.** [tell](#tell) and [removeperson](#removeperson)
+  stamp a ring-change pass as due on this machine when they re-sign the
+  keyring. `rotate` verifies that the committed keyring's version and
+  content digest match the stamp: the ring changed on this machine and
+  no pass has consumed the change yet. Without a due stamp, or with a
+  committed keyring that no longer matches one, `rotate` refuses with
+  exit code 70 and names the repository id. One pass consumes one ring
+  change; a second run immediately after refuses.
+- **The orphan gate.** Before anything is re-encrypted, `rotate` reads
+  the git index and refuses with exit 42 any committed ciphertext whose
+  path is no longer tracked, naming each one.
+- **No allowance question.** Every rotated ciphertext is already
+  committed, so it is established: re-encryption never asks (exit 72 is
+  not in this command's surface).
+- **The skip note.** A tracked path with no `.secret` on disk is skipped
+  with a note.
+- **Two-phase and all-or-nothing.** Every ciphertext is decrypted and
+  re-encrypted in memory first; the disk is written only after every
+  re-encryption succeeded. The keyring signature is verified against the
+  pin before anything is touched.
+
+Run `rotate` on the machine that re-signed the keyring, then commit the
+re-encrypted `.secret` files and the keyring. A scoped [hide](#hide)
+never consults or consumes the stamp: for day-to-day work, name the
+files you touched and reserve `rotate` for the ceremony.
+
+```sh
+$ git-veil tell alice@example.com age1xxxx
+added alice@example.com to the keyring
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
+$ git-veil rotate
+Rotated: .env
+files rotated
+ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
+```
+
+Exit codes: 70 (pass not due, or a stale stamp whose keyring version and
+digest no longer match the committed ring), 42 (orphaned ciphertext),
+60/61/62 (decryption, encryption, key parse), plus the gated-chain codes
+10/11/12/14/63, plus 30.
 
 ### `reveal`
 

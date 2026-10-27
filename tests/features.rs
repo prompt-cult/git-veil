@@ -3,8 +3,8 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_hide_all, cmd_import, cmd_init,
-    cmd_removeperson, cmd_reveal, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_removeperson,
+    cmd_reveal, cmd_rotate, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
     encrypt_to_x25519_public_keys, exit_code_of, extract_content_to_verify_from_keyring,
     generate_signing_keypair, generate_x25519_private_key, keyring_content_digest,
     parse_x25519_public_key, x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
@@ -1003,7 +1003,7 @@ fn test_positional_reveal_is_never_allowance_gated() {
 }
 
 // ---------------------------------------------------------------------------
-// The ring-change ceremony: tell/removeperson stamp the pass; hide --all
+// The ring-change ceremony: tell/removeperson stamp the pass; rotate
 // runs the whole-manifest re-encrypt once against the stamped ring.
 // ---------------------------------------------------------------------------
 
@@ -1050,8 +1050,8 @@ fn test_tell_and_removeperson_stamp_the_ring_change() {
 }
 
 #[test]
-fn test_hide_all_runs_once_then_refuses() {
-    let f = Fixture::new("hide-all-once");
+fn test_rotate_runs_once_then_refuses() {
+    let f = Fixture::new("rotate-once");
 
     let id = f.add_collab("alice@example.com");
     f.import_id(&id, "alice.age");
@@ -1059,12 +1059,40 @@ fn test_hide_all_runs_once_then_refuses() {
     f.add_file(".env", b"API_KEY=1\n");
     f.add_file("config.yml", b"config\n");
 
-    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false).expect("the ceremony pass");
-    assert!(f.repo.join(".env.secret").exists());
-    assert!(f.repo.join("config.yml.secret").exists());
+    // Hide to the current ring, keeping the plaintexts, then delete one
+    // plaintext. The ciphertext is the pass's only input, so the pass
+    // runs without it and recreates nothing.
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        f.tracked_names(),
+    )
+    .expect("hide");
+    let old_env = fs::read(f.repo.join(".env.secret")).unwrap();
+    let old_config = fs::read(f.repo.join("config.yml.secret")).unwrap();
+    fs::remove_file(f.repo.join(".env")).unwrap();
+
+    cmd_rotate(&f.repo.path, "origin", &f.key_store.path).expect("the pass");
+    assert_ne!(
+        fs::read(f.repo.join(".env.secret")).unwrap(),
+        old_env,
+        "the pass re-encrypts the ciphertext with its plaintext deleted"
+    );
+    assert_ne!(
+        fs::read(f.repo.join("config.yml.secret")).unwrap(),
+        old_config,
+        "the pass re-encrypts every tracked ciphertext"
+    );
     assert!(
-        !f.repo.join(".env").exists() && !f.repo.join("config.yml").exists(),
-        "the pass deletes plaintexts by default, like any hide"
+        !f.repo.join(".env").exists(),
+        "the pass recreates no plaintext: the deleted one stays deleted"
+    );
+    assert_eq!(
+        fs::read(f.repo.join("config.yml")).unwrap(),
+        b"config\n",
+        "the surviving plaintext is byte-identical: the pass never touches it"
     );
     assert!(
         RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
@@ -1074,8 +1102,8 @@ fn test_hide_all_runs_once_then_refuses() {
     );
 
     // The stamp is spent, so a second pass refuses with the policy code.
-    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
-        .expect_err("a consumed pass refuses");
+    let err =
+        cmd_rotate(&f.repo.path, "origin", &f.key_store.path).expect_err("a consumed pass refuses");
     assert_eq!(
         exit_code_of(&err),
         git_veil::ExitCode::Refused as i32,
@@ -1089,18 +1117,27 @@ fn test_hide_all_runs_once_then_refuses() {
 }
 
 #[test]
-fn test_hide_all_refuses_without_a_due_stamp() {
-    let f = Fixture::new("hide-all-nostamp");
+fn test_rotate_refuses_without_a_due_stamp() {
+    let f = Fixture::new("rotate-nostamp");
 
     let id = f.add_collab("alice@example.com");
     f.import_id(&id, "alice.age");
 
     f.add_file(".env", b"API_KEY=1\n");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        true,
+        vec![".env".to_string()],
+    )
+    .expect("hide");
+    let old_ciphertext = fs::read(f.repo.join(".env.secret")).unwrap();
 
     // No stamp at all: the ring changed on this machine, but the record is
-    // gone. The pass refuses before anything is encrypted.
+    // gone. The pass refuses before anything is rotated.
     RingPassStore::clear(&f.key_store.path, TEST_REPO_ID).unwrap();
-    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+    let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("a pass with no stamp refuses");
     assert_eq!(exit_code_of(&err), git_veil::ExitCode::Refused as i32);
     let message = format!("{:#}", err);
@@ -1108,27 +1145,29 @@ fn test_hide_all_refuses_without_a_due_stamp() {
         message.contains(TEST_REPO_ID),
         "the refusal names the repository id: {message}"
     );
-    assert!(
-        !f.repo.join(".env.secret").exists(),
-        "nothing is encrypted on refusal"
+    assert_eq!(
+        fs::read(f.repo.join(".env.secret")).unwrap(),
+        old_ciphertext,
+        "nothing is rotated on refusal"
     );
 
     // A stamp that does not match the committed ring refuses too: the
     // stamp says which ring the pass may rotate, and the committed ring
     // moved on.
     RingPassStore::write(&f.key_store.path, TEST_REPO_ID, 999, &"a".repeat(64)).unwrap();
-    let err = cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+    let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("a pass against a ring the stamp does not name refuses");
     assert_eq!(exit_code_of(&err), git_veil::ExitCode::Refused as i32);
-    assert!(
-        !f.repo.join(".env.secret").exists(),
-        "nothing is encrypted on refusal"
+    assert_eq!(
+        fs::read(f.repo.join(".env.secret")).unwrap(),
+        old_ciphertext,
+        "nothing is rotated on refusal"
     );
 }
 
 #[test]
-fn test_the_ceremony_re_encrypts_every_tracked_secret() {
-    let f = Fixture::new("hide-all-reencrypt");
+fn test_rotate_re_encrypts_every_tracked_ciphertext() {
+    let f = Fixture::new("rotate-reencrypt");
 
     let alice = f.add_collab("alice@example.com");
     f.import_id(&alice, "alice.age");
@@ -1136,8 +1175,9 @@ fn test_the_ceremony_re_encrypts_every_tracked_secret() {
     f.add_file(".env", b"API_KEY=1\n");
     f.add_file("config.yml", b"config\n");
 
-    // Hide to the ring as it stands, keeping plaintexts so the pass has
-    // something to rotate (rotation is reveal -> ring change -> pass).
+    // Hide to the ring as it stands, then delete one plaintext: the
+    // ciphertext is the pass's only input, so the deletion must not
+    // matter.
     cmd_hide(
         &f.repo.path,
         "origin",
@@ -1146,21 +1186,25 @@ fn test_the_ceremony_re_encrypts_every_tracked_secret() {
         f.tracked_names(),
     )
     .expect("hide");
-    let old_ciphertext = fs::read(f.repo.join(".env.secret")).unwrap();
+    fs::remove_file(f.repo.join(".env")).unwrap();
 
     // Rotate the ring: bob joins. The pass is stamped as due.
     let bob = f.add_collab("bob@example.com");
     f.import_id(&bob, "bob.age");
 
-    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false).expect("the ceremony pass");
-
-    // Every tracked ciphertext was re-encrypted to the current ring: fresh
-    // bytes, and bob - who was never in the old ring - can reveal.
-    assert_ne!(
-        fs::read(f.repo.join(".env.secret")).unwrap(),
-        old_ciphertext,
-        "the pass rewrote the ciphertext to the new ring"
+    cmd_rotate(&f.repo.path, "origin", &f.key_store.path).expect("the pass");
+    assert!(
+        !f.repo.join(".env").exists(),
+        "the pass recreates no plaintext: the deleted one stays deleted"
     );
+    assert_eq!(
+        fs::read(f.repo.join("config.yml")).unwrap(),
+        b"config\n",
+        "the surviving plaintext is byte-identical: the pass never touches it"
+    );
+
+    // Every tracked ciphertext was re-encrypted to the current ring: bob,
+    // who was never in the old ring, can reveal.
     cmd_reveal(
         &f.repo.path,
         "bob@example.com",
@@ -1171,6 +1215,57 @@ fn test_the_ceremony_re_encrypts_every_tracked_secret() {
     .expect("the new collaborator decrypts the passed ciphertexts");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), b"API_KEY=1\n");
     assert_eq!(fs::read(f.repo.join("config.yml")).unwrap(), b"config\n");
+}
+
+/// Rotate never touches plaintexts. An edited-not-yet-hidden plaintext on
+/// disk is byte-identical after the pass, and the rotated ciphertext
+/// carries the hidden content, not the edited plaintext.
+#[test]
+fn test_rotate_touches_no_plaintext() {
+    let f = Fixture::new("rotate-plaintext-orthogonal");
+
+    let alice = f.add_collab("alice@example.com");
+    f.import_id(&alice, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("hide");
+
+    // An edited plaintext, written after the ciphertext was committed.
+    fs::write(f.repo.join(".env"), b"API_KEY=2\n").unwrap();
+
+    // Rotate the ring: bob joins. The pass is stamped as due.
+    let bob = f.add_collab("bob@example.com");
+    f.import_id(&bob, "bob.age");
+
+    cmd_rotate(&f.repo.path, "origin", &f.key_store.path).expect("the pass");
+
+    assert_eq!(
+        fs::read(f.repo.join(".env")).unwrap(),
+        b"API_KEY=2\n",
+        "the pass never touches the on-disk plaintext"
+    );
+    // The rotation carried the hidden content, not the edited plaintext:
+    // reveal restores what the ciphertext held.
+    cmd_reveal(
+        &f.repo.path,
+        "bob@example.com",
+        "origin",
+        &f.key_store.path,
+        vec![".env".to_string()],
+    )
+    .expect("reveal");
+    assert_eq!(
+        fs::read(f.repo.join(".env")).unwrap(),
+        b"API_KEY=1\n",
+        "the rotated ciphertext carries the hidden content, not the edited plaintext"
+    );
 }
 
 #[test]
@@ -1205,8 +1300,20 @@ fn test_a_scoped_hide_needs_no_stamp_and_consumes_none() {
         "the scoped hide never consumes the stamp"
     );
 
-    // And the ceremony still runs afterwards against the same stamp.
-    cmd_hide_all(&f.repo.path, "origin", &f.key_store.path, false)
+    // And the pass still runs afterwards against the same stamp. It
+    // rotates the hidden ciphertext; the never-hidden tracked path has no
+    // ciphertext to rotate and is skipped with a note.
+    cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
         .expect("the pass runs after a scoped hide");
-    assert!(f.repo.join("config.yml.secret").exists());
+    assert!(f.repo.join(".env.secret").exists());
+    assert!(
+        !f.repo.join("config.yml.secret").exists(),
+        "rotate re-encrypts ciphertexts and never first-encrypts"
+    );
+    assert!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
+            .unwrap()
+            .is_none(),
+        "the pass consumed the stamp"
+    );
 }

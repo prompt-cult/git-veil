@@ -7,8 +7,8 @@ use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
     cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin,
-    cmd_fingerprint, cmd_hide, cmd_hide_all, cmd_import, cmd_init, cmd_list, cmd_list_keys,
-    cmd_remove, cmd_removekey, cmd_removeperson, cmd_reveal, cmd_show_repo_id, cmd_tell, cmd_trust,
+    cmd_fingerprint, cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys, cmd_remove,
+    cmd_removekey, cmd_removeperson, cmd_reveal, cmd_rotate, cmd_show_repo_id, cmd_tell, cmd_trust,
     cmd_trust_import, cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami,
     default_key_store, exit_code_of, get_git_config_email, permissions_check_bypassed_from_env,
     ExitCode,
@@ -229,18 +229,17 @@ fn run() -> Result<()> {
             remote,
             key_store: opt,
             keep_plaintext,
-            all,
             files,
         } => {
             let key_store = resolve_key_store(opt, skip_permissions_check)?;
-            if all {
-                // The ring-change ceremony: the whole-manifest pass, gated
-                // on the ring-change stamp (docs/design.md "The ring-change
-                // ceremony"). clap keeps --all and positional files apart.
-                cmd_hide_all(&repo_root, &remote, &key_store, keep_plaintext)?;
-            } else {
-                cmd_hide(&repo_root, &remote, &key_store, keep_plaintext, files)?;
-            }
+            cmd_hide(&repo_root, &remote, &key_store, keep_plaintext, files)?;
+        }
+        Commands::Rotate {
+            remote,
+            key_store: opt,
+        } => {
+            let key_store = resolve_key_store(opt, skip_permissions_check)?;
+            cmd_rotate(&repo_root, &remote, &key_store)?;
         }
         Commands::Reveal {
             email,

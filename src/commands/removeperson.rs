@@ -98,10 +98,10 @@ pub fn cmd_removeperson(
 
     println!("removed {} from the keyring", email_to_remove);
 
-    // One plain line for the due pass: the fact, then the verb, and no
-    // command (the issue #42 message policy). After a removal the pass is
-    // the rotation step: without it, existing ciphertext stays decryptable
-    // by the removed principal.
-    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.");
+    // One plain line for the due pass: the fact, the verb, and the
+    // follow-up command. After a removal the pass is the rotation step:
+    // without it, existing ciphertext stays decryptable by the removed
+    // principal.
+    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
     Ok(())
 }

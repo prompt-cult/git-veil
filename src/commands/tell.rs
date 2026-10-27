@@ -111,10 +111,10 @@ pub fn cmd_tell(
 
     println!("added {} to the keyring", email);
 
-    // One plain line for the due pass: the fact, then the verb, and no
-    // command (the issue #42 message policy). The stamp is written on
-    // every tell, so the notice is unconditional: the fresh-start flow
-    // reaches the same pass on its first hide --all.
-    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.");
+    // One plain line for the due pass: the fact, the verb, and the
+    // follow-up command. The stamp is written on every tell, so the
+    // notice is unconditional: the fresh-start flow reaches the same
+    // pass on its first rotate.
+    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
     Ok(())
 }

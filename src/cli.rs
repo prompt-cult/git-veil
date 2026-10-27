@@ -526,24 +526,14 @@ name refuses (error code 71). The allowance check (error code 72) then
 applies to the named files only, and names only the offenders among
 them. You name the file, the gate checks that file.
 
-THE RING-CHANGE PASS. hide --all re-encrypts EVERY tracked file to the
-current keyring. It is the one whole-manifest operation, and it is
-gated: tell and removeperson stamp the keyring change on this machine
-when they re-sign the keyring, and one hide --all consumes that stamp.
-Without a stamp for this repository on this machine, or when the
-committed keyring no longer matches the stamped version and digest,
-hide --all refuses (exit code 70) and names the repository id. A scoped
-hide never needs the stamp and never consumes it. The pass also refuses
-(error code 42) a committed ciphertext whose path is no longer tracked,
-and a tracked first-encrypt still needs its allowance (error code 72).
-A tracked path with no plaintext on disk is skipped with a note.
+The whole-manifest re-encrypt is the ring-change pass, and it is a
+separate command: git-veil rotate.
 
 EXAMPLES
   $ git-veil hide .env    # encrypt .env and delete the plaintext (the default)
   $ git-veil hide .env --keep-plaintext
   $ git-veil hide .env --remote upstream
   $ git-veil hide .env config.yml    # encrypt exactly the named files
-  $ git-veil hide --all    # the ring-change pass, after tell or removeperson
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
 ")]
     Hide {
@@ -556,13 +546,50 @@ EXAMPLES
         /// Leave plaintext files beside their ciphertexts instead of deleting them
         #[arg(long)]
         keep_plaintext: bool,
-        /// Run the ring-change pass: re-encrypt every tracked file to the current keyring.
-        /// Gated on the ring-change stamp that tell and removeperson write on this machine
-        #[arg(long, conflicts_with = "files")]
-        all: bool,
         /// Tracked files to hide
-        #[arg(value_name = "FILE", required_unless_present = "all")]
+        #[arg(value_name = "FILE", required = true)]
         files: Vec<String>,
+    },
+
+    /// Re-encrypt every tracked ciphertext to the current keyring
+    #[command(after_long_help = "\
+Re-encrypts every tracked ciphertext to the current keyring: each
+<name>.secret on disk is decrypted in memory and re-encrypted to the
+full current keyring, then written back atomically. This is the
+ring-change pass: run it after tell or removeperson so the committed
+ciphertext reflects the updated keyring.
+
+rotate is TWO-PHASE and ALL-OR-NOTHING: phase 1 decrypts and re-encrypts
+every working-set ciphertext in memory - if any ciphertext is missing or
+cannot be rotated, rotate aborts having changed NOTHING on disk. Phase 2
+(only after every re-encryption succeeded) writes each .secret atomically.
+
+rotate NEVER TOUCHES PLAINTEXTS. The ciphertext is the input: no
+plaintext is read, written, deleted or compared, and none is left on
+disk by the pass. An edited-not-yet-hidden plaintext is orthogonal to
+the pass; hide encrypts it later.
+
+The pass is gated. tell and removeperson stamp the keyring change on
+this machine when they re-sign the keyring, and one rotate consumes
+that stamp. Without a stamp for this repository on this machine, or
+when the committed keyring does not match the stamped version and
+digest, rotate refuses (exit code 70) and names the repository id. It
+also refuses (error code 42) a committed ciphertext whose path is no
+longer tracked: the pass covers the whole manifest, and an untracked
+ciphertext would silently stay decryptable by removed collaborators.
+A tracked path with no .secret ciphertext on disk is skipped with a
+note.
+
+EXAMPLES
+  $ git-veil rotate    # the ring-change pass, after tell or removeperson
+")]
+    Rotate {
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
+        #[arg(long)]
+        key_store: Option<PathBuf>,
     },
 
     /// Decrypt named tracked files back to plaintext
