@@ -32,22 +32,18 @@ fuzz_target!(|data: &[u8]| {
             );
         }
         Err(err) => {
-            // never-echo policy: on Err the error text must not contain any
-            // substring of the raw input longer than 8 characters. Check the
-            // error string against each sliding 8-char window of the input,
-            // so no URL shape can leak credentials into the error message.
-            let message = format!("{err:#}");
-            let message_bytes = message.as_bytes();
-            if s.len() < 8 {
-                return;
-            }
-            for window in s.as_bytes().windows(8) {
-                assert!(
-                    !message_bytes.windows(8).any(|w| w == window),
-                    "error text must not echo any part of the input (window {:?}): {message}",
-                    String::from_utf8_lossy(window)
-                );
-            }
+            // never-echo policy: on Err the refusal text is one fixed
+            // message, so nothing from the input is echoed beyond the
+            // words of the constant itself. Exact equality is the
+            // checkable form of that guarantee: a sliding-window scan
+            // cannot hold, because an attacker-controlled input can carry
+            // a chunk of any constant ("t docume" vs "trust
+            // documentation").
+            assert_eq!(
+                format!("{err:#}"),
+                "invalid git remote URL format. Expected a supported GitHub GitLab or Codeberg shape. See the trust documentation.",
+                "the refusal must be the fixed message; anything else echoes input"
+            );
         }
     }
 });
