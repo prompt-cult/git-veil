@@ -26,12 +26,14 @@ umask 077
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
-openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > owner.verifying
 
+# The verifying key, into the repository's .git-veil/ state directory.
 git-veil init
+openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
+  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
+
 git-veil import my-age-identity.txt
-git-veil trust demo+example@github.com  # possession proof. The seed must match owner.verifying
+git-veil trust demo+example@github.com  # possession proof. The seed must match .git-veil/owner.verifying
 git-veil export age1... --output me.pub
 git-veil tell example@github.com me.pub    # the owner must be in the keyring too
 git-veil add .env && git-veil hide .env
@@ -122,12 +124,12 @@ signing key, so she imports the pin-file the owner sent her:
 $ git-veil trust --import ~/demo.pin
 trusted the repository owner key
 pinned this repository owner key on this machine
-warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform.
+warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
 What happened. `trust --import` checked three things, and all three are
 mandatory. The pin-file's repository ID matches her remote. Its verifying
-key exactly matches the repository's committed `owner.verifying`. Its
+key exactly matches the repository's committed `.git-veil/owner.verifying`. Its
 fingerprint matches the owner fingerprint recorded in the committed
 `.git-veil/trust.json`. The pin lives in her `$HOME/.git-veil`, outside the
 repository. The committed `.git-veil/trust.json` is attacker-writable, so

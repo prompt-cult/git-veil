@@ -74,6 +74,19 @@ this machine before touching anything. The refusals, and what to do:
   repository. A fresh clone always starts here, even the owner's. Run
   `git-veil trust <repo-id>` (with the signing seed) or
   `git-veil trust --import <pin-file>` (without it).
+- **Exit 70, no committed verifying key.** The message names
+  `.git-veil/owner.verifying`. Either the owner has not created and
+  committed it yet (step 1 of the [Solo guide](solo.md)), or the file
+  sits at the repository root. The tool reads the verifying key only
+  from `.git-veil/owner.verifying`; a file at the repository root is
+  not read. Move it into place and commit:
+
+  ```sh
+  git mv owner.verifying .git-veil/owner.verifying && git commit -m "Move owner.verifying into .git-veil"
+  ```
+
+  The fingerprint derivation is location-independent, so every existing
+  pin stays valid and no machine needs to re-run `trust`.
 - **Exit 10, no committed record.** The repository's committed
   `.git-veil/trust.json` has no entry for this repository id. The owner
   must run `trust` on a machine holding the signing key and commit the
@@ -87,8 +100,8 @@ this machine before touching anything. The refusals, and what to do:
   freshness baseline. If the rollback is genuinely yours (a branch
   rewound), re-run `trust` to reset the baseline.
 
-A trust record in the retired 16-hex-character fingerprint format is
-refused as hostile: re-establish trust with `trust`.
+A trust record whose fingerprint is 16 hex characters is refused as
+hostile: re-establish trust with `trust`.
 
 ## The newcomer's failure shapes
 

@@ -116,8 +116,9 @@ impl TestRepo {
         // The committed owner.verifying: verifying key hex on line 1, the
         // owner's X25519 public key encoding on line 2. trust proves
         // possession of the matching seed and pins the key.
+        fs::create_dir_all(repo.join(".git-veil")).unwrap();
         fs::write(
-            repo.join("owner.verifying"),
+            repo.join(".git-veil/owner.verifying"),
             format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
         )
         .expect("write owner.verifying");
@@ -510,8 +511,9 @@ fn test_hide_no_keys_fails() {
         format!("{}\n", identity.to_string().expose_secret()),
     )
     .unwrap();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join("owner.verifying"),
+        repo.join(".git-veil/owner.verifying"),
         format!("{}\n{}\n", verifying_hex, recipient),
     )
     .unwrap();

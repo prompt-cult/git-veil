@@ -70,8 +70,9 @@ fn content_covers(content: &[u8], path: &str, is_dir: bool) -> bool {
     covered
 }
 
-/// Whether a found CODEOWNERS file covers both trust-critical paths: the
-/// committed owner verifying key and the `.git-veil/` directory. A pattern
+/// Whether a found CODEOWNERS file covers the trust-critical path: the
+/// `.git-veil/` state directory, which carries the committed owner
+/// verifying key, the keyring and the trust record. A pattern
 /// matching a representative file inside the directory also counts, because
 /// gitignore patterns may name files rather than the directory itself.
 pub fn covers_trust_critical_paths(repo_root: &Path) -> bool {
@@ -81,18 +82,15 @@ pub fn covers_trust_critical_paths(repo_root: &Path) -> bool {
     let Ok(content) = std::fs::read(&codeowners) else {
         return false;
     };
-    let key_covered = content_covers(&content, "owner.verifying", false);
-    let dir_covered = content_covers(&content, ".git-veil", true)
-        || content_covers(&content, ".git-veil/tracked.json", false);
-    key_covered && dir_covered
+    content_covers(&content, ".git-veil", true)
+        || content_covers(&content, ".git-veil/tracked.json", false)
 }
 
-/// The init suggestion: which paths to protect and what to add. Printed
+/// The init suggestion: which path to protect and what to add. Printed
 /// only by a non-quiet `init`. The tool never creates the file.
 pub fn suggestion_text() -> String {
     "suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform\n\
      add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:\n\
-     owner.verifying @the-repository-owner\n\
      .git-veil/ @the-repository-owner"
         .to_string()
 }
@@ -101,7 +99,7 @@ pub fn suggestion_text() -> String {
 /// review-gate a trust-anchor change. The warning is non-blocking. It is
 /// never an error and never changes an exit code.
 pub fn warning_text() -> String {
-    "warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform."
+    "warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform."
         .to_string()
 }
 

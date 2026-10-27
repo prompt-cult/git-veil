@@ -50,10 +50,10 @@ The law:
    spanning form.
 3. **This table is the translation reference** for any reader spanning
    both vocabularies; AGENTS.md carries the same law verbatim.
-4. **Two boundary tokens remain, named here as the contract**: the on-disk
-   key store file names `identities.txt` (X25519 private keys) and
-   `recipients.txt` (X25519 public keys) predate this rule and remain as
-   format constants, and the upstream `age` crate's type names
+4. **Two boundary tokens are format constants, named here as the
+   contract**: the on-disk key store file names `identities.txt` (X25519
+   private keys) and `recipients.txt` (X25519 public keys), and the
+   upstream `age` crate's type names
    (`age::x25519::Identity`, `age::x25519::Recipient`) appear at the single
    import site in `src/age_crypto.rs`, where they are aliased to
    `X25519PrivateKey` / `X25519PublicKey`.
@@ -91,16 +91,14 @@ one map (`TrustStore`, src/trust_store.rs):
 
 - `owner_fingerprints`: `{ "<repo_id>": "<owner fingerprint>" }` - the
   fingerprint of the repository's committed owner verifying key
-  (`owner.verifying`) under the single derivation (see "Fingerprints": the
+  (`.git-veil/owner.verifying`) under the single derivation (see "Fingerprints": the
   repository id is the label). Every gated command compares it against the
   local pin, pin-file import uses it as the witness, and `export-pin`
-  prints it as the human out-of-band token. Under the single derivation
-  these were once two maps carrying the same value; the schema carries
-  one. A legacy file with only `trusted_keys` loads empty and every gated
-  command refuses until the owner re-runs `trust`.
-
-Both fields default to absent when missing (pre-0.6 files parse cleanly);
-the file is written pretty-printed and atomically
+  prints it as the human out-of-band token. The schema carries one map.
+  A trust.json that holds only `trusted_keys` loads as an empty store and
+  every gated command refuses until the owner re-runs `trust`.
+The field defaults to absent when missing (a trust.json without the field
+parses as an empty store); the file is written pretty-printed and atomically
 (`TrustStore::save_to_file`); a missing file reads as an empty store
 (`TrustStore::load_from_file`).
 
@@ -118,6 +116,28 @@ so the name can never escape the pin directory (`TrustPinStore::sanitize_repo_id
 The pin is written only by the two pin-creation paths below; a
 fresh clone has no pin, which is why trust must be re-established per machine.
 
+### The verifying key file lives in .git-veil
+
+The repository's owner verifying key file lives at `.git-veil/owner.verifying`
+and is committed. Line 1 is the 64-hex Ed25519 verifying key. Line 2, when
+present, is the owner's X25519 public key encoding (imported into the key
+store as a convenience during the possession proof). The file is public
+material; committing it is safe and required.
+
+Two placement rules bind every command that reads it:
+
+- The command must run at the git repository worktree root, the same root
+  the remote-derived repository id is resolved from.
+- The `.git-veil/` state directory must exist: `git-veil init` creates it.
+  A read of the verifying key without the state directory refuses and says
+  to run `git-veil init` first.
+
+A root-level `owner.verifying` is not read; the key is read from
+`.git-veil/owner.verifying`. Move a root-level file into place with
+`git mv owner.verifying .git-veil/owner.verifying` and commit. The
+fingerprint derivation is location-independent, so a pin stays valid
+across the move and no machine needs to re-run `trust`.
+
 ### Pin creation (possession proof only)
 
 A repository can never supply its own trust anchor: there is no keyfile
@@ -129,13 +149,13 @@ after a move.
 $$
 \begin{array}{ll}
 \multicolumn{2}{l}{\textbf{Algorithm 2} \quad \textsc{Trust} \text{ - the possession proof (} \texttt{cmd\_trust} \text{, src/commands/trust.rs)}} \\
-\multicolumn{2}{l}{\textit{Permanent state: } T \text{ = committed } \texttt{.git-veil/trust.json} \text{ (} \mathit{ownerFingerprints}, \mathit{ownerFingerprints} \text{ maps);} \ S \text{ = the machine key store}} \\
+\multicolumn{2}{l}{\textit{Permanent state: } T \text{ = committed } \texttt{.git-veil/trust.json} \text{ (} \mathit{ownerFingerprints} \text{ map);} \ S \text{ = the machine key store}} \\
 \multicolumn{2}{l}{\textit{Machine state: } P \text{ = per-machine pins;} \ B \text{ = freshness baselines}} \\
 1: & \textbf{upon } \textsc{Trust}(\mathit{providedId}) \\
 2: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
 3: & \quad \textbf{guard } \mathit{providedId} = \mathit{derivedId} \quad \textbf{else refuse} \ . \ \text{exit 13} \\
-4: & \quad \mathit{cand} \leftarrow \text{line 1 of the committed } \texttt{owner.verifying} \quad . \ \text{64-hex Ed25519 verifying key} \\
-5: & \quad \textbf{if line 2 of } \texttt{owner.verifying} \text{ starts with the bech32 encoding then import it into } S \\
+4: & \quad \mathit{cand} \leftarrow \text{line 1 of the committed } \texttt{.git-veil/owner.verifying} \quad . \ \text{64-hex Ed25519 verifying key} \\
+5: & \quad \textbf{if line 2 of } \texttt{.git-veil/owner.verifying} \text{ starts with the bech32 encoding then import it into } S \\
 6: & \quad \textbf{function } \textsc{ProvePossession}(\mathit{cand}) \\
 7: & \quad\quad seeds \leftarrow \text{lines of } \texttt{signing-keys.txt} \quad . \ \text{a present-but-garbage line is a parse refusal, exit 62} \\
 8: & \quad\quad M \leftarrow \{ s \in seeds : \text{verifying}(s) = \mathit{cand} \} \\
@@ -146,7 +166,7 @@ $$
 13: & \quad \textsc{ProvePossession}(\mathit{cand}) \\
 14: & \quad \text{append } \mathit{cand} \text{ to } \texttt{verifying-keys.txt} \\
 15: & \quad \mathit{fp} \leftarrow \textsc{Fingerprint}(\mathit{derivedId}, \mathit{cand}) \\
-16: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside owner.verifying} \\
+16: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside the verifying key in .git-veil} \\
 17: & \quad \textsc{Reconcile}(T) \\
 18: & \quad P[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the machine pin, outside the repository} \\
 19: & \quad B[\mathit{derivedId}] \leftarrow \bot \quad . \ \text{re-pinning is the recovery ceremony, so the baseline resets with it} \\
@@ -180,7 +200,7 @@ $$
 8: & \quad (\mathit{pinId}, \mathit{pinVK}) \leftarrow \text{parse the pin-file} \\
 9: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
 10: & \quad \textbf{check (a): } \mathit{pinId} = \mathit{derivedId} \\
-11: & \quad \textbf{check (b): } \mathit{pinVK} = \text{the committed } \texttt{owner.verifying} \\
+11: & \quad \textbf{check (b): } \mathit{pinVK} = \text{the committed } \texttt{.git-veil/owner.verifying} \\
 12: & \quad \textbf{check (c): } \textsc{Fingerprint}(\mathit{pinId}, \mathit{pinVK}) = T.\mathit{ownerFingerprints}[\mathit{derivedId}] \\
    & \quad\quad . \ \text{an absent metadata field refuses: the owner must refresh it on a seed-holding machine} \\
 13: & \quad \textbf{if any check fails then refuse} \ . \ \text{exit 70; one of the two channels is compromised} \\
@@ -236,12 +256,12 @@ $$
 4: & \quad\quad \textbf{if } T.\mathit{ownerFingerprints} = \emptyset \textbf{ then refuse} \ . \ \text{exit 10: no trust record} \\
 5: & \quad\quad \textbf{else refuse} \ . \ \text{exit 10: rename suspicion, naming the recorded and derived ids as the clue} \\
 6: & \quad \mathit{claimed} \leftarrow T.\mathit{ownerFingerprints}[\mathit{repoId}] \\
-7: & \quad \textbf{guard } \mathit{claimed} \text{ and the pin are not retired 16-hex values} \quad \textbf{else refuse} \ . \ \text{exit 70; hostile legacy format, nothing rewritten} \\
+7: & \quad \textbf{guard } \mathit{claimed} \text{ and the pin are not 16-hex values} \quad \textbf{else refuse} \ . \ \text{exit 70; hostile format, nothing rewritten} \\
 8: & \quad \mathit{pin} \leftarrow \text{read } P[\mathit{repoId}] \\
 9: & \quad \textbf{if } \mathit{pin} = \bot \textbf{ then refuse} \ . \ \text{exit 11, naming } \mathit{repoId} \text{ and the remote it came from} \\
 10: & \quad \textbf{guard } \mathit{pin} = \mathit{claimed} \text{ (case-insensitively)} \quad \textbf{else refuse} \ . \ \text{exit 12} \\
 11: & \quad \mathit{vk} \leftarrow \text{the key store verifying key } k \text{ with } \textsc{Fingerprint}(\mathit{repoId}, \text{enc}(k)) = \mathit{claimed} \\
-12: & \quad \mathit{ring} \leftarrow \text{parse } \texttt{.git-veil/keyring} \quad . \ \text{a legacy three-field entry refuses, exit 62} \\
+12: & \quad \mathit{ring} \leftarrow \text{parse } \texttt{.git-veil/keyring} \quad . \ \text{a three-field entry refuses, exit 62} \\
 13: & \quad \textbf{if the keyring carries a signature then verify it over the canonical content with } \mathit{vk} \\
    & \quad\quad \textbf{else if the keyring has entries then refuse} \ . \ \text{exit 63: an unsigned ring with entries launders trust} \\
 14: & \quad \textsc{FreshnessGate}(\mathit{repoId}, \mathit{ring}) \quad . \ \text{Algorithm 5} \\
@@ -260,13 +280,13 @@ repository identities - may be named, since refusing to name them buys no
 security and costs the operator the ability to act.
 
 So an attacker who rewrites `trust.json` - or commits a self-consistent
-`owner.verifying`, signed keyring, metadata fingerprint and bogus pin-file -
-achieves nothing on a machine that holds the real seed: the proof fails, and
-an in-repo pin-file is refused by the path gate. Algorithm 2 writes
+`.git-veil/owner.verifying`, signed keyring, metadata fingerprint and bogus
+pin-file - achieves nothing on a machine that holds the real seed: the proof
+fails, and an in-repo pin-file is refused by the path gate. Algorithm 2 writes
 trust.json *before* the pin, so a death between the two writes leaves a
 mismatch, never a silently accepted changed anchor. Re-pinning over a
-different existing fingerprint prints a loud `replacing the previously
-pinned fingerprint ...` notice.
+different existing fingerprint prints a loud `replacing the pinned
+fingerprint ...` notice.
 
 ## Fingerprints
 
@@ -290,12 +310,13 @@ value with stock OS tools:
 
 ```sh
 printf '%s:%s' 'alice@example.com' "$(age-keygen -y private-key.txt)" | sha256sum
-printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
+printf '%s:%s' 'demo+example@github.com' "$(head -n 1 .git-veil/owner.verifying)" | sha256sum
 ```
 
 Use `printf`, never `echo` (echo appends a newline and hashes different
 bytes). Exactly one colon separates label and key. The digest is lowercase
-hex. `owner.verifying` line 1 is the verifying key; `head -n 1` selects it
+hex. `.git-veil/owner.verifying` line 1 is the verifying key; `head -n 1`
+selects it
 because the file may carry the owner's X25519 public key (`age` recipient)
 on line 2.
 
@@ -327,13 +348,13 @@ Where fingerprints are used:
   keyring stores only the principal and the public key (format v2), never
   a fingerprint;
 - key selection in `export`, `import`, `removekey` and `--signing-key` is
-  by public key string only; no fingerprint-as-identifier mode remains.
+  by public key string only; there is no fingerprint-as-identifier mode.
 
-**Legacy 16 hex character values are hostile.** The retired derivations
-produced 16 hex character fingerprints. A pin or committed trust record in
-that format is refused by every gated command with exit code 70, in a
-message naming the derivation change; nothing is rewritten silently. The
-recovery is re-establishing the pin as described in "Pin creation".
+**16 hex character fingerprints are refused.** A pin or committed trust
+record in the 16 hex character fingerprint format is refused by every
+gated command with exit code 70, in a message naming the derivation
+change; nothing is rewritten silently. The recovery is re-establishing
+the pin as described in "Pin creation".
 
 ## Keyring format and freshness (rollback refusal)
 
@@ -353,8 +374,8 @@ Keyring format v2: exactly two fields per entry - the
 principal (email) and the bech32 X25519 public key - with the signature
 over the pair.
 Fingerprints are computed on demand (see "Fingerprints") and never stored;
-a legacy three-field entry carrying a stored fingerprint is a parse
-refusal (exit code 62), never a silent migration.
+a three-field entry carrying a stored fingerprint is a parse refusal
+(exit code 62), never silently converted.
 
 The `version:` line (Keyring, src/keyring.rs) is a **monotonic counter
 carried inside the signed payload**: the signature covers it, so a version
@@ -392,8 +413,8 @@ The fork rule (step 7) exists because two curating machines that do not
 pull in between would otherwise produce two differently-populated
 version-N keyrings, and the second would silently replace the first; a
 legitimate bump to a higher version is accepted and advances both version
-and digest. Baselines written before the digest existed carry no digest and
-are upgraded in place on the next accepted signed ring. A fresh clone has
+and digest. A baseline without a digest is upgraded in place on the next
+accepted signed ring. A fresh clone has
 no baseline: the first gated command records the current signed keyring's
 version - the same trust-on-first-use posture as the pin itself. The
 baseline is machine-local state in the key store, which is exactly where it
@@ -403,9 +424,9 @@ the refusal would be void.
 **Recovery.** A legitimate rollback (the owner really does want an older
 keyring state) is the same ceremony as a legitimate anchor change: re-run
 Algorithm 2, which clears the freshness baseline along with re-pinning the
-key. Old keyrings written before freshness existed are accepted until the
-next `tell`/`removeperson` gives them a version; from then on their
-rollback is refused.
+key. A keyring without a version is accepted until the next
+`tell`/`removeperson` gives it a version; from then on its rollback is
+refused.
 
 ## Key discovery and selection
 
@@ -423,7 +444,7 @@ $$
 3: & \quad \textbf{if } keys = \emptyset \textbf{ then refuse} \ . \ \text{exit 20 with the create-and-back-up recipe} \\
 4: & \quad \textbf{if } \mathit{explicitVK} \ne \bot \textbf{ then} \\
 5: & \quad\quad M \leftarrow \{ k \in keys : \text{hex}(\text{verifying}(k)) = \mathit{explicitVK} \} \quad . \ \text{the ONLY explicit form: the full 64-hex verifying key} \\
-   & \quad\quad . \ \text{the 1-based index and the 64-hex seed forms are parse errors; a 16-hex fingerprint form is retired} \\
+   & \quad\quad . \ \text{the 1-based index and the 64-hex seed forms are parse errors; a 16-hex fingerprint form is not a selection form} \\
 6: & \quad\quad \textbf{if } |M| = 0 \textbf{ then refuse} \ . \ \text{exit 20} \,; \ \textbf{if } |M| > 1 \textbf{ then refuse} \ . \ \text{exit 70} \\
 7: & \quad\quad \textbf{return } \text{the unique } k \in M \\
 8: & \quad M \leftarrow \{ k \in keys : \textsc{Fingerprint}(\mathit{repoId}, \text{enc}(\text{verifying}(k))) = \mathit{claimed} \} \\
@@ -524,8 +545,8 @@ while it is being edited. Consequences, stated honestly:
   you name it; reveal resolves with the lexical strip, so a name need not
   exist on disk. The allowance gate and the code-41 warning apply to the
   named set.
-- **Naming a hidden file.** A plaintext that hide deleted no longer
-  exists, so naming it refuses at resolution (File not found). The loop
+- **Naming a hidden file.** A plaintext that hide deleted does not
+  exist, so naming it refuses at resolution (File not found). The loop
   is `reveal` (restores the plaintexts you name) → edit → `hide`. There
   is no skip-and-report on the named path: the file must exist to be
   named.
@@ -534,8 +555,8 @@ while it is being edited. Consequences, stated honestly:
   correct rotation is `reveal` (restores the plaintexts you name),
   `removeperson` (stamps the ring change), then the ring-change pass,
   `hide --all` (re-encrypts every tracked file that has a plaintext on
-  disk to the new ring and consumes the stamp). Documented here because it
-  is the one workflow that changed shape with this default.
+  disk to the new ring and consumes the stamp). Documented here because
+  it is the one workflow this posture shapes.
 - The allowance gate (exit 72) and the code-41 plaintext-leak warning only
   apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
@@ -606,10 +627,10 @@ Two mitigations close the hole:
 
 1. **`remove` deletes the sibling ciphertext by default.** Untracking a file
    deletes `<name>.secret` from the working tree in the same step
-   (`--keep-ciphertext` preserves the old leave-in-place behaviour). The
+   (`--keep-ciphertext` leaves the ciphertext in place). The
    ciphertext is committed content, so deletion is recoverable from git
-   history; the honest way to keep an untracked ciphertext around is now an
-   explicit flag, not a default.
+   history; the honest way to keep an untracked ciphertext around is the
+   explicit `--keep-ciphertext` flag, not a default.
 2. **The orphan gate travels with the whole-manifest pass.** Every `hide`
    names its files, and a named file is tracked by construction, so a
    scoped hide can never rotate into its own orphan and no orphan refusal
@@ -668,10 +689,9 @@ pass runs nowhere else.
   ring entry it was written to, so decryption keeps working while a pass
   is pending. The new ring matters only for encryption, which makes the
   ceremony a hide-side concern.
-- **Fresh start and migration.** The 0.7.0 runbook folds into the
-  ceremony: init, trust, tell (the first tell changes the ring from
-  empty and stamps the pass), add each path (add implies the allowance),
-  then `hide --all` once.
+- **Fresh start.** The runbook is the ceremony: init, trust, tell (the
+  first tell changes the ring from empty and stamps the pass), add each
+  path (add implies the allowance), then `hide --all` once.
 
 ## Allowance (first-encrypt consent, keyed to pin and principal)
 
@@ -746,13 +766,11 @@ Residual, stated honestly. A ring-member repo writer can attempt the
 two-commit ambush: commit a dummy `<name>.secret` alongside the
 nomination. The index then carries the ciphertext path, step 6 reads the
 path as established, and the victim's next `hide` encrypts the real
-plaintext to the ring. The happen-before oracle that once opposed this is
-gone: it was not a barrier - a patient attacker commits the dummy before
-the nomination and passes it - and its per-manifest-hash baseline cache
-re-refused legitimate machines after every manifest reorganisation. What
-remains is the strongest position available without signing-key ceremony,
-which the #19 discussion rejected: the attacker is inside the circle and
-can sign whatever more we require. The gate refuses every path the user
+plaintext to the ring. The gate does not stop the ambush: a patient
+attacker commits the dummy before the nomination and passes it. The gate
+is the strongest position available without signing-key ceremony, which
+would add nothing: the attacker is inside the circle and can sign
+whatever more we require. The gate refuses every path the user
 did not allow on this machine, and the refusal names the path. With
 file-scoped hide the surface collapses further: `hide` covers exactly the
 files it names, so the ambush fires only when the victim hides at that
@@ -783,7 +801,8 @@ harmless.
 - **Matching reuses the gitignore matcher** (gix-ignore, the gitoxide
   matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
   character ranges, no escape handling), so the matcher answers whether a
-  pattern covers `owner.verifying` and the `.git-veil/` directory,
+   pattern covers the `.git-veil/` directory (which carries the
+   verifying key beside the keyring it protects),
   last-match-wins. Owner strings are not validated - only the question
   does any pattern match these paths is answered. Gitea and Forgejo use a
   different pattern language; the gitignore matcher may produce false

@@ -1,4 +1,4 @@
-# Departing: removing a collaborator
+# Departing a team repository
 
 A collaborator (`bob@example.com`) leaves the team. The owner removes him
 from the keyring with `removeperson`. In the following, `age` refers to the
@@ -79,7 +79,7 @@ git-veil removekey age1... --yes
 
 This is destructive and local-only. It does not touch any repository,
 keyring or trust state, and it revokes nothing. If removekey refuses, the
-fallback is the same as ever. A corrupt store is never deleted, and a
+fallback is manual. A corrupt store is never deleted, and a
 public key matching several store lines must be disambiguated. Edit the
 matching line out of `identities.txt` and `recipients.txt` by hand, or
 delete the file if it holds nothing else bob needs.
@@ -134,7 +134,7 @@ error: user not found in the keyring. Check the principal, or ask the owner to a
 ```
 
 Together these are the whole story. The tool refuses bob on new
-keyrings. No software can make the old ciphertext in his possession
+keyrings. No software can make the ciphertext already in his possession
 unreadable.
 
 ## Checklist

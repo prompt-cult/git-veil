@@ -16,10 +16,10 @@ Suppress the CODEOWNERS suggestion and other non\-error output
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Run init first: trust, tell, add and hide all require the .git\-veil/ state
-directory it creates (keyring, trust.json, tracked.json). init never
-touches .gitignore \- the <name>.secret ciphertext files are meant to be
-committed, so gitignoring them would defeat the fresh\-clone decryptability
-contract.
+directory it creates (keyring, trust.json, tracked.json, and the committed
+owner.verifying the owner writes there). init never touches .gitignore \-
+the <name>.secret ciphertext files are meant to be committed, so
+gitignoring them would defeat the fresh\-clone decryptability contract.
 
 init refuses to reset a repository that already has established trust;
 remove .git\-veil/ explicitly if you really want a fresh start.

@@ -33,6 +33,11 @@ the keyring, so a rewritten keyring is caught on this machine. The signing
 key is not an `age` key, and no `age` tool makes it. You make it with
 `openssl` in the next block. Neither private half is ever committed.
 
+The block below writes the verifying key into `.git-veil/`, so run
+`git-veil init` first if you have not (step 2 creates the directory; the
+`mkdir -p` here makes the recipe order-free). Run everything at the
+repository worktree root.
+
 ```sh
 umask 077   # everything created below stays private to you
 
@@ -47,14 +52,16 @@ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key, the public half of the signing key. Commit this file.
+# The verifying key, the public half of the signing key. Into .git-veil/,
+# committed with the rest of the git-veil state.
+mkdir -p .git-veil
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > owner.verifying
+  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
 ```
 
 What happened. `signing-keys.txt` holds the 64-hex-character Ed25519 seed.
-It is the last 32 bytes of the key's DER encoding. `owner.verifying` holds
-the matching public key, also as hex.
+It is the last 32 bytes of the key's DER encoding. `.git-veil/owner.verifying`
+holds the matching public key, also as hex.
 
 Back both secrets up now. The backup is the `AGE-SECRET-KEY-1...` line from
 `my-age-identity.txt`, plus `ed25519.pem` and `signing-keys.txt`. The last
@@ -63,8 +70,8 @@ holding the strings is a complete backup. Lose the X25519 private key and
 every ciphertext is unrecoverable. Lose the signing key and you cannot
 re-sign the keyring. You would have to re-key from scratch.
 
-`owner.verifying` is public. Commit it. It is the candidate that `trust`
-proves your seed against.
+`.git-veil/owner.verifying` is public. Commit it. It is the candidate that
+`trust` proves your seed against.
 
 ## 2. Initialize, import, identify
 
@@ -73,7 +80,6 @@ $ git-veil init
 git-veil initialized
 suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
 add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
-owner.verifying @the-repository-owner
 .git-veil/ @the-repository-owner
 $ git-veil import my-age-identity.txt
 + imported: age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
@@ -86,14 +92,23 @@ $ git-veil whoami
 Your principal: example@github.com
 ```
 
-What happened. `.git-veil/` now holds `keyring`, `trust.json` and
-`tracked.json`. init never touches `.gitignore`. Your X25519 private key
-lives in the per-machine key store `$HOME/.git-veil/identities.txt`, created
-mode 0600. It is never committed. `reveal`, `cat`, `unhide` and `changes`
-look their key up there. `show-repo-id` prints the exact repo ID `trust`
-wants. It re-derives the ID from the remote and refuses a mismatch. `whoami`
-shows which principal decrypting commands will use. The principal comes from
+What happened. `.git-veil/` now holds `keyring`, `trust.json`,
+`tracked.json` and, once you have run the step 1 recipe, `owner.verifying`,
+the verifying key they all protect. init never touches `.gitignore`. Your
+X25519 private key lives in the per-machine key store
+`$HOME/.git-veil/identities.txt`, created mode 0600. It is never committed.
+`reveal`, `cat`, `unhide` and `changes` look their key up there.
+`show-repo-id` prints the exact repo ID `trust` wants. It re-derives the ID
+from the remote and refuses a mismatch. `whoami` shows which principal
+decrypting commands will use. The principal comes from
 `git config user.email`, or from `--email`.
+
+You should add or edit a CODEOWNERS file that protects the `.git-veil/`
+folder as owned by you. The suggestion above is the line to add. On a
+platform that enforces CODEOWNERS with branch protection, a changed trust
+anchor becomes a review-gated pull request instead of a silent push. The
+file goes at the repository root, or under the platform directory
+(`.github/CODEOWNERS` on GitHub).
 
 ## 3. Trust your own key (possession proof)
 
@@ -101,18 +116,19 @@ shows which principal decrypting commands will use. The principal comes from
 $ git-veil trust demo+example@github.com
 trusted the repository owner key
 pinned this repository owner key on this machine
-warning: no CODEOWNERS file covers owner.verifying and the .git-veil directory. Trust anchor changes are not review gated on the platform.
+warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
 What happened. There is no keyfile argument. A repository must never supply
-its own trust anchor. `trust` read the committed `owner.verifying`, derived
-the verifying key from every seed in your `$HOME/.git-veil/signing-keys.txt`,
-and found the exact match that proves you hold the signing key.
+its own trust anchor. `trust` read the committed `.git-veil/owner.verifying`,
+derived the verifying key from every seed in your
+`$HOME/.git-veil/signing-keys.txt`, and found the exact match that proves
+you hold the signing key.
 
 The fingerprint was pinned on this machine in `$HOME/.git-veil/trust-pins/`.
 The pin is outside the repository and is never committed. The
 fixed-derivation owner fingerprint was recorded in `.git-veil/trust.json`.
-Commit that file alongside `owner.verifying`.
+Commit that file alongside the verifying key.
 
 Every gated command checks the keyring signature against this pin first and
 fails closed without it. See `git-veil error-codes`. A missing pin is exit
@@ -181,7 +197,7 @@ error code 40, because that ciphertext would silently never reach the
 repository. Commit the ciphertext and state, not the plaintext:
 
 ```sh
-git add .gitignore owner.verifying .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
+git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
 ```
 
@@ -225,7 +241,7 @@ diff to show, it prints `unchanged: …`, `no hidden version: …` or
 `git-veil cat .env` writes the plaintext to stdout only. Neither the
 plaintext nor the ciphertext on disk is touched.
 
-Every `hide` and `reveal` names its file(s); the bare form is gone. The
+Every `hide` and `reveal` names its file(s); there is no bare form. The
 command acts on exactly the paths you give it, so keep the naming habit:
 it is the habit that matters in a team, where a whole-manifest pass would
 touch every ciphertext and the commit would look like you edited every

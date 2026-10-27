@@ -8,7 +8,7 @@ use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_import, cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring, exit_code_of,
     fingerprint_for_public_key, generate_signing_keypair, generate_x25519_private_key,
-    is_legacy_pin_shape, owner_key_fingerprint, parse_verifying_key, x25519_public_key_encoding,
+    is_16_hex_pin_shape, owner_key_fingerprint, parse_verifying_key, x25519_public_key_encoding,
     ExitCode, TrustPinStore, TrustStore,
 };
 use std::fs;
@@ -21,7 +21,7 @@ use std::process::Command;
 ///
 /// ```text
 /// printf '%s:%s' 'alice@example.com' "$(age-keygen -y identity.txt)" | sha256sum
-/// printf '%s:%s' 'demo+example@github.com' "$(head -n 1 owner.verifying)" | sha256sum
+/// printf '%s:%s' 'demo+example@github.com' "$(head -n 1 .git-veil/owner.verifying)" | sha256sum
 /// ```
 ///
 /// The first vector's public key is a real age-keygen X25519 public key.
@@ -143,12 +143,12 @@ fn test_fingerprint_shape_and_label_binding() {
 
 #[test]
 fn test_legacy_pin_shape_detection() {
-    assert!(is_legacy_pin_shape("deadbeefdeadbeef"));
-    assert!(is_legacy_pin_shape("0123456789ABCDEF"));
-    assert!(!is_legacy_pin_shape(GOLDEN_VECTORS[0].2));
-    assert!(!is_legacy_pin_shape("deadbeef")); // 8 hex chars: never a fingerprint
-    assert!(!is_legacy_pin_shape("0123456789abcdefg")); // 17 chars
-    assert!(!is_legacy_pin_shape("zzzzzzzzzzzzzzzz")); // not hex
+    assert!(is_16_hex_pin_shape("deadbeefdeadbeef"));
+    assert!(is_16_hex_pin_shape("0123456789ABCDEF"));
+    assert!(!is_16_hex_pin_shape(GOLDEN_VECTORS[0].2));
+    assert!(!is_16_hex_pin_shape("deadbeef")); // 8 hex chars: never a fingerprint
+    assert!(!is_16_hex_pin_shape("0123456789abcdefg")); // 17 chars
+    assert!(!is_16_hex_pin_shape("zzzzzzzzzzzzzzzz")); // not hex
 }
 
 // ---------------------------------------------------------------------------
@@ -270,8 +270,9 @@ fn trusted_fixture(label: &str) -> (TempDir, TempDir) {
         format!("{}\n", identity.to_string().expose_secret()),
     )
     .unwrap();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join("owner.verifying"),
+        repo.join(".git-veil/owner.verifying"),
         format!("{}\n{}\n", verifying_hex, recipient),
     )
     .unwrap();

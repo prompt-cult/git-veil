@@ -58,8 +58,7 @@ fn test_no_codeowners_is_not_covered_and_suggestion_is_printed() {
     assert!(find_codeowners(&repo.path).is_none());
     assert!(!covers_trust_critical_paths(&repo.path));
     let text = codeowners_suggestion();
-    assert!(text.contains("owner.verifying"));
-    assert!(text.contains(".git-veil/"));
+    assert!(text.contains(".git-veil/ @the-repository-owner"));
     assert!(!text.contains('<'), "no angle brackets in tool output");
 }
 
@@ -122,7 +121,7 @@ fn test_directory_pattern_and_inner_file_both_cover_the_state_directory() {
     init_git_repo(&repo_negated.path);
     fs::write(
         repo_negated.join("CODEOWNERS"),
-        b"* @owner\n.git-veil/\n!owner.verifying\n",
+        b"* @owner\n.git-veil/\n!.git-veil\n!.git-veil/tracked.json\n",
     )
     .unwrap();
     assert!(!covers_trust_critical_paths(&repo_negated.path));
@@ -188,8 +187,9 @@ fn test_trust_warns_or_suppresses_without_touching_the_exit_code() {
         format!("{}\n", identity.to_string().expose_secret()),
     )
     .unwrap();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join("owner.verifying"),
+        repo.join(".git-veil/owner.verifying"),
         format!("{}\n{}\n", verifying_hex, recipient),
     )
     .unwrap();

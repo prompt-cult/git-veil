@@ -57,7 +57,7 @@ pub use commands::unhide::cmd_unhide;
 pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
-pub use fingerprint::{fingerprint_for_public_key, is_legacy_pin_shape, owner_key_fingerprint};
+pub use fingerprint::{fingerprint_for_public_key, is_16_hex_pin_shape, owner_key_fingerprint};
 pub use fs_atomic::{write_atomic, write_atomic_mode};
 pub use key_discovery::{
     discover_signing_key, discover_signing_key_explicit, discover_x25519_private_key,

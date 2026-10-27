@@ -67,8 +67,8 @@ teams. These differences change habits, so they are stated up front:
 4. **Keys are proven at the door.** `tell` test-encrypts an in-memory
    canary to a new collaborator's key before signing it into the ring. A
    key that cannot encrypt never enters the keyring. And `trust` proves
-   possession of the seed matching the committed `owner.verifying` before
-   pinning it. git-secret's
+   possession of the seed matching the committed `.git-veil/owner.verifying`
+   before pinning it. git-secret's
    `tell` warns about invalid keys since 0.3.2, but the keyring itself is
    not authenticated.
 5. **`hide` deletes the plaintext.** `hide` encrypts and deletes the
@@ -151,7 +151,6 @@ $ git-veil init
 git-veil initialized
 suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
 add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
-owner.verifying @the-repository-owner
 .git-veil/ @the-repository-owner
 $ age-keygen -o my-age-identity.txt
 $ git-veil import my-age-identity.txt
@@ -162,7 +161,7 @@ $ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 $ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 $ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > owner.verifying
+  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
 $ git-veil show-repo-id
 Repository ID: demo+example@github.com
 Remote: origin
@@ -271,7 +270,7 @@ Checklist:
       plaintext (diff against the step-1 copy)
 - [ ] Post-reveal state matches git-secret's: plaintexts on disk, the
       `.secret` files still in place and still tracked by git
-- [ ] If someone was added to the old keyring but is missing here: the
+- [ ] If someone was added to the git-secret keyring but is missing here: the
       owner runs `git-veil tell` for them, then delivers the ring-change
       pass, `git-veil hide --all` (see [docs/joining.md](joining.md))
 - [ ] Anyone leaving the team: `removeperson` + `git-veil hide --all`,

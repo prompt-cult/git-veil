@@ -79,8 +79,9 @@ impl Fixture {
             format!("{}\n", identity.to_string().expose_secret()),
         )
         .unwrap();
+        fs::create_dir_all(repo.join(".git-veil")).unwrap();
         fs::write(
-            repo.join("owner.verifying"),
+            repo.join(".git-veil/owner.verifying"),
             format!("{}\n{}\n", verifying_hex, recipient),
         )
         .unwrap();
