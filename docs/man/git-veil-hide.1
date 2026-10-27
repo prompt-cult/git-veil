@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-hide \- Encrypt named tracked files to the keyring
 .SH SYNOPSIS
-\fBgit\-veil hide\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-keep\-plaintext\fR] [\fB\-\-all\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILE\fR] 
+\fBgit\-veil hide\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-keep\-plaintext\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Encrypt named tracked files to the keyring
 .SH OPTIONS
@@ -18,13 +18,10 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 \fB\-\-keep\-plaintext\fR
 Leave plaintext files beside their ciphertexts instead of deleting them
 .TP
-\fB\-\-all\fR
-Run the ring\-change pass: re\-encrypt every tracked file to the current keyring. Gated on the ring\-change stamp that tell and removeperson write on this machine
-.TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
-[\fIFILE\fR]
+<\fIFILE\fR>
 Tracked files to hide
 .SH EXTRA
 Encrypts each named tracked file to every key in the keyring and leaves
@@ -68,22 +65,12 @@ name refuses (error code 71). The allowance check (error code 72) then
 applies to the named files only, and names only the offenders among
 them. You name the file, the gate checks that file.
 
-THE RING\-CHANGE PASS. hide \-\-all re\-encrypts EVERY tracked file to the
-current keyring. It is the one whole\-manifest operation, and it is
-gated: tell and removeperson stamp the keyring change on this machine
-when they re\-sign the keyring, and one hide \-\-all consumes that stamp.
-Without a stamp for this repository on this machine, or when the
-committed keyring no longer matches the stamped version and digest,
-hide \-\-all refuses (exit code 70) and names the repository id. A scoped
-hide never needs the stamp and never consumes it. The pass also refuses
-(error code 42) a committed ciphertext whose path is no longer tracked,
-and a tracked first\-encrypt still needs its allowance (error code 72).
-A tracked path with no plaintext on disk is skipped with a note.
+The whole\-manifest re\-encrypt is the ring\-change pass, and it is a
+separate command: git\-veil rotate.
 
 EXAMPLES
   $ git\-veil hide .env    # encrypt .env and delete the plaintext (the default)
   $ git\-veil hide .env \-\-keep\-plaintext
   $ git\-veil hide .env \-\-remote upstream
   $ git\-veil hide .env config.yml    # encrypt exactly the named files
-  $ git\-veil hide \-\-all    # the ring\-change pass, after tell or removeperson
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files

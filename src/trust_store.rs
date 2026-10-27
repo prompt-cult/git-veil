@@ -225,7 +225,7 @@ impl TrustPinStore {
 /// signed on THIS machine and the whole-manifest re-encrypt pass is due.
 ///
 /// `tell` and `removeperson` write the stamp after they write the re-signed
-/// keyring; `hide --all` requires it, verifies the committed ring against
+/// keyring; `rotate` requires it, verifies the committed ring against
 /// it, and clears it after a successful pass (docs/design.md "The
 /// ring-change ceremony"). The stamp lives in the key store, outside the
 /// repository, so committed repo content can neither forge nor clear it.
@@ -246,7 +246,7 @@ impl RingPassStore {
             .join(TrustPinStore::sanitize_repo_id(repo_id))
     }
 
-    /// Stamps the ring state a `hide --all` pass must match: the keyring
+    /// Stamps the ring state a rotate pass must match: the keyring
     /// version just signed and the digest of the signed content.
     pub fn write(key_store: &Path, repo_id: &str, version: u64, digest: &str) -> Result<()> {
         let path = Self::stamp_path(key_store, repo_id);

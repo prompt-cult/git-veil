@@ -306,7 +306,8 @@ the workflow differ. One payoff is a smaller binary.
 | `allow`          | Allow files for encryption on this machine (answers `hide`'s exit-72 question, cached per clone per git user) |
 | `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts (`hide --all` runs the ring-change ceremony: the gated whole-manifest pass; `--keep-plaintext` keeps the plaintexts; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
+| `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts (`--keep-plaintext` keeps the plaintexts; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
+| `rotate`         | Deliver the due ring-change pass: re-encrypt every tracked ciphertext to the current keyring, in memory, plaintexts untouched |
 | `reveal`         | Decrypt the named tracked files back to plaintext (never gated) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
 | `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |

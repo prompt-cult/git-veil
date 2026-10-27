@@ -1637,3 +1637,78 @@ fn test_cat_does_not_touch_disk() {
         "ciphertext must not be touched by cat"
     );
 }
+
+// ---------------------------------------------------------------------------
+// rotate
+// ---------------------------------------------------------------------------
+
+/// `hide --all` is a usage error: hide covers exactly the named files,
+/// and the ring-change pass is its own command.
+#[test]
+fn test_hide_all_is_a_clap_usage_error() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .args(["hide", "--all"])
+        .env("GIT_VEIL_SKIP_PERMISSIONS", "1")
+        .output()
+        .expect("run git-veil hide --all");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "clap usage errors exit 2: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unexpected argument"),
+        "clap reports the unknown argument: {stderr}"
+    );
+}
+
+/// The ring-change note names the follow-up command. The note prints on
+/// every tell and removeperson, so the operator is never left guessing
+/// what delivers the pass.
+#[test]
+fn test_tell_and_removeperson_note_names_rotate() {
+    let fixture = TestRepo::new("rotate-note");
+
+    let collab_identity = generate_x25519_private_key();
+    let recipient = x25519_public_key_encoding(&collab_identity);
+
+    let run = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+            .args(args)
+            .env("GIT_VEIL_SKIP_PERMISSIONS", "1")
+            .env("GIT_VEIL_HOME", &fixture.key_store.path)
+            .current_dir(&fixture.repo.path)
+            .output()
+            .expect("run git-veil")
+    };
+
+    let out = run(&["tell", "bob@example.com", &recipient]);
+    assert!(
+        out.status.success(),
+        "tell failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).expect("tell stdout is utf8");
+    assert!(
+        stdout.contains(
+            "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
+        ),
+        "tell prints the rotate note: {stdout}"
+    );
+
+    let out = run(&["removeperson", "bob@example.com"]);
+    assert!(
+        out.status.success(),
+        "removeperson failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).expect("removeperson stdout is utf8");
+    assert!(
+        stdout.contains(
+            "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
+        ),
+        "removeperson prints the rotate note: {stdout}"
+    );
+}

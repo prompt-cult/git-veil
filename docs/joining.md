@@ -36,7 +36,7 @@ owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c1
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 Send the owner your X25519 public key first. Create an X25519 private key
@@ -55,30 +55,20 @@ keyring changed, so every tracked ciphertext is encrypted to a keyring
 that does not include you:
 
 ```sh
-$ git-veil reveal .env deploy.env
-keyring signature verified
-keys in keyring: 3
-Decrypted: .env
-Decrypted: deploy.env
-files revealed
-$ git-veil hide --all
-Encrypted: .env
-Encrypted: deploy.env
-Deleted plaintext: .env
-Deleted plaintext: deploy.env
-files hidden
+$ git-veil rotate
+Rotated: .env
+Rotated: deploy.env
+files rotated
 ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
 $ git add .git-veil/keyring .env.secret deploy.env.secret
 $ git commit -m "Add newcomer to keyring and re-encrypt"
 $ git push
 ```
 
-The pass re-encrypts every tracked file that has a plaintext on disk,
-which is what a rotation is for: `reveal` restores the plaintexts, and
-the pass deletes them again. One pass consumes the stamp `tell` wrote.
-Run it twice and the second run refuses with exit code 70, because the
-change was already delivered. For day-to-day work the owner names files
-instead; see [two-collaborators.md](two-collaborators.md).
+One pass consumes one ring change: run it twice and the second run
+refuses with exit code 70, because the change was already delivered. See
+[Commands - rotate](commands.md#rotate). For day-to-day work the owner
+names files instead; see [two-collaborators.md](two-collaborators.md).
 
 If the owner skips the ring-change pass, your reveal later fails with
 `decryption failed. This ciphertext was not encrypted to your key …`.

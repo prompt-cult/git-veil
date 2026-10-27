@@ -15,6 +15,7 @@ pub mod remove;
 pub mod removekey;
 pub mod removeperson;
 pub mod reveal;
+pub mod rotate;
 pub mod show_repo_id;
 pub mod tell;
 pub mod trust;

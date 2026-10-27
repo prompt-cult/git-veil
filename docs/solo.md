@@ -145,7 +145,7 @@ for that flow.
 $ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 $ git-veil tell example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 added example@github.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 What happened. `hide` encrypts to every key in the signed keyring, so even
@@ -157,12 +157,10 @@ key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
 committed. The `tell` argument after the email is the X25519 public key
 encoding itself, pasted as text. `export` prints exactly that string.
 
-The note names the ring-change ceremony. A ring change stamps a pass as
-due on this machine, and one `hide --all` delivers it. On a fresh
-repository nothing is hidden yet, so there is nothing to deliver: the
-first `hide` of `.env` encrypts to the current ring from the start, and
-the pending stamp gates nothing but the pass itself. You can leave it
-undelivered. See [docs/design.md](design.md), "The ring-change ceremony".
+The note stamps a ring-change pass as due on this machine. On a fresh
+repository nothing is hidden yet, so the first `hide` of `.env` encrypts
+to the current ring from the start, and you can leave the pass
+undelivered. See [Commands - rotate](commands.md#rotate).
 
 ## 5. Track, hide, commit
 
@@ -277,11 +275,10 @@ every secret. Give the box its own X25519 private key and its own pin:
 - Pin the owner key with `trust --import` and a pin-file you export with
   `git-veil export-pin`. That is the joining-user flow; see
   [joining.md](joining.md).
-- Put the box's public key in the keyring with `git-veil tell`. The ring
-  change stamps a pass as due, so reveal the files (name them), then
-  deliver the pass with `git-veil hide --all`: every tracked ciphertext
-  with a plaintext on disk is re-encrypted to the ring, and the ciphertexts
-  then carry a stanza for the box. One pass consumes the stamp.
+- Put the box's public key in the keyring with `git-veil tell`, then
+  deliver the ring-change pass with `git-veil rotate`: the box's
+  ciphertexts carry a stanza for the box after one rotate. See
+  [Commands - rotate](commands.md#rotate).
 
 The script then reads what it needs straight from the committed
 ciphertexts:
