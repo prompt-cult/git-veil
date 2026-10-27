@@ -538,9 +538,7 @@ while it is being edited. Consequences, stated honestly:
 
 - **The working set.** `hide` and `reveal` require named paths: they act
   on exactly the named tracked files (an unknown or untracked name
-  refuses, exit 71). There is no bare whole-manifest form; the
-  ring-change ceremony owns the whole-manifest pass, reachable only
-  through the gated `hide --all` (see "The ring-change ceremony"). Hide
+  refuses, exit 71). There is no bare whole-manifest form. Hide
   resolves names the way `add` does, so a named plaintext must exist when
   you name it; reveal resolves with the lexical strip, so a name need not
   exist on disk. The allowance gate and the code-41 warning apply to the
@@ -550,13 +548,6 @@ while it is being edited. Consequences, stated honestly:
   is `reveal` (restores the plaintexts you name) → edit → `hide`. There
   is no skip-and-report on the named path: the file must exist to be
   named.
-- **Rotation requires the plaintext.** `removeperson` + a scoped `hide`
-  alone cannot re-encrypt ciphertexts whose plaintexts are gone - the
-  correct rotation is `reveal` (restores the plaintexts you name),
-  `removeperson` (stamps the ring change), then the ring-change pass,
-  `hide --all` (re-encrypts every tracked file that has a plaintext on
-  disk to the new ring and consumes the stamp). Documented here because
-  it is the one workflow this posture shapes.
 - The allowance gate (exit 72) and the code-41 plaintext-leak warning only
   apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
@@ -631,19 +622,6 @@ Two mitigations close the hole:
    ciphertext is committed content, so deletion is recoverable from git
    history; the honest way to keep an untracked ciphertext around is the
    explicit `--keep-ciphertext` flag, not a default.
-2. **The orphan gate travels with the whole-manifest pass.** Every `hide`
-   names its files, and a named file is tracked by construction, so a
-   scoped hide can never rotate into its own orphan and no orphan refusal
-   runs on it. The whole-manifest pass - the ring-change ceremony,
-   `hide --all` (see "The ring-change ceremony") - owns the orphan gate
-   (exit 42): it enumerates ciphertext paths committed to the git index
-   and refuses when any of them does not correspond to a tracked path,
-   naming each one. The index is read verbatim
-   (`git -c core.quotePath=false ls-files -z`) so unicode/space names map
-   back to their tracked paths; a committed file named exactly `.secret`
-   (no plaintext stem - it cannot correspond to any tracked path) is
-   warned about and ignored rather than fatal, so one junk file cannot
-   brick the pass.
 
 Scope, stated honestly: the gate reads the git **index**, so it catches
 committed (staged) ciphertexts - the exfiltration channel. An uncommitted
@@ -655,10 +633,7 @@ such, not hidden.
 ## The ring-change ceremony
 
 After `tell` or `removeperson` re-signs the keyring, every tracked
-`.secret` still holds ciphertext encrypted to the previous ring. The
-whole-manifest re-encrypt is the one legitimate global pass, and it has
-its own door: `hide --all`. A scoped hide never opens that door, and the
-pass runs nowhere else.
+`.secret` still holds ciphertext encrypted to the previous ring.
 
 - **The stamp.** `tell` and `removeperson` write a ring-change stamp
   into the key store after they write the re-signed keyring. The stamp
@@ -666,32 +641,10 @@ pass runs nowhere else.
   keyring version they signed and the SHA-256 digest of that signed
   content (`RingPassStore`, src/trust_store.rs). It is machine-local and
   outside the repository, so no committed file can forge or clear it.
-- **The gate.** `hide --all` verifies that the committed keyring's
-  version and content digest match the stamp: the ring changed on this
-  machine and no pass has consumed the change yet. Without a stamp, or
-  with a committed keyring that no longer matches one, `hide --all`
-  refuses with exit code 70 and names the repository id. The refusal is
-  plain ASCII and names no command, per the issue #42 message policy.
-  A scoped hide never consults the stamp.
-- **The pass.** The pass re-encrypts every tracked file that has a
-  plaintext on disk to the current ring, two-phase and all-or-nothing
-  (Algorithm 8). A tracked path with no plaintext has nothing to
-  re-encrypt and is skipped with a note. The allowance gate still
-  applies to first-encrypts (exit 72), and the orphan gate runs over the
-  whole git index before anything is encrypted, refusing any committed
-  ciphertext whose path is no longer tracked (exit 42). When the pass
-  completes, the stamp is cleared: one pass per ring change.
-- **The notice.** `tell` and `removeperson` print one plain line when
-  they stamp: the keyring changed on this machine and a pass is due. The
-  line states the fact and names no command, per the issue #42 message
-  policy.
 - **reveal needs no ceremony.** An old ciphertext decrypts against the
   ring entry it was written to, so decryption keeps working while a pass
   is pending. The new ring matters only for encryption, which makes the
   ceremony a hide-side concern.
-- **Fresh start.** The runbook is the ceremony: init, trust, tell (the
-  first tell changes the ring from empty and stamps the pass), add each
-  path (add implies the allowance), then `hide --all` once.
 
 ## Allowance (first-encrypt consent, keyed to pin and principal)
 
@@ -743,9 +696,7 @@ $$
 \multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair; } S[\mathit{repoId}] \text{ = the ring-change stamp in the key store; } W \text{ = the working set: exactly the named files; there is no bare } \texttt{hide}} \\
 1: & \textbf{upon } \textsc{Hide} \\
 2: & \quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4; yields } \mathit{repoId} \text{ and the pin fingerprint} \\
-2a: & \quad \textbf{if } \texttt{--all} \text{: require the ring-change stamp: } S[\mathit{repoId}] \text{ must equal the committed ring's (version, signed-content digest)} \\
-   & \quad\quad \text{else refuse, exit 70, naming } \mathit{repoId} \ . \ \text{no stamp, or a ring that no longer matches one, is not a due pass} \\
-3: & \quad W \leftarrow \text{the named paths, resolved; a name outside } tracked \text{ refuses, exit 71} \ . \ \texttt{--all}\text{: } W = tracked \text{, the whole manifest} \\
+3: & \quad W \leftarrow \text{the named paths, resolved; a name outside } tracked \text{ refuses, exit 71} \\
 4: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
 5: & \quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \quad . \ \text{a committed file named exactly .secret is warned and skipped} \\
 6: & \quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
@@ -900,6 +851,6 @@ codes are never renumbered, only appended.
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
 | 63   | SignatureVerificationFailed  | Keyring signature missing or invalid |
-| 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`, `hide --all` without a due ring-change stamp) |
+| 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`) |
 | 71   | UnsafePath                   | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
 | 72   | UnintendedEncryption         | `hide` refuses to first-encrypt a tracked path never allowed on this machine (see "Allowance") |

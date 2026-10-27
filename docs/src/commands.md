@@ -19,9 +19,7 @@ Three contracts cover every command:
   table; the specification lives in the
   [Design specification](design.md).
 - **Named paths.** `hide` and `reveal` act on exactly the paths you give
-  them. There is no bare whole-manifest form. The one whole-manifest
-  operation is the ring-change pass, `hide --all`, and it is gated: see
-  [The ring-change pass](#the-ring-change-pass).
+  them. There is no bare whole-manifest form.
 
 ## Global flags and environment
 
@@ -354,10 +352,6 @@ re-signs the keyring with the owner's Ed25519 signing key.
   and prints the create-and-back-up recipe.
 - Telling the same email twice updates the entry instead of duplicating
   it.
-- `tell` stamps the ring-change pass as due on this machine. Existing
-  ciphertexts do not change until one `hide --all` delivers the pass. See
-  [The ring-change pass](#the-ring-change-pass) and
-  [Two collaborators](two-collaborators.md).
 
 The second argument is the collaborator's X25519 public key encoding
 itself, the `age1xxxx` string pasted as text. [`export`](#export) prints
@@ -543,7 +537,6 @@ Exit codes: none.
 ```sh
 git-veil hide <files>... [--keep-plaintext] [--remote <name>]
              [--key-store <dir>]
-git-veil hide --all [--keep-plaintext] [--remote <name>] [--key-store <dir>]
 ```
 
 Encrypts each named tracked file to every key in the keyring and leaves a
@@ -581,42 +574,8 @@ Deleted plaintext: .env
 files hidden
 ```
 
-#### The ring-change pass
-
-`hide --all` re-encrypts every tracked file to the current keyring. It is
-the one whole-manifest operation, and it is gated.
-
-`tell` and `removeperson` stamp the keyring change on this machine when
-they re-sign the keyring. One `hide --all` consumes that stamp: it
-re-encrypts every tracked file that has a plaintext on disk, so reveal
-the files first, and consumes the stamp. Without a stamp for this
-repository on this machine, or when the committed keyring no longer
-matches the stamped version and digest, `hide --all` refuses (exit 70)
-and names the repository id. One pass delivers one ring change; a second
-run immediately after refuses.
-
-The pass also refuses (exit 42) a committed ciphertext whose path is no
-longer tracked. A tracked path with no plaintext on disk is skipped with
-a note. A tracked first-encrypt still needs its allowance (exit 72).
-
-A scoped `hide` never consults the stamp and never consumes it. For
-day-to-day work, name the files you touched; reserve `hide --all` for the
-ceremony after `tell` or `removeperson`.
-
-```sh
-$ git-veil reveal .env deploy.env
-$ git-veil hide --all
-Encrypted: .env
-Encrypted: deploy.env
-Deleted plaintext: .env
-Deleted plaintext: deploy.env
-files hidden
-ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
-```
-
 Exit codes: 40 (ciphertext git-ignored), 41 (warning: plaintext not
-git-ignored), 42 (orphaned ciphertext, `--all` only), 70 (ring-change
-pass not due), 71 (unknown or unsafe path), 72 (no allowance), plus the
+git-ignored), 71 (unknown or unsafe path), 72 (no allowance), plus the
 crypto codes 60/61/63 and the gated-chain codes, plus 30.
 
 ### `reveal`

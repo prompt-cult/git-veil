@@ -19,10 +19,6 @@ What makes it safe to share:
   first-encrypt a path you never allowed on this machine (exit 72), and
   you answer with `git-veil allow`. See
   [Commands - allow](commands.md#allow).
-- **A ring-change ceremony.** `tell` and `removeperson` re-sign the
-  keyring but change no ciphertext. One `hide --all` delivers the change:
-  it re-encrypts every tracked file with a plaintext on disk to the
-  current ring. One pass consumes one change.
 
 ## The flows
 

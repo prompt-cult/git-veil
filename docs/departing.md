@@ -13,34 +13,18 @@ Understand the semantics before you rely on them:
   decrypt every one of them he can obtain, with this tool or with the
   reference `age` CLI, forever. Removing him changes nothing about the bytes
   already on disk or already in git history.
-- Only the ring-change pass, `git-veil hide --all`, produces new ciphertext
-  that is not encrypted to bob's key. Even then, git history still contains
-  every old ciphertext. Old commits stay decryptable by bob indefinitely.
 - Therefore, if bob ever saw or could have decrypted a secret, treat that
   secret as compromised and rotate it. Revocation here is bookkeeping,
   not cryptography.
 
 ## 1. What the owner runs
 
-Remove bob, then deliver the ring-change pass. `removeperson` stamps a
-pass as due on this machine when it re-signs the keyring, and one `hide
---all` consumes the stamp. The pass re-encrypts only tracked files with
-a plaintext on disk, so reveal the files first (name them):
+Remove bob, then deliver the ring-change pass:
 
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
-$ git-veil reveal .env
-keyring signature verified
-keys in keyring: 2
-Decrypted: .env
-files revealed
-$ git-veil hide --all
-Encrypted: .env
-Deleted plaintext: .env
-files hidden
-ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
 $ git add .git-veil/keyring .env.secret
 $ git commit -m "Remove bob from keyring and re-encrypt"
 $ git push
@@ -50,10 +34,7 @@ What happened. The keyring signature was verified against the pinned owner
 key before the change. removeperson fails closed on a tampered or unsigned
 keyring, and on an email that is not in the ring. Bob's entry was dropped,
 the ring re-signed with the owner's key, and a due pass stamped in the
-owner's key store. `hide --all` checked the stamp against the committed
-ring, re-encrypted every tracked file that had a plaintext on disk, and
-consumed the stamp: one pass per ring change. From this pass onward, new
-ciphertext does not include bob.
+owner's key store.
 
 The pass replaces ciphertext only for files whose plaintext was on
 disk. It does not scrub git history. Every previous version of
@@ -140,7 +121,6 @@ unreadable.
 ## Checklist
 
 - [ ] Owner: `removeperson <email>`. It fails if the email is not in the ring
-- [ ] Owner: `reveal` the files, then `hide --all`, commit `.git-veil/keyring` and the re-encrypted `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
 - [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up X25519 private key

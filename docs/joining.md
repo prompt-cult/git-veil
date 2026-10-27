@@ -50,36 +50,6 @@ with `scp`. The owner reads you the printed owner key fingerprint. A voice
 call is ideal. Compare it with the fingerprint recorded in the repository's
 committed `.git-veil/trust.json` before you import (step 4).
 
-Then, and this is critical, the owner delivers the ring-change pass. The
-keyring changed, so every tracked ciphertext is encrypted to a keyring
-that does not include you:
-
-```sh
-$ git-veil reveal .env deploy.env
-keyring signature verified
-keys in keyring: 3
-Decrypted: .env
-Decrypted: deploy.env
-files revealed
-$ git-veil hide --all
-Encrypted: .env
-Encrypted: deploy.env
-Deleted plaintext: .env
-Deleted plaintext: deploy.env
-files hidden
-ring-change pass complete: every tracked ciphertext is re-encrypted to the current keyring
-$ git add .git-veil/keyring .env.secret deploy.env.secret
-$ git commit -m "Add newcomer to keyring and re-encrypt"
-$ git push
-```
-
-The pass re-encrypts every tracked file that has a plaintext on disk,
-which is what a rotation is for: `reveal` restores the plaintexts, and
-the pass deletes them again. One pass consumes the stamp `tell` wrote.
-Run it twice and the second run refuses with exit code 70, because the
-change was already delivered. For day-to-day work the owner names files
-instead; see [two-collaborators.md](two-collaborators.md).
-
 If the owner skips the ring-change pass, your reveal later fails with
 `decryption failed. This ciphertext was not encrypted to your key …`.
 

@@ -157,12 +157,9 @@ key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
 committed. The `tell` argument after the email is the X25519 public key
 encoding itself, pasted as text. `export` prints exactly that string.
 
-The note names the ring-change ceremony. A ring change stamps a pass as
-due on this machine, and one `hide --all` delivers it. On a fresh
-repository nothing is hidden yet, so there is nothing to deliver: the
-first `hide` of `.env` encrypts to the current ring from the start, and
-the pending stamp gates nothing but the pass itself. You can leave it
-undelivered. See [docs/design.md](design.md), "The ring-change ceremony".
+On a fresh
+repository nothing is hidden yet: the
+first `hide` of `.env` encrypts to the current ring from the start.
 
 ## 5. Track, hide, commit
 
@@ -277,11 +274,7 @@ every secret. Give the box its own X25519 private key and its own pin:
 - Pin the owner key with `trust --import` and a pin-file you export with
   `git-veil export-pin`. That is the joining-user flow; see
   [joining.md](joining.md).
-- Put the box's public key in the keyring with `git-veil tell`. The ring
-  change stamps a pass as due, so reveal the files (name them), then
-  deliver the pass with `git-veil hide --all`: every tracked ciphertext
-  with a plaintext on disk is re-encrypted to the ring, and the ciphertexts
-  then carry a stanza for the box. One pass consumes the stamp.
+- Put the box's public key in the keyring with `git-veil tell`.
 
 The script then reads what it needs straight from the committed
 ciphertexts:

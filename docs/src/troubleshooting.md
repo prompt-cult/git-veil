@@ -28,7 +28,7 @@ public API: they are never renumbered, only appended.
 | 61 | EncryptionFailed | Encryption failed |
 | 62 | KeyParseFailure | A key, keyring or signature could not be parsed |
 | 63 | SignatureVerificationFailed | Keyring signature missing or invalid |
-| 70 | Refused | Policy refusal (init over established trust, `clean` without `--yes`, `hide --all` without a due ring-change stamp) |
+| 70 | Refused | Policy refusal (init over established trust, `clean` without `--yes`) |
 | 71 | UnsafePath | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
 | 72 | UnintendedEncryption | `hide` refuses to first-encrypt a tracked path never allowed on this machine |
 
@@ -131,9 +131,6 @@ half-encrypted tree:
   modified by someone else. If the tracking is wanted,
   `git-veil allow <path>` and hide again. A path you added yourself never
   asks; a path whose ciphertext is already committed never asks.
-- **Exit 70 on `hide --all`**. The ring-change pass is not due, or was
-  already consumed. The pass exists to turn a ring change into
-  ciphertext; a scoped `hide` of named files always works.
 - **Exit 40**. The `.secret` ciphertext path is itself git-ignored, for
   example swallowed by a parent rule like `.tmp/`. Fix the ignore rules
   so the ciphertext will be committed.
@@ -151,11 +148,7 @@ Exit 60 means no stanza in the ciphertext is addressed to your X25519
 public key. The common causes, in order:
 
 1. You are on an old commit. `git pull`.
-2. The ring changed and the pass was never delivered. The owner runs
-   `reveal` (naming the files), then `git-veil hide --all`, then commits
-   and pushes the fresh ciphertexts.
-3. Your keyring entry is newer than the ciphertext and the owner skipped
-   the ceremony. Same remedy as 2.
+2. The owner has not delivered the ring-change pass.
 
 Remember that a removed collaborator can still decrypt every ciphertext
 written while they were a member, straight out of git history. Rotation of

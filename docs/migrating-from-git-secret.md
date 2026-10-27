@@ -270,10 +270,7 @@ Checklist:
       plaintext (diff against the step-1 copy)
 - [ ] Post-reveal state matches git-secret's: plaintexts on disk, the
       `.secret` files still in place and still tracked by git
-- [ ] If someone was added to the git-secret keyring but is missing here: the
-      owner runs `git-veil tell` for them, then delivers the ring-change
-      pass, `git-veil hide --all` (see [docs/joining.md](joining.md))
-- [ ] Anyone leaving the team: `removeperson` + `git-veil hide --all`,
+- [ ] Anyone leaving the team: `removeperson`,
       and rotate the secrets they ever saw - the same
       forward-looking-revocation rules as git-secret apply (see
       [docs/departing.md](departing.md))
@@ -287,7 +284,7 @@ Checklist:
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
 | `git secret add`                        | `git-veil add`                  | Both append the plaintext name to `.gitignore` when not already ignored; git-veil additionally warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove`               | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
-| `git secret hide`                       | `git-veil hide`                 | Diverged shape and default. git-veil `hide` names its files, and the whole-manifest pass is the gated ceremony, `git-veil hide --all`. git-veil deletes the plaintext, git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
+| `git secret hide`                       | `git-veil hide`                 | Diverged shape and default. git-veil `hide` names its files. git-veil deletes the plaintext, git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
 | `git secret reveal`                     | `git-veil reveal`               | Same ciphertext behaviour: both leave the `.secret` in place. git-veil `reveal` names its files |
 | `git secret cat`                        | `git-veil cat`                  | Both print one file to stdout without touching disk state |
 | `git secret changes`                    | `git-veil changes`              | Both compare on-disk plaintext with the last hidden version |
