@@ -719,12 +719,11 @@ fn test_hide_and_tell_fail_without_trust() {
 
     let id = generate_x25519_private_key();
     let r = x25519_public_key_encoding(&id);
-    fs::write(repo.join("alice.recipient"), &r).unwrap();
     assert!(
         cmd_tell(
             &repo.path,
             "alice@example.com",
-            "alice.recipient",
+            &r,
             "origin",
             &key_store.path,
             None,

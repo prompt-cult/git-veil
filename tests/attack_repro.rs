@@ -107,12 +107,10 @@ impl Fixture {
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
         let id = generate_x25519_private_key();
         let r = x25519_public_key_encoding(&id);
-        let fname = format!("{}.recipient", email);
-        fs::write(self.repo.join(&fname), &r).unwrap();
         cmd_tell(
             &self.repo.path,
             email,
-            &fname,
+            &r,
             "origin",
             &self.key_store.path,
             None,
@@ -758,11 +756,10 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
     // This store simulates the victim's machine.
     let victim = generate_x25519_private_key();
     let victim_recipient = x25519_public_key_encoding(&victim);
-    fs::write(f.repo.join("victim.recipient"), &victim_recipient).unwrap();
     cmd_tell(
         &f.repo.path,
         "victim@example.com",
-        "victim.recipient",
+        &victim_recipient,
         "origin",
         &f.key_store.path,
         None,
@@ -849,11 +846,10 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     // owner.verifying line 2.
     let owner_verifying = fs::read_to_string(f.repo.join(".git-veil/owner.verifying")).unwrap();
     let owner_recipient = owner_verifying.lines().nth(1).unwrap().trim();
-    fs::write(f.repo.join("owner.recipient"), owner_recipient).unwrap();
     cmd_tell(
         &f.repo.path,
         "owner@example.com",
-        "owner.recipient",
+        owner_recipient,
         "origin",
         &f.key_store.path,
         None,
@@ -963,15 +959,11 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
 fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     let f = Fixture::new("case-variant");
     let victim = generate_x25519_private_key();
-    fs::write(
-        f.repo.join("victim.recipient"),
-        x25519_public_key_encoding(&victim),
-    )
-    .unwrap();
+    let victim_recipient = x25519_public_key_encoding(&victim);
     cmd_tell(
         &f.repo.path,
         "victim@example.com",
-        "victim.recipient",
+        &victim_recipient,
         "origin",
         &f.key_store.path,
         None,

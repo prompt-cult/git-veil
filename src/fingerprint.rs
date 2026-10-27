@@ -9,7 +9,7 @@
 //! printed as 64 lowercase hexadecimal characters. The label is the
 //! principal label for a keyring principal, or the repository id for the
 //! owner key. The public key encoding is the bech32 X25519 public key
-//! (age1...) or the 64 hex character Ed25519 verifying key.
+//! (age1xxxx) or the 64 hex character Ed25519 verifying key.
 //!
 //! The derivation is a pure function over public values with a fixed,
 //! documented shape, so a user on a clean host reproduces the exact value

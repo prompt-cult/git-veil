@@ -25,10 +25,14 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 Collaborator\*(Aqs email
 .TP
 <\fIPUBLIC_KEY\fR>
-Path to a file containing the collaborator\*(Aqs X25519 public key encoding (age1...)
+The collaborator\*(Aqs bech32 X25519 public key encoding (age1xxxx), pasted literally
 .SH EXTRA
 Adds a collaborator\*(Aqs X25519 public key to the repository keyring and
-re\-signs the keyring with the owner\*(Aqs Ed25519 signing key. The existing
+re\-signs the keyring with the owner\*(Aqs Ed25519 signing key. The second
+argument is the collaborator\*(Aqs bech32 X25519 public key encoding
+(age1xxxx), pasted literally: the encoding git\-veil export prints on the
+collaborator\*(Aqs machine, or age\-keygen \-y prints from their key file. A
+file name is not a valid key encoding and is refused. The existing
 keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test\-encrypted to the new key so a key that
 cannot encrypt is never signed into the ring.
@@ -46,4 +50,4 @@ this machine, and the signing key in the local key store. Next steps:
 add files, then hide.
 
 EXAMPLES
-  $ git\-veil tell alice@example.com alice.pub
+  $ git\-veil tell alice@example.com age1xxxx

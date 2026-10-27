@@ -19,7 +19,7 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
 <\fIIDENTIFIER\fR>
-Exact X25519 public key encoding (age1...) of the key to remove
+Exact X25519 public key encoding (age1xxxx) of the key to remove
 .SH EXTRA
 Drops key material from the LOCAL key store: every X25519 private key in
 $GIT_VEIL_HOME (or $HOME/.git\-veil) identities.txt and every X25519
@@ -45,6 +45,6 @@ removekey never rewrites a store it could not fully parse. On success a
 per\-store summary prints the public key encodings removed.
 
 EXAMPLES
-  $ git\-veil removekey age1axmf...                 # exact public key encoding
-  $ git\-veil removekey age1axmf... \-\-yes           # confirm only\-private\-key removal
-  $ git\-veil removekey age1axmf... \-\-key\-store /path/to/store
+  $ git\-veil removekey age1xxxx                 # exact public key encoding
+  $ git\-veil removekey age1xxxx \-\-yes           # confirm only\-private\-key removal
+  $ git\-veil removekey age1xxxx \-\-key\-store /path/to/store
