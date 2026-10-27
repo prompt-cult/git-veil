@@ -32,9 +32,9 @@ argument: a repository must never supply its own trust anchor. Two
 pin\-creation paths exist, and nothing else:
 
 1. POSSESSION PROOF (default): git\-veil trust <repo_id>. The candidate is
-   the repository\*(Aqs committed owner.verifying (64 hex chars on line 1);
-   the proof is an exact match between that key and the verifying key
-   derived from a seed in <key store>/signing\-keys.txt. Match \-> pin
+   the repository\*(Aqs committed .git\-veil/owner.verifying (64 hex chars on
+   line 1); the proof is an exact match between that key and the verifying
+   key derived from a seed in <key store>/signing\-keys.txt. Match \-> pin
    written. No match \-> refusal (exit code 20): pins are created only on
    machines holding the signing key.
 
@@ -42,13 +42,13 @@ pin\-creation paths exist, and nothing else:
    produced by git\-veil export\-pin on a machine that proved possession.
    Three mandatory consistency checks: the pin\-file\*(Aqs repo\-id must match
    this repository; its verifying key must exactly match the committed
-   owner.verifying; and its owner key fingerprint must match the owner
-   fingerprint recorded in .git\-veil/trust.json. Any mismatch \-> refusal:
-   one of the two channels is compromised.
+   .git\-veil/owner.verifying; and its owner key fingerprint must match the
+   owner fingerprint recorded in .git\-veil/trust.json. Any mismatch \->
+   refusal: one of the two channels is compromised.
 
-A pin or trust record in the retired 16 hex character fingerprint format
-is hostile: every gated command refuses it until trust is re\-established.
-See the fingerprint documentation for the current derivation.
+A pin or trust record in the 16 hex character fingerprint format is
+refused as hostile: every gated command fails until trust is re\-established.
+See the fingerprint documentation for the derivation.
 
 Both paths refuse a path inside the repository worktree, so a pin\-file
 always travels out of band (e.g. ssh) \- the same model as known_hosts

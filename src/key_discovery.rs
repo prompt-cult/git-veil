@@ -24,7 +24,7 @@ fn signing_key_recipe(_key_store: &Path) -> String {
      backed up. Create an Ed25519 signing key yourself and back it up. See the \
      key creation documentation. The seed goes into signing-keys.txt as one 64 \
      hex character line and the matching verifying key goes into the committed \
-     owner.verifying file. Without the seed you cannot re-sign the keyring."
+     .git-veil/owner.verifying file. Without the seed you cannot re-sign the keyring."
         .to_string()
 }
 
@@ -98,7 +98,7 @@ pub fn discover_signing_key(
 /// shell history, `ps` output, scrollback and agent transcripts, so the
 /// private key must never appear there. A 1-based index into
 /// signing-keys.txt is not a selection form either, because reordering
-/// the file would silently rename what an index selected. The retired
+/// the file would silently rename what an index selected. The
 /// 16-hex-character fingerprint form is not a selection form.
 ///
 /// Zero matches exits with code 20. More than one match, from a

@@ -83,8 +83,9 @@ impl Fixture {
             format!("{}\n", identity.to_string().expose_secret()),
         )
         .unwrap();
+        fs::create_dir_all(repo.join(".git-veil")).unwrap();
         fs::write(
-            repo.join("owner.verifying"),
+            repo.join(".git-veil/owner.verifying"),
             format!("{}\n{}\n", verifying_hex, recipient),
         )
         .unwrap();
@@ -176,8 +177,9 @@ fn test_trust_without_matching_seed_refuses() {
     // store holds keypair B's seed, so possession of A is not proven.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join("owner.verifying"),
+        repo.join(".git-veil/owner.verifying"),
         format!("{}\n", owner_verifying_hex),
     )
     .unwrap();
@@ -212,7 +214,12 @@ fn test_trust_ambiguous_seeds_refuse() {
     init_git_repo(&repo.path);
 
     let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::write(repo.join("owner.verifying"), format!("{}\n", verifying_hex)).unwrap();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
+    fs::write(
+        repo.join(".git-veil/owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
     // The same seed twice: the match is ambiguous, so refuse rather than pick.
     let seed = hex::encode(signing_key.to_bytes());
     fs::write(
@@ -237,7 +244,12 @@ fn test_trust_wrong_repo_id_fails() {
     init_git_repo(&repo.path);
 
     let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::write(repo.join("owner.verifying"), format!("{}\n", verifying_hex)).unwrap();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
+    fs::write(
+        repo.join(".git-veil/owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
     fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
@@ -257,6 +269,41 @@ fn test_trust_wrong_repo_id_fails() {
 }
 
 #[test]
+fn trust_refuses_root_level_owner_verifying() {
+    let repo = TempDir::new("root-key");
+    let key_store = TempDir::new("root-key-ks");
+    init_git_repo(&repo.path);
+
+    // The root-level owner.verifying is the retired location. Its key
+    // matches the store's seed exactly, and trust still refuses: the only
+    // key it reads is .git-veil/owner.verifying.
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(repo.join("owner.verifying"), format!("{}\n", verifying_hex)).unwrap();
+    fs::write(
+        key_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    cmd_init(&repo.path, false).expect("init");
+    assert!(!repo.join(".git-veil/owner.verifying").exists());
+
+    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false)
+        .expect_err("trust must ignore a root-level owner.verifying");
+    assert_eq!(exit_code_of(&err), 70);
+    assert!(
+        err.to_string()
+            .contains("no committed owner verifying key file at .git-veil/owner.verifying"),
+        "the refusal names the state-directory path: {err}"
+    );
+    assert!(
+        TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
+            .unwrap()
+            .is_none(),
+        "no pin may be written on refusal"
+    );
+}
+
+#[test]
 fn test_retrust_replaces_pin() {
     let f = Fixture::new("retrust");
 
@@ -267,7 +314,7 @@ fn test_retrust_replaces_pin() {
     // Key rotation: new seed, new committed owner.verifying, re-prove.
     let (new_signing_key, new_verifying_hex) = generate_signing_keypair();
     fs::write(
-        f.repo.join("owner.verifying"),
+        f.repo.join(".git-veil/owner.verifying"),
         format!("{}\n", new_verifying_hex),
     )
     .unwrap();
@@ -309,8 +356,9 @@ fn test_export_pin_without_matching_seed_refuses() {
     // store holds keypair B's seed, so export must refuse.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
+    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join("owner.verifying"),
+        repo.join(".git-veil/owner.verifying"),
         format!("{}\n", owner_verifying_hex),
     )
     .unwrap();
@@ -780,7 +828,7 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
 
     let (attacker_signing_key, attacker_verifying_hex) = generate_signing_keypair();
     fs::write(
-        attacked.join("owner.verifying"),
+        attacked.join(".git-veil/owner.verifying"),
         format!("{}\n", attacker_verifying_hex),
     )
     .unwrap();

@@ -24,8 +24,7 @@ Exact X25519 public key encoding (age1...) of the key to remove
 Drops key material from the LOCAL key store: every X25519 private key in
 $GIT_VEIL_HOME (or $HOME/.git\-veil) identities.txt and every X25519
 public key in recipients.txt whose public key encoding exactly matches
-the identifier is removed. Keys are selected by public key string only;
-no fingerprint\-as\-identifier mode remains.
+the identifier is removed. Keys are selected by public key string only.
 
 This is destructive and LOCAL\-ONLY: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. Removing a

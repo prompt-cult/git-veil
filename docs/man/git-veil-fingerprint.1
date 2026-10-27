@@ -34,7 +34,7 @@ This is a pure function: no repository, no key store, no pin, no
 network. A clean host reproduces the exact value with stock OS tools:
 
   printf \*(Aq%s:%s\*(Aq \*(Aqalice@example.com\*(Aq "$(age\-keygen \-y identity.txt)" | sha256sum
-  printf \*(Aq%s:%s\*(Aq \*(Aqdemo+example@github.com\*(Aq "$(head \-n 1 owner.verifying)" | sha256sum
+  printf \*(Aq%s:%s\*(Aq \*(Aqdemo+example@github.com\*(Aq "$(head \-n 1 .git\-veil/owner.verifying)" | sha256sum
 
 Use printf, never echo (echo appends a newline and hashes different
 bytes). Exactly one colon separates label and key. The digest is

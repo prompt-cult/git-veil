@@ -82,8 +82,9 @@ impl Fixture {
             format!("{}\n", identity.to_string().expose_secret()),
         )
         .unwrap();
+        fs::create_dir_all(repo.join(".git-veil")).unwrap();
         fs::write(
-            repo.join("owner.verifying"),
+            repo.join(".git-veil/owner.verifying"),
             format!("{}\n{}\n", verifying_hex, recipient),
         )
         .unwrap();
@@ -846,7 +847,7 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     // The owner must be in the keyring too for the reveal below. Their
     // X25519 private key is in the key store. The public key is
     // owner.verifying line 2.
-    let owner_verifying = fs::read_to_string(f.repo.join("owner.verifying")).unwrap();
+    let owner_verifying = fs::read_to_string(f.repo.join(".git-veil/owner.verifying")).unwrap();
     let owner_recipient = owner_verifying.lines().nth(1).unwrap().trim();
     fs::write(f.repo.join("owner.recipient"), owner_recipient).unwrap();
     cmd_tell(

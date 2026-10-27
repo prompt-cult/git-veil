@@ -17,13 +17,12 @@
 //!
 //! ```text
 //! printf '%s:%s' 'principal-label' "$(age-keygen -y private-key.txt)" | sha256sum
-//! printf '%s:%s' 'repo-id' "$(head -n 1 owner.verifying)" | sha256sum
+//! printf '%s:%s' 'repo-id' "$(head -n 1 .git-veil/owner.verifying)" | sha256sum
 //! ```
 //!
 //! Fingerprints are computed on demand and never stored in the keyring.
-//! A 16 hex character pin or trust record is a legacy artefact from a
-//! retired derivation, and every gated command refuses it as hostile
-//! ([`is_legacy_pin_shape`]).
+//! A 16 hex character pin or trust record is refused as hostile by every
+//! gated command ([`is_16_hex_pin_shape`]).
 
 use sha2::{Digest, Sha256};
 
@@ -51,10 +50,9 @@ pub fn owner_key_fingerprint(repo_id: &str, verifying_key: &ed25519_dalek::Verif
 }
 
 /// True when `value` is exactly 16 ASCII hexadecimal characters, the
-/// shape of a retired fingerprint. Such values predate the SHA-256
-/// derivation and are refused as hostile by every gated command. The
-/// recovery is re-establishing the pin as described in the trust
-/// documentation.
-pub fn is_legacy_pin_shape(value: &str) -> bool {
+/// shape of a 16-hex fingerprint. Such values are refused as hostile by
+/// every gated command. The recovery is re-establishing the pin as
+/// described in the trust documentation.
+pub fn is_16_hex_pin_shape(value: &str) -> bool {
     value.len() == 16 && value.chars().all(|c| c.is_ascii_hexdigit())
 }

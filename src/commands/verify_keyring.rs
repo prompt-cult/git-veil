@@ -4,20 +4,20 @@ use std::path::Path;
 
 use crate::age_crypto::for_each_store_line;
 use crate::exit_codes::{coded, ExitCode};
-use crate::fingerprint::{fingerprint_for_public_key, is_legacy_pin_shape};
+use crate::fingerprint::{fingerprint_for_public_key, is_16_hex_pin_shape};
 use crate::{
     derive_repo_id, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
     get_remote_push_url, keyring_content_digest, parse_verifying_key, verify_keyring_signature,
     Keyring, TrustPinStore, TrustStore,
 };
 
-/// The refusal for a retired 16 hex character fingerprint, wherever it is
-/// found. Plain ASCII. It names the derivation change and no command.
+/// The refusal for a 16 hex character fingerprint, wherever it is
+/// found. Plain ASCII. It names the derivation and no command.
 /// The remedy is the trust documentation.
 fn legacy_fingerprint_error() -> anyhow::Error {
     coded(
         ExitCode::Refused,
-        "a trust pin or record in the retired 16 hex character fingerprint format was found. The fingerprint derivation changed to SHA-256 over the label, a colon, and the public key encoding, printed as 64 lowercase hex characters. Re-establish the pin as described in the trust documentation.".to_string(),
+        "a trust pin or record in the 16 hex character fingerprint format was found. The fingerprint is SHA-256 over the label, a colon, and the public key encoding, printed as 64 lowercase hex characters. Re-establish the pin as described in the trust documentation.".to_string(),
     )
 }
 
@@ -107,14 +107,14 @@ pub fn verify_keyring_against_trust(
     // Require the per-machine pin written by cmd_trust, and fail closed
     // on any disagreement.
     //
-    // A 16 hex character value is a retired fingerprint, hostile
+    // A 16 hex character value is a hostile fingerprint
     // wherever it is found. The pin is checked before the committed
-    // record so a missing pin stays a missing pin and a legacy pin is
+    // record so a missing pin stays a missing pin and a 16-hex pin is
     // never silently compared away. Nothing is rewritten. The recovery is
     // re-establishing the pin.
     let pinned = match TrustPinStore::read_pin(key_store, &repo_id)? {
         Some(pinned) => {
-            if is_legacy_pin_shape(&pinned) {
+            if is_16_hex_pin_shape(&pinned) {
                 return Err(legacy_fingerprint_error());
             }
             pinned
@@ -129,7 +129,7 @@ pub fn verify_keyring_against_trust(
             ))
         }
     };
-    if is_legacy_pin_shape(trusted_fingerprint) {
+    if is_16_hex_pin_shape(trusted_fingerprint) {
         return Err(legacy_fingerprint_error());
     }
     if !pinned.eq_ignore_ascii_case(trusted_fingerprint) {

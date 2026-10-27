@@ -27,10 +27,10 @@ Repository ID (e.g., fara+simbo1905@github.com)
 Writes this repository\*(Aqs pin\-file for import on a machine WITHOUT the
 signing key (which runs git\-veil trust \-\-import <pin\-file>). Export
 requires the same possession proof as trust: an exact match between the
-repository\*(Aqs committed owner.verifying and the verifying key derived from
-a seed in <key store>/signing\-keys.txt. A machine without the matching
-seed cannot export at all \- pins originate only from machines holding the
-signing key; store\-less machines are consumers, never producers.
+repository\*(Aqs committed .git\-veil/owner.verifying and the verifying key
+derived from a seed in <key store>/signing\-keys.txt. A machine without the
+matching seed cannot export at all \- pins originate only from machines
+holding the signing key; store\-less machines are consumers, never producers.
 
 \-\-output must point OUTSIDE the repository worktree: a committed pin\-file
 would be exactly the self\-supplied anchor the pin model exists to

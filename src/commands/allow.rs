@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::allowance::AllowanceStore;
 use crate::commands::add::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
-use crate::fingerprint::is_legacy_pin_shape;
+use crate::fingerprint::is_16_hex_pin_shape;
 use crate::tracked_files::{get_git_config_email, resolve_repo_relative_input, PathResolveMode};
 use crate::{derive_repo_id, get_remote_push_url, TrustPinStore};
 
@@ -20,11 +20,11 @@ pub(crate) fn resolve_allowance_anchor(
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
     let pin = match TrustPinStore::read_pin(key_store, &repo_id)? {
-        Some(pin) if !is_legacy_pin_shape(&pin) => pin,
+        Some(pin) if !is_16_hex_pin_shape(&pin) => pin,
         Some(_) => {
             return Err(coded(
                 ExitCode::Refused,
-                "a trust pin in the retired 16 hex character fingerprint format was found. The fingerprint derivation changed to SHA-256 over the label, a colon, and the public key encoding, printed as 64 lowercase hex characters. Re-establish the pin as described in the trust documentation.".to_string(),
+                "a trust pin in the 16 hex character fingerprint format was found. The fingerprint is SHA-256 over the label, a colon, and the public key encoding, printed as 64 lowercase hex characters. Re-establish the pin as described in the trust documentation.".to_string(),
             ))
         }
         None => {

@@ -10,18 +10,17 @@ use crate::fs_atomic::write_atomic;
 pub struct TrustStore {
     /// repo_id -> fixed-derivation fingerprint (SHA-256 of the raw key
     /// bytes, hex) of the repository's committed owner verifying key
-    /// (`owner.verifying`). Committed alongside the key so pin-file
-    /// import can cross-check three channels (pin-file, committed key,
-    /// committed fingerprint) and so a human can verify it out of band.
-    /// One map: under the single derivation the pinned fingerprint and
-    /// the owner fingerprint are the same value.
+    /// (`.git-veil/owner.verifying`). Committed alongside the key so
+    /// pin-file import can cross-check three channels (pin-file,
+    /// committed key, committed fingerprint) and so a human can verify it
+    /// out of band. One map: under the single derivation the pinned
+    /// fingerprint and the owner fingerprint are the same value.
     #[serde(default)]
     pub owner_fingerprints: HashMap<String, String>,
 }
 
-/// The on-disk shapes. trust.json once carried a second map,
-/// `trusted_keys`, written before the derivations were unified. That
-/// field is legacy and ignored on load. A file without
+/// The on-disk shape. A trust.json that carries a second map,
+/// `trusted_keys`, has that field ignored on load. A file without
 /// `owner_fingerprints` loads empty, so every gated command refuses
 /// until the owner re-runs `trust` on a seed-holding machine and
 /// commits the refresh.

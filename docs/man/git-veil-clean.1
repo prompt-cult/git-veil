@@ -16,9 +16,9 @@ Confirm destruction of tracked state and any ciphertext. Required when the clean
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Removes the .git\-veil state directory (keyring, trust.json,
-tracked.json). .gitignore is never rewritten, and the in\-place .secret
-ciphertext files are ordinary committable files that clean does not
-disown.
+tracked.json, and the committed owner.verifying). .gitignore is never
+rewritten, and the in\-place .secret ciphertext files are ordinary
+committable files that clean does not disown.
 
 The .secret ciphertexts can be the ONLY remaining copy of a secret. A
 clean that would destroy tracked state or ciphertext therefore refuses

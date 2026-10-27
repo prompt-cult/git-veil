@@ -38,10 +38,10 @@ pub enum Commands {
     /// Initialize git-veil state (.git-veil/) in the current repository
     #[command(after_long_help = "\
 Run init first: trust, tell, add and hide all require the .git-veil/ state
-directory it creates (keyring, trust.json, tracked.json). init never
-touches .gitignore - the <name>.secret ciphertext files are meant to be
-committed, so gitignoring them would defeat the fresh-clone decryptability
-contract.
+directory it creates (keyring, trust.json, tracked.json, and the committed
+owner.verifying the owner writes there). init never touches .gitignore -
+the <name>.secret ciphertext files are meant to be committed, so
+gitignoring them would defeat the fresh-clone decryptability contract.
 
 init refuses to reset a repository that already has established trust;
 remove .git-veil/ explicitly if you really want a fresh start.
@@ -107,8 +107,7 @@ The output never contains private key material - even when the match is
 your imported private key, export always emits the public half.
 
 Matching is exact: the identifier is the key's public key encoding. Keys
-are selected by public key string only; no fingerprint-as-identifier mode
-remains.
+are selected by public key string only.
 export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
@@ -132,8 +131,7 @@ EXAMPLES
 Drops key material from the LOCAL key store: every X25519 private key in
 $GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt and every X25519
 public key in recipients.txt whose public key encoding exactly matches
-the identifier is removed. Keys are selected by public key string only;
-no fingerprint-as-identifier mode remains.
+the identifier is removed. Keys are selected by public key string only.
 
 This is destructive and LOCAL-ONLY: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. Removing a
@@ -177,9 +175,9 @@ argument: a repository must never supply its own trust anchor. Two
 pin-creation paths exist, and nothing else:
 
 1. POSSESSION PROOF (default): git-veil trust <repo_id>. The candidate is
-   the repository's committed owner.verifying (64 hex chars on line 1);
-   the proof is an exact match between that key and the verifying key
-   derived from a seed in <key store>/signing-keys.txt. Match -> pin
+   the repository's committed .git-veil/owner.verifying (64 hex chars on
+   line 1); the proof is an exact match between that key and the verifying
+   key derived from a seed in <key store>/signing-keys.txt. Match -> pin
    written. No match -> refusal (exit code 20): pins are created only on
    machines holding the signing key.
 
@@ -187,13 +185,13 @@ pin-creation paths exist, and nothing else:
    produced by git-veil export-pin on a machine that proved possession.
    Three mandatory consistency checks: the pin-file's repo-id must match
    this repository; its verifying key must exactly match the committed
-   owner.verifying; and its owner key fingerprint must match the owner
-   fingerprint recorded in .git-veil/trust.json. Any mismatch -> refusal:
-   one of the two channels is compromised.
+   .git-veil/owner.verifying; and its owner key fingerprint must match the
+   owner fingerprint recorded in .git-veil/trust.json. Any mismatch ->
+   refusal: one of the two channels is compromised.
 
-A pin or trust record in the retired 16 hex character fingerprint format
-is hostile: every gated command refuses it until trust is re-established.
-See the fingerprint documentation for the current derivation.
+A pin or trust record in the 16 hex character fingerprint format is
+refused as hostile: every gated command fails until trust is re-established.
+See the fingerprint documentation for the derivation.
 
 Both paths refuse a path inside the repository worktree, so a pin-file
 always travels out of band (e.g. ssh) - the same model as known_hosts
@@ -238,10 +236,10 @@ EXAMPLES
 Writes this repository's pin-file for import on a machine WITHOUT the
 signing key (which runs git-veil trust --import <pin-file>). Export
 requires the same possession proof as trust: an exact match between the
-repository's committed owner.verifying and the verifying key derived from
-a seed in <key store>/signing-keys.txt. A machine without the matching
-seed cannot export at all - pins originate only from machines holding the
-signing key; store-less machines are consumers, never producers.
+repository's committed .git-veil/owner.verifying and the verifying key
+derived from a seed in <key store>/signing-keys.txt. A machine without the
+matching seed cannot export at all - pins originate only from machines
+holding the signing key; store-less machines are consumers, never producers.
 
 --output must point OUTSIDE the repository worktree: a committed pin-file
 would be exactly the self-supplied anchor the pin model exists to
@@ -291,7 +289,7 @@ This is a pure function: no repository, no key store, no pin, no
 network. A clean host reproduces the exact value with stock OS tools:
 
   printf '%s:%s' 'alice@example.com' \"$(age-keygen -y identity.txt)\" | sha256sum
-  printf '%s:%s' 'demo+example@github.com' \"$(head -n 1 owner.verifying)\" | sha256sum
+  printf '%s:%s' 'demo+example@github.com' \"$(head -n 1 .git-veil/owner.verifying)\" | sha256sum
 
 Use printf, never echo (echo appends a newline and hashes different
 bytes). Exactly one colon separates label and key. The digest is
@@ -811,9 +809,9 @@ EXAMPLES
     /// Remove the .git-veil state directory (--yes required when data would be lost)
     #[command(after_long_help = "\
 Removes the .git-veil state directory (keyring, trust.json,
-tracked.json). .gitignore is never rewritten, and the in-place .secret
-ciphertext files are ordinary committable files that clean does not
-disown.
+tracked.json, and the committed owner.verifying). .gitignore is never
+rewritten, and the in-place .secret ciphertext files are ordinary
+committable files that clean does not disown.
 
 The .secret ciphertexts can be the ONLY remaining copy of a secret. A
 clean that would destroy tracked state or ciphertext therefore refuses
