@@ -115,6 +115,6 @@ pub fn cmd_tell(
     // command (the issue #42 message policy). The stamp is written on
     // every tell, so the notice is unconditional: the fresh-start flow
     // reaches the same pass on its first hide --all.
-    println!("note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.");
+    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.");
     Ok(())
 }

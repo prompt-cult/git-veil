@@ -30,7 +30,7 @@ a plaintext on disk, so reveal the files first (name them):
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
-note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
 $ git-veil reveal .env
 keyring signature verified
 keys in keyring: 2

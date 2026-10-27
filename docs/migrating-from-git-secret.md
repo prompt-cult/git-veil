@@ -187,7 +187,7 @@ sends the `age1xxxx` line their `git-veil export` prints:
 ```sh
 $ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
-note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
 ```
 
 What happened. This is the git-secret `tell` split into two steps.

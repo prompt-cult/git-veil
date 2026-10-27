@@ -36,7 +36,7 @@ owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c1
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
 $ git-veil tell newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
-note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
 ```
 
 Send the owner your X25519 public key first. Create an X25519 private key

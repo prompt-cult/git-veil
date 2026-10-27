@@ -369,7 +369,7 @@ signing key in the local key store.
 ```sh
 $ git-veil tell alice@example.com age1xxxx
 added alice@example.com to the keyring
-note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
 ```
 
 Exit codes: 20 (missing signing key), 61 (the canary would not encrypt),
@@ -398,7 +398,7 @@ not in the ring.
 ```sh
 $ git-veil removeperson bob@example.com
 removed bob@example.com from the keyring
-note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
 ```
 
 Exit codes: 20 (missing signing key), 22 (email not in the ring), plus the

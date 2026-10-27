@@ -145,7 +145,7 @@ for that flow.
 $ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 $ git-veil tell example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 added example@github.com to the keyring
-note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.
 ```
 
 What happened. `hide` encrypts to every key in the signed keyring, so even

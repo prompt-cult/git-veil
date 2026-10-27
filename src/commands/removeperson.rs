@@ -102,6 +102,6 @@ pub fn cmd_removeperson(
     // command (the issue #42 message policy). After a removal the pass is
     // the rotation step: without it, existing ciphertext stays decryptable
     // by the removed principal.
-    println!("note: the keyring changed on this machine. A ring-change pass is due: every tracked ciphertext still needs re-encryption to the current keyring.");
+    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the hide command with the all flag.");
     Ok(())
 }
