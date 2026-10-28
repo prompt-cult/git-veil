@@ -87,17 +87,12 @@ git commit -m "Add encrypted secrets"
 git-veil reveal .env                            # brings it back when you need to edit
 ```
 
-`init` refuses to reset a repository that already has established trust.
-`trust` refuses a typo'd repo id: it re-derives the id from the remote and
-compares. `hide` deletes the plaintext once every ciphertext is written;
-pass `--keep-plaintext` to change that.
-
-`add-file` also records an allowance on this machine, so the first `hide` of a
-file you added never asks. A path someone else nominated in the committed
-tracking manifest does ask: `hide` refuses with exit code 72 and you answer
-with `git-veil allow <path>`. This is the allowance gate, and it exists
-because `tracked.json` is committed and unsigned. See
-[Commands - allow](commands.md#allow) for the full story.
+Every command's behaviour, flags and exit codes are documented in
+[Commands](commands.md). Two refusals are worth knowing before they
+surprise you: `init` will not reset a repository with established trust,
+and `hide` asks before it first-encrypts a path someone else nominated in
+the tracking manifest. You answer with
+[allow](commands.md#allow).
 
 ## The daily cycle
 
@@ -126,7 +121,7 @@ loop with real output.
   and departing.
 - [Commands](commands.md) - every command documented: options, behaviour
   and exit codes.
-- [Troubleshooting](troubleshooting.md) - the exit-code table, key store
-  permissions and the failure shapes worth knowing.
+- [Troubleshooting](troubleshooting.md) - key store permissions, the trust
+  and rotate failure stories, and recovery.
 - [Design specification](design.md) - how identity, trust anchoring, key
   validity, crash safety and path safety work.

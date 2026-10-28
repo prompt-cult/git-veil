@@ -75,7 +75,7 @@ teams. These differences change habits, so they are stated up front:
    plaintext by default. Pass `--keep-plaintext` to keep it, mirroring
    git-secret's `-d`. `reveal` writes the plaintexts and
    leaves the `.secret` files in place, the same defaults git-secret has.
-   git-veil additionally refuses `hide` outright when a `.secret` path is
+   git-veil also refuses `hide` outright when a `.secret` path is
    git-ignored, for example swallowed by a parent-directory rule. That is
    a silent-loss mode git-secret does not detect. See the cheat-sheet for
    the mapping.
@@ -194,9 +194,7 @@ What happened. This is the git-secret `tell` split into two steps.
 First the key hand-off, then ring membership. The reason is difference 1.
 There is no shared gpg keychain for `add-key` to look keys up in. The public
 key arrives as pasted text, and the owner's `add-key` signs it into
-the keyring. In this section `age` is the open source `age` encryption
-tooling. It is installed separately, and `git-veil` uses the Rust `rage`
-library to work with the keys. Collaborators who want a head start can
+the keyring. Collaborators who want a head start can
 already `import` their own private key. Step 5 uses it.
 
 ### 4. Track the files and hide
@@ -227,8 +225,8 @@ it.
 
 Note. Your pre-push plaintexts from step 1 are still on disk and still
 gitignored. That is exactly the state git-secret left them in. `hide`
-refuses, exit code 40, if any `.secret` path is itself git-ignored. It
-warns, error code 41 in the message, if a plaintext is not gitignored.
+warns or refuses when the ignore rules are wrong; the failure shapes are
+in [Commands - hide](commands.md#hide).
 
 ### 5. Per-collaborator verification checklist
 
@@ -285,7 +283,7 @@ Checklist:
 | `git secret init`                       | `git-veil init` + `git-veil trust` | Setup splits in two: `init` creates `.git-veil/`, `trust` pins the owner's key per machine (git-secret had no pin step) |
 | `git secret tell`                       | `git-veil import` + `git-veil add-key` | Two steps, because there is no gpg keychain for `add-key` to find keys in - public keys arrive as files; `import` is for *your own* X25519 private key (per machine). After `add-key`, run `git-veil rotate` once to re-encrypt existing ciphertext to the new ring |
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
-| `git secret add`                        | `git-veil add-file`             | Both append the plaintext name to `.gitignore` when not already ignored; git-veil additionally warns when the `.secret` path is itself git-ignored |
+| `git secret add`                        | `git-veil add-file`             | Both append the plaintext name to `.gitignore` when not already ignored; git-veil also warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove-file`          | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
 | `git secret hide`                       | `git-veil hide`                 | Diverged shape and default. git-veil `hide` names its files. git-veil deletes the plaintext, git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
 | `git secret reveal`                     | `git-veil reveal`               | Same ciphertext behaviour: both leave the `.secret` in place. git-veil `reveal` names its files |

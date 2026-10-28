@@ -64,16 +64,12 @@ default `$HOME/.git-veil` (for example `GIT_VEIL_HOME=~/keys/project-a`).
 
 ## Key store permissions
 
-The key store is checked the way gpg checks `~/.gnupg`. The store directory
-and the private files (`identities.txt`, `signing-keys.txt`) must not be
-readable or writable by group or other. git-veil never changes permissions on
-files it did not create.
-
-If the check fails, git-veil exits with code 30 and names the paths and modes
-at fault. Fix them with `chmod`. To accept the current state instead, run
-`git-veil trust-permissions`. It pins the exact `(path, mode)` pairs, and a
-later change fails again. To bypass the check for one command, use
-`--dangerously-skip-permissions-check` or set `GIT_VEIL_SKIP_PERMISSIONS=1`.
+The key store is checked the way gpg checks `~/.gnupg`: the store directory
+and the private files must not be readable or writable by group or other.
+git-veil never changes permissions on files it did not create. On a
+violation it exits with code 30 and names the paths. The fix, the
+deliberate acknowledgment and the one-command bypass are covered in
+[docs/src/troubleshooting.md](docs/src/troubleshooting.md#key-store-permissions-exit-30).
 
 ## Exit codes
 
@@ -143,45 +139,14 @@ Name the files explicitly; see
 
 ## The hide gate: allow
 
-`hide` encrypts to every key in the keyring, so everyone in the ring can
-decrypt. The tracked file list, `.git-veil/tracked.json`, is committed and
-unsigned, which means anyone with write access to the repository can
-nominate a path in it. Before it first-encrypts a path, `hide` stops and
-asks, as an error code and never as a blocking prompt: are you sure this
-file is one you want to share with the others in the keyring? The refusal
-is exit code 72, and it names the paths.
-
-You answer with `git-veil allow`:
-
-```sh
-$ git-veil hide deploy.env
-error: refusing to hide: paths are tracked but were never allowed for encryption on this machine. tracked.json may have been modified by someone else. Allow the paths deliberately if the tracking is wanted. Error code 72. The offending tracked paths:
-  deploy.env
-$ git-veil allow deploy.env
-allowed 1 files
-$ git-veil hide deploy.env
-Encrypted: deploy.env
-Deleted plaintext: deploy.env
-files hidden
-```
-
-The answer is recorded in your key store, keyed to this clone's trust pin
-and your git user, so it is cached per clone per git username. Once
-recorded, an allowance survives manifest changes and never needs
-re-recording.
-
-Three things keep the gate out of the way:
-
-- Name your files. `git-veil add-file .env` records the allowance too, so
-  a path you added on this machine never asks.
-- Re-encryption needs no allowance. A tracked path whose `.secret`
-  ciphertext is already committed is established, and any machine holding
-  the pin re-encrypts it. That is what keeps rotation working on a fresh
-  clone.
-- Many checkouts with no common git email: the record keys on
-  `git config user.email`, so you allow once per email.
-
-`reveal` is never gated. Decryption needs only keyring membership.
+The tracked file list, `.git-veil/tracked.json`, is committed and unsigned,
+so anyone with write access to the repository can nominate a path in it.
+Before `hide` first-encrypts a path you never allowed on this machine, it
+refuses and asks, and you answer with `git-veil allow`. The full walkthrough
+with real output is in
+[docs/two-collaborators.md](docs/two-collaborators.md); the mechanics,
+including the cases that never ask, are in
+[docs/src/commands.md](docs/src/commands.md#allow).
 
 ## Installation
 
@@ -303,10 +268,10 @@ the workflow differ. One payoff is a smaller binary.
 | `add-key`        | Add a collaborator's public key to the keyring and re-sign it           |
 | `remove-key`     | Remove a collaborator from the keyring and re-sign it                   |
 | `add-file`       | Track files for encryption (auto-gitignores plaintext names; records the allowance on this machine) |
-| `allow`          | Allow files for encryption on this machine (answers `hide`'s exit-72 question, cached per clone per git user) |
-| `remove-file`    | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
+| `allow`          | Allow files for encryption on this machine (answers `hide`'s allowance question) |
+| `remove-file`    | Untrack files (the sibling `.secret` ciphertext is deleted by default) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts (`--keep-plaintext` keeps the plaintexts; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
+| `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts |
 | `rotate`         | Deliver the due ring-change pass: re-encrypt every tracked ciphertext to the current keyring, in memory, plaintexts untouched |
 | `reveal`         | Decrypt the named tracked files back to plaintext (never gated) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
@@ -315,7 +280,7 @@ the workflow differ. One payoff is a smaller binary.
 | `whoami`         | Show the principal git-veil will use                        |
 | `verify-keys`    | Verify the keyring signature against the pinned trusted key             |
 | `list-keys`      | List keyring keys after verifying the keyring signature                 |
-| `clean`          | Remove the `.git-veil` state directory (`--yes` required when data would be lost) |
+| `clean`          | Remove the `.git-veil` state directory (guards against data loss) |
 | `trust-permissions` | Acknowledge the key store's current (path, mode) pairs as trusted     |
 | `error-codes`    | List every documented exit code with its name and meaning               |
 | `completions`    | Emit a shell completion script for the given shell to stdout            |

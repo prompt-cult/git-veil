@@ -1,39 +1,15 @@
 # Troubleshooting
 
-Every deliberate failure exits with a documented code. Run
-`git-veil error-codes` for the table any time. Failures without a more
-specific code exit 1, and command-line usage errors exit 2. The codes are
-public API: they are never renumbered, only appended.
+Every deliberate failure exits with a documented code. Failures without a
+more specific code exit 1, and command-line usage errors exit 2. The codes
+are public API: they are never renumbered, only appended.
 
-## The exit-code table
-
-| Code | Name | Meaning |
-|------|------|---------|
-| 1 | GeneralError | Failure without a more specific code |
-| 2 | Usage | Command-line usage error |
-| 10 | NoTrustRecord | Committed trust.json has no entry for this repository; run `git-veil trust` |
-| 11 | NoTrustPin | No local trust pin on this machine; run `git-veil trust` |
-| 12 | TrustMismatch | Committed trust.json disagrees with this machine's pin; re-pin if intended |
-| 13 | TrustRepoIdMismatch | `repo_id` argument does not match the one derived from the remote |
-| 14 | KeyringRollback | Keyring version is below this machine's freshness baseline; re-`trust` if the rollback is intended |
-| 20 | NoSigningKey | No Ed25519 signing key in the key store; create one and back it up |
-| 21 | NoX25519PrivateKey | No X25519 private key in the key store matching your keyring entry; create and import one |
-| 22 | PrincipalNotInKeyring | Your principal is not in the signed keyring; ask the owner to add you with `add-key` |
-| 30 | UnsafeKeyStorePermissions | Key store directory or private key file is group/world accessible |
-| 40 | CiphertextIgnored | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add-file`) |
-| 41 | PlaintextNotIgnored | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
-| 42 | OrphanedCiphertext | A committed `.secret` ciphertext path is not tracked; `rotate` refuses it |
-| 43 | PlaintextTracked | The plaintext is tracked in git, which `reveal` refuses |
-| 60 | DecryptionFailed | Ciphertext could not be decrypted with the local private key |
-| 61 | EncryptionFailed | Encryption failed |
-| 62 | KeyParseFailure | A key, keyring or signature could not be parsed |
-| 63 | SignatureVerificationFailed | Keyring signature missing or invalid |
-| 70 | Refused | Policy refusal (init over established trust, `clean` without `--yes`, `rotate` without a due ring-change stamp) |
-| 71 | UnsafePath | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
-| 72 | UnintendedEncryption | `hide` refuses to first-encrypt a tracked path never allowed on this machine |
-
-The full specification of each refusal, including the paths that must
-never be refused silently, is in the [Design specification](design.md).
+Run `git-veil error-codes` for the full table any time. The per-command
+lists, which code means what for the command you just ran, are in
+[Commands](commands.md). The full specification of each refusal, including
+the paths that must never be refused silently, is in the
+[Design specification](design.md). The sections below are the failure
+stories: what each refusal means for you, and what to do.
 
 ## Key store permissions (exit 30)
 
@@ -59,8 +35,9 @@ git-veil trust-permissions
 
 The acknowledgment pins the exact (path, mode) pairs in
 `permissions-ack.json`. A later change fails again until you
-re-acknowledge. To bypass the check for one command:
-`--dangerously-skip-permissions-check` or `GIT_VEIL_SKIP_PERMISSIONS=1`.
+re-acknowledge. The acknowledgment command, and the one-command bypass,
+are documented in
+[Commands - global flags and environment](commands.md#global-flags-and-environment).
 
 If your own real key store has loose modes, your tests fail with exit 30.
 Fix the modes; do not weaken the check.
@@ -105,21 +82,11 @@ hostile: re-establish trust with `trust`.
 
 ## The newcomer's failure shapes
 
-Most "it doesn't work" cases on a fresh clone are one of these. Run
-`git-veil error-codes` for the full table.
-
-- **Exit 11** on any command: you have not pinned this repository on this
-  machine. Import the owner's pin-file. See
-  [Joining a team repository](joining.md).
-- **Exit 22**, `user not found in the keyring`: the owner has not run
-  `add-key` yet, or has not pushed the updated keyring. Run `git pull`
-  first; nothing on your side can fix it otherwise.
-- **Exit 60**, `decryption failed. This ciphertext was not encrypted to
-  your key`: the owner ran `add-key` but did not deliver the ring-change
-  pass, or you are on an old commit. Run `git pull`.
-- **Exit 21**, no X25519 private key: your key store lacks your private
-  key. The message prints the `age-keygen` recipe. Create it, import it,
-  back it up.
+Most "it doesn't work" cases on a fresh clone are an owner step that has
+not happened yet: a missing pin, a keyring entry that was never added, a
+ring-change pass that was never delivered, or a private key that was never
+imported. The four shapes, what each message means and the fix, are in
+[Joining - failure shapes worth knowing](joining.md#failure-shapes-worth-knowing).
 
 ## The hide refusals
 

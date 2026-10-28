@@ -20,9 +20,8 @@ What makes it safe to share:
   you answer with `git-veil allow`. See
   [Commands - allow](commands.md#allow).
 - **A ring-change pass.** `add-key` and `remove-key` re-sign the keyring
-  but change no ciphertext. `git-veil rotate` delivers the change: it
-  re-encrypts every tracked ciphertext to the current ring, in memory.
-  One pass consumes one change. See [Commands - rotate](commands.md#rotate).
+  but change no ciphertext; `git-veil rotate` delivers the change. One pass
+  consumes one change. See [Commands - rotate](commands.md#rotate).
 
 ## The flows
 

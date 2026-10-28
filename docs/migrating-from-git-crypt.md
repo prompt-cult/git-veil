@@ -186,13 +186,11 @@ git push
 
 What happened. `hide` encrypted each named file to every key in
 the signed keyring and wrote `<name>.secret` beside where the plaintext
-was, deleting the plaintext. Pass `--keep-plaintext` to keep it.
-`hide` reads each tracked plaintext from disk and fails if one
-is missing. Keep the worktree unlocked until this step is done: if
-git-crypt re-locked some files mid-migration, unlock them first, so
-every named plaintext is on disk. The `.secret` files are meant to be
-committed. The plaintext names are gitignored, which step 3 did already.
-Never gitignore `*.secret`. That would defeat the fresh-clone
+was, deleting the plaintext. Keep the worktree unlocked until this step
+is done: if git-crypt re-locked some files mid-migration, unlock them
+first, so every named plaintext is on disk. The `.secret` files are meant
+to be committed. The plaintext names are gitignored, which step 3 did
+already. Never gitignore `*.secret`. That would defeat the fresh-clone
 decryptability contract.
 
 ## 6. Verify on every collaborator machine
@@ -225,7 +223,7 @@ belong in circulation.
 
 | git-crypt | git-veil | Notes |
 |---|---|---|
-| `git-crypt init` | `git-veil init` + `git-veil trust` | git-veil additionally requires pinning the owner's signing key, per machine. |
+| `git-crypt init` | `git-veil init` + `git-veil trust` | git-veil also requires pinning the owner's signing key, per machine. |
 | `.gitattributes` `filter=git-crypt` lines | `git-veil add-file <files>` | Explicit tracked list instead of patterns; new secret files need an explicit `add-file` or they stay plaintext. |
 | `git-crypt add-gpg-user USER_ID` | `git-veil add-key <email> age1xxxx` | git-crypt commits a GPG-wrapped copy of the shared key automatically. git-veil signs the collaborator into the keyring, and `git-veil rotate` then re-encrypts existing ciphertext to the new ring. |
 | `git-crypt ls-gpg-users` | `git-veil list-keys` | `ls-gpg-users` was a long-open git-crypt feature request. `list-keys` verifies the keyring signature before listing. |

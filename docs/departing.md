@@ -35,11 +35,10 @@ $ git push
 ```
 
 What happened. The keyring signature was verified against the pinned owner
-key before the change. remove-key fails closed on a tampered or unsigned
-keyring, and on an email that is not in the ring. Bob's entry was dropped,
-the ring re-signed with the owner's key, and a due pass stamped in the
-owner's key store. `rotate` re-encrypted every tracked ciphertext to the
-current ring and consumed the stamp: one pass per ring change. See
+key before the change. Bob's entry was dropped, the ring re-signed with the
+owner's key, and the ring-change pass delivered: every tracked ciphertext
+re-encrypted to the current ring. See
+[Commands - remove-key](commands.md#remove-key) and
 [Commands - rotate](commands.md#rotate).
 
 The pass re-encrypts tracked ciphertexts. It does not scrub git history.
@@ -64,12 +63,10 @@ store, so `--yes` confirms its removal:
 git-veil forget age1xxxx --yes
 ```
 
-This is destructive and local-only. It does not touch any repository,
-keyring or trust state, and it revokes nothing. If forget refuses, the
-fallback is manual. A corrupt store is never deleted, and a
-public key matching several store lines must be disambiguated. Edit the
-matching line out of `identities.txt` and `recipients.txt` by hand, or
-delete the file if it holds nothing else bob needs.
+The command is destructive and local-only, and it revokes nothing; the
+details are in [Commands - forget](commands.md#forget). If `forget` refuses,
+the fallback is manual. Edit the matching line out of the key store files
+by hand, or delete the file if it holds nothing else bob needs.
 
 ## 3. Verify the rotation actually happened
 

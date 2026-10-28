@@ -402,3 +402,63 @@ fn test_every_subcommand_has_help_discussion() {
         );
     }
 }
+
+/// One home per fact (#57): a command's invocation token `git-veil <name>`
+/// is a mechanics restatement wherever it appears outside commands.md, the
+/// one mechanical reference. Scenario pages may show a transcript, so the
+/// budget is generous, but a page that re-teaches a command blows through
+/// it, and a command name spread across every page is drift by definition.
+/// Two numbers, zero judgment: at most 8 tokens per command per non-home
+/// page, and at most 18 non-home pages per command.
+#[test]
+fn test_docs_one_home_gate() {
+    const MAX_PER_PAGE: usize = 8;
+    const MAX_PAGES: usize = 18;
+    const HOME: &str = "commands.md";
+    let names = [
+        "add-file", "remove-file", "add-key", "remove-key", "forget",
+        "repo-id", "verify-keys", "hide", "rotate", "reveal", "cat",
+        "changes", "list", "list-keys", "allow", "trust", "export-pin",
+        "fingerprint", "import", "export", "init", "clean", "whoami",
+        "trust-permissions", "error-codes", "completions", "manpages",
+    ];
+    let mut pages: Vec<PathBuf> = fs::read_dir(repo_root().join("docs/src"))
+        .expect("read docs/src")
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "md"))
+        .collect();
+    pages.push(repo_root().join("README.md"));
+
+    for name in names {
+        let token = format!("git-veil {name}");
+        let mut pages_with: Vec<String> = Vec::new();
+        for page in &pages {
+            if page.file_name().is_some_and(|f| f.to_string_lossy() == HOME) {
+                continue;
+            }
+            let content = fs::read_to_string(page)
+                .unwrap_or_else(|e| panic!("read {}: {e}", page.display()));
+            let count = content.matches(&token).count();
+            if count > MAX_PER_PAGE {
+                panic!(
+                    "one-home gate: `{token}` appears {count} times in {} \
+                     (budget {MAX_PER_PAGE}); the mechanics restatement \
+                     belongs in docs/src/{HOME} - carry a link instead",
+                    page.display()
+                );
+            }
+            if count > 0 {
+                pages_with.push(page.display().to_string());
+            }
+        }
+        if pages_with.len() > MAX_PAGES {
+            panic!(
+                "one-home gate: `{token}` is restated across {} pages \
+                 (budget {MAX_PAGES}); consolidate to docs/src/{HOME} and \
+                 link from the rest: {}",
+                pages_with.len(),
+                pages_with.join(", ")
+            );
+        }
+    }
+}

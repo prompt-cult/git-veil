@@ -7,13 +7,10 @@ ID `demo+example@github.com`. Each person has their own machine, their own
 refers to the open source `age` encryption tooling, which may be installed
 separately to securely create and maintain cryptographic keys outside of the
 git repo; the `git-veil` software uses the Rust `rage` library to work with
-the keys. git-veil generates no keys. Each person creates their own X25519
-private key (`age` identity) with `age-keygen` or `rage-keygen`. The owner
-also creates an Ed25519 signing key. That key is not an `age` key, and no
-`age` tool makes it. The owner makes it with `openssl`. See step 1 of
-[solo.md](solo.md). Exporting public keys needs no external tool. Each
-person runs `git-veil export <public-key> --output <file>` from their own
-key store.
+the keys. git-veil generates no keys: each person creates their own X25519
+private key, and the owner also creates an Ed25519 signing key. The recipes
+are step 1 of [solo.md](solo.md). Exporting public keys needs no external
+tool; see [Commands - export](commands.md#export).
 
 ## Part 1 - the owner sets the repository up
 
@@ -66,16 +63,13 @@ note: the keyring has changed. To re-encrypt to the updated keyring, run the rot
 ```
 
 What happened. The keyring signature was verified against the pinned owner
-key before the change. A canary was test-encrypted to the pasted key, so a key
-that cannot encrypt is never signed in. The keyring was re-signed with the
-owner's Ed25519 key. Adding the same email twice updates the entry instead
-of duplicating it.
+key before the change, and Alice was signed in. The mechanics, including
+the canary test, are in [Commands - add-key](commands.md#add-key).
 
 Important. Adding Alice does not change ciphertext that already exists.
-Files hidden before she joined were encrypted only to the owner's key.
-To bring her in, the owner delivers the ring-change pass with `git-veil
-rotate`: no reveal step, and the ciphertexts never leave the committed
-state mid-ceremony.
+Files hidden before she joined were encrypted only to the owner's key. To
+bring her in, the owner delivers the ring-change pass with `git-veil
+rotate`; see [Commands - rotate](commands.md#rotate).
 
 ```sh
 git-veil rotate
@@ -127,14 +121,12 @@ pinned this repository owner key on this machine
 warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
-What happened. `trust --import` checked three things, and all three are
-mandatory. The pin-file's repository ID matches her remote. Its verifying
-key exactly matches the repository's committed `.git-veil/owner.verifying`. Its
-fingerprint matches the owner fingerprint recorded in the committed
-`.git-veil/trust.json`. The pin lives in her `$HOME/.git-veil`, outside the
-repository. The committed `.git-veil/trust.json` is attacker-writable, so
-her local pin is the real anchor. A pin-file path inside the repository is
-refused outright.
+What happened. `trust --import` verified the pin-file against the remote,
+the committed verifying key and the committed trust record, then pinned the
+owner key in her `$HOME/.git-veil`, outside the repository. The three
+mandatory checks are in [Commands - trust](commands.md#trust). The
+committed `.git-veil/trust.json` is attacker-writable, so her local pin is
+the real anchor.
 
 Now she can decrypt:
 
@@ -213,9 +205,7 @@ $ git commit -m "Allow deploy.env and hide it"
 $ git push
 ```
 
-The answer is cached. It lives in the owner's key store, keyed to this
-clone's trust pin and his git user, so a later hide of the same path does
-not ask again:
+The answer is cached, so a later hide of the same path does not ask again:
 
 ```sh
 $ git-veil reveal deploy.env
@@ -229,39 +219,24 @@ Deleted plaintext: deploy.env
 files hidden
 ```
 
-Three facts keep the gate out of the way:
-
-- `add-file` implies `allow`. A path you added on this machine never asks.
-- Naming files keeps the question small: `git-veil hide deploy.env`
-  examines the named files only, and a refusal names only the offenders
-  among them. A scoped `hide` of files you named yourself never asks at
-  all.
-- The record keys on your git user (`git config user.email`). If you use
-  many checkouts and do not set a common git email on all of them, you
-  allow once per email.
-
-Two more facts: re-encryption of an established ciphertext needs no
-allowance, so a path whose `.secret` is already committed is re-encrypted
-by any machine holding the pin, which is why rotation on a fresh clone
-never asks; and `reveal` is never gated. Alice reveals the file the
-moment its ciphertext lands. Decryption needs only keyring membership.
+Three facts keep the gate out of the way, and the rules, including the
+cases that never ask, are in [Commands - allow](commands.md#allow):
+`add-file` implies `allow`, re-encryption of an established ciphertext
+never asks, and the record keys on your git user (`git config user.email`).
 
 ## Who can decrypt what
 
-- Every `hide` produces one ciphertext. It carries one stanza for every
-   key in the signed keyring. Any keyring member can reveal.
-- The keyring (`.git-veil/keyring`, committed) is signed by the owner's
-  key. Every gated command verifies that signature against the local pin
-  before touching anything, so a keyring edited by a non-owner fails
-  closed.
+- Every `hide` produces one ciphertext any keyring member can reveal.
+- The keyring is signed by the owner's key, and every gated command
+  verifies that signature against the local pin before touching anything,
+  so a keyring edited by a non-owner fails closed.
 - Pinning is per machine. A collaborator who gets a new laptop imports a
   freshly exported pin-file there (the owner runs `export-pin` and
   transfers it out of band).
 - The owner's own `reveal` uses the owner key; the collaborator's uses
   theirs. Neither ever sees the other's private key.
-- `hide` first-encrypts a path only after you allowed it on this machine
-  (exit code 72). `reveal` is never gated: decryption needs only keyring
-  membership.
+- Before `hide` first-encrypts a path you did not allow on this machine,
+  it asks; see [Commands - allow](commands.md#allow).
 - The reveal error `user not found in the keyring. Check the principal,
   or ask the owner to add it` means the owner
   has not yet done Part 2's re-encrypt-and-push.
