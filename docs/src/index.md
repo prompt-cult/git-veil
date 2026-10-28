@@ -75,29 +75,24 @@ root of a git repository:
 ```sh
 git-veil init                                   # creates .git-veil/ state in the repo
 git-veil import private-key.txt                 # your X25519 private key, made by age-keygen
-git-veil show-repo-id                           # prints the ID trust wants, e.g. demo+example@github.com
+git-veil repo-id                                # prints the ID trust wants, e.g. demo+example@github.com
 git-veil trust demo+example@github.com          # possession proof: pins the owner key on this machine
 git-veil export age1xxxx                        # your public key string
-git-veil tell example@github.com age1xxxx       # adds you to the signed keyring
+git-veil add-key example@github.com age1xxxx    # adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
-git-veil add .env                               # tracks it, gitignores the plaintext name
+git-veil add-file .env                          # tracks it, gitignores the plaintext name
 git-veil hide .env                              # encrypts to the keyring; deletes the plaintext
 git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
 git-veil reveal .env                            # brings it back when you need to edit
 ```
 
-`init` refuses to reset a repository that already has established trust.
-`trust` refuses a typo'd repo id: it re-derives the id from the remote and
-compares. `hide` deletes the plaintext once every ciphertext is written;
-pass `--keep-plaintext` to change that.
-
-`add` also records an allowance on this machine, so the first `hide` of a
-file you added never asks. A path someone else nominated in the committed
-tracking manifest does ask: `hide` refuses with exit code 72 and you answer
-with `git-veil allow <path>`. This is the allowance gate, and it exists
-because `tracked.json` is committed and unsigned. See
-[Commands - allow](commands.md#allow) for the full story.
+Every command's behaviour, flags and exit codes are documented in
+[Commands](commands.md). Two refusals are worth knowing before they
+surprise you: `init` will not reset a repository with established trust,
+and `hide` asks before it first-encrypts a path someone else nominated in
+the tracking manifest. You answer with
+[allow](commands.md#allow).
 
 ## The daily cycle
 
@@ -106,7 +101,7 @@ file(s); the command acts on exactly the paths you give it, so the commit
 shows what you actually touched:
 
 ```sh
-git-veil unhide .env          # decrypt one file in place to edit
+git-veil reveal .env          # decrypt one file in place to edit
 ... edit .env ...
 git-veil changes              # diff plaintext against the last hidden version
 git-veil hide .env            # re-encrypt one file; every other ciphertext is untouched
@@ -114,7 +109,7 @@ git add .env.secret && git commit -m "Rotate API key"
 ```
 
 `cat .env` peeks at stdout without touching disk state. `list` shows what
-is tracked, `list-keys` shows who can decrypt, `verify-keyring` and
+is tracked, `list-keys` shows who can decrypt, `verify-keys` and
 `changes` are the health checks. The [Solo guide](solo.md) walks the whole
 loop with real output.
 
@@ -126,7 +121,7 @@ loop with real output.
   and departing.
 - [Commands](commands.md) - every command documented: options, behaviour
   and exit codes.
-- [Troubleshooting](troubleshooting.md) - the exit-code table, key store
-  permissions and the failure shapes worth knowing.
+- [Troubleshooting](troubleshooting.md) - key store permissions, the trust
+  and rotate failure stories, and recovery.
 - [Design specification](design.md) - how identity, trust anchoring, key
   validity, crash safety and path safety work.

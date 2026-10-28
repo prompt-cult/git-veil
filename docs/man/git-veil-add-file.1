@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil-add 1  "git-veil-add " 
+.TH git-veil-add-file 1  "git-veil-add-file " 
 .SH NAME
-git\-veil\-add \- Track files for encryption
+git\-veil\-add\-file \- Track files for encryption
 .SH SYNOPSIS
-\fBgit\-veil add\fR [\fB\-\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil add\-file\fR [\fB\-\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
 Track files for encryption
 .SH OPTIONS
@@ -29,8 +29,9 @@ hide refuses to first\-encrypt a tracked path that was never allowed on
 this machine (exit code 72), so a tracked.json modified by someone else
 cannot silently nominate your files for encryption.
 
-Typical flow: init \-> trust \-> tell (once per collaborator) \-> add \-> hide.
+Typical flow: init \-> trust \-> add\-key (once per collaborator) \-> add\-file
+\-> hide.
 
 EXAMPLES
-  $ git\-veil add .env
-  $ git\-veil add config/credentials.yml notes.md
+  $ git\-veil add\-file .env
+  $ git\-veil add\-file config/credentials.yml notes.md

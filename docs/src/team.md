@@ -19,10 +19,9 @@ What makes it safe to share:
   first-encrypt a path you never allowed on this machine (exit 72), and
   you answer with `git-veil allow`. See
   [Commands - allow](commands.md#allow).
-- **A ring-change pass.** `tell` and `removeperson` re-sign the keyring
-  but change no ciphertext. `git-veil rotate` delivers the change: it
-  re-encrypts every tracked ciphertext to the current ring, in memory.
-  One pass consumes one change. See [Commands - rotate](commands.md#rotate).
+- **A ring-change pass.** `add-key` and `remove-key` re-sign the keyring
+  but change no ciphertext; `git-veil rotate` delivers the change. One pass
+  consumes one change. See [Commands - rotate](commands.md#rotate).
 
 ## The flows
 
@@ -30,12 +29,12 @@ What makes it safe to share:
   exchanges public keys and pin-files with the first collaborator. The
   full walkthrough, including the exit-72 gate with real output, is in
   [Two collaborators](two-collaborators.md).
-- **Someone joins** - the owner exports a pin-file, runs `tell`, and
+- **Someone joins** - the owner exports a pin-file, runs `add-key`, and
   delivers the ring-change pass before the newcomer can decrypt anything.
   The newcomer's own checklist is in
   [Joining a team repository](joining.md), including the failure shapes
   when an owner step has not happened yet.
-- **Someone leaves** - `removeperson`, the ring-change pass, and rotation
+- **Someone leaves** - `remove-key`, the ring-change pass, and rotation
   of every secret they could ever decrypt. Revocation is bookkeeping, not
   cryptography: the reasoning and the checklist are in
   [Departing](departing.md).

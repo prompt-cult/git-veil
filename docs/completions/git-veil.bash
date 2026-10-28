@@ -16,8 +16,11 @@ _git__veil() {
             ",$1")
                 cmd="git__veil"
                 ;;
-            git__veil,add)
-                cmd="git__veil__subcmd__add"
+            git__veil,add-file)
+                cmd="git__veil__subcmd__add__subcmd__file"
+                ;;
+            git__veil,add-key)
+                cmd="git__veil__subcmd__add__subcmd__key"
                 ;;
             git__veil,allow)
                 cmd="git__veil__subcmd__allow"
@@ -46,6 +49,9 @@ _git__veil() {
             git__veil,fingerprint)
                 cmd="git__veil__subcmd__fingerprint"
                 ;;
+            git__veil,forget)
+                cmd="git__veil__subcmd__forget"
+                ;;
             git__veil,help)
                 cmd="git__veil__subcmd__help"
                 ;;
@@ -67,14 +73,14 @@ _git__veil() {
             git__veil,manpages)
                 cmd="git__veil__subcmd__manpages"
                 ;;
-            git__veil,remove)
-                cmd="git__veil__subcmd__remove"
+            git__veil,remove-file)
+                cmd="git__veil__subcmd__remove__subcmd__file"
                 ;;
-            git__veil,removekey)
-                cmd="git__veil__subcmd__removekey"
+            git__veil,remove-key)
+                cmd="git__veil__subcmd__remove__subcmd__key"
                 ;;
-            git__veil,removeperson)
-                cmd="git__veil__subcmd__removeperson"
+            git__veil,repo-id)
+                cmd="git__veil__subcmd__repo__subcmd__id"
                 ;;
             git__veil,reveal)
                 cmd="git__veil__subcmd__reveal"
@@ -82,29 +88,23 @@ _git__veil() {
             git__veil,rotate)
                 cmd="git__veil__subcmd__rotate"
                 ;;
-            git__veil,show-repo-id)
-                cmd="git__veil__subcmd__show__subcmd__repo__subcmd__id"
-                ;;
-            git__veil,tell)
-                cmd="git__veil__subcmd__tell"
-                ;;
             git__veil,trust)
                 cmd="git__veil__subcmd__trust"
                 ;;
             git__veil,trust-permissions)
                 cmd="git__veil__subcmd__trust__subcmd__permissions"
                 ;;
-            git__veil,unhide)
-                cmd="git__veil__subcmd__unhide"
-                ;;
-            git__veil,verify-keyring)
-                cmd="git__veil__subcmd__verify__subcmd__keyring"
+            git__veil,verify-keys)
+                cmd="git__veil__subcmd__verify__subcmd__keys"
                 ;;
             git__veil,whoami)
                 cmd="git__veil__subcmd__whoami"
                 ;;
-            git__veil__subcmd__help,add)
-                cmd="git__veil__subcmd__help__subcmd__add"
+            git__veil__subcmd__help,add-file)
+                cmd="git__veil__subcmd__help__subcmd__add__subcmd__file"
+                ;;
+            git__veil__subcmd__help,add-key)
+                cmd="git__veil__subcmd__help__subcmd__add__subcmd__key"
                 ;;
             git__veil__subcmd__help,allow)
                 cmd="git__veil__subcmd__help__subcmd__allow"
@@ -133,6 +133,9 @@ _git__veil() {
             git__veil__subcmd__help,fingerprint)
                 cmd="git__veil__subcmd__help__subcmd__fingerprint"
                 ;;
+            git__veil__subcmd__help,forget)
+                cmd="git__veil__subcmd__help__subcmd__forget"
+                ;;
             git__veil__subcmd__help,help)
                 cmd="git__veil__subcmd__help__subcmd__help"
                 ;;
@@ -154,14 +157,14 @@ _git__veil() {
             git__veil__subcmd__help,manpages)
                 cmd="git__veil__subcmd__help__subcmd__manpages"
                 ;;
-            git__veil__subcmd__help,remove)
-                cmd="git__veil__subcmd__help__subcmd__remove"
+            git__veil__subcmd__help,remove-file)
+                cmd="git__veil__subcmd__help__subcmd__remove__subcmd__file"
                 ;;
-            git__veil__subcmd__help,removekey)
-                cmd="git__veil__subcmd__help__subcmd__removekey"
+            git__veil__subcmd__help,remove-key)
+                cmd="git__veil__subcmd__help__subcmd__remove__subcmd__key"
                 ;;
-            git__veil__subcmd__help,removeperson)
-                cmd="git__veil__subcmd__help__subcmd__removeperson"
+            git__veil__subcmd__help,repo-id)
+                cmd="git__veil__subcmd__help__subcmd__repo__subcmd__id"
                 ;;
             git__veil__subcmd__help,reveal)
                 cmd="git__veil__subcmd__help__subcmd__reveal"
@@ -169,23 +172,14 @@ _git__veil() {
             git__veil__subcmd__help,rotate)
                 cmd="git__veil__subcmd__help__subcmd__rotate"
                 ;;
-            git__veil__subcmd__help,show-repo-id)
-                cmd="git__veil__subcmd__help__subcmd__show__subcmd__repo__subcmd__id"
-                ;;
-            git__veil__subcmd__help,tell)
-                cmd="git__veil__subcmd__help__subcmd__tell"
-                ;;
             git__veil__subcmd__help,trust)
                 cmd="git__veil__subcmd__help__subcmd__trust"
                 ;;
             git__veil__subcmd__help,trust-permissions)
                 cmd="git__veil__subcmd__help__subcmd__trust__subcmd__permissions"
                 ;;
-            git__veil__subcmd__help,unhide)
-                cmd="git__veil__subcmd__help__subcmd__unhide"
-                ;;
-            git__veil__subcmd__help,verify-keyring)
-                cmd="git__veil__subcmd__help__subcmd__verify__subcmd__keyring"
+            git__veil__subcmd__help,verify-keys)
+                cmd="git__veil__subcmd__help__subcmd__verify__subcmd__keys"
                 ;;
             git__veil__subcmd__help,whoami)
                 cmd="git__veil__subcmd__help__subcmd__whoami"
@@ -197,7 +191,7 @@ _git__veil() {
 
     case "${cmd}" in
         git__veil)
-            opts="-h -V --dangerously-skip-permissions-check --help --version init import export removekey trust export-pin fingerprint tell removeperson add allow remove list hide rotate reveal cat unhide changes show-repo-id whoami verify-keyring list-keys trust-permissions error-codes clean completions manpages help"
+            opts="-h -V --dangerously-skip-permissions-check --help --version init import export forget trust export-pin fingerprint add-key remove-key add-file allow remove-file list hide rotate reveal cat changes repo-id whoami verify-keys list-keys trust-permissions error-codes clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -210,7 +204,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__add)
+        git__subcmd__veil__subcmd__add__subcmd__file)
             opts="-h --remote --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -218,6 +212,32 @@ _git__veil() {
             fi
             case "${prev}" in
                 --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        git__subcmd__veil__subcmd__add__subcmd__key)
+            opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --signing-key)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --key-store)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -402,8 +422,26 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        git__subcmd__veil__subcmd__forget)
+            opts="-h --yes --key-store --dangerously-skip-permissions-check --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --key-store)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         git__subcmd__veil__subcmd__help)
-            opts="init import export removekey trust export-pin fingerprint tell removeperson add allow remove list hide rotate reveal cat unhide changes show-repo-id whoami verify-keyring list-keys trust-permissions error-codes clean completions manpages help"
+            opts="init import export forget trust export-pin fingerprint add-key remove-key add-file allow remove-file list hide rotate reveal cat changes repo-id whoami verify-keys list-keys trust-permissions error-codes clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -416,7 +454,21 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__help__subcmd__add)
+        git__subcmd__veil__subcmd__help__subcmd__add__subcmd__file)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        git__subcmd__veil__subcmd__help__subcmd__add__subcmd__key)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -556,6 +608,20 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        git__subcmd__veil__subcmd__help__subcmd__forget)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         git__subcmd__veil__subcmd__help__subcmd__help)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -654,7 +720,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__help__subcmd__remove)
+        git__subcmd__veil__subcmd__help__subcmd__remove__subcmd__file)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -668,7 +734,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__help__subcmd__removekey)
+        git__subcmd__veil__subcmd__help__subcmd__remove__subcmd__key)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -682,7 +748,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__help__subcmd__removeperson)
+        git__subcmd__veil__subcmd__help__subcmd__repo__subcmd__id)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -724,34 +790,6 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__help__subcmd__show__subcmd__repo__subcmd__id)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        git__subcmd__veil__subcmd__help__subcmd__tell)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         git__subcmd__veil__subcmd__help__subcmd__trust)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -780,21 +818,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__help__subcmd__unhide)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        git__subcmd__veil__subcmd__help__subcmd__verify__subcmd__keyring)
+        git__subcmd__veil__subcmd__help__subcmd__verify__subcmd__keys)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -926,7 +950,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__remove)
+        git__subcmd__veil__subcmd__remove__subcmd__file)
             opts="-h --keep-ciphertext --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -940,25 +964,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__removekey)
-            opts="-h --yes --key-store --dangerously-skip-permissions-check --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --key-store)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        git__subcmd__veil__subcmd__removeperson)
+        git__subcmd__veil__subcmd__remove__subcmd__key)
             opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -974,6 +980,24 @@ _git__veil() {
                     return 0
                     ;;
                 --key-store)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        git__subcmd__veil__subcmd__repo__subcmd__id)
+            opts="-h --remote --dangerously-skip-permissions-check --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1032,50 +1056,6 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__show__subcmd__repo__subcmd__id)
-            opts="-h --remote --dangerously-skip-permissions-check --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --remote)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        git__subcmd__veil__subcmd__tell)
-            opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --remote)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --signing-key)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --key-store)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         git__subcmd__veil__subcmd__trust)
             opts="-h --import --remote --suppress-codeowners --key-store --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -1120,33 +1100,7 @@ _git__veil() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        git__subcmd__veil__subcmd__unhide)
-            opts="-h --email --remote --key-store --dangerously-skip-permissions-check --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --email)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --remote)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --key-store)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        git__subcmd__veil__subcmd__verify__subcmd__keyring)
+        git__subcmd__veil__subcmd__verify__subcmd__keys)
             opts="-h --remote --key-store --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

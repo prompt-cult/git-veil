@@ -84,7 +84,7 @@ add a CODEOWNERS file at the repository root, or under the platform directory, a
 $ git-veil import my-age-identity.txt
 + imported: age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 Summary: 1 imported, 0 skipped
-$ git-veil show-repo-id
+$ git-veil repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
@@ -94,14 +94,10 @@ Your principal: example@github.com
 
 What happened. `.git-veil/` now holds `keyring`, `trust.json`,
 `tracked.json` and, once you have run the step 1 recipe, `owner.verifying`,
-the verifying key they all protect. init never touches `.gitignore`. Your
-X25519 private key lives in the per-machine key store
-`$HOME/.git-veil/identities.txt`, created mode 0600. It is never committed.
-`reveal`, `cat`, `unhide` and `changes` look their key up there.
-`show-repo-id` prints the exact repo ID `trust` wants. It re-derives the ID
-from the remote and refuses a mismatch. `whoami` shows which principal
-decrypting commands will use. The principal comes from
-`git config user.email`, or from `--email`.
+the verifying key they all protect. Your X25519 private key lives in the
+per-machine key store, never committed. The behaviour and options of
+`init`, `import`, `repo-id` and `whoami` are in
+[Commands](commands.md#setup).
 
 You should add or edit a CODEOWNERS file that protects the `.git-veil/`
 folder as owned by you. The suggestion above is the line to add. On a
@@ -119,43 +115,32 @@ pinned this repository owner key on this machine
 warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
-What happened. There is no keyfile argument. A repository must never supply
-its own trust anchor. `trust` read the committed `.git-veil/owner.verifying`,
-derived the verifying key from every seed in your
-`$HOME/.git-veil/signing-keys.txt`, and found the exact match that proves
-you hold the signing key.
-
-The fingerprint was pinned on this machine in `$HOME/.git-veil/trust-pins/`.
-The pin is outside the repository and is never committed. The
+What happened. There is no keyfile argument: a repository must never supply
+its own trust anchor. `trust` proved possession of your signing key and
+pinned the owner fingerprint on this machine, outside the repository. The
 fixed-derivation owner fingerprint was recorded in `.git-veil/trust.json`.
-Commit that file alongside the verifying key.
+Commit that file alongside the verifying key. The mechanics of the proof
+are in [Commands - trust](commands.md#trust).
 
 Every gated command checks the keyring signature against this pin first and
-fails closed without it. See `git-veil error-codes`. A missing pin is exit
-code 11. A mismatch between the committed record and your pin is 12.
-
-A fresh clone, even yours, has no pin until you run `trust` there again. A
-machine without the signing seed cannot pin directly at all. It imports a
-pin-file you export with `git-veil export-pin`. See [joining.md](joining.md)
-for that flow.
+fails closed without it. A fresh clone, even yours, has no pin until you
+run `trust` there again. A machine without the signing seed cannot pin
+directly at all. It imports a pin-file you export with `git-veil export-pin`.
+See [joining.md](joining.md) for that flow.
 
 ## 4. Put yourself in the keyring
 
 ```sh
 $ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
-$ git-veil tell example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
+$ git-veil add-key example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
 added example@github.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
 
 What happened. `hide` encrypts to every key in the signed keyring, so even
-solo you must be in it. `tell` found your signing key in the key store. The
-store file is `signing-keys.txt`. The key whose verifying fingerprint matches
-the pin `trust` wrote is the one used. `tell` verified the existing keyring
-signature against your pin, test-encrypted an in-memory canary to the new
-key, and signed the updated keyring. The keyring at `.git-veil/keyring` is
-committed. The `tell` argument after the email is the X25519 public key
-encoding itself, pasted as text. `export` prints exactly that string.
+solo you must be in it. `add-key` verified the keyring against your pin and
+signed you in; the argument after the email is the public key string that
+`export` prints. See [Commands - add-key](commands.md#add-key).
 
 The note stamps a ring-change pass as due on this machine. On a fresh
 repository nothing is hidden yet, so the first `hide` of `.env` encrypts
@@ -166,7 +151,7 @@ undelivered. See [Commands - rotate](commands.md#rotate).
 
 ```sh
 $ printf 'API_KEY=hunter2\n' > .env
-$ git-veil add .env
+$ git-veil add-file .env
 file not in .gitignore, adding: .env
 added 1 files
 $ git-veil hide .env
@@ -178,21 +163,21 @@ ls: .env: No such file or directory
 .env.secret
 ```
 
-What happened. `add` gitignored the plaintext name for you, as git-secret
-does. It also recorded the path in the allowance store in your key store:
-`add` implies `allow`, so the first `hide` runs without a question. (The
+What happened. `add-file` gitignored the plaintext name for you, as
+git-secret does. It also recorded the path in the allowance store in your
+key store: `add-file` implies `allow`, so the first `hide` runs without a
+question. (The
 question exists for paths someone else nominated; it is described in the
 [two-collaborators guide](two-collaborators.md).) `hide` encrypted `.env`
 to your key as `.env.secret` and deleted the plaintext. Pass
 `--keep-plaintext` to keep it. `reveal` brings the plaintext back. That is
 the only recovery.
 
-Two guards watch the working tree. If a tracked plaintext is on disk but not
-gitignored, `hide` prints a warning, error code 41, because a blind
-`git add -A` would commit it. If a `.secret` path is itself gitignored, for
-example by a parent-directory rule like `.tmp/`, `hide` refuses outright,
-error code 40, because that ciphertext would silently never reach the
-repository. Commit the ciphertext and state, not the plaintext:
+Two guards watch the working tree: `hide` warns when a tracked plaintext is
+not gitignored, and refuses when the ciphertext path itself is, because
+either way the commit would carry the wrong bytes. The failure shapes are
+in [Commands - hide](commands.md#hide). Commit the ciphertext and state,
+not the plaintext:
 
 ```sh
 git add .gitignore .git-veil .env.secret
@@ -208,9 +193,9 @@ decryptability contract.
 Edit, check, hide, commit, reveal. Name the file you are working with:
 
 ```sh
-$ git-veil unhide .env          # decrypt one file in place
+$ git-veil reveal .env          # decrypt one file in place
 Decrypted: .env
-file unhidden
+files revealed
 ... edit .env ...
 $ git-veil changes              # report the diff
 changed: .env
@@ -230,8 +215,8 @@ Decrypted: .env
 files revealed
 ```
 
-What happened. `unhide` and `reveal` decrypt ciphertext back to the plaintext
-path and leave the `.secret` files in place. `hide .env` re-encrypted one
+What happened. `reveal` decrypts ciphertext back to the plaintext
+path and leaves the `.secret` files in place. `hide .env` re-encrypted one
 file and left every other tracked file alone. `changes` decrypts each
 ciphertext and diffs it against the plaintext beside it. Where there is no
 diff to show, it prints `unchanged: …`, `no hidden version: …` or
@@ -275,7 +260,7 @@ every secret. Give the box its own X25519 private key and its own pin:
 - Pin the owner key with `trust --import` and a pin-file you export with
   `git-veil export-pin`. That is the joining-user flow; see
   [joining.md](joining.md).
-- Put the box's public key in the keyring with `git-veil tell`, then
+- Put the box's public key in the keyring with `git-veil add-key`, then
   deliver the ring-change pass with `git-veil rotate`: the box's
   ciphertexts carry a stanza for the box after one rotate. See
   [Commands - rotate](commands.md#rotate).
@@ -299,7 +284,7 @@ needs only keyring membership, so no `allow` step is needed on the box.
 ## 8. Health checks
 
 ```sh
-git-veil verify-keyring   # exit 0 only if the signature matches your pin
+git-veil verify-keys      # exit 0 only if the signature matches your pin
 git-veil list-keys        # who can decrypt, after the same verification
 git-veil list             # which files are tracked
 git-veil error-codes      # every documented exit code, number and meaning
@@ -307,21 +292,10 @@ git-veil error-codes      # every documented exit code, number and meaning
 
 ## Key store permissions
 
-git-veil checks its key store the way gpg checks `~/.gnupg`. The key store is
-`$GIT_VEIL_HOME` or `$HOME/.git-veil`. The store directory and the private
-files (`identities.txt`, `signing-keys.txt`) must not be group- or
-world-accessible. git-veil never changes permissions itself. On a violation
-it exits with code 30, names the exact paths and modes, and offers the
-remedies. Fix them with `chmod`. Or, if you accept the risk, record the
-current state as trusted:
-
-```sh
-git-veil trust-permissions
-```
-
-The acknowledgment pins the exact (path, mode) pairs in
-`permissions-ack.json`. If the permissions later change to anything else,
-git-veil refuses again. `--dangerously-skip-permissions-check` or
-`GIT_VEIL_SKIP_PERMISSIONS=1` bypasses the check entirely. These checks
-apply to the key store only. Files inside your repository working tree are
-yours to manage.
+git-veil checks its key store the way gpg checks `~/.gnupg`: the store
+directory and the private files must not be group- or world-accessible, and
+a violation exits with code 30. The fix, the deliberate acknowledgment and
+the one-command bypass are covered in
+[Troubleshooting - key store permissions](troubleshooting.md#key-store-permissions-exit-30).
+These checks apply to the key store only. Files inside your repository
+working tree are yours to manage.

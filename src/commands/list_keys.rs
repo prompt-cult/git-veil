@@ -9,7 +9,7 @@ use crate::{verify_keyring_against_trust, Keyring};
 /// verification.
 ///
 /// The keyring is verified against the trust pin, the same gate as
-/// verify-keyring, before it is presented. On success the listing is
+/// verify-keys, before it is presented. On success the listing is
 /// prefixed with a verification banner. On failure the unverified
 /// content is still printed, so an auditor can see the tampered
 /// content, but under a loud invalid-signature banner, and the

@@ -33,7 +33,8 @@ pub use codeowners::{
     record_suppression as record_codeowners_suppression, suggestion_text as codeowners_suggestion,
     warning_text as codeowners_warning,
 };
-pub use commands::add::cmd_add;
+pub use commands::add_file::cmd_add_file;
+pub use commands::add_key::cmd_add_key;
 pub use commands::allow::cmd_allow;
 pub use commands::cat::cmd_cat;
 pub use commands::changes::cmd_changes;
@@ -41,21 +42,19 @@ pub use commands::clean::cmd_clean;
 pub use commands::export::{cmd_export, export_public_key};
 pub use commands::export_pin::cmd_export_pin;
 pub use commands::fingerprint::cmd_fingerprint;
+pub use commands::forget::cmd_forget;
 pub use commands::hide::cmd_hide;
 pub use commands::import::cmd_import;
 pub use commands::init::cmd_init;
 pub use commands::list::cmd_list;
 pub use commands::list_keys::cmd_list_keys;
-pub use commands::remove::cmd_remove;
-pub use commands::removekey::cmd_removekey;
-pub use commands::removeperson::cmd_removeperson;
+pub use commands::remove_file::cmd_remove_file;
+pub use commands::remove_key::cmd_remove_key;
+pub use commands::repo_id::cmd_repo_id;
 pub use commands::reveal::cmd_reveal;
 pub use commands::rotate::cmd_rotate;
-pub use commands::show_repo_id::cmd_show_repo_id;
-pub use commands::tell::cmd_tell;
 pub use commands::trust::{cmd_trust, cmd_trust_import};
-pub use commands::unhide::cmd_unhide;
-pub use commands::verify_keyring::{cmd_verify_keyring, verify_keyring_against_trust};
+pub use commands::verify_keys::{cmd_verify_keys, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
 pub use fingerprint::{fingerprint_for_public_key, is_16_hex_pin_shape, owner_key_fingerprint};

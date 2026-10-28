@@ -6,8 +6,8 @@
 use age::secrecy::ExposeSecret;
 use git_veil::cli::Cli;
 use git_veil::{
-    cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_tell, cmd_trust,
-    cmd_trust_import, cmd_verify_keyring, exit_code_of, generate_signing_keypair,
+    cmd_add_key, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_trust,
+    cmd_trust_import, cmd_verify_keys, exit_code_of, generate_signing_keypair,
     generate_x25519_private_key, owner_key_fingerprint, x25519_public_key_encoding, PinFile,
     TrustPinStore, TrustStore,
 };
@@ -163,8 +163,8 @@ fn test_trust_proof_writes_pin_and_verifies() {
         owner_key_fingerprint(TEST_REPO_ID, &f.signing_key.verifying_key()),
         "the metadata must record the owner fingerprint under the single derivation"
     );
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
-        .expect("verify-keyring passes after a proven pin");
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
+        .expect("verify-keys passes after a proven pin");
 }
 
 #[test]
@@ -337,7 +337,7 @@ fn test_retrust_replaces_pin() {
         .unwrap()
         .unwrap();
     assert_ne!(old_pin, new_pin, "the pin must be replaced");
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify passes with the new pin");
 }
 
@@ -486,8 +486,8 @@ fn test_import_happy_path_on_storeless_machine() {
             .is_some(),
         "the pin must be written"
     );
-    cmd_verify_keyring(&f.repo.path, "origin", &fresh_store.path)
-        .expect("verify-keyring passes with the imported pin");
+    cmd_verify_keys(&f.repo.path, "origin", &fresh_store.path)
+        .expect("verify-keys passes with the imported pin");
 }
 
 #[test]
@@ -668,7 +668,7 @@ fn test_no_pin_fails_closed() {
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
 
-    let result = cmd_verify_keyring(&repo.path, "origin", &key_store.path);
+    let result = cmd_verify_keys(&repo.path, "origin", &key_store.path);
     let err = result.expect_err("should fail without local pin");
     let message = err.to_string();
     assert!(
@@ -693,7 +693,7 @@ fn test_mismatched_pin_fails_closed() {
 
     TrustPinStore::write_pin(&f.key_store.path, TEST_REPO_ID, &"ff".repeat(32)).unwrap();
 
-    let result = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path);
+    let result = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path);
     assert!(result.is_err(), "should fail with mismatched pin");
     assert!(result.unwrap_err().to_string().contains("changed"));
 }
@@ -720,7 +720,7 @@ fn test_hide_and_tell_fail_without_trust() {
     let id = generate_x25519_private_key();
     let r = x25519_public_key_encoding(&id);
     assert!(
-        cmd_tell(
+        cmd_add_key(
             &repo.path,
             "alice@example.com",
             &r,
@@ -729,7 +729,7 @@ fn test_hide_and_tell_fail_without_trust() {
             None,
         )
         .is_err(),
-        "tell should fail without trust"
+        "add-key should fail without trust"
     );
 }
 
@@ -740,7 +740,7 @@ fn test_unsigned_keyring_with_entries_fails() {
     let keyring_content = "-----BEGIN GIT-VEIL KEYRING-----\nalice@example.com:age1xxx\n-----END GIT-VEIL KEYRING-----\n";
     fs::write(f.repo.join(".git-veil/keyring"), keyring_content).unwrap();
 
-    let result = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path);
+    let result = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path);
     assert!(result.is_err(), "unsigned keyring with entries should fail");
     assert!(result.unwrap_err().to_string().contains("no signature"));
 }
@@ -748,7 +748,7 @@ fn test_unsigned_keyring_with_entries_fails() {
 #[test]
 fn test_empty_keyring_no_signature_ok() {
     let f = Fixture::new("empty-kr");
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("empty keyring should verify");
 }
 
@@ -910,7 +910,7 @@ fn test_rename_suspicion_no_remedy_on_gated_commands() {
     let f = Fixture::new("rename-verify");
     rename_remote(&f.repo.path, "git@github.com:owner/fara-moved.git");
 
-    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    let err = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("a renamed repo must not verify against the old trust record");
     assert_eq!(exit_code_of(&err), 10);
     let message = format!("{:#}", err);

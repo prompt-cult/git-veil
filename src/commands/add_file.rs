@@ -23,7 +23,7 @@ use crate::tracked_files::{
 /// hide refuses to first-encrypt a path that neither has a committed
 /// ciphertext nor was allowed on this machine. See "Allowance" in
 /// docs/design.md.
-pub fn cmd_add(
+pub fn cmd_add_file(
     repo_root: &Path,
     files: Vec<String>,
     remote_name: &str,
@@ -34,7 +34,7 @@ pub fn cmd_add(
 
     let (repo_id, pin) = resolve_allowance_anchor(repo_root, remote_name, key_store)?;
     let principal = get_git_config_email(repo_root).context(
-        "add records the allowance with the manifest nomination, which needs your git config user.email",
+        "add-file records the allowance with the manifest nomination, which needs your git config user.email",
     )?;
 
     let mut count = 0;
@@ -71,7 +71,7 @@ pub fn cmd_add(
 }
 
 /// Runs `git check-ignore` for one repo-relative path: true when git
-/// ignores it. Shared by the add-time warning and hide's fail-closed
+/// ignores it. Shared by the add-file warning and hide's fail-closed
 /// ciphertext gate so the two sides cannot drift apart.
 pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<bool> {
     Ok(Command::new("git")
@@ -84,7 +84,7 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
 }
 
 /// True when the repo-relative path is tracked in the git index, staged
-/// or committed. Shared by reveal and unhide's tracked-plaintext
+/// or committed. Shared by reveal's tracked-plaintext
 /// refusal (exit 43, docs/design.md "Ignore safety" gate 4). A
 /// git-tracked plaintext is ordinary repository content, not a
 /// secret, and overwriting it from attacker-committed ciphertext is

@@ -38,9 +38,9 @@ after every encryption succeeded) writes each .secret atomically.
 
 hide only works after the repository is initialized (git\-veil init), the
 owner\*(Aqs key is trusted on this machine (git\-veil trust), collaborators are
-in the keyring (git\-veil tell), and files are tracked (git\-veil add).
-Before encrypting anything, the keyring signature is verified against the
-pinned trusted key. unhide, reveal and cat invert hide.
+in the keyring (git\-veil add\-key), and files are tracked (git\-veil
+add\-file). Before encrypting anything, the keyring signature is verified
+against the pinned trusted key. reveal and cat invert hide.
 
 hide REFUSES (exit code 40) when a <name>.secret ciphertext path is
 itself git\-ignored \- e.g. swallowed by a parent\-directory rule like
@@ -51,15 +51,15 @@ it. It also REFUSES (exit code 72) a tracked path that has a plaintext on
 disk, no committed ciphertext in the git index, and no allowance on this
 machine: tracked.json is committed and unsigned, so a path added by
 someone else is refused until you allow it here. The allowance is
-recorded by add on this machine, or deliberately with git\-veil allow.
+recorded by add\-file on this machine, or deliberately with git\-veil allow.
 The plaintext is DELETED by default once every ciphertext is durably
 written \- the normal loop is reveal (restore plaintexts) \-> edit \-> hide.
 \-\-keep\-plaintext leaves the plaintexts beside their ciphertexts. Each
-named file must exist when you name it (hide resolves paths the way add
-does); once a plaintext is hidden, reveal restores it before hide can
-re\-encrypt it.
+named file must exist when you name it (hide resolves paths the way
+add\-file does); once a plaintext is hidden, reveal restores it before
+hide can re\-encrypt it.
 
-hide covers exactly the named files: each is resolved the way add
+hide covers exactly the named files: each is resolved the way add\-file
 resolves paths, and must already be tracked \- an unknown or untracked
 name refuses (error code 71). The allowance check (error code 72) then
 applies to the named files only, and names only the offenders among

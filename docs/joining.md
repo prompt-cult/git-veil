@@ -34,7 +34,7 @@ $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
 owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
-$ git-veil tell newcomer@example.com age1xxxx
+$ git-veil add-key newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
@@ -65,8 +65,7 @@ $ git commit -m "Add newcomer to keyring and re-encrypt"
 $ git push
 ```
 
-One pass consumes one ring change: run it twice and the second run
-refuses with exit code 70, because the change was already delivered. See
+One pass consumes one ring change; see
 [Commands - rotate](commands.md#rotate). For day-to-day work the owner
 names files instead; see [two-collaborators.md](two-collaborators.md).
 
@@ -96,19 +95,17 @@ $ git-veil import newcomer-age-identity.txt
 Summary: 1 imported, 0 skipped
 ```
 
-What happened. Your X25519 private key, the `AGE-SECRET-KEY-1...` line,
-sits in the per-machine key store `$HOME/.git-veil/identities.txt`. It is
-never committed, and it is created mode 0600. Import only your own key. The
-owner's public half arrives with the clone inside `.git-veil/` as
-`.git-veil/owner.verifying`. The pin-file from the team (step 4) is what lets
-you pin it. If you have not created a private key yet, exit code 21 prints
-the `age-keygen` recipe. Back the private key up. Without it the
-ciphertexts are unrecoverable.
+What happened. Your X25519 private key sits in the per-machine key store,
+never committed. Import only your own key. The owner's public half arrives
+with the clone inside `.git-veil/` as `.git-veil/owner.verifying`; the
+pin-file from the team (step 4) is what lets you pin it. Back the private
+key up: without it the ciphertexts are unrecoverable. See
+[Commands - import](commands.md#import).
 
 ### 3. Print the repository ID
 
 ```sh
-$ git-veil show-repo-id
+$ git-veil repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
@@ -116,7 +113,7 @@ Push URL: git@github.com:example/demo.git
 
 What happened. The ID is derived from the remote push URL, not from your
 own email. `trust` re-derives and cross-checks it, so a typo fails loudly.
-For a non-`origin` remote, add `--remote <name>`.
+See [Commands - repo-id](commands.md#repo-id).
 
 ### 4. Import the pin-file - per machine
 
@@ -128,17 +125,12 @@ warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes
 ```
 
 What happened. Your machine holds no signing key. It never needs one.
-`trust --import` ran three mandatory consistency checks. The pin-file's
-repository ID matches the one derived from your remote. Its verifying key
-exactly matches the repository's committed `.git-veil/owner.verifying`. Its
-fingerprint matches the owner fingerprint recorded in the committed
-`.git-veil/trust.json`. All three agreed, so the key was pinned in your
-`$HOME/.git-veil`, outside the repository. Any mismatch is a hard refusal.
-One of the two channels is compromised. The pin-file path must live outside
-the repository. An in-repo pin-file is exactly the self-supplied anchor the
-model refuses. Before importing, compare the fingerprint the owner read to
-you with the one in `.git-veil/trust.json`. That human check is the
-out-of-band anchor.
+`trust --import` verified the pin-file against the remote, the committed
+verifying key and the committed trust record, then pinned the owner key in
+your `$HOME/.git-veil`, outside the repository. The three mandatory checks
+are in [Commands - trust](commands.md#trust). Before importing, compare the
+fingerprint the owner read to you with the one in `.git-veil/trust.json`.
+That human check is the out-of-band anchor.
 
 ### 5. Check who is in the keyring
 
@@ -154,8 +146,8 @@ Total: 3 keys
 ```
 
 What happened. The keyring signature verified against your fresh pin, and
-you are listed. If your entry is missing, the owner has not run `tell` yet.
-Nothing on your side can fix that.
+you are listed. If your entry is missing, the owner has not run `add-key`
+yet. Nothing on your side can fix that.
 
 ### 6. Reveal
 ```sh
@@ -168,10 +160,8 @@ files revealed
 ```
 
 What happened. Every tracked file's `.secret` ciphertext was decrypted to
-its plaintext path. The `.secret` files stay in place. `cat .env` prints to
-stdout instead, without touching disk state. `unhide .env` does one file in
-place. `changes` shows where your plaintext drifted from the last hidden
-version.
+its plaintext path. The `.secret` files stay in place. To peek at a file
+without touching disk state, use [cat](commands.md#cat).
 
 ## Failure shapes worth knowing
 
@@ -184,12 +174,12 @@ meet as a newcomer:
    derived repository identity and the remote it came from. Import the
    owner's pin-file (step 4).
 - `user not found in the keyring. Check the principal, or ask the owner
-   to add it` (exit code 22). The owner has not run `tell`, or has not
+   to add it` (exit code 22). The owner has not run `add-key`, or has not
    pushed the updated keyring. Run `git pull` first.
 - `decryption failed. This ciphertext was not encrypted to your key and
    no stanza in it is addressed to your X25519 public key` (exit code 60).
-   The owner told you but did not deliver the ring-change pass, or your
-   clone is missing the re-encrypted ciphertexts.
+   The owner ran `add-key` but did not deliver the ring-change pass, or
+   your clone is missing the re-encrypted ciphertexts.
    Run `git pull`.
 - `no X25519 private key …` (exit code 21). Your key store lacks your
    private key. The message prints the creation and backup recipe. Redo
@@ -202,11 +192,7 @@ edit, `changes`, `hide`, commit, `reveal` cycle, and name the files you
 work with: `git-veil hide .env` churns one ciphertext instead of the
 whole manifest.
 
-`hide` asks one question before it first-encrypts a path you did not add
-on this machine: exit code 72, naming the path. Answer it with
-`git-veil allow <path>`. Paths whose `.secret` ciphertext is already
-committed need no allowance, so re-hiding after a rotation never asks.
-`reveal` is never gated: decryption needs only keyring membership. Check
-with the owner before re-hiding a shared repo. `hide` encrypts to the
-whole current keyring, and deletes plaintexts by default.
-`--keep-plaintext` keeps them.
+Before `hide` first-encrypts a path someone else nominated, it asks, and
+you answer with [allow](commands.md#allow); the gate, and the cases that
+never ask, are described there. Check with the owner before re-hiding a
+shared repo.

@@ -6,12 +6,12 @@ use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, Tracked
 
 /// Removes files from the tracked files list.
 ///
-/// Unlike cmd_add, the tracked plaintext may not exist. Hide deletes
+/// Unlike cmd_add_file, the tracked plaintext may not exist. Hide deletes
 /// it and leaves only the `.secret` ciphertext beside it, so removal
 /// must not require the plaintext to be on disk. Forcing the user to
 /// reveal a secret just to untrack it would defeat the purpose.
-/// Resolution therefore mirrors cmd_unhide. An absolute path is
-/// stripped lexically against the canonical repository root, a
+/// Resolution therefore tolerates the missing plaintext: an absolute
+/// path is stripped lexically against the canonical repository root, a
 /// relative path is taken as repo-relative, and both go through the
 /// shared `validate_tracked_path` boundary check. Paths outside the
 /// repository are still rejected.
@@ -26,7 +26,7 @@ use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, Tracked
 /// `--keep-ciphertext` leaves the ciphertext in place for callers that
 /// want it. Hide will then refuse the orphan until it is staged-deleted
 /// or the path is re-tracked.
-pub fn cmd_remove(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -> Result<()> {
+pub fn cmd_remove_file(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -> Result<()> {
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
 

@@ -177,7 +177,7 @@ pub fn verify_keyring_against_trust(
     // Freshness check (see "Keyring format and freshness" in
     // docs/design.md). A valid signature proves the owner signed this
     // keyring at some point, not that it is current. A `git revert` of a
-    // removeperson commit would otherwise silently return a revoked
+    // remove-key commit would otherwise silently return a revoked
     // collaborator to the keyring. The per-machine baseline, the highest
     // version ever accepted here and stored outside the repo beside the
     // pin, turns any version regression into a fail-closed refusal. A
@@ -237,7 +237,7 @@ pub fn verify_keyring_against_trust(
 }
 
 /// Verifies the keyring signature against the trusted signing key.
-pub fn cmd_verify_keyring(repo_root: &Path, remote_name: &str, key_store: &Path) -> Result<()> {
+pub fn cmd_verify_keys(repo_root: &Path, remote_name: &str, key_store: &Path) -> Result<()> {
     let (repo_id, fingerprint, keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 

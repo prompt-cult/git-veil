@@ -60,9 +60,9 @@ for EVERY repository that uses that store, so the store and its pins are
 one trust boundary. Sharing a single store across mutually distrusting
 repositories is not advised; use a separate \-\-key\-store per trust domain.
 
-Requires init first. Typical next step: tell.
+Requires init first. Typical next step: add\-key.
 
 EXAMPLES
-  $ git\-veil show\-repo\-id                        # get the repo id to pass here
+  $ git\-veil repo\-id                              # get the repo id to pass here
   $ git\-veil trust fara+simbo1905@github.com     # possession proof
   $ git\-veil trust \-\-import /tmp/fara.pin        # pin\-file from export\-pin

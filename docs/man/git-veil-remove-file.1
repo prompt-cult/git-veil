@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil-remove 1  "git-veil-remove " 
+.TH git-veil-remove-file 1  "git-veil-remove-file " 
 .SH NAME
-git\-veil\-remove \- Untrack files (deletes the sibling .secret unless \-\-keep\-ciphertext)
+git\-veil\-remove\-file \- Untrack files (deletes the sibling .secret unless \-\-keep\-ciphertext)
 .SH SYNOPSIS
-\fBgit\-veil remove\fR [\fB\-\-keep\-ciphertext\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil remove\-file\fR [\fB\-\-keep\-ciphertext\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
 Untrack files (deletes the sibling .secret unless \-\-keep\-ciphertext)
 .SH OPTIONS
@@ -31,5 +31,5 @@ ciphertext in place; hide will refuse it as an orphan until it is
 removed or the path is re\-tracked.
 
 EXAMPLES
-  $ git\-veil remove .env
-  $ git\-veil remove \-\-keep\-ciphertext config/credentials.yml
+  $ git\-veil remove\-file .env
+  $ git\-veil remove\-file \-\-keep\-ciphertext config/credentials.yml

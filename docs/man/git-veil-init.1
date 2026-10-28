@@ -15,9 +15,9 @@ Suppress the CODEOWNERS suggestion and other non\-error output
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Run init first: trust, tell, add and hide all require the .git\-veil/ state
-directory it creates (keyring, trust.json, tracked.json, and the committed
-owner.verifying the owner writes there). init never touches .gitignore \-
+Run init first: trust, add\-key, add\-file and hide all require the .git\-veil/
+state directory it creates (keyring, trust.json, tracked.json, and the
+committed owner.verifying the owner writes there). init never touches .gitignore \-
 the <name>.secret ciphertext files are meant to be committed, so
 gitignoring them would defeat the fresh\-clone decryptability contract.
 

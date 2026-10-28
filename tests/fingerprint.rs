@@ -6,7 +6,7 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_import, cmd_init, cmd_tell, cmd_trust, cmd_verify_keyring, exit_code_of,
+    cmd_add_key, cmd_import, cmd_init, cmd_trust, cmd_verify_keys, exit_code_of,
     fingerprint_for_public_key, generate_signing_keypair, generate_x25519_private_key,
     is_16_hex_pin_shape, owner_key_fingerprint, parse_verifying_key, x25519_public_key_encoding,
     ExitCode, TrustPinStore, TrustStore,
@@ -332,7 +332,7 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     let pin_before = fs::read_to_string(&pin_path).unwrap();
     let record_before = fs::read_to_string(&trust_path).unwrap();
 
-    let err = cmd_verify_keyring(&repo.path, "origin", &key_store.path)
+    let err = cmd_verify_keys(&repo.path, "origin", &key_store.path)
         .expect_err("a legacy pin must refuse as hostile");
     assert_legacy_refusal(&err);
 
@@ -346,7 +346,7 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("re-trust");
     let pin_after = fs::read_to_string(&pin_path).unwrap();
     assert_eq!(pin_after.trim().len(), 64, "the rewritten pin is 64-hex");
-    cmd_verify_keyring(&repo.path, "origin", &key_store.path)
+    cmd_verify_keys(&repo.path, "origin", &key_store.path)
         .expect("verify passes once trust is re-established");
 }
 
@@ -358,7 +358,7 @@ fn test_legacy_pin_alone_refuses() {
     // per-machine pin is a legacy 16-hex value.
     TrustPinStore::write_pin(&key_store.path, TEST_REPO_ID, "deadbeefdeadbeef").unwrap();
 
-    let err = cmd_verify_keyring(&repo.path, "origin", &key_store.path)
+    let err = cmd_verify_keys(&repo.path, "origin", &key_store.path)
         .expect_err("a legacy pin must refuse even against a current record");
     assert_legacy_refusal(&err);
 }
@@ -374,7 +374,7 @@ fn test_legacy_record_alone_refuses() {
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
     trust.save_to_file(&trust_path).unwrap();
 
-    let err = cmd_verify_keyring(&repo.path, "origin", &key_store.path)
+    let err = cmd_verify_keys(&repo.path, "origin", &key_store.path)
         .expect_err("a legacy committed record must refuse");
     assert_legacy_refusal(&err);
 }
@@ -392,7 +392,7 @@ fn test_list_keys_prints_the_binding_fingerprint_per_principal() {
     for email in ["alice@example.com", "bob@example.com"] {
         let identity = generate_x25519_private_key();
         let recipient = x25519_public_key_encoding(&identity);
-        cmd_tell(
+        cmd_add_key(
             &repo.path,
             email,
             &recipient,
@@ -400,7 +400,7 @@ fn test_list_keys_prints_the_binding_fingerprint_per_principal() {
             &key_store.path,
             None,
         )
-        .expect("tell");
+        .expect("add-key");
         recipients.push((email, recipient));
     }
 

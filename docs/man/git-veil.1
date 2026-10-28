@@ -1,6 +1,6 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil 1  "git-veil 0.11.0" 
+.TH git-veil 1  "git-veil 0.12.0" 
 .SH NAME
 git\-veil \- Git secret management using "age" encryption
 .SH SYNOPSIS
@@ -28,7 +28,7 @@ Import your X25519 private key into the git\-veil key store
 git\-veil\-export(1)
 Export an X25519 public key from the local key store
 .TP
-git\-veil\-removekey(1)
+git\-veil\-forget(1)
 Remove a key from the local key store (destructive, local\-only)
 .TP
 git\-veil\-trust(1)
@@ -40,19 +40,19 @@ Export this repository\*(Aqs pin\-file for import on another machine
 git\-veil\-fingerprint(1)
 Print the git\-veil fingerprint of a labelled public key
 .TP
-git\-veil\-tell(1)
+git\-veil\-add\-key(1)
 Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
 .TP
-git\-veil\-removeperson(1)
+git\-veil\-remove\-key(1)
 Remove a collaborator from the keyring and re\-sign it
 .TP
-git\-veil\-add(1)
+git\-veil\-add\-file(1)
 Track files for encryption
 .TP
 git\-veil\-allow(1)
 Allow files for encryption on this machine
 .TP
-git\-veil\-remove(1)
+git\-veil\-remove\-file(1)
 Untrack files (deletes the sibling .secret unless \-\-keep\-ciphertext)
 .TP
 git\-veil\-list(1)
@@ -70,19 +70,16 @@ Decrypt named tracked files back to plaintext
 git\-veil\-cat(1)
 Decrypt a single tracked file to stdout
 .TP
-git\-veil\-unhide(1)
-Decrypt one tracked file back to plaintext
-.TP
 git\-veil\-changes(1)
 Report where plaintext differs from the last hidden version
 .TP
-git\-veil\-show\-repo\-id(1)
+git\-veil\-repo\-id(1)
 Show the repository ID derived from the git remote push URL
 .TP
 git\-veil\-whoami(1)
 Show the principal git\-veil will use for you
 .TP
-git\-veil\-verify\-keyring(1)
+git\-veil\-verify\-keys(1)
 Verify the keyring signature against the pinned trusted key
 .TP
 git\-veil\-list\-keys(1)
@@ -106,4 +103,4 @@ Write roff man pages (git\-veil.1 plus one per subcommand) to a directory
 git\-veil\-help(1)
 Print this message or the help of the given subcommand(s)
 .SH VERSION
-v0.11.0
+v0.12.0

@@ -28,7 +28,7 @@ is the key handoff between collaborators without any external tool: the
 local store only holds keys THIS machine knows about (your imported
 private key and any public key trust has pinned), so each collaborator
 runs export on their OWN machine and sends the public key encoding to the
-owner, who adds it to the keyring with tell. It cannot export a
+owner, who adds it to the keyring with add\-key. It cannot export a
 collaborator\*(Aqs key for them. Here "age" refers to the open source age
 encryption tooling, installed separately; git\-veil uses the Rust "rage"
 library to work with the keys.

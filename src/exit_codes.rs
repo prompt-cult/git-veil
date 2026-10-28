@@ -44,7 +44,7 @@ pub enum ExitCode {
     /// whole-manifest pass refuses it; see docs/design.md "Orphaned
     /// ciphertext").
     OrphanedCiphertext = 42,
-    /// The plaintext is tracked in git (fatal in `reveal`/`unhide`).
+    /// The plaintext is tracked in git (fatal in `reveal`).
     PlaintextTracked = 43,
     /// Ciphertext could not be decrypted with the local private key.
     DecryptionFailed = 60,
@@ -144,9 +144,7 @@ impl ExitCode {
             ExitCode::OrphanedCiphertext => {
                 "A committed ciphertext path is not tracked; the whole-manifest pass refuses it"
             }
-            ExitCode::PlaintextTracked => {
-                "The plaintext is tracked in git which reveal and unhide refuse"
-            }
+            ExitCode::PlaintextTracked => "The plaintext is tracked in git which reveal refuses",
             ExitCode::DecryptionFailed => {
                 "Ciphertext could not be decrypted with the local private key"
             }

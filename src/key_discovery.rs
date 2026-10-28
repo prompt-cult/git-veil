@@ -49,12 +49,12 @@ pub fn load_signing_keys(key_store: &Path) -> Result<Vec<SigningKey>> {
     Ok(keys)
 }
 
-/// Selects the Ed25519 signing key for keyring curation (tell/removeperson).
+/// Selects the Ed25519 signing key for keyring curation (add-key/remove-key).
 ///
 /// The trusted key is used: the one whose owner key fingerprint under the
 /// single derivation (repository id as the label, see src/fingerprint.rs)
 /// equals `pinned_fingerprint`. The keyring must be signed with exactly
-/// the key the pin names, which is what verify_keyring checks against, so
+/// the key the pin names, which is what verify-keys checks against, so
 /// the pin, not list order, selects the key.
 ///
 /// No usable key exits with code 20 and the create-and-back-up recipe.

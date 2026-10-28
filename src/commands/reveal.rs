@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::commands::add::is_tracked_in_git;
+use crate::commands::add_file::is_tracked_in_git;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
@@ -11,7 +11,7 @@ use crate::key_discovery::discover_x25519_private_key;
 use crate::tracked_files::{
     ensure_regular_file, resolve_repo_relative_input, validate_tracked_path, PathResolveMode,
 };
-use crate::{cmd_verify_keyring, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
+use crate::{cmd_verify_keys, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
 /// index. See docs/design.md "Ignore safety" gate 4.
@@ -31,7 +31,7 @@ fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
 /// Decrypts tracked files using the user's private key.
 ///
 /// `files` names the working set: reveal covers exactly the named files.
-/// Each is resolved the way unhide resolves paths (the plaintext is
+/// Each is resolved with the plaintext-absent rule (the plaintext is
 /// normally absent at reveal time, so the name need not exist on disk),
 /// and must already be tracked - an unknown or untracked name refuses
 /// with the path-safety code (71). Reveal is ungated: ring membership is
@@ -52,7 +52,7 @@ pub fn cmd_reveal(
     files: Vec<String>,
 ) -> Result<()> {
     // Verify keyring signature first
-    cmd_verify_keyring(repo_root, remote_name, key_store)?;
+    cmd_verify_keys(repo_root, remote_name, key_store)?;
 
     // Load keyring
     let keyring_path = repo_root.join(".git-veil/keyring");
@@ -77,7 +77,7 @@ pub fn cmd_reveal(
     let tracked = TrackedFiles::load(&tracked_path)?;
 
     // The working set. Reveal covers exactly the named files: each is
-    // resolved the way unhide resolves paths, and must already be tracked.
+    // resolved with the plaintext-absent rule, and must already be tracked.
     // No change detection.
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut scoped: Vec<PathBuf> = Vec::new();
@@ -93,7 +93,7 @@ pub fn cmd_reveal(
                 ExitCode::UnsafePath,
                 format!(
                     "refusing to reveal: {} is not a tracked path in .git-veil/tracked.json. \
-                     Track it with git-veil add first. Error code 71.",
+                      Track it with git-veil add-file first. Error code 71.",
                     relative.to_string_lossy()
                 ),
             ));

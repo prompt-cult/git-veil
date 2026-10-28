@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil-removeperson 1  "git-veil-removeperson " 
+.TH git-veil-remove-key 1  "git-veil-remove-key " 
 .SH NAME
-git\-veil\-removeperson \- Remove a collaborator from the keyring and re\-sign it
+git\-veil\-remove\-key \- Remove a collaborator from the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil removeperson\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
+\fBgit\-veil remove\-key\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
 .SH DESCRIPTION
 Remove a collaborator from the keyring and re\-sign it
 .SH OPTIONS
@@ -41,4 +41,4 @@ Requires init, an established trust pin (trust), and the signing key in
 the local key store.
 
 EXAMPLES
-  $ git\-veil removeperson alice@example.com
+  $ git\-veil remove\-key alice@example.com

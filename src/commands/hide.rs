@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::age_crypto::X25519PublicKey;
 use crate::allowance::AllowanceStore;
-use crate::commands::add::is_gitignored;
+use crate::commands::add_file::is_gitignored;
 use crate::commands::rotate::index_state;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;

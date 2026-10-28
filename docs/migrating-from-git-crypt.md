@@ -82,7 +82,7 @@ grep -rn 'filter=git-crypt' --include=gitattributes .
 ```
 
 What happened. You now have the concrete file list to hand to
-`git-veil add` in step 5, and every `.gitattributes` line to strip in
+`git-veil add-file` in step 5, and every `.gitattributes` line to strip in
 step 3. Note that git-crypt patterns can live in nested `.gitattributes`
 files, not only the repo root.
 
@@ -90,7 +90,7 @@ Keep the list. git-crypt encrypts by pattern, through `.gitattributes`
 lines like `*.key filter=git-crypt diff=git-crypt`. git-veil tracks an
 explicit file list, `.git-veil/tracked.json`. Files created later are
 encrypted by git-crypt automatically if they match a pattern. Under
-git-veil someone must run `git-veil add` on each new secret file, or it
+git-veil someone must run `git-veil add-file` on each new secret file, or it
 will simply be a normal plaintext file.
 
 ## 3. Remove git-crypt from the repository
@@ -159,10 +159,10 @@ On the owner's machine:
 ```sh
 git-veil init                                # create .git-veil/ state
 git-veil import my-age-identity.txt          # owner's X25519 private key into the local key store
-git-veil show-repo-id                        # print the repository ID, e.g. demo+example@github.com
+git-veil repo-id                             # print the repository ID, e.g. demo+example@github.com
 git-veil trust demo+example@github.com        # possession proof. Pin the owner key.
-git-veil tell example@github.com age1xxxx    # the owner must be in the keyring too; the key is the pasted public key string
-git-veil tell alice@example.com age1xxxx  # once per collaborator; paste the key alice sent
+git-veil add-key example@github.com age1xxxx  # the owner must be in the keyring too; the key is the pasted public key string
+git-veil add-key alice@example.com age1xxxx  # once per collaborator; paste the key alice sent
 ```
 
 What happened. `.git-veil/` now holds a signed keyring of
@@ -177,7 +177,7 @@ local gpg web-of-trust. See the cheat-sheet below.
 Back on the owner's machine, using the inventory from step 2:
 
 ```sh
-git-veil add .env config/credentials.yml   # every file from encrypted-files.txt
+git-veil add-file .env config/credentials.yml   # every file from encrypted-files.txt
 git-veil hide .env config/credentials.yml
 git add .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 git commit -m "Re-encrypt secrets with git-veil"
@@ -186,13 +186,11 @@ git push
 
 What happened. `hide` encrypted each named file to every key in
 the signed keyring and wrote `<name>.secret` beside where the plaintext
-was, deleting the plaintext. Pass `--keep-plaintext` to keep it.
-`hide` reads each tracked plaintext from disk and fails if one
-is missing. Keep the worktree unlocked until this step is done: if
-git-crypt re-locked some files mid-migration, unlock them first, so
-every named plaintext is on disk. The `.secret` files are meant to be
-committed. The plaintext names are gitignored, which step 3 did already.
-Never gitignore `*.secret`. That would defeat the fresh-clone
+was, deleting the plaintext. Keep the worktree unlocked until this step
+is done: if git-crypt re-locked some files mid-migration, unlock them
+first, so every named plaintext is on disk. The `.secret` files are meant
+to be committed. The plaintext names are gitignored, which step 3 did
+already. Never gitignore `*.secret`. That would defeat the fresh-clone
 decryptability contract.
 
 ## 6. Verify on every collaborator machine
@@ -204,9 +202,9 @@ hire will experience:
 git clone git@github.com:example/demo.git && cd demo
 git config user.email alice@example.com
 git-veil import alice-age-identity.txt     # their own X25519 private key only
-git-veil show-repo-id
+git-veil repo-id
 git-veil trust --import ~/demo.pin         # pin-file exported by the owner, out of band
-git-veil verify-keyring                    # exit 0 = signature matches the pin
+git-veil verify-keys                       # exit 0 = signature matches the pin
 git-veil list-keys                         # who can decrypt, after verification
 git-veil reveal .env config/credentials.yml
 shasum -a 256 .env config/credentials.yml  # must match plaintext-before.sha256
@@ -225,9 +223,9 @@ belong in circulation.
 
 | git-crypt | git-veil | Notes |
 |---|---|---|
-| `git-crypt init` | `git-veil init` + `git-veil trust` | git-veil additionally requires pinning the owner's signing key, per machine. |
-| `.gitattributes` `filter=git-crypt` lines | `git-veil add <files>` | Explicit tracked list instead of patterns; new secret files need an explicit `add` or they stay plaintext. |
-| `git-crypt add-gpg-user USER_ID` | `git-veil tell <email> age1xxxx` | git-crypt commits a GPG-wrapped copy of the shared key automatically. git-veil signs the collaborator into the keyring, and `git-veil rotate` then re-encrypts existing ciphertext to the new ring. |
+| `git-crypt init` | `git-veil init` + `git-veil trust` | git-veil also requires pinning the owner's signing key, per machine. |
+| `.gitattributes` `filter=git-crypt` lines | `git-veil add-file <files>` | Explicit tracked list instead of patterns; new secret files need an explicit `add-file` or they stay plaintext. |
+| `git-crypt add-gpg-user USER_ID` | `git-veil add-key <email> age1xxxx` | git-crypt commits a GPG-wrapped copy of the shared key automatically. git-veil signs the collaborator into the keyring, and `git-veil rotate` then re-encrypts existing ciphertext to the new ring. |
 | `git-crypt ls-gpg-users` | `git-veil list-keys` | `ls-gpg-users` was a long-open git-crypt feature request. `list-keys` verifies the keyring signature before listing. |
 | `git-crypt unlock` | `git-veil reveal` | Semantics differ, see below. |
 | `git-crypt lock [--force]` | `git-veil hide` | Semantics differ, see below. |
@@ -235,7 +233,7 @@ belong in circulation.
 | `git-crypt export-key FILE` | deliberately no equivalent | git-crypt exports the repo-wide symmetric key for out-of-band sharing. git-veil has no shared symmetric key to export. `git-veil export` exports a collaborator's public key. A different purpose entirely. |
 | `git-crypt unlock KEYFILE` (symmetric mode) | deliberately no equivalent | git-veil always decrypts with your X25519 private key from the local key store. There is no shared-key fast path. |
 | `git-crypt migrate-key` | deliberately no equivalent | Migrates a shared symmetric key. git-veil has no shared symmetric key. |
-| Key rotation / off-boarding | `git-veil removeperson` + `git-veil rotate` | git-crypt explicitly supports neither. Its README says there is "no del-gpg-user command… no support for rotating the key". git-veil's forward-looking procedure and its honest history limits are in [departing.md](departing.md). |
+| Key rotation / off-boarding | `git-veil remove-key` + `git-veil rotate` | git-crypt explicitly supports neither. Its README says there is "no del-gpg-user command… no support for rotating the key". git-veil's forward-looking procedure and its honest history limits are in [departing.md](departing.md). |
 | `diff=git-crypt` transparent plaintext diffs | deliberately no equivalent; `git-veil changes` | No smudge/clean filter exists, so git and forges see `.secret` ciphertext, never plaintext diffs. `changes` diffs your on-disk plaintext against the last hidden version, locally. |
 | GPG web-of-trust (`--trusted` opt-out) | `git-veil trust` per-machine pin | git-crypt delegates trust to whatever `gpg` says. git-veil verifies the owner-signed keyring against a pin you establish on each machine, a possession proof on a signing-key machine or an out-of-band pin-file import elsewhere, and fails closed without it. |
 | `.git-crypt/keys/*/*.gpg` committed wrapped keys | `.git-veil/keyring` (owner-signed) | The keyring carries each collaborator's public key, signed by the owner. Its signature is verified before any crypto operation. |
@@ -252,7 +250,7 @@ outright if any named ciphertext is missing. There is nothing to `lock`.
 The inverse one-shot is `git-veil hide`, which re-encrypts the named
 plaintexts to the whole keyring and deletes them. Pass
 `--keep-plaintext` to keep them. It fails if a named plaintext is
-missing. For one file at a time use `unhide`,
+missing. For one file at a time, name it in `reveal`;
 and `cat` prints a file to stdout without touching disk state.
 
 ## Two honest warnings
@@ -263,7 +261,7 @@ Under git-crypt, plaintext is the normal on-disk state and the workflow
 does not change. Under git-veil the worktree churns between two states.
 You have plaintexts while you work, and `.secret` ciphertext after `hide`.
 The plaintexts are untracked files sitting in your checkout until you hide
-again. Editing a secret means reveal or `unhide`, then edit, `hide`,
+again. Editing a secret means `reveal`, then edit, `hide`,
 commit. git-crypt wins when secrets are edited constantly and nobody
 should ever have to think. git-veil wins when the collaborator roster
 changes, when you want committed state that is verifiably ciphertext, and

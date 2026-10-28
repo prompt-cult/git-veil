@@ -22,8 +22,8 @@ pub struct KeyringEntry {
 pub struct Keyring {
     pub entries: Vec<KeyringEntry>,
     pub signature: Option<String>,
-    /// Monotonic counter inside the signed payload, bumped by tell and
-    /// removeperson. `None` means the keyring has no version line. Such
+    /// Monotonic counter inside the signed payload, bumped by add-key and
+    /// remove-key. `None` means the keyring has no version line. Such
     /// keyrings count as version 0 for rollback comparisons.
     pub version: Option<u64>,
 }
@@ -178,7 +178,7 @@ impl Keyring {
 
     /// Bumps the monotonic freshness counter for a re-sign. The new version
     /// is current + 1, and a versionless keyring counts as 0. Called by
-    /// tell and removeperson before signing, so the bump is covered by the
+    /// add-key and remove-key before signing, so the bump is covered by the
     /// new signature. Errors at u64::MAX rather than overflowing. A
     /// poisoned ring must produce a clean refusal, never a panic.
     pub fn bump_version(&mut self) -> Result<()> {

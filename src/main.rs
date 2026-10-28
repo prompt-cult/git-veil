@@ -6,12 +6,11 @@ use std::process::ExitCode as StdExitCode;
 use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin,
-    cmd_fingerprint, cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys, cmd_remove,
-    cmd_removekey, cmd_removeperson, cmd_reveal, cmd_rotate, cmd_show_repo_id, cmd_tell, cmd_trust,
-    cmd_trust_import, cmd_trust_permissions, cmd_unhide, cmd_verify_keyring, cmd_whoami,
-    default_key_store, exit_code_of, get_git_config_email, permissions_check_bypassed_from_env,
-    ExitCode,
+    cmd_add_file, cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export,
+    cmd_export_pin, cmd_fingerprint, cmd_forget, cmd_hide, cmd_import, cmd_init, cmd_list,
+    cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal, cmd_rotate, cmd_trust,
+    cmd_trust_import, cmd_trust_permissions, cmd_verify_keys, cmd_whoami, default_key_store,
+    exit_code_of, get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -27,9 +26,9 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 /// Resolves the key store location for commands that consume a key_store.
 /// An explicit `--key-store` wins, then `$GIT_VEIL_HOME`, then
 /// `$HOME/.git-veil`. Resolved lazily so HOME-free subcommands
-/// (remove/list/clean/show-repo-id/error-codes) never fail on an unset
-/// HOME. add, allow and list-keys are not in that set: add and allow
-/// record the machine-local allowance store in the key store (see
+/// (remove-file/list/clean/repo-id/error-codes) never fail on an unset
+/// HOME. add-file, allow and list-keys are not in that set: add-file and
+/// allow record the machine-local allowance store in the key store (see
 /// "Allowance" in docs/design.md), and list-keys verifies the keyring
 /// signature against the pinned key, so all three consume a key_store
 /// like every other gated command.
@@ -114,12 +113,12 @@ fn run() -> Result<()> {
                 output.as_deref(),
             )?;
         }
-        Commands::RemoveKey {
+        Commands::Forget {
             identifier,
             yes,
             key_store: opt,
         } => {
-            cmd_removekey(
+            cmd_forget(
                 &resolve_key_store(opt, skip_permissions_check)?,
                 &identifier,
                 yes,
@@ -178,14 +177,14 @@ fn run() -> Result<()> {
         Commands::Fingerprint { label, public_key } => {
             cmd_fingerprint(&label, &public_key);
         }
-        Commands::Tell {
+        Commands::AddKey {
             email,
             public_key,
             remote,
             signing_key,
             key_store: opt,
         } => {
-            cmd_tell(
+            cmd_add_key(
                 &repo_root,
                 &email,
                 &public_key,
@@ -194,13 +193,13 @@ fn run() -> Result<()> {
                 signing_key.as_deref(),
             )?;
         }
-        Commands::RemovePerson {
+        Commands::RemoveKey {
             email,
             remote,
             signing_key,
             key_store: opt,
         } => {
-            cmd_removeperson(
+            cmd_remove_key(
                 &repo_root,
                 &email,
                 &remote,
@@ -208,7 +207,7 @@ fn run() -> Result<()> {
                 signing_key.as_deref(),
             )?;
         }
-        Commands::Add { files, remote } => cmd_add(
+        Commands::AddFile { files, remote } => cmd_add_file(
             &repo_root,
             files,
             &remote,
@@ -220,10 +219,10 @@ fn run() -> Result<()> {
             &remote,
             &resolve_key_store(None, skip_permissions_check)?,
         )?,
-        Commands::Remove {
+        Commands::RemoveFile {
             files,
             keep_ciphertext,
-        } => cmd_remove(&repo_root, files, keep_ciphertext)?,
+        } => cmd_remove_file(&repo_root, files, keep_ciphertext)?,
         Commands::List => cmd_list(&repo_root)?,
         Commands::Hide {
             remote,
@@ -271,21 +270,6 @@ fn run() -> Result<()> {
                 &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
-        Commands::Unhide {
-            file,
-            email,
-            remote,
-            key_store: opt,
-        } => {
-            let email = resolve_email(&repo_root, email)?;
-            cmd_unhide(
-                &repo_root,
-                &file,
-                &email,
-                &remote,
-                &resolve_key_store(opt, skip_permissions_check)?,
-            )?;
-        }
         Commands::Changes {
             files,
             email,
@@ -301,7 +285,7 @@ fn run() -> Result<()> {
                 &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
-        Commands::ShowRepoId { remote } => cmd_show_repo_id(&repo_root, &remote)?,
+        Commands::RepoId { remote } => cmd_repo_id(&repo_root, &remote)?,
         Commands::Whoami {
             email,
             key_store: opt,
@@ -312,11 +296,11 @@ fn run() -> Result<()> {
                 &resolve_key_store(opt, skip_permissions_check)?,
             )?;
         }
-        Commands::VerifyKeyring {
+        Commands::VerifyKeys {
             remote,
             key_store: opt,
         } => {
-            cmd_verify_keyring(
+            cmd_verify_keys(
                 &repo_root,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,

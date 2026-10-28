@@ -79,7 +79,7 @@ $$
 \end{array}
 $$
 
-`show-repo-id` prints the derived id. `trust` re-derives it from the live
+`repo-id` prints the derived id. `trust` re-derives it from the live
 remote and refuses a provided `repo_id` that does not match the computed one
 (`cmd_trust`, src/commands/trust.rs), so a typo cannot pin a key under the
 wrong identity.
@@ -245,7 +245,7 @@ returns to naming exactly the ids the configured remotes derive.
 ## The gated-command chain
 
 Every gated command verifies the keyring signature through
-`verify_keyring_against_trust` (src/commands/verify_keyring.rs):
+`verify_keyring_against_trust` (src/commands/verify_keys.rs):
 
 $$
 \begin{array}{ll}
@@ -347,7 +347,7 @@ Where fingerprints are used:
   the derivation with the principal label - computed at print time; the
   keyring stores only the principal and the public key (format v2), never
   a fingerprint;
-- key selection in `export`, `import`, `removekey` and `--signing-key` is
+- key selection in `export`, `import`, `forget` and `--signing-key` is
   by public key string only; there is no fingerprint-as-identifier mode.
 
 **16 hex character fingerprints are refused.** A pin or committed trust
@@ -379,13 +379,13 @@ a three-field entry carrying a stored fingerprint is a parse refusal
 
 The `version:` line (Keyring, src/keyring.rs) is a **monotonic counter
 carried inside the signed payload**: the signature covers it, so a version
-number cannot be forged without the owner key. `tell` and `removeperson`
+number cannot be forged without the owner key. `add-key` and `remove-key`
 write `current + 1` (current = the keyring's own version, 0 when absent) -
 the counter needs no state outside the keyring it is serialised into, and no
 clock, so there is no drift to reason about.
 
 The signature alone proves "the owner signed this at some point", not "this
-is current": a plain `git revert` of a removeperson commit restores an old,
+is current": a plain `git revert` of a remove-key commit restores an old,
 still-validly-signed keyring, silently returning a revoked collaborator to
 the keyring. The defence is a per-machine **freshness baseline** - the
 highest keyring version this machine has ever accepted for this repo id,
@@ -425,7 +425,7 @@ the refusal would be void.
 keyring state) is the same ceremony as a legitimate anchor change: re-run
 Algorithm 2, which clears the freshness baseline along with re-pinning the
 key. A keyring without a version is accepted until the next
-`tell`/`removeperson` gives it a version; from then on its rollback is
+`add-key`/`remove-key` gives it a version; from then on its rollback is
 refused.
 
 ## Key discovery and selection
@@ -437,7 +437,7 @@ credentials (`src/key_discovery.rs`).
 
 $$
 \begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 6} \quad \textsc{DiscoverSigningKey}(S, \mathit{repoId}, \mathit{claimed}, \mathit{explicitVK}) \ . \ \text{used by tell and removeperson}} \\
+\multicolumn{2}{l}{\textbf{Algorithm 6} \quad \textsc{DiscoverSigningKey}(S, \mathit{repoId}, \mathit{claimed}, \mathit{explicitVK}) \ . \ \text{used by add-key and remove-key}} \\
 \multicolumn{2}{l}{\textit{S = the key store;} \ \texttt{signing-keys.txt} \text{ holds one 64-hex seed per line, } \texttt{\#} \text{ comments and blank lines skipped}} \\
 1: & \textbf{function } \textsc{DiscoverSigningKey} \\
 2: & \quad keys \leftarrow \text{load signing keys} \quad . \ \text{a garbage line is a parse refusal, exit 62, never silently no keys} \\
@@ -508,21 +508,20 @@ file, rename it over the target, then best-effort fsync the parent directory
 file is removed and the target is untouched. The target is therefore always
 either the old content or the new content, never a mix. `write_atomic_mode` is
 the same sequence with an explicit creation mode for private key material.
-Covered writes: the keyring (`cmd_init`, `cmd_tell`, `cmd_removeperson`),
+Covered writes: the keyring (`cmd_init`, `cmd_add_key`, `cmd_remove_key`),
 tracked.json (`TrackedFiles::save`), trust.json and pins (`TrustStore`,
 `TrustPinStore`), the private-key/public-key/verifying-key stores
 (`cmd_import`, `import_x25519_private_key_to_store`,
 `import_x25519_public_key_to_store`, `cmd_trust`), ciphertext (`cmd_hide`),
-restored plaintext (`cmd_reveal`,
-`cmd_unhide`), export output (`cmd_export`), the removekey rewrite
-(`cmd_removekey`), and the permissions acknowledgment
+restored plaintext (`cmd_reveal`), export output (`cmd_export`), the
+`forget` rewrite (`cmd_forget`), and the permissions acknowledgment
 (`cmd_trust_permissions`). Key-store appends are implemented as read-existing
 plus `write_atomic` of the whole accumulated content - an accepted O(n) trade
 so a torn private-key store (which would brick all decryption) is impossible.
 
 $$
 \begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 8} \quad \textsc{TwoPhase} \text{ - the hide/reveal/unhide commit discipline}} \\
+\multicolumn{2}{l}{\textbf{Algorithm 8} \quad \textsc{TwoPhase} \text{ - the hide/reveal commit discipline}} \\
 1: & \textbf{phase 1 (in memory): } \text{read and validate every target;} \text{ compute all outputs} \\
    & \quad \text{any failure aborts with nothing changed on disk} \\
 2: & \textbf{phase 2 (commit): } \text{write each output atomically;} \text{ a part-way failure is reported with written/total counts, exit non-zero} \\
@@ -541,7 +540,7 @@ while it is being edited. Consequences, stated honestly:
   refuses, exit 71). There is no bare whole-manifest form. The one
   whole-manifest pass is the ring-change ceremony's `rotate` (see "The
   ring-change ceremony"). Hide
-  resolves names the way `add` does, so a named plaintext must exist when
+  resolves names the way `add-file` does, so a named plaintext must exist when
   you name it; reveal resolves with the lexical strip, so a name need not
   exist on disk. The allowance gate and the code-41 warning apply to the
   named set.
@@ -567,16 +566,16 @@ ordering invariant).
 
 Ciphertext lives beside its plaintext as `<name>.secret` and is meant to be
 committed; plaintext is meant to be gitignored. The gates below run inside
-Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`,
+Algorithm 9 (`src/commands/add_file.rs`, `src/commands/hide.rs`,
 `src/allowance.rs`):
 
-1. **Add-time gitignore gate** (`ensure_gitignored`): like git-secret, `add`
+1. **Add-time gitignore gate** (`ensure_gitignored`): like git-secret, `add-file`
    runs `git check-ignore` on the plaintext path and appends it to
    `.gitignore` when not already ignored.
 2. **Ciphertext-ignored refusal**: a `.secret` path can be silently swallowed
    by an unrelated broad rule (e.g. a parent directory like `.tmp/` in
-   `.gitignore`) - `add` would succeed and the ciphertext would never reach
-   the repository. `add` therefore warns (exit stays 0) when the future
+   `.gitignore`) - `add-file` would succeed and the ciphertext would never reach
+   the repository. `add-file` therefore warns (exit stays 0) when the future
    `.secret` path is git-ignored, and `hide` **refuses outright** with exit
    code 40 before encrypting anything, listing every offending path.
 3. **Plaintext-leak warning**: if a tracked plaintext exists on disk but is
@@ -588,17 +587,17 @@ Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`,
    warning but a hard refusal in the decryption-write commands. A plaintext
    that is tracked in git is ordinary repository content, not a secret
    (git-veil plaintexts are gitignored by construction; a tracked plaintext
-   is exactly the state the code-41 warning flags). If `reveal` or `unhide`
+   is exactly the state the code-41 warning flags). If `reveal`
    refused nothing there, a repo writer could nominate a source file - say
     `ci/deploy.sh` - in the unsigned `tracked.json` and commit a payload
     ciphertext encrypted to the ring's public keys (no signing key
     needed, the keyring is untouched); the victim's `reveal` would overwrite
-   the source file and the CI would execute it. `reveal` and `unhide`
-   therefore refuse with exit code 43 (PlaintextTracked) when the target
+   the source file and the CI would execute it. `reveal`
+   therefore refuses with exit code 43 (PlaintextTracked) when the target
    plaintext path is tracked in the git index, naming the path and the
    `git rm --cached` remedy. `cat` is not gated: it never writes. The gate
-   is `ensure_not_tracked_in_git` (src/commands/reveal.rs, unhide.rs) over
-   `is_tracked_in_git` (src/commands/add.rs), whose index match is
+   is `ensure_not_tracked_in_git` (src/commands/reveal.rs) over
+   `is_tracked_in_git` (src/commands/add_file.rs), whose index match is
    case-insensitive as a fallback: on the macOS and Windows default
    filesystems a case-variant spelling (`BUILD.SH` vs `Build.sh`) resolves
    to the same file, so an exact-match miss must still refuse when any
@@ -610,7 +609,7 @@ Algorithm 9 (`src/commands/add.rs`, `src/commands/hide.rs`,
 
 `hide` re-encrypts only tracked paths. That makes the tracked manifest the
 de-facto revocation boundary: if a path is removed from `tracked.json`, the
-old ciphertext is never re-encrypted, so after a `removeperson` rotation the
+old ciphertext is never re-encrypted, so after a `remove-key` rotation the
 stale `.secret` stays decryptable by the removed collaborator - silently,
 because no scoped `hide` runs the orphan gate; only the ring-change pass
 does. Since
@@ -619,7 +618,7 @@ cause the manifest deletion in the first place.
 
 Two mitigations close the hole:
 
-1. **`remove` deletes the sibling ciphertext by default.** Untracking a file
+1. **`remove-file` deletes the sibling ciphertext by default.** Untracking a file
    deletes `<name>.secret` from the working tree in the same step
    (`--keep-ciphertext` leaves the ciphertext in place). The
    ciphertext is committed content, so deletion is recoverable from git
@@ -640,19 +639,19 @@ Two mitigations close the hole:
 
 Scope, stated honestly: the gate reads the git **index**, so it catches
 committed (staged) ciphertexts - the exfiltration channel. An uncommitted
-on-disk `.secret` left behind by `remove --keep-ciphertext` is not detected
+on-disk `.secret` left behind by `remove-file --keep-ciphertext` is not detected
 until staged; a blind `git add -A` could sweep it into a commit. This is the
 same risk class as the code-41 plaintext-leak warning and is documented as
 such, not hidden.
 
 ## The ring-change ceremony
 
-After `tell` or `removeperson` re-signs the keyring, every tracked
+After `add-key` or `remove-key` re-signs the keyring, every tracked
 `.secret` still holds ciphertext encrypted to the previous ring. The door
 that delivers the pass is `git-veil rotate`: the one command that turns a
 ring change into ciphertext, and the only whole-manifest pass.
 
-- **The stamp.** `tell` and `removeperson` write a ring-change stamp
+- **The stamp.** `add-key` and `remove-key` write a ring-change stamp
   into the key store after they write the re-signed keyring. The stamp
   lives at `<key store>/ring-pass/<sanitized repo id>` and holds the
   keyring version they signed and the SHA-256 digest of that signed
@@ -675,7 +674,7 @@ ring change into ciphertext, and the only whole-manifest pass.
   git index before anything is re-encrypted, refusing any committed
   ciphertext whose path is no longer tracked (exit 42). When the pass
   completes, the stamp is cleared: one pass per ring change.
-- **The notice.** `tell` and `removeperson` print one plain line when
+- **The notice.** `add-key` and `remove-key` print one plain line when
   they stamp: `note: the keyring has changed. To re-encrypt to the
   updated keyring, run the rotate command.` The line states the fact and
   names the follow-up command.
@@ -698,10 +697,10 @@ their own machine, recorded in the key store and keyed to the trust pin and
 the principal:
 
 - **The verb is `allow`.** `git-veil allow <path>` resolves the path
-  exactly like `add` (canonicalise, must exist, stored repo-relative) and
+  exactly like `add-file` (canonicalise, must exist, stored repo-relative) and
   records it in the allowance store. The principal comes from git config
   user.email.
-- **`add` implies `allow`.** The manifest nomination is the user's standing
+- **`add-file` implies `allow`.** The manifest nomination is the user's standing
   instruction: one deliberate act writes the public repository fact and the
   private consent together. A path the user added on this machine never
   needs a second step.
@@ -719,7 +718,7 @@ the principal:
   established: any machine holding the pin re-encrypts it, which is what
   keeps rotation working on a fresh clone. The gate exists solely for
   first-encrypt.
-- **`removeperson` purges the removed principal's records** in the key
+- **`remove-key` purges the removed principal's records** in the key
   store of the machine running it - that store holds only this machine's
   records, which is the honest scope. A revoked collaborator leaves no
   ambient consent behind.
@@ -833,7 +832,7 @@ $$
 4: & \quad \textbf{guard } \text{lstat}(\mathit{path}) \text{ is a regular file or absent} \quad \textbf{else refuse} \ . \ \text{exit 71; a committed symlink is refused on every use} \\
 5: & \quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root} \quad \textbf{else refuse} \ . \ \text{exit 71} \\
 6: & \textbf{end function} \\[2mm]
-\multicolumn{2}{l}{\textbf{upon } \textsc{Reveal} / \textsc{Unhide} \text{ (the decryption-write gate)}} \\
+\multicolumn{2}{l}{\textbf{upon } \textsc{Reveal} \text{ (the decryption-write gate)}} \\
 a: & \quad \textbf{guard } \text{the target plaintext is not tracked in the git index, case-insensitively} \\
    & \quad\quad \textbf{else refuse} \ . \ \text{exit 43, naming the path; cat is not gated, it never writes} \\
 b: & \textbf{end upon}
@@ -846,11 +845,11 @@ canonicalise-and-reject (`resolve_repo_relative_input` with
 regular-file gate (`ensure_regular_file`, lstat; a *missing* path is
 accepted - the plaintext is normally absent while hidden), layer 4
 `ensure_ciphertext_beside_plaintext`. Layers 1 to 4 fire on every use of a
-tracked path in hide, reveal, unhide, cat and changes. *Threats countered:*
+tracked path in hide, reveal, cat and changes. *Threats countered:*
 a malicious committed tracked.json making git-veil read or write outside
 the repository; tracking a symlink whose target is read into committed
 ciphertext (hide) or printed (cat/changes) or written through
-(reveal/unhide); any future drift in the ciphertext-path math reintroducing
+(reveal); any future drift in the ciphertext-path math reintroducing
 an escape. The case-insensitive fallback in the decryption-write gate
 exists because on the macOS and Windows default filesystems a case-variant
 spelling (`BUILD.SH` vs `Build.sh`) resolves to the same file, so an
@@ -879,12 +878,12 @@ codes are never renumbered, only appended.
 | 14   | KeyringRollback              | Keyring version is below this machine's freshness baseline; re-`trust` if the rollback is intended |
 | 20   | NoSigningKey                 | No Ed25519 signing key in the key store; create one and back it up |
 | 21   | NoX25519PrivateKey           | No X25519 private key in the key store matching your keyring entry; create and import one |
-| 22   | PrincipalNotInKeyring        | Your principal is not in the signed keyring; ask the owner to `tell` you |
+| 22   | PrincipalNotInKeyring        | Your principal is not in the signed keyring; ask the owner to add you with `add-key` |
 | 30   | UnsafeKeyStorePermissions    | Key store directory or private key file is group/world accessible |
-| 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
+| 40   | CiphertextIgnored            | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add-file`) |
 | 41   | PlaintextNotIgnored          | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
 | 42   | OrphanedCiphertext           | A committed `.secret` ciphertext path is not tracked; `rotate` refuses (see "Orphaned ciphertext") |
-| 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`/`unhide`; see "Ignore safety" gate 4) |
+| 43   | PlaintextTracked             | The plaintext is tracked in git (fatal in `reveal`; see "Ignore safety" gate 4) |
 | 60   | DecryptionFailed             | Ciphertext could not be decrypted with the local private key |
 | 61   | EncryptionFailed             | Encryption failed |
 | 62   | KeyParseFailure              | A key, keyring or signature could not be parsed |
