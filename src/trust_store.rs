@@ -224,7 +224,7 @@ impl TrustPinStore {
 /// The per-machine ring-change stamp: the record that a keyring change was
 /// signed on THIS machine and the whole-manifest re-encrypt pass is due.
 ///
-/// `tell` and `removeperson` write the stamp after they write the re-signed
+/// `add-key` and `remove-key` write the stamp after they write the re-signed
 /// keyring; `rotate` requires it, verifies the committed ring against
 /// it, and clears it after a successful pass (docs/design.md "The
 /// ring-change ceremony"). The stamp lives in the key store, outside the

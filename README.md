@@ -34,7 +34,7 @@ key and reads what it needs.
 
 Each repository has an ID derived from its git remote push URL. The remote
 `git@github.com:example/demo.git` gives the ID `demo+example@github.com`.
-Run `git-veil show-repo-id` to print your repository's ID.
+Run `git-veil repo-id` to print your repository's ID.
 
 The repository owner's signing key is pinned on each machine. A repository
 can never supply its own trust anchor. The only way to create a pin directly
@@ -102,12 +102,12 @@ back it up.
 ```sh
 git-veil init                                   # create .git-veil/ state
 git-veil import my-age-identity.txt             # import your X25519 private key into the local key store
-git-veil show-repo-id                           # print the repository ID
+git-veil repo-id                                # print the repository ID
 git-veil trust demo+example@github.com          # pin the owner key by possession proof
 git-veil export age1xxxx                        # print your public key string
-git-veil tell example@github.com age1xxxx       # paste the string, adds you to the signed keyring
+git-veil add-key example@github.com age1xxxx    # paste the string, adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
-git-veil add .env                               # track the file (gitignores the plaintext name)
+git-veil add-file .env                          # track the file (gitignores the plaintext name)
 git-veil hide .env                              # encrypt: .env -> .env.secret (plaintext deleted)
 git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
@@ -172,8 +172,8 @@ re-recording.
 
 Three things keep the gate out of the way:
 
-- Name your files. `git-veil add .env` records the allowance too, so a
-  path you added on this machine never asks.
+- Name your files. `git-veil add-file .env` records the allowance too, so
+  a path you added on this machine never asks.
 - Re-encryption needs no allowance. A tracked path whose `.secret`
   ciphertext is already committed is established, and any machine holding
   the pin re-encrypts it. That is what keeps rotation working on a fresh
@@ -264,7 +264,7 @@ This key is not an `age` key, and no `age` tool makes it. You make it with
 umask 077
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 
-# The seed. tell and removeperson read it. 64 hex characters.
+# The seed. add-key and remove-key read it. 64 hex characters.
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
@@ -275,7 +275,7 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 ```
 
 The signing-key file format is one 64-hex-character Ed25519 seed per line in
-`<key store>/signing-keys.txt`. tell/removeperson sign with the key whose
+`<key store>/signing-keys.txt`. add-key/remove-key sign with the key whose
 verifying fingerprint is pinned for the repository. Commands that
 need a missing key exit with a documented code (`git-veil error-codes`)
 after printing how to create and back it up.
@@ -297,24 +297,23 @@ the workflow differ. One payoff is a smaller binary.
 | `init`           | Initialize git-veil state (`.git-veil/`) in the current repository        |
 | `import`         | Import your X25519 private key file(s) into the git-veil key store       |
 | `export`         | Export an X25519 public key from the local key store                    |
-| `removekey`      | Remove a key from the local key store (destructive, local-only)         |
+| `forget`         | Delete a key from the local key store (destructive, local-only)         |
 | `trust`          | Pin the repository owner's key by possession proof, or import a pin-file (per machine) |
 | `export-pin`     | Export this repository's pin-file for import on a machine without the signing key |
-| `tell`           | Add a collaborator's public key to the keyring and re-sign it           |
-| `removeperson`   | Remove a collaborator from the keyring and re-sign it                   |
-| `add`            | Track files for encryption (auto-gitignores plaintext names; records the allowance on this machine) |
+| `add-key`        | Add a collaborator's public key to the keyring and re-sign it           |
+| `remove-key`     | Remove a collaborator from the keyring and re-sign it                   |
+| `add-file`       | Track files for encryption (auto-gitignores plaintext names; records the allowance on this machine) |
 | `allow`          | Allow files for encryption on this machine (answers `hide`'s exit-72 question, cached per clone per git user) |
-| `remove`         | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
+| `remove-file`    | Untrack files (deletes the sibling `.secret` unless `--keep-ciphertext`) |
 | `list`           | List all tracked files                                                  |
 | `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts (`--keep-plaintext` keeps the plaintexts; refuses when a `.secret` path is git-ignored; asks the exit-72 allowance question before first-encrypting a path you did not allow) |
 | `rotate`         | Deliver the due ring-change pass: re-encrypt every tracked ciphertext to the current keyring, in memory, plaintexts untouched |
 | `reveal`         | Decrypt the named tracked files back to plaintext (never gated) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |
-| `unhide`         | Decrypt one tracked file back to plaintext (ciphertext kept)             |
 | `changes`        | Report where plaintext differs from the last hidden version             |
-| `show-repo-id`   | Show the repository ID derived from the git remote push URL             |
+| `repo-id`        | Show the repository ID derived from the git remote push URL             |
 | `whoami`         | Show the principal git-veil will use                        |
-| `verify-keyring` | Verify the keyring signature against the pinned trusted key             |
+| `verify-keys`    | Verify the keyring signature against the pinned trusted key             |
 | `list-keys`      | List keyring keys after verifying the keyring signature                 |
 | `clean`          | Remove the `.git-veil` state directory (`--yes` required when data would be lost) |
 | `trust-permissions` | Acknowledge the key store's current (path, mode) pairs as trusted     |

@@ -35,8 +35,8 @@ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
 git-veil import my-age-identity.txt
 git-veil trust demo+example@github.com  # possession proof. The seed must match .git-veil/owner.verifying
 git-veil export age1xxxx
-git-veil tell example@github.com age1xxxx    # the owner must be in the keyring too
-git-veil add .env && git-veil hide .env
+git-veil add-key example@github.com age1xxxx  # the owner must be in the keyring too
+git-veil add-file .env && git-veil hide .env
 git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
 git push
 ```
@@ -60,7 +60,7 @@ or use any channel an attacker cannot rewrite. Then the owner adds her to
 the keyring:
 
 ```sh
-$ git-veil tell alice@example.com age1xxxx
+$ git-veil add-key alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
@@ -68,11 +68,11 @@ note: the keyring has changed. To re-encrypt to the updated keyring, run the rot
 What happened. The keyring signature was verified against the pinned owner
 key before the change. A canary was test-encrypted to the pasted key, so a key
 that cannot encrypt is never signed in. The keyring was re-signed with the
-owner's Ed25519 key. Telling the same email twice updates the entry instead
+owner's Ed25519 key. Adding the same email twice updates the entry instead
 of duplicating it.
 
-Important. Telling Alice does not change ciphertext that already exists.
-Files hidden before she was told were encrypted only to the owner's key.
+Important. Adding Alice does not change ciphertext that already exists.
+Files hidden before she joined were encrypted only to the owner's key.
 To bring her in, the owner delivers the ring-change pass with `git-veil
 rotate`: no reveal step, and the ciphertexts never leave the committed
 state mid-ceremony.
@@ -162,7 +162,7 @@ files hidden
 $ git-veil reveal .env   # restore .env only
 ```
 
-A rotation after `tell` or `removeperson` is different work: the
+A rotation after `add-key` or `remove-key` is different work: the
 ring-change pass, delivered with `git-veil rotate`. See
 [Commands - rotate](commands.md#rotate).
 
@@ -179,7 +179,7 @@ pushed the manifest before hiding it:
 
 ```sh
 $ printf 'DEPLOY_HOST=staging.example.com\nDEPLOY_USER=alice\n' > deploy.env
-$ git-veil add deploy.env
+$ git-veil add-file deploy.env
 file not in .gitignore, adding: deploy.env
 added 1 files
 $ git add .gitignore .git-veil/tracked.json
@@ -231,7 +231,7 @@ files hidden
 
 Three facts keep the gate out of the way:
 
-- `add` implies `allow`. A path you added on this machine never asks.
+- `add-file` implies `allow`. A path you added on this machine never asks.
 - Naming files keeps the question small: `git-veil hide deploy.env`
   examines the named files only, and a refusal names only the offenders
   among them. A scoped `hide` of files you named yourself never asks at

@@ -26,7 +26,7 @@ struct StoreContents {
 /// A non-comment line that is not a parseable X25519 private key is a
 /// hard error naming the corrupt line. The store is refused untouched.
 /// Silently skipping corrupt lines would let a successful removal
-/// rewrite the store without them, deleting key material removekey was
+/// rewrite the store without them, deleting key material forget was
 /// never asked to touch. The same fail-closed rule applies to every key
 /// store read.
 fn load_private_key_store(path: &Path) -> Result<StoreContents> {
@@ -90,7 +90,7 @@ fn load_public_key_store(path: &Path) -> Result<StoreContents> {
 /// `<key_store>/identities.txt` and `<key_store>/recipients.txt` whose
 /// X25519 public key encoding exactly matches `identifier` is dropped.
 /// Keys are selected by public key string only.
-pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
+pub fn cmd_forget(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
     let private_keys_path = key_store.join("identities.txt");
     let public_keys_path = key_store.join("recipients.txt");
 
@@ -116,7 +116,7 @@ pub fn cmd_removekey(key_store: &Path, identifier: &str, yes: bool) -> Result<()
 
     if private_key_matches.is_empty() && public_key_matches.is_empty() {
         anyhow::bail!(
-            "no matching key found in the key store. removekey only removes keys this machine local store holds"
+            "no matching key found in the key store. forget only removes keys this machine local store holds"
         );
     }
 

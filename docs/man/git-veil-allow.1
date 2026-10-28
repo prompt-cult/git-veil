@@ -24,11 +24,11 @@ allowed these paths for encryption. tracked.json is committed and
 unsigned, so any repo writer can nominate a path in it; hide refuses to
 first\-encrypt a tracked path that was never allowed on this machine
 (exit code 72). Once recorded, an allowance survives manifest changes
-and never needs re\-recording. removeperson purges the allowance record
+and never needs re\-recording. remove\-key purges the allowance record
 of a removed principal.
 
-allow resolves paths exactly like add: the file must exist and resolve
-inside the repository. add records the allowance too, so allow is only
+allow resolves paths exactly like add\-file: the file must exist and resolve
+inside the repository. add\-file records the allowance too, so allow is only
 needed for a path someone else nominated, or to allow a path under a
 principal the manifest nomination did not run for.
 

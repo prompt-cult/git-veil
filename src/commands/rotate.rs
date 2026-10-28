@@ -21,7 +21,7 @@ use crate::{
 /// Reads the committed keyring's version and signed-content digest: the
 /// ring state a due ring-change stamp must match. An unsigned keyring has
 /// no digest, and an unsigned ring can never match a stamp, because only
-/// tell and removeperson stamp a ring they have just signed.
+/// add-key and remove-key stamp a ring they have just signed.
 fn committed_ring_state(repo_root: &Path) -> Result<(Option<u64>, Option<String>)> {
     let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
@@ -135,7 +135,7 @@ fn decrypt_with_any_store_key(
 
 /// The ring-change pass: re-encrypts every tracked ciphertext to the
 /// current keyring (docs/design.md "The ring-change ceremony"). Run it
-/// after tell or removeperson so the committed ciphertext reflects the
+/// after add-key or remove-key so the committed ciphertext reflects the
 /// updated keyring.
 ///
 /// The plaintexts are never in the data path: the ciphertext is the
@@ -145,7 +145,7 @@ fn decrypt_with_any_store_key(
 ///
 /// The pass is gated before anything is rotated:
 ///
-/// 1. The stamp gate. tell and removeperson stamp the ring they signed -
+/// 1. The stamp gate. add-key and remove-key stamp the ring they signed -
 ///    its version and signed-content digest - into this machine's key
 ///    store. The committed keyring must match that stamp exactly: the ring
 ///    changed HERE and no pass has consumed the change yet. Without a

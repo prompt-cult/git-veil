@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 use crate::allowance::AllowanceStore;
-use crate::commands::add::is_gitignored;
+use crate::commands::add_file::is_gitignored;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fingerprint::is_16_hex_pin_shape;
 use crate::tracked_files::{get_git_config_email, resolve_repo_relative_input, PathResolveMode};

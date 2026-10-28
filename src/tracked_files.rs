@@ -73,7 +73,7 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
 /// through it would corrupt the link target or silently replace the link.
 /// The lstat gate (symlink_metadata, which does not follow the link)
 /// rejects this, naming the path. A path that does not exist on disk is
-/// accepted. For cat/changes/reveal/unhide the plaintext is normally
+/// accepted. For cat/changes/reveal the plaintext is normally
 /// absent: the file is hidden and only the `.secret` ciphertext remains.
 pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
     let full_path = repo_root.join(file);
@@ -136,26 +136,26 @@ fn stays_inside_repo_root(path: &Path) -> bool {
 /// The commands share one canonicalise-and-strip shape but deliberately
 /// differ in two documented ways.
 ///
-/// - whether the plaintext may be absent. `cmd_add`, `cmd_cat` and
+/// - whether the plaintext may be absent. `cmd_add_file`, `cmd_cat` and
 ///   `cmd_changes` require existence for the paths they canonicalise,
-///   while `cmd_remove` and `cmd_unhide` must work while the file is
+///   while `cmd_remove_file` and `cmd_reveal` must work while the file is
 ///   hidden (hide deleted the plaintext, only the `.secret` ciphertext
 ///   remains).
-/// - which path `validate_tracked_path` guards. `cmd_add` and
-///   `cmd_remove` validate the resolved result, which is about to be
+/// - which path `validate_tracked_path` guards. `cmd_add_file` and
+///   `cmd_remove_file` validate the resolved result, which is about to be
 ///   stored in tracked.json, while `cmd_cat`, `cmd_changes` and
-///   `cmd_unhide` validate only the literal relative input.
+///   `cmd_reveal` validate only the literal relative input.
 ///
 /// The variants pin down each caller's exact contract.
 /// [`resolve_repo_relative_input`] enforces it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathResolveMode {
-    /// `cmd_add`: the input must exist. Both absolute and relative inputs
+    /// `cmd_add_file`: the input must exist. Both absolute and relative inputs
     /// are canonicalised against the canonical repo root (symlinks
     /// resolved, `..` collapsed) before stripping, and the resolved path
     /// is validated.
     CanonicaliseRequireExists,
-    /// `cmd_remove`: no existence requirement. Absolute inputs are
+    /// `cmd_remove_file`: no existence requirement. Absolute inputs are
     /// stripped lexically against the canonical repo root, relative inputs
     /// are taken as-is, and the resolved path is validated.
     LexicalStripValidateResolved,
@@ -164,7 +164,7 @@ pub enum PathResolveMode {
     /// after validation. The stripped absolute-derived path is not
     /// re-validated. The caller's tracked-file membership check guards it.
     CanonicaliseAbsoluteValidateRelative,
-    /// `cmd_unhide`: no existence requirement. Absolute inputs are
+    /// `cmd_reveal`: no existence requirement. Absolute inputs are
     /// stripped lexically. Relative inputs are taken as-is after
     /// validation. The stripped path is not re-validated.
     LexicalStripValidateRelative,
@@ -175,7 +175,7 @@ pub enum PathResolveMode {
 ///
 /// `root_verb` names the command's action for the "cannot operate on the
 /// repository root itself" error (e.g. `"track"`, `"remove"`, `"cat"`,
-/// `"unhide"`, `"check"`).
+/// `"reveal"`, `"check"`).
 pub(crate) fn resolve_repo_relative_input(
     repo_root: &Path,
     user_path: &str,

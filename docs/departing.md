@@ -1,13 +1,13 @@
 # Departing a team repository
 
 A collaborator (`bob@example.com`) leaves the team. The owner removes him
-from the keyring with `removeperson`. In the following, `age` refers to the
+from the keyring with `remove-key`. In the following, `age` refers to the
 open source `age` encryption tooling, which may be installed separately to
 securely create and maintain cryptographic keys outside of the git repo; the
 `git-veil` software uses the Rust `rage` library to work with the keys.
 Understand the semantics before you rely on them:
 
-- `removeperson` deletes bob's entry from the signed keyring and re-signs
+- `remove-key` deletes bob's entry from the signed keyring and re-signs
   it. It is forward-looking only.
 - Ciphertexts that already exist were encrypted to bob's key. He can still
   decrypt every one of them he can obtain, with this tool or with the
@@ -22,7 +22,7 @@ Understand the semantics before you rely on them:
 Remove bob, then deliver the ring-change pass:
 
 ```sh
-$ git-veil removeperson bob@example.com
+$ git-veil remove-key bob@example.com
 removed bob@example.com from the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 $ git-veil rotate
@@ -35,7 +35,7 @@ $ git push
 ```
 
 What happened. The keyring signature was verified against the pinned owner
-key before the change. removeperson fails closed on a tampered or unsigned
+key before the change. remove-key fails closed on a tampered or unsigned
 keyring, and on an email that is not in the ring. Bob's entry was dropped,
 the ring re-signed with the owner's key, and a due pass stamped in the
 owner's key store. `rotate` re-encrypted every tracked ciphertext to the
@@ -56,16 +56,16 @@ rm -rf ~/work/demo                 # wipe his clone. Ciphertext and .git-veil go
 ```
 
 And his local key store, `$HOME/.git-veil`, holds his PRIVATE X25519 key.
-He removes it from that store with `removekey`, selected by his exact
+He removes it from that store with `forget`, selected by his exact
 public key encoding. The private key is usually the only one in his
 store, so `--yes` confirms its removal:
 
 ```sh
-git-veil removekey age1xxxx --yes
+git-veil forget age1xxxx --yes
 ```
 
 This is destructive and local-only. It does not touch any repository,
-keyring or trust state, and it revokes nothing. If removekey refuses, the
+keyring or trust state, and it revokes nothing. If forget refuses, the
 fallback is manual. A corrupt store is never deleted, and a
 public key matching several store lines must be disambiguated. Edit the
 matching line out of `identities.txt` and `recipients.txt` by hand, or
@@ -126,9 +126,9 @@ unreadable.
 
 ## Checklist
 
-- [ ] Owner: `removeperson <email>`. It fails if the email is not in the ring
+- [ ] Owner: `remove-key <email>`. It fails if the email is not in the ring
 - [ ] Owner: deliver the ring-change pass with `git-veil rotate`, commit `.git-veil/keyring` and the re-encrypted `.secret` files, push
 - [ ] Everyone: rotate every secret bob could ever decrypt, then commit the new values via hide
 - [ ] Owner: `list-keys` shows bob gone; `reveal`/`cat` works for remaining members
-- [ ] Departing user: wipe clone; `removekey` their key from the local key store; destroy or archive their backed-up X25519 private key
+- [ ] Departing user: wipe clone; `forget` their key from the local key store; destroy or archive their backed-up X25519 private key
 - [ ] Optional: rewrite history (`git filter-repo`) and force-push if the ciphertext bytes themselves must vanish

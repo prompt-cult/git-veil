@@ -57,7 +57,7 @@ _arguments "${_arguments_options[@]}" : \
 ':identifier -- X25519 public key encoding (age1xxxx) of the key to export:_default' \
 && ret=0
 ;;
-(removekey)
+(forget)
 _arguments "${_arguments_options[@]}" : \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--yes[Confirm destructive removal\: required when the target is the only private key in the store]' \
@@ -99,7 +99,7 @@ _arguments "${_arguments_options[@]}" : \
 ':public_key -- Public key encoding\: bech32 X25519 public key (age1xxxx) or 64-hex Ed25519 verifying key:_default' \
 && ret=0
 ;;
-(tell)
+(add-key)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
@@ -111,7 +111,7 @@ _arguments "${_arguments_options[@]}" : \
 ':public_key -- The collaborator'\''s bech32 X25519 public key encoding (age1xxxx), pasted literally:_default' \
 && ret=0
 ;;
-(removeperson)
+(remove-key)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
@@ -122,7 +122,7 @@ _arguments "${_arguments_options[@]}" : \
 ':email -- Email of the collaborator to remove:_default' \
 && ret=0
 ;;
-(add)
+(add-file)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name (derives the repository id for the allowance store)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
@@ -140,7 +140,7 @@ _arguments "${_arguments_options[@]}" : \
 '*::files -- File(s) to allow:_default' \
 && ret=0
 ;;
-(remove)
+(remove-file)
 _arguments "${_arguments_options[@]}" : \
 '--keep-ciphertext[Leave the <name>.secret ciphertext in place (hide will refuse it as an orphan)]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
@@ -198,17 +198,6 @@ _arguments "${_arguments_options[@]}" : \
 ':file -- File to decrypt:_default' \
 && ret=0
 ;;
-(unhide)
-_arguments "${_arguments_options[@]}" : \
-'--email=[Your email address]:EMAIL:_default' \
-'--remote=[Git remote name]:REMOTE:_default' \
-'--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
-'--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
-'-h[Print help (see more with '\''--help'\'')]' \
-'--help[Print help (see more with '\''--help'\'')]' \
-':file -- File to unhide:_default' \
-&& ret=0
-;;
 (changes)
 _arguments "${_arguments_options[@]}" : \
 '--email=[Your email address]:EMAIL:_default' \
@@ -220,7 +209,7 @@ _arguments "${_arguments_options[@]}" : \
 '*::files -- File(s) to check (default\: all tracked files):_default' \
 && ret=0
 ;;
-(show-repo-id)
+(repo-id)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
@@ -237,7 +226,7 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
 ;;
-(verify-keyring)
+(verify-keys)
 _arguments "${_arguments_options[@]}" : \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
@@ -318,7 +307,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(removekey)
+(forget)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -334,15 +323,15 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(tell)
+(add-key)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(removeperson)
+(remove-key)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(add)
+(add-file)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -350,7 +339,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(remove)
+(remove-file)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -374,15 +363,11 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(unhide)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (changes)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(show-repo-id)
+(repo-id)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -390,7 +375,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(verify-keyring)
+(verify-keys)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -437,25 +422,24 @@ _git-veil_commands() {
 'init:Initialize git-veil state (.git-veil/) in the current repository' \
 'import:Import your X25519 private key into the git-veil key store' \
 'export:Export an X25519 public key from the local key store' \
-'removekey:Remove a key from the local key store (destructive, local-only)' \
+'forget:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
-'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
-'removeperson:Remove a collaborator from the keyring and re-sign it' \
-'add:Track files for encryption' \
+'add-key:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
+'remove-key:Remove a collaborator from the keyring and re-sign it' \
+'add-file:Track files for encryption' \
 'allow:Allow files for encryption on this machine' \
-'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
+'remove-file:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
 'hide:Encrypt named tracked files to the keyring' \
 'rotate:Re-encrypt every tracked ciphertext to the current keyring' \
 'reveal:Decrypt named tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
-'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
-'show-repo-id:Show the repository ID derived from the git remote push URL' \
+'repo-id:Show the repository ID derived from the git remote push URL' \
 'whoami:Show the principal git-veil will use for you' \
-'verify-keyring:Verify the keyring signature against the pinned trusted key' \
+'verify-keys:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \
 'error-codes:List every documented exit code with its name and meaning' \
@@ -466,10 +450,15 @@ _git-veil_commands() {
     )
     _describe -t commands 'git-veil commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__add_commands] )) ||
-_git-veil__subcmd__add_commands() {
+(( $+functions[_git-veil__subcmd__add-file_commands] )) ||
+_git-veil__subcmd__add-file_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil add commands' commands "$@"
+    _describe -t commands 'git-veil add-file commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__add-key_commands] )) ||
+_git-veil__subcmd__add-key_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil add-key commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__allow_commands] )) ||
 _git-veil__subcmd__allow_commands() {
@@ -516,31 +505,35 @@ _git-veil__subcmd__fingerprint_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil fingerprint commands' commands "$@"
 }
+(( $+functions[_git-veil__subcmd__forget_commands] )) ||
+_git-veil__subcmd__forget_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil forget commands' commands "$@"
+}
 (( $+functions[_git-veil__subcmd__help_commands] )) ||
 _git-veil__subcmd__help_commands() {
     local commands; commands=(
 'init:Initialize git-veil state (.git-veil/) in the current repository' \
 'import:Import your X25519 private key into the git-veil key store' \
 'export:Export an X25519 public key from the local key store' \
-'removekey:Remove a key from the local key store (destructive, local-only)' \
+'forget:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
-'tell:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
-'removeperson:Remove a collaborator from the keyring and re-sign it' \
-'add:Track files for encryption' \
+'add-key:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
+'remove-key:Remove a collaborator from the keyring and re-sign it' \
+'add-file:Track files for encryption' \
 'allow:Allow files for encryption on this machine' \
-'remove:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
+'remove-file:Untrack files (deletes the sibling .secret unless --keep-ciphertext)' \
 'list:List all tracked files' \
 'hide:Encrypt named tracked files to the keyring' \
 'rotate:Re-encrypt every tracked ciphertext to the current keyring' \
 'reveal:Decrypt named tracked files back to plaintext' \
 'cat:Decrypt a single tracked file to stdout' \
-'unhide:Decrypt one tracked file back to plaintext' \
 'changes:Report where plaintext differs from the last hidden version' \
-'show-repo-id:Show the repository ID derived from the git remote push URL' \
+'repo-id:Show the repository ID derived from the git remote push URL' \
 'whoami:Show the principal git-veil will use for you' \
-'verify-keyring:Verify the keyring signature against the pinned trusted key' \
+'verify-keys:Verify the keyring signature against the pinned trusted key' \
 'list-keys:List keyring keys after verifying the keyring signature' \
 'trust-permissions:Acknowledge the key store'\''s current permissions as trusted' \
 'error-codes:List every documented exit code with its name and meaning' \
@@ -551,10 +544,15 @@ _git-veil__subcmd__help_commands() {
     )
     _describe -t commands 'git-veil help commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__help__subcmd__add_commands] )) ||
-_git-veil__subcmd__help__subcmd__add_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__add-file_commands] )) ||
+_git-veil__subcmd__help__subcmd__add-file_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil help add commands' commands "$@"
+    _describe -t commands 'git-veil help add-file commands' commands "$@"
+}
+(( $+functions[_git-veil__subcmd__help__subcmd__add-key_commands] )) ||
+_git-veil__subcmd__help__subcmd__add-key_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil help add-key commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__allow_commands] )) ||
 _git-veil__subcmd__help__subcmd__allow_commands() {
@@ -601,6 +599,11 @@ _git-veil__subcmd__help__subcmd__fingerprint_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help fingerprint commands' commands "$@"
 }
+(( $+functions[_git-veil__subcmd__help__subcmd__forget_commands] )) ||
+_git-veil__subcmd__help__subcmd__forget_commands() {
+    local commands; commands=()
+    _describe -t commands 'git-veil help forget commands' commands "$@"
+}
 (( $+functions[_git-veil__subcmd__help__subcmd__help_commands] )) ||
 _git-veil__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
@@ -636,20 +639,20 @@ _git-veil__subcmd__help__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help manpages commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__help__subcmd__remove_commands] )) ||
-_git-veil__subcmd__help__subcmd__remove_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__remove-file_commands] )) ||
+_git-veil__subcmd__help__subcmd__remove-file_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil help remove commands' commands "$@"
+    _describe -t commands 'git-veil help remove-file commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__help__subcmd__removekey_commands] )) ||
-_git-veil__subcmd__help__subcmd__removekey_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__remove-key_commands] )) ||
+_git-veil__subcmd__help__subcmd__remove-key_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil help removekey commands' commands "$@"
+    _describe -t commands 'git-veil help remove-key commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__help__subcmd__removeperson_commands] )) ||
-_git-veil__subcmd__help__subcmd__removeperson_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__repo-id_commands] )) ||
+_git-veil__subcmd__help__subcmd__repo-id_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil help removeperson commands' commands "$@"
+    _describe -t commands 'git-veil help repo-id commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__reveal_commands] )) ||
 _git-veil__subcmd__help__subcmd__reveal_commands() {
@@ -661,16 +664,6 @@ _git-veil__subcmd__help__subcmd__rotate_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help rotate commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__help__subcmd__show-repo-id_commands] )) ||
-_git-veil__subcmd__help__subcmd__show-repo-id_commands() {
-    local commands; commands=()
-    _describe -t commands 'git-veil help show-repo-id commands' commands "$@"
-}
-(( $+functions[_git-veil__subcmd__help__subcmd__tell_commands] )) ||
-_git-veil__subcmd__help__subcmd__tell_commands() {
-    local commands; commands=()
-    _describe -t commands 'git-veil help tell commands' commands "$@"
-}
 (( $+functions[_git-veil__subcmd__help__subcmd__trust_commands] )) ||
 _git-veil__subcmd__help__subcmd__trust_commands() {
     local commands; commands=()
@@ -681,15 +674,10 @@ _git-veil__subcmd__help__subcmd__trust-permissions_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil help trust-permissions commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__help__subcmd__unhide_commands] )) ||
-_git-veil__subcmd__help__subcmd__unhide_commands() {
+(( $+functions[_git-veil__subcmd__help__subcmd__verify-keys_commands] )) ||
+_git-veil__subcmd__help__subcmd__verify-keys_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil help unhide commands' commands "$@"
-}
-(( $+functions[_git-veil__subcmd__help__subcmd__verify-keyring_commands] )) ||
-_git-veil__subcmd__help__subcmd__verify-keyring_commands() {
-    local commands; commands=()
-    _describe -t commands 'git-veil help verify-keyring commands' commands "$@"
+    _describe -t commands 'git-veil help verify-keys commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__help__subcmd__whoami_commands] )) ||
 _git-veil__subcmd__help__subcmd__whoami_commands() {
@@ -726,20 +714,20 @@ _git-veil__subcmd__manpages_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil manpages commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__remove_commands] )) ||
-_git-veil__subcmd__remove_commands() {
+(( $+functions[_git-veil__subcmd__remove-file_commands] )) ||
+_git-veil__subcmd__remove-file_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil remove commands' commands "$@"
+    _describe -t commands 'git-veil remove-file commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__removekey_commands] )) ||
-_git-veil__subcmd__removekey_commands() {
+(( $+functions[_git-veil__subcmd__remove-key_commands] )) ||
+_git-veil__subcmd__remove-key_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil removekey commands' commands "$@"
+    _describe -t commands 'git-veil remove-key commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__removeperson_commands] )) ||
-_git-veil__subcmd__removeperson_commands() {
+(( $+functions[_git-veil__subcmd__repo-id_commands] )) ||
+_git-veil__subcmd__repo-id_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil removeperson commands' commands "$@"
+    _describe -t commands 'git-veil repo-id commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__reveal_commands] )) ||
 _git-veil__subcmd__reveal_commands() {
@@ -751,16 +739,6 @@ _git-veil__subcmd__rotate_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil rotate commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__show-repo-id_commands] )) ||
-_git-veil__subcmd__show-repo-id_commands() {
-    local commands; commands=()
-    _describe -t commands 'git-veil show-repo-id commands' commands "$@"
-}
-(( $+functions[_git-veil__subcmd__tell_commands] )) ||
-_git-veil__subcmd__tell_commands() {
-    local commands; commands=()
-    _describe -t commands 'git-veil tell commands' commands "$@"
-}
 (( $+functions[_git-veil__subcmd__trust_commands] )) ||
 _git-veil__subcmd__trust_commands() {
     local commands; commands=()
@@ -771,15 +749,10 @@ _git-veil__subcmd__trust-permissions_commands() {
     local commands; commands=()
     _describe -t commands 'git-veil trust-permissions commands' commands "$@"
 }
-(( $+functions[_git-veil__subcmd__unhide_commands] )) ||
-_git-veil__subcmd__unhide_commands() {
+(( $+functions[_git-veil__subcmd__verify-keys_commands] )) ||
+_git-veil__subcmd__verify-keys_commands() {
     local commands; commands=()
-    _describe -t commands 'git-veil unhide commands' commands "$@"
-}
-(( $+functions[_git-veil__subcmd__verify-keyring_commands] )) ||
-_git-veil__subcmd__verify-keyring_commands() {
-    local commands; commands=()
-    _describe -t commands 'git-veil verify-keyring commands' commands "$@"
+    _describe -t commands 'git-veil verify-keys commands' commands "$@"
 }
 (( $+functions[_git-veil__subcmd__whoami_commands] )) ||
 _git-veil__subcmd__whoami_commands() {

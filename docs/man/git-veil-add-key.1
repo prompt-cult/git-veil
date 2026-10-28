@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil-tell 1  "git-veil-tell " 
+.TH git-veil-add-key 1  "git-veil-add-key " 
 .SH NAME
-git\-veil\-tell \- Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
+git\-veil\-add\-key \- Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil tell\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
+\fBgit\-veil add\-key\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> <\fIPUBLIC_KEY\fR> 
 .SH DESCRIPTION
 Add a collaborator\*(Aqs X25519 public key to the keyring and re\-sign it
 .SH OPTIONS
@@ -50,4 +50,4 @@ this machine, and the signing key in the local key store. Next steps:
 add files, then hide.
 
 EXAMPLES
-  $ git\-veil tell alice@example.com age1xxxx
+  $ git\-veil add\-key alice@example.com age1xxxx

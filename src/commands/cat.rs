@@ -12,7 +12,7 @@ use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, Track
 /// Decrypts a single tracked file to stdout without touching disk state.
 ///
 /// The user-supplied path is resolved to its repo-relative form the same way
-/// cmd_add/cmd_remove resolve paths (canonicalise-and-strip). Relative paths
+/// cmd_add_file/cmd_remove_file resolve paths (canonicalise-and-strip). Relative paths
 /// resolve against `repo_root`. Tracked paths are stored repo-relative and
 /// are validated, so the ciphertext path can never escape the repository
 /// root.

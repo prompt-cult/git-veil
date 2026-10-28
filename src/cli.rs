@@ -37,9 +37,9 @@ pub struct Cli {
 pub enum Commands {
     /// Initialize git-veil state (.git-veil/) in the current repository
     #[command(after_long_help = "\
-Run init first: trust, tell, add and hide all require the .git-veil/ state
-directory it creates (keyring, trust.json, tracked.json, and the committed
-owner.verifying the owner writes there). init never touches .gitignore -
+Run init first: trust, add-key, add-file and hide all require the .git-veil/
+state directory it creates (keyring, trust.json, tracked.json, and the
+committed owner.verifying the owner writes there). init never touches .gitignore -
 the <name>.secret ciphertext files are meant to be committed, so
 gitignoring them would defeat the fresh-clone decryptability contract.
 
@@ -59,8 +59,8 @@ EXAMPLES
     #[command(after_long_help = "\
 Imports X25519 private keys (\"age\" identities - the AGE-SECRET-KEY-1...
 lines produced by age-keygen) into your per-machine key store
-($GIT_VEIL_HOME or $HOME/.git-veil). This is where reveal/cat/unhide/
-changes find the private key matching your keyring entry. The key store
+($GIT_VEIL_HOME or $HOME/.git-veil). This is where reveal/cat/changes
+find the private key matching your keyring entry. The key store
 is local to this machine and is never committed; each collaborator
 imports their own private key. The store is written mode 0600 regardless
 of umask. git-veil never generates keys - create yours with age-keygen
@@ -98,7 +98,7 @@ is the key handoff between collaborators without any external tool: the
 local store only holds keys THIS machine knows about (your imported
 private key and any public key trust has pinned), so each collaborator
 runs export on their OWN machine and sends the public key encoding to the
-owner, who adds it to the keyring with tell. It cannot export a
+owner, who adds it to the keyring with add-key. It cannot export a
 collaborator's key for them. Here \"age\" refers to the open source age
 encryption tooling, installed separately; git-veil uses the Rust \"rage\"
 library to work with the keys.
@@ -126,7 +126,6 @@ EXAMPLES
     },
 
     /// Remove a key from the local key store (destructive, local-only)
-    #[command(name = "removekey")]
     #[command(after_long_help = "\
 Drops key material from the LOCAL key store: every X25519 private key in
 $GIT_VEIL_HOME (or $HOME/.git-veil) identities.txt and every X25519
@@ -137,26 +136,26 @@ This is destructive and LOCAL-ONLY: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. Removing a
 private key from the store does not stop old ciphertext that was
 encrypted to it from being decryptable by whoever holds it. Revoking a
-departing collaborator is removeperson + re-hide (docs/departing.md);
-removekey is the departing user's housekeeping step for their own
+departing collaborator is remove-key + re-hide (docs/departing.md);
+forget is the departing user's housekeeping step for their own
 machine's store.
 
 Danger guard: if the target private key is the only one in
-identities.txt, removekey refuses without --yes - this is your only
+identities.txt, forget refuses without --yes - this is your only
 private key, and without it you cannot decrypt anything.
 
 The store rewrite is atomic and lossless for the retained lines. A
 corrupt (e.g. truncated) store is refused untouched - the error names the
 file, the line number, and the corrupt line so you can delete exactly it;
-removekey never rewrites a store it could not fully parse. On success a
+forget never rewrites a store it could not fully parse. On success a
 per-store summary prints the public key encodings removed.
 
 EXAMPLES
-  $ git-veil removekey age1xxxx                 # exact public key encoding
-  $ git-veil removekey age1xxxx --yes           # confirm only-private-key removal
-  $ git-veil removekey age1xxxx --key-store /path/to/store
+  $ git-veil forget age1xxxx                 # exact public key encoding
+  $ git-veil forget age1xxxx --yes           # confirm only-private-key removal
+  $ git-veil forget age1xxxx --key-store /path/to/store
 ")]
-    RemoveKey {
+    Forget {
         /// Exact X25519 public key encoding (age1xxxx) of the key to remove
         identifier: String,
         /// Confirm destructive removal: required when the target is the only
@@ -203,10 +202,10 @@ for EVERY repository that uses that store, so the store and its pins are
 one trust boundary. Sharing a single store across mutually distrusting
 repositories is not advised; use a separate --key-store per trust domain.
 
-Requires init first. Typical next step: tell.
+Requires init first. Typical next step: add-key.
 
 EXAMPLES
-  $ git-veil show-repo-id                        # get the repo id to pass here
+  $ git-veil repo-id                              # get the repo id to pass here
   $ git-veil trust fara+simbo1905@github.com     # possession proof
   $ git-veil trust --import /tmp/fara.pin        # pin-file from export-pin
 ")]
@@ -331,9 +330,9 @@ this machine, and the signing key in the local key store. Next steps:
 add files, then hide.
 
 EXAMPLES
-  $ git-veil tell alice@example.com age1xxxx
+  $ git-veil add-key alice@example.com age1xxxx
 ")]
-    Tell {
+    AddKey {
         /// Collaborator's email
         email: String,
         /// The collaborator's bech32 X25519 public key encoding (age1xxxx), pasted literally
@@ -350,7 +349,6 @@ EXAMPLES
     },
 
     /// Remove a collaborator from the keyring and re-sign it
-    #[command(name = "removeperson")]
     #[command(after_long_help = "\
 Removes a collaborator's entry from the keyring and re-signs it with the
 owner's Ed25519 signing key. The existing keyring signature is verified
@@ -369,9 +367,9 @@ Requires init, an established trust pin (trust), and the signing key in
 the local key store.
 
 EXAMPLES
-  $ git-veil removeperson alice@example.com
+  $ git-veil remove-key alice@example.com
 ")]
-    RemovePerson {
+    RemoveKey {
         /// Email of the collaborator to remove
         email: String,
         /// Git remote name
@@ -386,6 +384,7 @@ EXAMPLES
     },
 
     /// Track files for encryption
+    #[command(alias = "add")]
     #[command(after_long_help = "\
 Tracks files for encryption in .git-veil/tracked.json (stored
 repo-relative). Nothing is encrypted yet - hide does that. Files must
@@ -398,13 +397,14 @@ hide refuses to first-encrypt a tracked path that was never allowed on
 this machine (exit code 72), so a tracked.json modified by someone else
 cannot silently nominate your files for encryption.
 
-Typical flow: init -> trust -> tell (once per collaborator) -> add -> hide.
+Typical flow: init -> trust -> add-key (once per collaborator) -> add-file
+-> hide.
 
 EXAMPLES
-  $ git-veil add .env
-  $ git-veil add config/credentials.yml notes.md
+  $ git-veil add-file .env
+  $ git-veil add-file config/credentials.yml notes.md
 ")]
-    Add {
+    AddFile {
         /// File(s) to add
         #[arg(required = true)]
         files: Vec<String>,
@@ -421,11 +421,11 @@ allowed these paths for encryption. tracked.json is committed and
 unsigned, so any repo writer can nominate a path in it; hide refuses to
 first-encrypt a tracked path that was never allowed on this machine
 (exit code 72). Once recorded, an allowance survives manifest changes
-and never needs re-recording. removeperson purges the allowance record
+and never needs re-recording. remove-key purges the allowance record
 of a removed principal.
 
-allow resolves paths exactly like add: the file must exist and resolve
-inside the repository. add records the allowance too, so allow is only
+allow resolves paths exactly like add-file: the file must exist and resolve
+inside the repository. add-file records the allowance too, so allow is only
 needed for a path someone else nominated, or to allow a path under a
 principal the manifest nomination did not run for.
 
@@ -446,6 +446,7 @@ EXAMPLES
     },
 
     /// Untrack files (deletes the sibling .secret unless --keep-ciphertext)
+    #[command(alias = "rm")]
     #[command(after_long_help = "\
 Untracks files (removes them from .git-veil/tracked.json). The plaintext
 may already be gone - hide deletes plaintexts by default - so the file
@@ -460,10 +461,10 @@ ciphertext in place; hide will refuse it as an orphan until it is
 removed or the path is re-tracked.
 
 EXAMPLES
-  $ git-veil remove .env
-  $ git-veil remove --keep-ciphertext config/credentials.yml
+  $ git-veil remove-file .env
+  $ git-veil remove-file --keep-ciphertext config/credentials.yml
 ")]
-    Remove {
+    RemoveFile {
         /// File(s) to remove
         #[arg(required = true)]
         files: Vec<String>,
@@ -499,9 +500,9 @@ after every encryption succeeded) writes each .secret atomically.
 
 hide only works after the repository is initialized (git-veil init), the
 owner's key is trusted on this machine (git-veil trust), collaborators are
-in the keyring (git-veil tell), and files are tracked (git-veil add).
-Before encrypting anything, the keyring signature is verified against the
-pinned trusted key. unhide, reveal and cat invert hide.
+in the keyring (git-veil add-key), and files are tracked (git-veil
+add-file). Before encrypting anything, the keyring signature is verified
+against the pinned trusted key. reveal and cat invert hide.
 
 hide REFUSES (exit code 40) when a <name>.secret ciphertext path is
 itself git-ignored - e.g. swallowed by a parent-directory rule like
@@ -512,15 +513,15 @@ it. It also REFUSES (exit code 72) a tracked path that has a plaintext on
 disk, no committed ciphertext in the git index, and no allowance on this
 machine: tracked.json is committed and unsigned, so a path added by
 someone else is refused until you allow it here. The allowance is
-recorded by add on this machine, or deliberately with git-veil allow.
+recorded by add-file on this machine, or deliberately with git-veil allow.
 The plaintext is DELETED by default once every ciphertext is durably
 written - the normal loop is reveal (restore plaintexts) -> edit -> hide.
 --keep-plaintext leaves the plaintexts beside their ciphertexts. Each
-named file must exist when you name it (hide resolves paths the way add
-does); once a plaintext is hidden, reveal restores it before hide can
-re-encrypt it.
+named file must exist when you name it (hide resolves paths the way
+add-file does); once a plaintext is hidden, reveal restores it before
+hide can re-encrypt it.
 
-hide covers exactly the named files: each is resolved the way add
+hide covers exactly the named files: each is resolved the way add-file
 resolves paths, and must already be tracked - an unknown or untracked
 name refuses (error code 71). The allowance check (error code 72) then
 applies to the named files only, and names only the offenders among
@@ -556,7 +557,7 @@ EXAMPLES
 Re-encrypts every tracked ciphertext to the current keyring: each
 <name>.secret on disk is decrypted in memory and re-encrypted to the
 full current keyring, then written back atomically. This is the
-ring-change pass: run it after tell or removeperson so the committed
+ring-change pass: run it after add-key or remove-key so the committed
 ciphertext reflects the updated keyring.
 
 rotate is TWO-PHASE and ALL-OR-NOTHING: phase 1 decrypts and re-encrypts
@@ -569,7 +570,7 @@ plaintext is read, written, deleted or compared, and none is left on
 disk by the pass. An edited-not-yet-hidden plaintext is orthogonal to
 the pass; hide encrypts it later.
 
-The pass is gated. tell and removeperson stamp the keyring change on
+The pass is gated. add-key and remove-key stamp the keyring change on
 this machine when they re-sign the keyring, and one rotate consumes
 that stamp. Without a stamp for this repository on this machine, or
 when the committed keyring does not match the stamped version and
@@ -581,7 +582,7 @@ A tracked path with no .secret ciphertext on disk is skipped with a
 note.
 
 EXAMPLES
-  $ git-veil rotate    # the ring-change pass, after tell or removeperson
+  $ git-veil rotate    # the ring-change pass, after add-key or remove-key
 ")]
     Rotate {
         /// Git remote name
@@ -605,7 +606,7 @@ an unknown or untracked name refuses (error code 71). Reveal is never
 gated by the encryption allowance: decryption needs only keyring
 membership, so a named path is revealed without any allow step.
 
-reveal is the inverse of hide; unhide does one file; cat prints one
+reveal is the inverse of hide; cat prints one
 file without touching disk state.
 
 reveal is TWO-PHASE and ALL-OR-NOTHING: EVERY file in the working set
@@ -660,32 +661,6 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Decrypt one tracked file back to plaintext
-    #[command(after_long_help = "\
-Decrypts one tracked file's in-place <name>.secret ciphertext back to
-the plaintext path - the inverse of hide for a single file. The keyring
-signature is verified against the pinned trusted key first; the file must
-be tracked and its ciphertext present. Typical round trip: unhide to edit,
-then hide to re-encrypt.
-
-EXAMPLES
-  $ git-veil unhide .env
-  $ git-veil unhide .env --email alice@example.com
-")]
-    Unhide {
-        /// File to unhide
-        file: String,
-        /// Your email address
-        #[arg(long)]
-        email: Option<String>,
-        /// Git remote name
-        #[arg(long, default_value = "origin")]
-        remote: String,
-        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
-        key_store: Option<PathBuf>,
-    },
-
     /// Report where plaintext differs from the last hidden version
     #[command(after_long_help = "\
 Reports where the on-disk plaintext differs from the last hidden version:
@@ -713,7 +688,6 @@ EXAMPLES
     },
 
     /// Show the repository ID derived from the git remote push URL
-    #[command(name = "show-repo-id")]
     #[command(after_long_help = "\
 Prints the repository ID derived from the git remote push URL - the
 exact string trust expects as its repo_id argument (trust re-derives it
@@ -721,10 +695,10 @@ from the remote and refuses a mismatch). Pass --remote if your remote is
 not 'origin'.
 
 EXAMPLES
-  $ git-veil show-repo-id
-  $ git-veil show-repo-id --remote upstream
+  $ git-veil repo-id
+  $ git-veil repo-id --remote upstream
 ")]
-    ShowRepoId {
+    RepoId {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,
@@ -735,7 +709,7 @@ EXAMPLES
 Prints the principal git-veil will use for you: git config user.email, or
 the --email override. The principal label is committed in the public
 keyring, so naming it leaks nothing. Use it to check which keyring entry
-reveal/cat/unhide will look up before they fail on a missing private key.
+reveal/cat will look up before they fail on a missing private key.
 
 EXAMPLES
   $ git-veil whoami
@@ -751,20 +725,19 @@ EXAMPLES
     },
 
     /// Verify the keyring signature against the pinned trusted key
-    #[command(name = "verify-keyring")]
     #[command(after_long_help = "\
 Verifies the keyring's signature against the pinned trusted key for this
 repository. Fail-closed: without an established trust pin (git-veil
 trust) on this machine, or when the signature does not verify, the
 command exits with an error. Every gated command (hide, reveal, cat,
-unhide, changes, tell, removeperson, list-keys) runs this same check
+changes, add-key, remove-key, list-keys) runs this same check
 before touching secrets.
 
 EXAMPLES
-  $ git-veil verify-keyring
-  $ git-veil verify-keyring --remote upstream
+  $ git-veil verify-keys
+  $ git-veil verify-keys --remote upstream
 ")]
-    VerifyKeyring {
+    VerifyKeys {
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,

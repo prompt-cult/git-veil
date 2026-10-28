@@ -120,7 +120,7 @@ pub(crate) fn prove_possession(key_store: &Path, candidate: &VerifyingKey) -> Re
 }
 
 /// Appends the verifying key to `<key store>/verifying-keys.txt`, where
-/// `verify-keyring` later loads the pinned key by fingerprint.
+/// `verify-keys` later loads the pinned key by fingerprint.
 pub(crate) fn append_verifying_key_to_store(
     key_store: &Path,
     verifying_key_hex: &str,

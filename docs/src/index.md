@@ -75,12 +75,12 @@ root of a git repository:
 ```sh
 git-veil init                                   # creates .git-veil/ state in the repo
 git-veil import private-key.txt                 # your X25519 private key, made by age-keygen
-git-veil show-repo-id                           # prints the ID trust wants, e.g. demo+example@github.com
+git-veil repo-id                                # prints the ID trust wants, e.g. demo+example@github.com
 git-veil trust demo+example@github.com          # possession proof: pins the owner key on this machine
 git-veil export age1xxxx                        # your public key string
-git-veil tell example@github.com age1xxxx       # adds you to the signed keyring
+git-veil add-key example@github.com age1xxxx    # adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
-git-veil add .env                               # tracks it, gitignores the plaintext name
+git-veil add-file .env                          # tracks it, gitignores the plaintext name
 git-veil hide .env                              # encrypts to the keyring; deletes the plaintext
 git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
@@ -92,7 +92,7 @@ git-veil reveal .env                            # brings it back when you need t
 compares. `hide` deletes the plaintext once every ciphertext is written;
 pass `--keep-plaintext` to change that.
 
-`add` also records an allowance on this machine, so the first `hide` of a
+`add-file` also records an allowance on this machine, so the first `hide` of a
 file you added never asks. A path someone else nominated in the committed
 tracking manifest does ask: `hide` refuses with exit code 72 and you answer
 with `git-veil allow <path>`. This is the allowance gate, and it exists
@@ -106,7 +106,7 @@ file(s); the command acts on exactly the paths you give it, so the commit
 shows what you actually touched:
 
 ```sh
-git-veil unhide .env          # decrypt one file in place to edit
+git-veil reveal .env          # decrypt one file in place to edit
 ... edit .env ...
 git-veil changes              # diff plaintext against the last hidden version
 git-veil hide .env            # re-encrypt one file; every other ciphertext is untouched
@@ -114,7 +114,7 @@ git add .env.secret && git commit -m "Rotate API key"
 ```
 
 `cat .env` peeks at stdout without touching disk state. `list` shows what
-is tracked, `list-keys` shows who can decrypt, `verify-keyring` and
+is tracked, `list-keys` shows who can decrypt, `verify-keys` and
 `changes` are the health checks. The [Solo guide](solo.md) walks the whole
 loop with real output.
 

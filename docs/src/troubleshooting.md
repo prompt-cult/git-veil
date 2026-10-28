@@ -18,12 +18,12 @@ public API: they are never renumbered, only appended.
 | 14 | KeyringRollback | Keyring version is below this machine's freshness baseline; re-`trust` if the rollback is intended |
 | 20 | NoSigningKey | No Ed25519 signing key in the key store; create one and back it up |
 | 21 | NoX25519PrivateKey | No X25519 private key in the key store matching your keyring entry; create and import one |
-| 22 | PrincipalNotInKeyring | Your principal is not in the signed keyring; ask the owner to `tell` you |
+| 22 | PrincipalNotInKeyring | Your principal is not in the signed keyring; ask the owner to add you with `add-key` |
 | 30 | UnsafeKeyStorePermissions | Key store directory or private key file is group/world accessible |
-| 40 | CiphertextIgnored | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add`) |
+| 40 | CiphertextIgnored | A `.secret` ciphertext path is git-ignored (fatal in `hide`; warning in `add-file`) |
 | 41 | PlaintextNotIgnored | Tracked plaintext on disk is not git-ignored (warning; exit stays 0) |
 | 42 | OrphanedCiphertext | A committed `.secret` ciphertext path is not tracked; `rotate` refuses it |
-| 43 | PlaintextTracked | The plaintext is tracked in git, which `reveal` and `unhide` refuse |
+| 43 | PlaintextTracked | The plaintext is tracked in git, which `reveal` refuses |
 | 60 | DecryptionFailed | Ciphertext could not be decrypted with the local private key |
 | 61 | EncryptionFailed | Encryption failed |
 | 62 | KeyParseFailure | A key, keyring or signature could not be parsed |
@@ -94,7 +94,7 @@ this machine before touching anything. The refusals, and what to do:
 - **Exit 12, mismatch.** The committed record disagrees with your pin.
   One of the two changed. Re-pin if the change is intended.
 - **Exit 13, repo id mismatch.** The `repo_id` you passed does not match
-  the one derived from the remote. Run `git-veil show-repo-id` and pass
+  the one derived from the remote. Run `git-veil repo-id` and pass
   exactly that.
 - **Exit 14, rollback.** The keyring version is below this machine's
   freshness baseline. If the rollback is genuinely yours (a branch
@@ -112,11 +112,11 @@ Most "it doesn't work" cases on a fresh clone are one of these. Run
   machine. Import the owner's pin-file. See
   [Joining a team repository](joining.md).
 - **Exit 22**, `user not found in the keyring`: the owner has not run
-  `tell` yet, or has not pushed the updated keyring. Run `git pull`
+  `add-key` yet, or has not pushed the updated keyring. Run `git pull`
   first; nothing on your side can fix it otherwise.
 - **Exit 60**, `decryption failed. This ciphertext was not encrypted to
-  your key`: the owner told you but did not deliver the ring-change pass,
-  or you are on an old commit. Run `git pull`.
+  your key`: the owner ran `add-key` but did not deliver the ring-change
+  pass, or you are on an old commit. Run `git pull`.
 - **Exit 21**, no X25519 private key: your key store lacks your private
   key. The message prints the `age-keygen` recipe. Create it, import it,
   back it up.
@@ -148,10 +148,10 @@ leaves a half-rotated tree:
 - **Exit 70**. The ring-change pass is not due, or the stamp is stale:
   the committed keyring no longer matches the ring change this machine
   stamped. The pass exists to turn a ring change into ciphertext, and
-  one pass consumes one change. Run `git-veil rotate` only after `tell`
-  or `removeperson`; see [Commands - rotate](commands.md#rotate).
+  one pass consumes one change. Run `git-veil rotate` only after `add-key`
+  or `remove-key`; see [Commands - rotate](commands.md#rotate).
 - **Exit 42**. A committed `.secret` path is no longer tracked. Untrack
-  it deliberately with `git-veil remove`, or re-track it with `add`.
+  it deliberately with `git-veil remove-file`, or re-track it with `add-file`.
 
 ## Decryption and rotation (exit 60)
 
@@ -174,11 +174,11 @@ the secret values is the real remedy; see [Departing](departing.md).
   memory first, and the disk is written only after every file succeeds.
 - **Plaintext deleted by `hide`.** It is not gone: the `.secret` beside
   it decrypts back. `git-veil reveal <file>` restores it.
-- **Ciphertext deleted by `remove`.** Recover it from git history; the
+- **Ciphertext deleted by `remove-file`.** Recover it from git history; the
   deletion is a normal committed deletion.
 - **A corrupt key store** is refused untouched, naming the file, the line
   number and the corrupt line, so you can delete exactly that line.
-  [removekey](commands.md#removekey) never rewrites a store it could not
+  [forget](commands.md#forget) never rewrites a store it could not
   fully parse.
 - **Lost X25519 private key with no backup.** Every ciphertext encrypted
   to it is unrecoverable. There is no recovery path, which is why the

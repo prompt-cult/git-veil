@@ -5,9 +5,9 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_allow, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_remove,
-    cmd_removeperson, cmd_reveal, cmd_rotate, cmd_tell, cmd_trust, cmd_trust_import, cmd_unhide,
-    cmd_verify_keyring, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
+    cmd_add_file, cmd_add_key, cmd_allow, cmd_export_pin, cmd_hide, cmd_import, cmd_init,
+    cmd_remove_file, cmd_remove_key, cmd_reveal, cmd_rotate, cmd_trust, cmd_trust_import,
+    cmd_verify_keys, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
     x25519_public_key_encoding, TrackedFiles,
 };
 
@@ -107,7 +107,7 @@ impl Fixture {
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
         let id = generate_x25519_private_key();
         let r = x25519_public_key_encoding(&id);
-        cmd_tell(
+        cmd_add_key(
             &self.repo.path,
             email,
             &r,
@@ -115,7 +115,7 @@ impl Fixture {
             &self.key_store.path,
             None,
         )
-        .expect("tell");
+        .expect("add-key");
         id
     }
 
@@ -125,13 +125,13 @@ impl Fixture {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(&p, content).unwrap();
-        cmd_add(
+        cmd_add_file(
             &self.repo.path,
             vec![name.to_string()],
             "origin",
             &self.key_store.path,
         )
-        .expect("add");
+        .expect("add-file");
     }
 
     fn hide(&self) {
@@ -186,7 +186,7 @@ impl Fixture {
 // Regression: a rolled-back keyring is refused by the freshness baseline
 // (exit 14).
 //
-// tell/removeperson bump a monotonic counter inside the signed payload,
+// add-key/remove-key bump a monotonic counter inside the signed payload,
 // and every machine records the highest version it has accepted (beside the
 // pin, outside the repo).
 // ---------------------------------------------------------------------------
@@ -205,26 +205,26 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     assert!(keyring_v1.contains("carol@example.com"));
 
     // Owner revokes carol: keyring v2 (empty, re-signed) verifies fine.
-    cmd_removeperson(
+    cmd_remove_key(
         &f.repo.path,
         "carol@example.com",
         "origin",
         &f.key_store.path,
         None,
     )
-    .expect("removeperson");
+    .expect("remove-key");
     let keyring_v2 = fs::read_to_string(&keyring_path).unwrap();
     assert!(!keyring_v2.contains("carol@example.com"));
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("v2 (empty, signed) verifies");
 
     // Attack: a repo writer restores the old keyring file content
-    // (equivalent to `git revert` of the removeperson commit).
+    // (equivalent to `git revert` of the remove-key commit).
     fs::write(&keyring_path, &keyring_v1).unwrap();
 
     // Verification refuses the rolled-back keyring with exit 14. The
     // signature is valid but the version regressed below the baseline.
-    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    let err = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("rolled-back keyring must be refused");
     assert_eq!(
         exit_code_of(&err),
@@ -257,7 +257,7 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
         false,
     )
     .expect("re-trust");
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify succeeds after the re-trust reset the baseline");
     let _ = carol;
 }
@@ -285,7 +285,7 @@ fn resigned(keyring_text: &str, version: Option<u64>, f: &Fixture) -> String {
 #[test]
 fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
     let f = Fixture::new("migration-forward");
-    // tell writes version 1 and hide's verify records baseline 1.
+    // add-key writes version 1 and hide's verify records baseline 1.
     let _carol = f.add_collab("carol@example.com");
     f.add_file("secrets.env", b"TOKEN=x\n");
     f.hide();
@@ -295,7 +295,7 @@ fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
     // exists it is a rollback, so it is refused.
     let versionless = resigned(&fs::read_to_string(&keyring_path).unwrap(), None, &f);
     fs::write(&keyring_path, &versionless).unwrap();
-    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    let err = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("versionless keyring must be refused once a versioned baseline exists");
     assert_eq!(exit_code_of(&err), 14);
 
@@ -308,21 +308,21 @@ fn fix_versionless_keyring_is_a_migration_state_not_a_rollback() {
         None,
         &f2,
     );
-    // The baseline is still 0: tell's verify saw the empty unsigned keyring
+    // The baseline is still 0: add-key's verify saw the empty unsigned keyring
     // (observed 0, baseline 0), and no gated command ran since the v1 write.
     // A versionless keyring is not a regression.
     fs::write(f2.repo.join(".git-veil/keyring"), &versionless2).unwrap();
-    cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+    cmd_verify_keys(&f2.repo.path, "origin", &f2.key_store.path)
         .expect("versionless keyring accepted while the baseline is still 0");
 
     // The next versioned keyring (v1) is then free to establish baseline 1,
     // after which the versionless state is refused as a rollback.
     let versioned = resigned(&versionless2, Some(1), &f2);
     fs::write(f2.repo.join(".git-veil/keyring"), &versioned).unwrap();
-    cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+    cmd_verify_keys(&f2.repo.path, "origin", &f2.key_store.path)
         .expect("versioned keyring accepted, baseline advances to 1");
     fs::write(f2.repo.join(".git-veil/keyring"), &versionless2).unwrap();
-    let err = cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+    let err = cmd_verify_keys(&f2.repo.path, "origin", &f2.key_store.path)
         .expect_err("versionless keyring refused now that the baseline is 1");
     assert_eq!(exit_code_of(&err), 14);
 }
@@ -581,7 +581,7 @@ fn allowance_store_is_keyed_per_pin_and_principal() {
 }
 
 #[test]
-fn fix_removeperson_purges_the_removed_principal_allowance() {
+fn fix_remove_key_purges_the_removed_principal_allowance() {
     let f = Fixture::new("purge-allowance");
     let _carol = f.add_collab("carol@example.com");
     f.add_file("secrets.env", b"TOKEN=x\n");
@@ -613,14 +613,14 @@ fn fix_removeperson_purges_the_removed_principal_allowance() {
 
     // The owner revokes carol. The purge takes her allowance record with
     // the keyring entry, on this machine's key store.
-    cmd_removeperson(
+    cmd_remove_key(
         &f.repo.path,
         "carol@example.com",
         "origin",
         &f.key_store.path,
         None,
     )
-    .expect("removeperson");
+    .expect("remove-key");
     assert!(
         !AllowanceStore::contains(
             &f.key_store.path,
@@ -654,7 +654,7 @@ fn fix_remove_deletes_ciphertext_by_default() {
     f.hide();
     assert!(f.repo.join("api.key.secret").exists());
 
-    cmd_remove(&f.repo.path, vec!["api.key".to_string()], false).expect("remove");
+    cmd_remove_file(&f.repo.path, vec!["api.key".to_string()], false).expect("remove-file");
     assert!(
         !f.repo.join("api.key.secret").exists(),
         "remove must delete the sibling ciphertext by default"
@@ -676,7 +676,7 @@ fn fix_remove_keep_ciphertext_leaves_the_orphan_in_place() {
     f.hide();
     f.stage_all();
 
-    cmd_remove(&f.repo.path, vec!["api.key".to_string()], true).expect("remove");
+    cmd_remove_file(&f.repo.path, vec!["api.key".to_string()], true).expect("remove-file");
     assert!(
         f.repo.join("api.key.secret").exists(),
         "--keep-ciphertext leaves the ciphertext in place"
@@ -717,10 +717,10 @@ fn fix_rotate_refuses_a_committed_untracked_ciphertext() {
     // De-track the path while its ciphertext stays committed (the
     // --keep-ciphertext shape, as a repo writer or a careless owner would
     // produce), then stage the manifest change so the index reflects it.
-    cmd_remove(&f.repo.path, vec!["api.key".to_string()], true).expect("remove");
+    cmd_remove_file(&f.repo.path, vec!["api.key".to_string()], true).expect("remove-file");
     f.stage_all();
 
-    // The stamp is due (tell stamped the ring change; the scoped hide never
+    // The stamp is due (add-key stamped the ring change; the scoped hide never
     // consumed it), so the refusal is the orphan gate, not the stamp gate.
     let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("the pass must refuse a committed orphan");
@@ -741,10 +741,10 @@ fn fix_rotate_refuses_a_committed_untracked_ciphertext() {
 }
 
 // ---------------------------------------------------------------------------
-// Regression: reveal/unhide refuse a tracked-in-git plaintext (exit 43)
+// Regression: reveal refuses a tracked-in-git plaintext (exit 43)
 //
 // A git-tracked plaintext is repository content, not a secret.
-// Reveal and unhide refuse to overwrite it.
+// Reveal refuses to overwrite it.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -755,7 +755,7 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
     // This store simulates the victim's machine.
     let victim = generate_x25519_private_key();
     let victim_recipient = x25519_public_key_encoding(&victim);
-    cmd_tell(
+    cmd_add_key(
         &f.repo.path,
         "victim@example.com",
         &victim_recipient,
@@ -763,7 +763,7 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
         &f.key_store.path,
         None,
     )
-    .expect("tell victim");
+    .expect("add-key victim");
     fs::write(
         f.repo.join("victim.age"),
         format!("{}\n", victim.to_string().expose_secret()),
@@ -821,15 +821,15 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
         "the source file must be untouched"
     );
 
-    // And unhide refuses the same way.
-    let err = cmd_unhide(
+    // And the single-file reveal form refuses the same way.
+    let err = cmd_reveal(
         &f.repo.path,
-        "ci/deploy.sh",
         "victim@example.com",
         "origin",
         &f.key_store.path,
+        vec!["ci/deploy.sh".to_string()],
     )
-    .expect_err("unhide must refuse a git-tracked plaintext");
+    .expect_err("single-file reveal must refuse a git-tracked plaintext");
     assert_eq!(exit_code_of(&err), 43);
 }
 
@@ -837,7 +837,7 @@ fn fix_reveal_refuses_tracked_in_git_plaintext() {
 fn fix_reveal_still_works_for_gitignored_plaintexts() {
     // The normal flow. The plaintext is gitignored and never in the
     // index, and the committed ciphertext reveals fine. The exit-43 gate
-    // must not disturb legitimate reveal and unhide.
+    // must not disturb legitimate reveal.
     let f = Fixture::new("reveal-normal");
     let _carol = f.add_collab("carol@example.com");
     // The owner must be in the keyring too for the reveal below. Their
@@ -845,7 +845,7 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     // owner.verifying line 2.
     let owner_verifying = fs::read_to_string(f.repo.join(".git-veil/owner.verifying")).unwrap();
     let owner_recipient = owner_verifying.lines().nth(1).unwrap().trim();
-    cmd_tell(
+    cmd_add_key(
         &f.repo.path,
         "owner@example.com",
         owner_recipient,
@@ -853,7 +853,7 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
         &f.key_store.path,
         None,
     )
-    .expect("tell owner");
+    .expect("add-key owner");
     let secret = b"TOKEN=v1\n";
     f.add_file("secrets.env", secret);
     f.hide();
@@ -870,14 +870,14 @@ fn fix_reveal_still_works_for_gitignored_plaintexts() {
     .expect("reveal of a gitignored tracked plaintext must work");
     assert_eq!(fs::read(f.repo.join("secrets.env")).unwrap(), secret);
 
-    cmd_unhide(
+    cmd_reveal(
         &f.repo.path,
-        "secrets.env",
         "owner@example.com",
         "origin",
         &f.key_store.path,
+        vec!["secrets.env".to_string()],
     )
-    .expect("unhide of a gitignored tracked plaintext must work");
+    .expect("repeat reveal of a gitignored tracked plaintext must work");
 }
 
 // ---------------------------------------------------------------------------
@@ -916,14 +916,14 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
     // Refused with exit 14. It parses as a rollback to no collaborators,
     // and its version line is unauthenticated so it cannot move the
     // baseline.
-    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    let err = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("unsigned ring must be refused when a baseline exists");
     assert_eq!(exit_code_of(&err), 14);
 
     // Owner restores the real ring. The machine is not bricked. The
     // baseline was never advanced by the unsigned ring.
     fs::write(&keyring_path, &real_ring).unwrap();
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("real ring verifies again: no baseline poisoning");
 
     // On a machine with no baseline (fresh init), an unsigned empty ring
@@ -943,10 +943,10 @@ fn fix_baseline_not_poisoned_by_unsigned_empty_keyring() {
         ),
     )
     .unwrap();
-    cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path)
+    cmd_verify_keys(&f2.repo.path, "origin", &f2.key_store.path)
         .expect("fresh-init unsigned empty ring accepted on a baseline-less machine");
     fs::write(&keyring_path2, &clean_ring).unwrap();
-    cmd_verify_keyring(&f2.repo.path, "origin", &f2.key_store.path).expect(
+    cmd_verify_keys(&f2.repo.path, "origin", &f2.key_store.path).expect(
         "clean ring verifies on the fresh machine: no baseline was written by the unsigned ring",
     );
 }
@@ -959,7 +959,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
     let f = Fixture::new("case-variant");
     let victim = generate_x25519_private_key();
     let victim_recipient = x25519_public_key_encoding(&victim);
-    cmd_tell(
+    cmd_add_key(
         &f.repo.path,
         "victim@example.com",
         &victim_recipient,
@@ -967,7 +967,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
         &f.key_store.path,
         None,
     )
-    .expect("tell victim");
+    .expect("add-key victim");
     fs::write(
         f.repo.join("victim.age"),
         format!("{}\n", victim.to_string().expose_secret()),
@@ -1082,13 +1082,13 @@ fn fix_equal_version_fork_refused_by_baseline_digest() {
         &f,
     );
     fs::write(&keyring_path, &fork).unwrap();
-    let err = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    let err = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect_err("equal-version fork must be refused");
     assert_eq!(exit_code_of(&err), 14);
 
     // The legitimate bump (same content, next version) is accepted.
     let next = resigned(&fs::read_to_string(&keyring_path).unwrap(), Some(2), &f);
     fs::write(&keyring_path, &next).unwrap();
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("the legitimate version bump advances the baseline");
 }

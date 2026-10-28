@@ -14,10 +14,10 @@ use crate::{
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
 /// signed into the keyring. It is discarded immediately and never written to
 /// disk or transmitted. The point is only to prove the key can encrypt.
-const TELL_CANARY: &[u8] = b"git-veil tell canary";
+const ADD_KEY_CANARY: &[u8] = b"git-veil add-key canary";
 
 /// Adds a collaborator's public key to the keyring and signs it.
-pub fn cmd_tell(
+pub fn cmd_add_key(
     repo_root: &Path,
     email: &str,
     collaborator_key: &str,
@@ -29,7 +29,7 @@ pub fn cmd_tell(
     // against the trusted key before any mutation. An unsigned keyring is
     // only acceptable when it has zero entries (the fresh-init state). A
     // keyring containing entries must already carry a valid signature
-    // from the trusted key, otherwise tell would launder trust by
+    // from the trusted key, otherwise add-key would launder trust by
     // re-signing attacker-supplied content.
     let (repo_id, trusted_fingerprint, _) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
@@ -50,10 +50,10 @@ pub fn cmd_tell(
     // actually encrypt, before any keyring mutation. A
     // malformed-but-parseable key must never be signed into the committed
     // keyring. The canary is in-memory only.
-    if encrypt_to_x25519_public_key(TELL_CANARY, &collaborator_public_key).is_err() {
+    if encrypt_to_x25519_public_key(ADD_KEY_CANARY, &collaborator_public_key).is_err() {
         return Err(coded(
             ExitCode::EncryptionFailed,
-            "collaborator key cannot encrypt. The public key may be invalid. See the tell documentation"
+            "collaborator key cannot encrypt. The public key may be invalid. See the add-key documentation"
                 .to_string(),
         ));
     }
@@ -77,9 +77,9 @@ pub fn cmd_tell(
     // Serialize keyring without signature
     let keyring_without_sig = keyring.serialize();
 
-    // Find the signing key. Tell is run by the repo owner curating the
+    // Find the signing key. Add-key is run by the repo owner curating the
     // keyring, so it must sign with the trusted key, the one
-    // verify_keyring checks against, never with the collaborator's key.
+    // verify-keys checks against, never with the collaborator's key.
     // Discovery selects the signing key whose owner key fingerprint
     // matches the pinned fingerprint. git-veil never generates one. A
     // missing key fails with the recipe.
@@ -88,7 +88,7 @@ pub fn cmd_tell(
         None => discover_signing_key(key_store, &repo_id, &trusted_fingerprint)?,
     };
 
-    // Sign keyring content: sign exactly the bytes that verify_keyring will
+    // Sign keyring content: sign exactly the bytes that verify-keys will
     // extract (everything up to and including the END marker, excluding the
     // trailing newline), using the same canonicalization function so the two
     // sides of the sign/verify contract cannot drift apart.
@@ -112,7 +112,7 @@ pub fn cmd_tell(
     println!("added {} to the keyring", email);
 
     // One plain line for the due pass: the fact, the verb, and the
-    // follow-up command. The stamp is written on every tell, so the
+    // follow-up command. The stamp is written on every add-key, so the
     // notice is unconditional: the fresh-start flow reaches the same
     // pass on its first rotate.
     println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");

@@ -34,7 +34,7 @@ $ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
 pin-file written to /tmp/demo.pin
 owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
 import it on the target machine with: git-veil trust --import /tmp/demo.pin
-$ git-veil tell newcomer@example.com age1xxxx
+$ git-veil add-key newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
@@ -108,7 +108,7 @@ ciphertexts are unrecoverable.
 ### 3. Print the repository ID
 
 ```sh
-$ git-veil show-repo-id
+$ git-veil repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
@@ -154,8 +154,8 @@ Total: 3 keys
 ```
 
 What happened. The keyring signature verified against your fresh pin, and
-you are listed. If your entry is missing, the owner has not run `tell` yet.
-Nothing on your side can fix that.
+you are listed. If your entry is missing, the owner has not run `add-key`
+yet. Nothing on your side can fix that.
 
 ### 6. Reveal
 ```sh
@@ -169,9 +169,8 @@ files revealed
 
 What happened. Every tracked file's `.secret` ciphertext was decrypted to
 its plaintext path. The `.secret` files stay in place. `cat .env` prints to
-stdout instead, without touching disk state. `unhide .env` does one file in
-place. `changes` shows where your plaintext drifted from the last hidden
-version.
+stdout instead, without touching disk state. `changes` shows where your
+plaintext drifted from the last hidden version.
 
 ## Failure shapes worth knowing
 
@@ -184,12 +183,12 @@ meet as a newcomer:
    derived repository identity and the remote it came from. Import the
    owner's pin-file (step 4).
 - `user not found in the keyring. Check the principal, or ask the owner
-   to add it` (exit code 22). The owner has not run `tell`, or has not
+   to add it` (exit code 22). The owner has not run `add-key`, or has not
    pushed the updated keyring. Run `git pull` first.
 - `decryption failed. This ciphertext was not encrypted to your key and
    no stanza in it is addressed to your X25519 public key` (exit code 60).
-   The owner told you but did not deliver the ring-change pass, or your
-   clone is missing the re-encrypted ciphertexts.
+   The owner ran `add-key` but did not deliver the ring-change pass, or
+   your clone is missing the re-encrypted ciphertexts.
    Run `git pull`.
 - `no X25519 private key …` (exit code 21). Your key store lacks your
    private key. The message prints the creation and backup recipe. Redo

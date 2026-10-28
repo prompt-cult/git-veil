@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH git-veil-verify-keyring 1  "git-veil-verify-keyring " 
+.TH git-veil-verify-keys 1  "git-veil-verify-keys " 
 .SH NAME
-git\-veil\-verify\-keyring \- Verify the keyring signature against the pinned trusted key
+git\-veil\-verify\-keys \- Verify the keyring signature against the pinned trusted key
 .SH SYNOPSIS
-\fBgit\-veil verify\-keyring\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil verify\-keys\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Verify the keyring signature against the pinned trusted key
 .SH OPTIONS
@@ -22,9 +22,9 @@ Verifies the keyring\*(Aqs signature against the pinned trusted key for this
 repository. Fail\-closed: without an established trust pin (git\-veil
 trust) on this machine, or when the signature does not verify, the
 command exits with an error. Every gated command (hide, reveal, cat,
-unhide, changes, tell, removeperson, list\-keys) runs this same check
+changes, add\-key, remove\-key, list\-keys) runs this same check
 before touching secrets.
 
 EXAMPLES
-  $ git\-veil verify\-keyring
-  $ git\-veil verify\-keyring \-\-remote upstream
+  $ git\-veil verify\-keys
+  $ git\-veil verify\-keys \-\-remote upstream

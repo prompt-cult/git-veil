@@ -3,8 +3,8 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init, cmd_removeperson,
-    cmd_reveal, cmd_rotate, cmd_tell, cmd_trust, cmd_unhide, cmd_verify_keyring,
+    cmd_add_file, cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init,
+    cmd_remove_key, cmd_reveal, cmd_rotate, cmd_trust, cmd_verify_keys,
     encrypt_to_x25519_public_keys, exit_code_of, extract_content_to_verify_from_keyring,
     generate_signing_keypair, generate_x25519_private_key, keyring_content_digest,
     parse_x25519_public_key, x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
@@ -101,7 +101,7 @@ impl Fixture {
     fn add_collab(&self, email: &str) -> age::x25519::Identity {
         let id = generate_x25519_private_key();
         let r = x25519_public_key_encoding(&id);
-        cmd_tell(
+        cmd_add_key(
             &self.repo.path,
             email,
             &r,
@@ -109,7 +109,7 @@ impl Fixture {
             &self.key_store.path,
             None,
         )
-        .expect("tell");
+        .expect("add-key");
         id
     }
 
@@ -128,13 +128,13 @@ impl Fixture {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(&p, content).unwrap();
-        cmd_add(
+        cmd_add_file(
             &self.repo.path,
             vec![name.to_string()],
             "origin",
             &self.key_store.path,
         )
-        .expect("add");
+        .expect("add-file");
     }
 
     /// The tracked file names, as the required-form hide and reveal calls
@@ -321,7 +321,7 @@ fn test_keyring_tamper_invalidates_signature() {
     let tampered = original.replace("age1", "age2");
     fs::write(&keyring_path, &tampered).unwrap();
 
-    let result = cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path);
+    let result = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path);
     assert!(result.is_err(), "tampered keyring should fail verification");
 }
 
@@ -413,12 +413,12 @@ fn test_cat_preserves_disk_state() {
 }
 
 // ---------------------------------------------------------------------------
-// Unhide restores one file, leaves others hidden
+// Reveal restores one file, leaves others hidden
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_unhide_isolates_single_file() {
-    let f = Fixture::new("unhide-iso");
+fn test_reveal_isolates_single_file() {
+    let f = Fixture::new("reveal-iso");
 
     let id = f.add_collab("alice@example.com");
     f.import_id(&id, "alice.age");
@@ -435,16 +435,18 @@ fn test_unhide_isolates_single_file() {
     )
     .expect("hide");
 
-    cmd_unhide(
+    // Reveal covers exactly the named files: one name restores one file
+    // and leaves the other hidden.
+    cmd_reveal(
         &f.repo.path,
-        ".env",
         "alice@example.com",
         "origin",
         &f.key_store.path,
+        vec![".env".to_string()],
     )
-    .expect("unhide .env");
+    .expect("reveal .env");
 
-    // unhide restores the plaintext and does not delete the ciphertext
+    // reveal restores the plaintext and does not delete the ciphertext
     // (matching git-secret).
     assert!(f.repo.join(".env").exists());
     assert!(
@@ -495,19 +497,19 @@ fn test_changes_binary_file() {
 }
 
 // ---------------------------------------------------------------------------
-// Multiple tell updates existing entry
+// Multiple add-key updates existing entry
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_tell_updates_existing_email() {
-    let f = Fixture::new("tell-update");
+fn test_add_key_updates_existing_email() {
+    let f = Fixture::new("add-key-update");
 
     let _id1 = f.add_collab("alice@example.com");
 
-    // Tell again with a new key for the same email
+    // Add-key again with a new key for the same email
     let id2 = generate_x25519_private_key();
     let r2 = x25519_public_key_encoding(&id2);
-    cmd_tell(
+    cmd_add_key(
         &f.repo.path,
         "alice@example.com",
         &r2,
@@ -515,7 +517,7 @@ fn test_tell_updates_existing_email() {
         &f.key_store.path,
         None,
     )
-    .expect("tell update");
+    .expect("add-key update");
 
     let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).expect("parse");
@@ -536,14 +538,14 @@ fn test_remove_last_person_signs_empty_keyring() {
 
     f.add_collab("alice@example.com");
 
-    git_veil::cmd_removeperson(
+    git_veil::cmd_remove_key(
         &f.repo.path,
         "alice@example.com",
         "origin",
         &f.key_store.path,
         None,
     )
-    .expect("removeperson");
+    .expect("remove-key");
 
     let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).expect("parse");
@@ -553,7 +555,7 @@ fn test_remove_last_person_signs_empty_keyring() {
         "empty keyring should still be signed"
     );
 
-    cmd_verify_keyring(&f.repo.path, "origin", &f.key_store.path)
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("verify empty signed keyring");
 }
 
@@ -575,13 +577,13 @@ fn test_hide_refuses_when_ciphertext_path_is_ignored() {
 
     // add succeeds (it gitignores the plaintext), but warns that the
     // ciphertext path is swallowed by the .tmp/ rule
-    cmd_add(
+    cmd_add_file(
         &f.repo.path,
         vec![".tmp/x.txt".to_string()],
         "origin",
         &f.key_store.path,
     )
-    .expect("add");
+    .expect("add-file");
 
     // Hide fails closed before encrypting anything. Exit code 40.
     let err = cmd_hide(
@@ -654,15 +656,15 @@ fn test_hide_warns_but_succeeds_when_plaintext_not_ignored() {
 }
 
 #[test]
-fn test_tell_fails_with_code_20_when_signing_key_missing() {
-    let f = Fixture::new("tell-nosigning");
+fn test_add_key_fails_with_code_20_when_signing_key_missing() {
+    let f = Fixture::new("add-key-nosigning");
     // The fixture wrote signing-keys.txt. Simulate the fresh-machine case.
     fs::remove_file(f.key_store.join("signing-keys.txt")).unwrap();
 
     let id = git_veil::generate_x25519_private_key();
     let r = git_veil::x25519_public_key_encoding(&id);
 
-    let err = cmd_tell(
+    let err = cmd_add_key(
         &f.repo.path,
         "bob@example.com",
         &r,
@@ -1003,14 +1005,14 @@ fn test_positional_reveal_is_never_allowance_gated() {
 }
 
 // ---------------------------------------------------------------------------
-// The ring-change ceremony: tell/removeperson stamp the pass; rotate
+// The ring-change ceremony: add-key/remove-key stamp the pass; rotate
 // runs the whole-manifest re-encrypt once against the stamped ring.
 // ---------------------------------------------------------------------------
 
 /// The stamp holds the keyring version and the signed-content digest, and
-/// tell/removeperson re-stamp it on every ring change.
+/// add-key/remove-key re-stamp it on every ring change.
 #[test]
-fn test_tell_and_removeperson_stamp_the_ring_change() {
+fn test_add_key_and_remove_key_stamp_the_ring_change() {
     let f = Fixture::new("ring-pass-stamp");
 
     f.add_collab("alice@example.com");
@@ -1020,32 +1022,32 @@ fn test_tell_and_removeperson_stamp_the_ring_change() {
     let version = Keyring::parse(&keyring_text).unwrap().version.unwrap();
     let stamp = RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
         .unwrap()
-        .expect("tell stamps the ring-change pass");
+        .expect("add-key stamps the ring-change pass");
     assert_eq!(
         stamp,
         (version, keyring_content_digest(&signed)),
-        "the stamp names the ring tell signed"
+        "the stamp names the ring add-key signed"
     );
 
-    // removeperson re-signs at the next version and re-stamps.
-    cmd_removeperson(
+    // remove-key re-signs at the next version and re-stamps.
+    cmd_remove_key(
         &f.repo.path,
         "alice@example.com",
         "origin",
         &f.key_store.path,
         None,
     )
-    .expect("removeperson");
+    .expect("remove-key");
     let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     let signed = extract_content_to_verify_from_keyring(&keyring_text).unwrap();
     let version = Keyring::parse(&keyring_text).unwrap().version.unwrap();
     let stamp = RingPassStore::read(&f.key_store.path, TEST_REPO_ID)
         .unwrap()
-        .expect("removeperson stamps the ring-change pass");
+        .expect("remove-key stamps the ring-change pass");
     assert_eq!(
         stamp,
         (version, keyring_content_digest(&signed)),
-        "the stamp names the ring removeperson signed"
+        "the stamp names the ring remove-key signed"
     );
 }
 
@@ -1278,7 +1280,7 @@ fn test_a_scoped_hide_needs_no_stamp_and_consumes_none() {
     f.add_file(".env", b"API_KEY=1\n");
     f.add_file("config.yml", b"config\n");
 
-    // The pass is due (tell stamped it), and the scoped hide ignores the
+    // The pass is due (add-key stamped it), and the scoped hide ignores the
     // stamp both ways: it runs, and it leaves the pass armed.
     cmd_hide(
         &f.repo.path,
