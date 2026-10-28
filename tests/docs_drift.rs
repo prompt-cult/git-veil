@@ -416,11 +416,33 @@ fn test_docs_one_home_gate() {
     const MAX_PAGES: usize = 18;
     const HOME: &str = "commands.md";
     let names = [
-        "add-file", "remove-file", "add-key", "remove-key", "forget",
-        "repo-id", "verify-keys", "hide", "rotate", "reveal", "cat",
-        "changes", "list", "list-keys", "allow", "trust", "export-pin",
-        "fingerprint", "import", "export", "init", "clean", "whoami",
-        "trust-permissions", "error-codes", "completions", "manpages",
+        "add-file",
+        "remove-file",
+        "add-key",
+        "remove-key",
+        "forget",
+        "repo-id",
+        "verify-keys",
+        "hide",
+        "rotate",
+        "reveal",
+        "cat",
+        "changes",
+        "list",
+        "list-keys",
+        "allow",
+        "trust",
+        "export-pin",
+        "fingerprint",
+        "import",
+        "export",
+        "init",
+        "clean",
+        "whoami",
+        "trust-permissions",
+        "error-codes",
+        "completions",
+        "manpages",
     ];
     let mut pages: Vec<PathBuf> = fs::read_dir(repo_root().join("docs/src"))
         .expect("read docs/src")
@@ -433,11 +455,14 @@ fn test_docs_one_home_gate() {
         let token = format!("git-veil {name}");
         let mut pages_with: Vec<String> = Vec::new();
         for page in &pages {
-            if page.file_name().is_some_and(|f| f.to_string_lossy() == HOME) {
+            if page
+                .file_name()
+                .is_some_and(|f| f.to_string_lossy() == HOME)
+            {
                 continue;
             }
-            let content = fs::read_to_string(page)
-                .unwrap_or_else(|e| panic!("read {}: {e}", page.display()));
+            let content =
+                fs::read_to_string(page).unwrap_or_else(|e| panic!("read {}: {e}", page.display()));
             let count = content.matches(&token).count();
             if count > MAX_PER_PAGE {
                 panic!(
