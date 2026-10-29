@@ -169,8 +169,7 @@ EXAMPLES
 
     /// Pin this repository's owner key on this machine (possession proof, or pin-file import)
     #[command(after_long_help = "\
-Pin this repository's owner key on this machine. There is no keyfile
-argument: a repository must never supply its own trust anchor. Two
+Pin this repository's owner key on this machine. Two
 pin-creation paths exist, and nothing else:
 
 1. POSSESSION PROOF (default): git-veil trust <repo_id>. The candidate is

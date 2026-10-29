@@ -177,8 +177,7 @@ git-veil trust --import <pin-file> [--remote <name>] [--suppress-codeowners]
              [--key-store <dir>]
 ```
 
-Pins this repository's owner key on this machine. There is no keyfile
-argument: a repository must never supply its own trust anchor. Exactly two
+Pins this repository's owner key on this machine. Exactly two
 paths create a pin.
 
 1. **Possession proof** (default). `trust <repo_id>` reads the committed

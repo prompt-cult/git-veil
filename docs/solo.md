@@ -115,8 +115,7 @@ pinned this repository owner key on this machine
 warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
 ```
 
-What happened. There is no keyfile argument: a repository must never supply
-its own trust anchor. `trust` proved possession of your signing key and
+What happened. `trust` proved possession of your signing key and
 pinned the owner fingerprint on this machine, outside the repository. The
 fixed-derivation owner fingerprint was recorded in `.git-veil/trust.json`.
 Commit that file alongside the verifying key. The mechanics of the proof

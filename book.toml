@@ -16,6 +16,9 @@ create-missing = false
 [preprocessor.mathblock]
 command = "scripts/mdbook-mathblock.py"
 
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
 [output.html]
 # The site is served from https://prompt-cult.github.io/git-veil/, a subpath
 # of the Pages host. mdBook emits root-relative asset URLs only when
@@ -30,7 +33,7 @@ edit-url-template = "https://github.com/prompt-cult/git-veil/edit/main/docs/src/
 # built-in mathjax-support flag uses MathJax 2, which cannot render those
 # macros, so the book loads MathJax 3's tex-svg output instead: see
 # docs/tex-mj3.js, wired in below.
-additional-js = ["docs/tex-mj3.js"]
+additional-js = ["docs/tex-mj3.js", "mermaid.min.js", "mermaid-init.js"]
 
 [output.html.search]
 enable = true

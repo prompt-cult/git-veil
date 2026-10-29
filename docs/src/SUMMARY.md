@@ -8,6 +8,7 @@
   - [Joining a team repository](joining.md)
   - [Departing a team repository](departing.md)
 - [Commands](commands.md)
+- [Trust and pinning model](trust-model.md)
 - [Troubleshooting](troubleshooting.md)
 - [Migrating from git-secret](migrating-from-git-secret.md)
 - [Migrating from git-crypt](migrating-from-git-crypt.md)
