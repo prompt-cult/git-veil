@@ -105,7 +105,7 @@ private key.
 ```sh
 $ age-keygen -o my-age-identity.txt
 $ git-veil import my-age-identity.txt
-+ imported: age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
++ imported: age1xxxx
 Summary: 1 imported, 0 skipped
 ```
 

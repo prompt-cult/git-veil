@@ -105,7 +105,7 @@ $ git clone git@github.com:example/demo.git
 $ cd demo
 $ git config user.email alice@example.com
 $ git-veil import alice-age-identity.txt
-+ imported: age1k7fgmcxrthltagnlh6hljsdjel0yhwczvzlfysg4d8kmkpha9qnq20ehc3
++ imported: age1xxxx
 Summary: 1 imported, 0 skipped
 ```
 

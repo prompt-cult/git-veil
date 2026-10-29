@@ -1,6 +1,8 @@
 # Migrating from git-secret to git-veil
 
-git-veil is a git-secret work-alike. The mental model maps over almost one
+The commands have changed a lot since git-veil was modelled on
+git-secret, so this page is about the mental model, not the command
+names. The mental model maps over almost one
 to one. Tracked files are encrypted in place to a per-repository keyring of
 collaborator keys. What does not map is the material itself. git-veil does
 not maintain compatibility with git-secret's cryptographic material. See the
@@ -34,51 +36,6 @@ So there is no in-place upgrade. The path is reveal everything (name
 the files), tear down git-secret, re-key with git-veil, re-encrypt.
 Everything stays plain files in between. Plan a moment when nobody else
 is pushing.
-
-## What git-veil deliberately does differently
-
-git-veil is inspired by git-secret, and git-secret works fine for many
-teams. These differences change habits, so they are stated up front:
-
-1. **No gpg binary.** git-secret shells out to `gpg` for every
-   operation, so keys live in and move through the GnuPG keychain.
-   Collaborators `gpg --import` each other's public keys, and git-secret
-   finds them there when you run `tell`. git-veil has no gpg step at
-   runtime. Keys are X25519 private keys (`age` identities) created with
-   `age-keygen` or `rage-keygen` and moved as plain text files, with
-   `import` for your own private key, per machine, and `export` for the
-   public key, to hand to the owner. Your existing OpenPGP keys do not
-   carry over. The migration includes creating fresh X25519 keys.
-2. **The keyring is signed and tamper-evident.** git-secret's
-   `.gitsecret/keys/` keyring is an ordinary gpg keyring. Nothing in
-   git-secret detects it being edited in place. git-veil's keyring file
-   (`.git-veil/keyring`) is signed by the repository owner's Ed25519 key,
-   and the signature is verified against the pinned owner key before every
-   encryption, decryption or keyring mutation. A tampered keyring fails
-   closed.
-3. **Trust is pinned per machine.** With git-secret, a fresh clone worked
-   as soon as your `~/.gnupg` had a matching private key. The trust
-   anchor was implicit in your keychain. In git-veil the trust anchor is
-   an explicit pin of the owner's signing key, stored in your local key
-   store and never committed. Machines holding the signing key pin with
-   `git-veil trust <repo-id>`, a possession proof. Every other machine
-   imports a pin-file exported by one, `git-veil trust --import`, which
-   travels out of band. This is the single biggest new habit.
-4. **Keys are proven at the door.** `add-key` test-encrypts an in-memory
-   canary to a new collaborator's key before signing it into the ring. A
-   key that cannot encrypt never enters the keyring. And `trust` proves
-   possession of the seed matching the committed `.git-veil/owner.verifying`
-   before pinning it. git-secret's
-   `tell` warns about invalid keys since 0.3.2, but the keyring itself is
-   not authenticated.
-5. **`hide` deletes the plaintext.** `hide` encrypts and deletes the
-   plaintext by default. Pass `--keep-plaintext` to keep it, mirroring
-   git-secret's `-d`. `reveal` writes the plaintexts and
-   leaves the `.secret` files in place, the same defaults git-secret has.
-   git-veil also refuses `hide` outright when a `.secret` path is
-   git-ignored, for example swallowed by a parent-directory rule. That is
-   a silent-loss mode git-secret does not detect. See the cheat-sheet for
-   the mapping.
 
 ## Step-by-step migration
 
@@ -154,7 +111,7 @@ add a CODEOWNERS file at the repository root, or under the platform directory, a
 .git-veil/ @the-repository-owner
 $ age-keygen -o my-age-identity.txt
 $ git-veil import my-age-identity.txt
-+ imported: age13dejlgwd4nc4xkavuxz3axf0c7tm0v2yr3d6p62tv9rqtaa4xe8qv6tuqa
++ imported: age1xxxx
 Summary: 1 imported, 0 skipped
 $ umask 077
 $ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
@@ -312,3 +269,18 @@ documentation in the [sobolevn/git-secret repository][repo] (the
 0.5.0 command spelling `killperson` → `removeperson`.
 
 [repo]: https://github.com/sobolevn/git-secret
+
+## What git-veil deliberately does differently
+
+git-veil is inspired by git-secret, and git-secret works fine for many
+teams. These differences change habits, so they are stated up front:
+
+1. **No gpg binary.** git-secret shells out to `gpg` for every
+   operation, so keys live in and move through the GnuPG keychain.
+   Collaborators `gpg --import` each other's public keys, and git-secret
+   finds them there when you run `tell`. git-veil has no gpg step at
+   runtime. Keys are X25519 private keys (`age` identities) created with
+   `age-keygen` or `rage-keygen` and moved as plain text files, with
+   `import` for your own private key, per machine, and `export` for the
+   public key, to hand to the owner. Your existing OpenPGP keys do not
+   carry over. The migration includes creating fresh X25519 keys.

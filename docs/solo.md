@@ -82,7 +82,7 @@ suggestion: protect the trust-critical paths with a CODEOWNERS file so changes t
 add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
 .git-veil/ @the-repository-owner
 $ git-veil import my-age-identity.txt
-+ imported: age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
++ imported: age1xxxx
 Summary: 1 imported, 0 skipped
 $ git-veil repo-id
 Repository ID: demo+example@github.com
@@ -130,11 +130,18 @@ See [joining.md](joining.md) for that flow.
 ## 4. Put yourself in the keyring
 
 ```sh
-$ git-veil export age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
-$ git-veil add-key example@github.com age1jtc5wcv433vnlrlwthwq0zscm4ecx6dnad509vgdnjj25mqgrvfsf0sal3
+$ age-keygen -y my-age-identity.txt
+age1xxxx
+$ git-veil add-key example@github.com age1xxxx
 added example@github.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
+
+What happened. Your public key is the `age1xxxx` line `age-keygen`
+printed when you created the identity in step 1; `age-keygen -y` prints it
+again from the identity file any time you need it. `add-key` verified the
+keyring against your pin and signed you in; the argument after the email is
+the public key string. See [Commands - add-key](commands.md#add-key).
 
 What happened. `hide` encrypts to every key in the signed keyring, so even
 solo you must be in it. `add-key` verified the keyring against your pin and

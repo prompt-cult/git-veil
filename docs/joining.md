@@ -91,7 +91,7 @@ explicitly.
 
 ```sh
 $ git-veil import newcomer-age-identity.txt
-+ imported: age192a9fdj0l2gv0wfhqvtv8hj8ha8gvdcpgx8rw2wsdnrkcsttr5jq8n7q3n
++ imported: age1xxxx
 Summary: 1 imported, 0 skipped
 ```
 
