@@ -1,10 +1,11 @@
 name: Fuzz Smoke
 
 on:
+  # Every merge to main gets the smoke test; the weekly cron caused more
+  # red than value (see the run history), so it is gone.
+  push:
+    branches: [main]
   workflow_dispatch:
-  schedule:
-    # Weekly, Mondays 06:00 UTC
-    - cron: '0 6 * * 1'
 
 env:
   CARGO_TERM_COLOR: always
