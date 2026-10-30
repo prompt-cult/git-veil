@@ -1,34 +1,37 @@
 # git-veil
 
 git-veil stores encrypted secrets in a git repository. It is written in Rust.
-It encrypts with [`age`][age] (via the pure-Rust [`age` crate][age-crate]) and
-signs the keyring with [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]).
+It encrypt files using [`age`][age] identity keys (via the pure-Rust [`age` crate][age-crate]). The public part of the identies are committed into the git repo. That keyring of `age` public keys are signed with an [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]) key pair you generate using `openssl`.
 
 In the following, `age` refers to the open source `age` encryption tooling,
 which may be installed separately to securely create and maintain
 cryptographic keys outside of the git repo; the `git-veil` software uses the
 Rust `rage` library to work with the keys.
 
+The `age` format is an encryption format designed by Filippo Valsorda.
+Thi means that `git-veil`'s ciphertexts are standard `age` encrypted files. Any compliant `age` tool can decrypt them.
+
 [age]: https://age-encryption.org
 [age-crate]: https://crates.io/crates/age
 [ed25519]: https://en.wikipedia.org/wiki/EdDSA#Ed25519
 [dalek]: https://crates.io/crates/ed25519-dalek
-
-The `age` format is an encryption format designed by Filippo Valsorda.
-git-veil's ciphertexts are standard `age` files. Any compliant `age` tool can
-decrypt them, including the reference [`age`][age-cli] command-line tool and
-the Rust [`rage`][rage] command-line tool.
-
 [age-cli]: https://github.com/FiloSottile/age
 [rage]: https://github.com/str4d/rage
 
 ## Why
 
-The point of git-veil is that your secret material is backed up alongside
-the code. The ciphertexts are committed, so every clone carries the
-secrets, and the plaintext never has to leave your machine to reach a
-build box: a build or deployment script runs `git-veil reveal` on its own
-key and reads what it needs.
+The point of `git-veil` is that your application deployment secret material is versioned alongside the code. The ciphertexts are committed, so every clone carries the exact secrets that work with that version of the code. The plaintext never has to leave your machine to reach a build box: you simply create a `age` identify file per CI pipeline or per enviroment or per VM. Then your deployment script or your production server can run `git-veil reveal` to use its own `age` identity to decrypt the secrets your code needs. 
+
+Under such a model you should `ssh` into your dev, test and prod environments and run the commadns to create the `age` identity in that environment. You do not need to look at the secret part of the key nor cut and paste it or transmit it. You simply copy the public part of the key and pass it to `git veil add-key`. 
+
+The proceeding paragraphs may read like a very radical idea. Yet consider the alternatives; you have to maintain a system to distribute and backup your deployment secrets. Your author is shocked at how many software platforms (e.g. mobile application tooling, mobile backend) have you commit plaintext certificates into a private git database. Your author has seen and used a lot of enterprise systems were certificts and crypto materials were supposed to be automated. In practice your author has often seen them stepped around:
+
+- Testing the final deployment of production keys into production takes time and efforts and just as you got it right in some test environment does not mean it is going to go right first time in pro. The `git-veil` means that your secret management pipeline is your code depoyment pipeline. 
+- The moment doing things "properly" is not "just works" people end up cutting/pasting/emailing the certs, passwords or keys around. The effort of getting your keys securely deployed should not be left at the point when you are under pressure to go live. The effort of `git-veil` is in the initial setup and in learning how to use it. Once you know the drill you can move to a model where your deployment secrets are not being pasted over slack channels. 
+- Your author has many times seen crypto materials expiring some months paste go-live and lots of lost time and bad optics on trying to retractively fix the mess. This is why your author added automated testing to the mighty git-secret project. Perfection, and complexity, is the enemy or secure. 
+- Your author is concinced that the net result is quite a lot of security theatre and security-by-obsecurity. Or even the worst of all worlds; a central secret management tool that is a concentration risk combined with work around that are pasting around certs when sites go down a year after go-live. 
+
+The aim of `git-veil` is to bring self-soveriegn public-key encryption of your application deployment secrets to the masses. History tells use that it is developer hubris to build your own security tooling. Leave it to the professional cryptographers working in the open with other profession cryptographers. Your author's response to the charge of hubris is to ask that you hold my beer; but first buy me a beer for you to hold. By which I mean raise me a PR and join the discussion. 
 
 ## Trust model
 
@@ -326,6 +329,15 @@ material: a repository's `.secret` files, keyring and trust state written by
 git-secret are not readable by git-veil, and vice versa. Use one tool
 consistently within any given repository.
 
+## Responsible Disclosure
+
+Contract the copyright holder at firstname at firstname surname dot org. 
+
 ## License
 
-GPL-3.0-or-later (see the `license` field in [Cargo.toml](Cargo.toml)).
+This is a FOSS security tool where I would like folks to share fixes. If you 
+want to privately use your own copy somewhere be my guest. If you want to 
+distribute or share then I am insisting your make the code public for inspection so that we can all benefit. 
+
+SPDX-License-Identifier: GPL-3.0-or-later
+git-veil Copyright © 2026 Simon J. Massey
