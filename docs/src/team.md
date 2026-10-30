@@ -48,9 +48,9 @@ What makes it safe to share:
 - **Rotate before you revoke.** Remove the person, deliver the pass, and
   rotate every secret they ever saw. Old ciphertext in git history stays
   decryptable by their key forever.
-- **Transfer pin-files out of band.** `export-pin` refuses an in-repo
-  path. Send the file over ssh, and read the printed owner fingerprint to
-  the importer so they can compare it with the committed
+- **Transfer pins out of band.** `export-pin` refuses an in-repo
+  destination. Pipe the pin over ssh, and read the printed owner
+  fingerprint to the importer so they can compare it with the committed
   `.git-veil/trust.json`.
 - **Protect the trust anchor.** A CODEOWNERS file covering `.git-veil/`
   makes trust-anchor changes review
