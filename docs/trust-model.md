@@ -11,12 +11,14 @@ We pin the fingerprint to the git service, organisation, and repo, which we call
 ```mermaid
 flowchart TD
   A["Machine wants to trust repo"] --> B{"Possession proof available?"}
-  B -- "yes: signing seed in local key store" --> C["git-veil trust &lt;repo_id&gt;"]
+  B -- "yes: repo owner, signing seed in local key store" --> C["git-veil init &lt;verifying-key&gt;"]
   B -- "no: consumer machine" --> D["Obtain pin-file out of band"]
-  C --> E["Read committed .git-veil/owner.verifying"]
-  E --> F{"Matches verifying key derived from a seed in signing-keys.txt?"}
-  F -- "exact match" --> G["Pin written to key store"]
-  F -- "no match" --> X1["Refuse — exit 20"]
+  C --> C2{"Passed-in key path inside the worktree?"}
+  C2 -- "yes" --> X0["Refuse — exit 71"]
+  C --> C3{"Matches verifying key derived from a seed in signing-keys.txt?"}
+  C3 -- "no match" --> X1["Refuse — exit 20"]
+  C3 -- "exact match" --> E["Copy the key to committed .git-veil/owner.verifying"]
+  E --> G["Fingerprint into trust.json, pin written to key store"]
   D --> H["git-veil trust --import &lt;pin-file&gt;"]
   H --> I{"3 consistency checks"}
   I -- "all pass" --> G
@@ -51,8 +53,8 @@ The pin-file always travels out of band (scp, USB, read aloud), never through th
 
 | Command | Purpose | Notable exit codes |
 | --- | --- | --- |
-| `trust <repo_id>` | Possession proof; pin from committed `.git-veil/owner.verifying` | 13, 20, 70, 71, 30 |
-| `trust --import <pin-file>` | Pin from an exported pin-file, out of band | 13, 20, 70, 71, 30 |
+| `init <verifying-key>` | Possession proof; copies the passed-in key to committed `.git-veil/owner.verifying`, records the fingerprint, pins | 13, 20, 62, 70, 71, 30 |
+| `trust --import <pin-file>` | Pin from an exported pin-file, out of band | 70, 71, 30 |
 | `export-pin` | Write pin-file for machines without the signing key | 20, 71, 30 |
 | `fingerprint <label> <public_key>` | Pure `SHA-256(label:encoding)` derivation, no state | usage errors (2) |
 | `verify-keys` | Cheap health check of the gate above | 10, 11, 12, 14, 63, 70, 30 |
@@ -60,4 +62,4 @@ The pin-file always travels out of band (scp, USB, read aloud), never through th
 
 **Refused as hostile:** a pin or trust record in the old 16-hex-character fingerprint format is refused until trust is re-established (exit 70).
 
-**Typical order:** `init` → `trust` → `add-key` → `rotate`. 
+**Typical order:** `init <verifying-key>` → `import` → `add-key` → `rotate`. 

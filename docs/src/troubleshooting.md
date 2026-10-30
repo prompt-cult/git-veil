@@ -49,8 +49,8 @@ this machine before touching anything. The refusals, and what to do:
 
 - **Exit 11, no local pin.** This machine has never pinned this
   repository. A fresh clone always starts here, even the owner's. Run
-  `git-veil trust <repo-id>` (with the signing seed) or
-  `git-veil trust --import <pin-file>` (without it).
+  `git-veil trust --import <pin-file>` with a pin-file a machine holding
+  the signing seed exported.
 - **Exit 70, no committed verifying key.** The message names
   `.git-veil/owner.verifying`. Either the owner has not created and
   committed it yet (step 1 of the [Solo guide](solo.md)), or the file

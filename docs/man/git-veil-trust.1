@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH git-veil-trust 1  "git-veil-trust " 
 .SH NAME
-git\-veil\-trust \- Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
+git\-veil\-trust \- Pin this repository\*(Aqs owner key on this machine from an exported pin\-file
 .SH SYNOPSIS
-\fBgit\-veil trust\fR [\fB\-\-import\fR] [\fB\-\-remote\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIREPO_ID\fR] 
+\fBgit\-veil trust\fR <\fB\-\-import\fR> [\fB\-\-remote\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Pin this repository\*(Aqs owner key on this machine (possession proof, or pin\-file import)
+Pin this repository\*(Aqs owner key on this machine from an exported pin\-file
 .SH OPTIONS
 .TP
 \fB\-\-import\fR \fI<PIN_FILE>\fR
@@ -23,36 +23,25 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil). The store and
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
-.TP
-[\fIREPO_ID\fR]
-Repository ID (e.g., fara+simbo1905@github.com); required unless \-\-import
 .SH EXTRA
-Pin this repository\*(Aqs owner key on this machine. Two
-pin\-creation paths exist, and nothing else:
+Pin this repository\*(Aqs owner key on this machine by importing a pin\-file
+produced by git\-veil export\-pin on a machine that proved possession.
+Three mandatory consistency checks: the pin\-file\*(Aqs repo\-id must match
+this repository; its verifying key must exactly match the committed
+\&.git\-veil/owner.verifying; and its owner key fingerprint must match the
+owner fingerprint recorded in .git\-veil/trust.json. Any mismatch \->
+refusal: one of the two channels is compromised.
 
-1. POSSESSION PROOF (default): git\-veil trust <repo_id>. The candidate is
-   the repository\*(Aqs committed .git\-veil/owner.verifying (64 hex chars on
-   line 1); the proof is an exact match between that key and the verifying
-   key derived from a seed in <key store>/signing\-keys.txt. Match \-> pin
-   written. No match \-> refusal (exit code 20): pins are created only on
-   machines holding the signing key.
-
-2. IMPORT: git\-veil trust \-\-import <pin\-file>, where the pin\-file was
-   produced by git\-veil export\-pin on a machine that proved possession.
-   Three mandatory consistency checks: the pin\-file\*(Aqs repo\-id must match
-   this repository; its verifying key must exactly match the committed
-   .git\-veil/owner.verifying; and its owner key fingerprint must match the
-   owner fingerprint recorded in .git\-veil/trust.json. Any mismatch \->
-   refusal: one of the two channels is compromised.
+There is no possession\-proof form: the repo owner pins at init, and every
+other machine imports.
 
 A pin or trust record in the 16 hex character fingerprint format is
 refused as hostile: every gated command fails until trust is re\-established.
 See the fingerprint documentation for the derivation.
 
-Both paths refuse a path inside the repository worktree, so a pin\-file
+The pin\-file must point OUTSIDE the repository worktree, so a pin\-file
 always travels out of band (e.g. ssh) \- the same model as known_hosts
-provisioning. The pin lives in the key store, never committed; every
-machine (including the owner\*(Aqs fresh clones) pins for itself.
+provisioning. The pin lives in the key store, never committed.
 
 Trust domain: the key store named by \-\-key\-store holds this machine\*(Aqs pins
 for EVERY repository that uses that store, so the store and its pins are
@@ -62,6 +51,4 @@ repositories is not advised; use a separate \-\-key\-store per trust domain.
 Requires init first. Typical next step: add\-key.
 
 EXAMPLES
-  $ git\-veil repo\-id                              # get the repo id to pass here
-  $ git\-veil trust fara+simbo1905@github.com     # possession proof
   $ git\-veil trust \-\-import /tmp/fara.pin        # pin\-file from export\-pin

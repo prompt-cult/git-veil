@@ -2,9 +2,8 @@
 //! repository. The tool never requires CODEOWNERS, never creates the
 //! file, and never alters an exit code.
 
-use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_init, cmd_trust, codeowners_suggestion, codeowners_suppressed, codeowners_warning,
+    cmd_export_pin, cmd_trust, codeowners_suggestion, codeowners_suppressed, codeowners_warning,
     covers_trust_critical_paths, exit_code_of, find_codeowners, record_codeowners_suppression,
 };
 use std::fs;
@@ -45,6 +44,40 @@ fn init_git_repo(dir: &Path) {
         .status()
         .expect("git");
     assert!(s.success());
+}
+
+/// Adds a remote and runs the init ceremony from `key_store_dir`, whose
+/// key store receives the signing seed and the owner verifying key file.
+fn init_state_from(repo_root: &Path, key_store_dir: &Path, quiet: bool, suppress: bool) {
+    let s = std::process::Command::new("git")
+        .current_dir(repo_root)
+        .args(["remote", "add", "origin", "git@github.com:owner/fara.git"])
+        .status()
+        .expect("git remote add");
+    assert!(s.success());
+
+    let (signing_key, verifying_hex) = git_veil::generate_signing_keypair();
+    fs::create_dir_all(key_store_dir).unwrap();
+    fs::write(
+        key_store_dir.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    fs::write(
+        key_store_dir.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+
+    git_veil::cmd_init(
+        repo_root,
+        &key_store_dir.join("owner.verifying"),
+        "origin",
+        key_store_dir,
+        quiet,
+        suppress,
+    )
+    .expect("init runs the pin ceremony");
 }
 
 fn covering_codeowners() -> &'static [u8] {
@@ -163,80 +196,51 @@ fn test_init_suggestion_respects_quiet_and_the_coverage_gate() {
     // these cmd-level tests cannot capture.
     let repo = TempDir::new("init-suggest");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path, false).expect("init");
+    {
+        let ks = TempDir::new("init-suggest-ks");
+        init_state_from(&repo.path, &ks.path, false, false);
+    }
     assert!(repo.join(".git-veil/keyring").exists());
+    assert!(repo.join(".git-veil/owner.verifying").exists());
 
     // Quiet init behaves identically state-wise.
     let repo_quiet = TempDir::new("init-quiet");
     init_git_repo(&repo_quiet.path);
-    cmd_init(&repo_quiet.path, true).expect("quiet init");
+    {
+        let ks = TempDir::new("init-quiet-ks");
+        init_state_from(&repo_quiet.path, &ks.path, true, false);
+    }
     assert!(repo_quiet.join(".git-veil/keyring").exists());
+    assert!(repo_quiet.join(".git-veil/owner.verifying").exists());
 }
 
 #[test]
-fn test_trust_warns_or_suppresses_without_touching_the_exit_code() {
+fn test_pin_ceremony_warns_or_suppresses_without_touching_the_exit_code() {
     let repo = TempDir::new("trust-warn");
     init_git_repo(&repo.path);
-
-    let identity = age::x25519::Identity::generate();
-    let recipient = identity.to_public();
-    let (signing_key, verifying_hex) = git_veil::generate_signing_keypair();
-
-    fs::write(
-        repo.join("owner.age"),
-        format!("{}\n", identity.to_string().expose_secret()),
-    )
-    .unwrap();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
-    fs::write(
-        repo.join(".git-veil/owner.verifying"),
-        format!("{}\n{}\n", verifying_hex, recipient),
-    )
-    .unwrap();
     fs::write(repo.join(".gitignore"), "owner.age\n").unwrap();
 
     let store = TempDir::new("trust-warn-ks");
-    fs::write(
-        store.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(signing_key.to_bytes())),
-    )
-    .unwrap();
 
-    cmd_init(&repo.path, false).expect("init");
-
-    let remote_url = "git@github.com:owner/fara.git";
-    let s = std::process::Command::new("git")
-        .current_dir(&repo.path)
-        .args(["remote", "add", "origin", remote_url])
-        .status()
-        .expect("git");
-    assert!(s.success());
-
-    // Suppressed or not, trust exits zero (the warning is non-blocking).
-    let result = cmd_trust(
-        &repo.path,
-        "fara+owner@github.com",
-        "origin",
-        &store.path,
-        false,
-    );
-    assert!(
-        result.is_ok(),
-        "the CODEOWNERS warning must never alter the exit code: {result:?}"
-    );
+    // Suppressed or not, init exits zero (the warning is non-blocking).
+    init_state_from(&repo.path, &store.path, false, false);
     assert!(!codeowners_suppressed(&store.path, "fara+owner@github.com"));
 
-    // Suppressing through the pin-creation command records the entry.
-    let result = cmd_trust(
+    // Suppressing through the pin-import command records the entry.
+    let out_dir = TempDir::new("trust-warn-out");
+    let pin = out_dir.join("fara.pin");
+    cmd_export_pin(
         &repo.path,
         "fara+owner@github.com",
+        &pin,
         "origin",
         &store.path,
-        true,
-    );
+    )
+    .expect("export-pin with the matching seed succeeds");
+    let result = cmd_trust(&repo.path, &pin, "origin", &store.path, true);
     assert!(
         result.is_ok(),
-        "suppressing trust must still pin: {result:?}"
+        "suppressing the pin import must still pin: {result:?}"
     );
     assert!(codeowners_suppressed(&store.path, "fara+owner@github.com"));
 
@@ -244,18 +248,7 @@ fn test_trust_warns_or_suppresses_without_touching_the_exit_code() {
     fs::write(repo.join("CODEOWNERS"), covering_codeowners()).unwrap();
     assert!(covers_trust_critical_paths(&repo.path));
     let store2 = TempDir::new("trust-warn-ks2");
-    fs::write(
-        store2.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(signing_key.to_bytes())),
-    )
-    .unwrap();
-    let result = cmd_trust(
-        &repo.path,
-        "fara+owner@github.com",
-        "origin",
-        &store2.path,
-        false,
-    );
+    let result = cmd_trust(&repo.path, &pin, "origin", &store2.path, false);
     assert!(result.is_ok());
     assert!(
         !codeowners_suppressed(&store2.path, "fara+owner@github.com"),

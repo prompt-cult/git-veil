@@ -9,8 +9,8 @@ use git_veil::{
     cmd_add_file, cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export,
     cmd_export_pin, cmd_fingerprint, cmd_forget, cmd_hide, cmd_import, cmd_init, cmd_list,
     cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal, cmd_rotate, cmd_trust,
-    cmd_trust_import, cmd_trust_permissions, cmd_verify_keys, cmd_whoami, default_key_store,
-    exit_code_of, get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
+    cmd_trust_permissions, cmd_verify_keys, cmd_whoami, default_key_store, exit_code_of,
+    get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
 };
 
 /// Resolves the email for commands that accept --email: an explicit,
@@ -91,7 +91,22 @@ fn run() -> Result<()> {
     let repo_root = std::env::current_dir()?;
 
     match cli.command {
-        Commands::Init { quiet } => cmd_init(&repo_root, quiet)?,
+        Commands::Init {
+            verifying_key,
+            remote,
+            quiet,
+            suppress_codeowners,
+            key_store: opt,
+        } => {
+            cmd_init(
+                &repo_root,
+                &verifying_key,
+                &remote,
+                &resolve_key_store(opt, skip_permissions_check)?,
+                quiet,
+                suppress_codeowners,
+            )?;
+        }
         Commands::Import {
             files,
             key_store: opt,
@@ -125,40 +140,19 @@ fn run() -> Result<()> {
             )?;
         }
         Commands::Trust {
-            repo_id,
             import,
             remote,
             suppress_codeowners,
             key_store: opt,
         } => {
             let key_store = resolve_key_store(opt, skip_permissions_check)?;
-            match (import, repo_id) {
-                (Some(pin_file), None) => {
-                    cmd_trust_import(
-                        &repo_root,
-                        &pin_file,
-                        &remote,
-                        &key_store,
-                        suppress_codeowners,
-                    )?;
-                }
-                (None, Some(repo_id)) => {
-                    cmd_trust(
-                        &repo_root,
-                        &repo_id,
-                        &remote,
-                        &key_store,
-                        suppress_codeowners,
-                    )?;
-                }
-                // clap's required_unless_present/conflicts_with make both
-                // remaining arms unreachable. They stay so the match is
-                // total.
-                (Some(_), Some(_)) => anyhow::bail!("--import cannot be combined with a repo_id"),
-                (None, None) => anyhow::bail!(
-                    "trust requires a repository id or the import flag with a pin file"
-                ),
-            }
+            cmd_trust(
+                &repo_root,
+                &import,
+                &remote,
+                &key_store,
+                suppress_codeowners,
+            )?;
         }
         Commands::ExportPin {
             repo_id,

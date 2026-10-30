@@ -7,9 +7,8 @@ use age::secrecy::ExposeSecret;
 use git_veil::cli::Cli;
 use git_veil::{
     cmd_add_key, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_trust,
-    cmd_trust_import, cmd_verify_keys, exit_code_of, generate_signing_keypair,
-    generate_x25519_private_key, owner_key_fingerprint, x25519_public_key_encoding, PinFile,
-    TrustPinStore, TrustStore,
+    cmd_verify_keys, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
+    owner_key_fingerprint, x25519_public_key_encoding, PinFile, TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::Path;
@@ -59,8 +58,8 @@ fn init_git_repo(dir: &Path) {
 
 const TEST_REPO_ID: &str = "fara+owner@github.com";
 
-/// A fully-trusted fixture: git repo, key store holding the owner's seed,
-/// committed owner.verifying, init + possession-proof trust.
+/// A fully-trusted fixture: git repo, key store holding the owner's seed
+/// and verifying key file, init running the pin ceremony.
 struct Fixture {
     repo: TempDir,
     key_store: TempDir,
@@ -83,21 +82,29 @@ impl Fixture {
             format!("{}\n", identity.to_string().expose_secret()),
         )
         .unwrap();
-        fs::create_dir_all(repo.join(".git-veil")).unwrap();
-        fs::write(
-            repo.join(".git-veil/owner.verifying"),
-            format!("{}\n{}\n", verifying_hex, recipient),
-        )
-        .unwrap();
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
         )
         .unwrap();
+        // The owner verifying key file lives outside the repository, in
+        // the key store, and init copies it into .git-veil/ and pins.
+        fs::write(
+            key_store.join("owner.verifying"),
+            format!("{}\n{}\n", verifying_hex, recipient),
+        )
+        .unwrap();
 
-        cmd_init(&repo.path, false).expect("init");
+        cmd_init(
+            &repo.path,
+            &key_store.join("owner.verifying"),
+            "origin",
+            &key_store.path,
+            false,
+            false,
+        )
+        .expect("init copies the owner key in and pins");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self {
             repo,
@@ -108,37 +115,53 @@ impl Fixture {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The parser rejects a keyfile argument
-// ---------------------------------------------------------------------------
+#[test]
+fn test_bare_trust_is_a_parse_error() {
+    use clap::Parser as _;
+    // The bare form is gone: trust handles the pin-file import only. The
+    // old `git-veil trust <repo-id>` possession-proof form must not parse.
+    let result = Cli::try_parse_from(["git-veil", "trust", TEST_REPO_ID]);
+    assert!(result.is_err(), "the bare trust form must be a parse error");
+}
 
 #[test]
-fn test_trust_keyfile_argument_is_a_parse_error() {
+fn test_init_requires_the_verifying_key_argument() {
     use clap::Parser as _;
-    // `git-veil trust <repo-id> <keyfile>`, the self-anchoring form,
-    // must not even parse.
-    let result = Cli::try_parse_from(["git-veil", "trust", TEST_REPO_ID, "owner.verifying"]);
+    // init takes the repo owner verifying key path as a mandatory second
+    // argument; the bare form must not parse.
+    let result = Cli::try_parse_from(["git-veil", "init"]);
     assert!(
         result.is_err(),
-        "trust with a keyfile argument must be a parse error"
+        "init without the verifying key argument must be a parse error"
     );
+}
 
-    // The two pin-creation paths parse. Nothing else does.
-    assert!(Cli::try_parse_from(["git-veil", "trust", TEST_REPO_ID]).is_ok());
-    assert!(
-        Cli::try_parse_from(["git-veil", "trust", "--import", "/tmp/fara.pin"]).is_ok(),
-        "trust --import <pin-file> must parse"
+#[test]
+fn test_init_refuses_a_verifying_key_inside_the_repository() {
+    // The trust anchor travels in from outside the repository only. A
+    // verifying key path inside the worktree is refused with the
+    // documented path-safety code, before any state is created.
+    let repo = TempDir::new("init-inside");
+    let key_store = TempDir::new("init-inside-ks");
+    init_git_repo(&repo.path);
+
+    let (_signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(repo.join("owner.verifying"), format!("{}\n", verifying_hex)).unwrap();
+
+    let err = cmd_init(
+        &repo.path,
+        &repo.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect_err("init with the verifying key inside the repository must refuse");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::UnsafePath as i32,
+        "the inside-the-repo refusal exits with the documented path-safety code"
     );
-    // Bare trust, and --import combined with a repo-id, are usage errors.
-    assert!(Cli::try_parse_from(["git-veil", "trust"]).is_err());
-    assert!(Cli::try_parse_from([
-        "git-veil",
-        "trust",
-        TEST_REPO_ID,
-        "--import",
-        "/tmp/fara.pin"
-    ])
-    .is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -168,18 +191,18 @@ fn test_trust_proof_writes_pin_and_verifies() {
 }
 
 #[test]
-fn test_trust_without_matching_seed_refuses() {
+fn test_init_without_matching_seed_refuses() {
     let repo = TempDir::new("no-seed");
     let key_store = TempDir::new("no-seed-ks");
     init_git_repo(&repo.path);
 
-    // The repository's owner.verifying is keypair A's public half. The
-    // store holds keypair B's seed, so possession of A is not proven.
+    // The passed owner verifying key is keypair A's public half. The
+    // store holds keypair B's seed, so possession of A is not proven, and
+    // init refuses before any state is created.
     let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
     let (unrelated_signing_key, _) = generate_signing_keypair();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join(".git-veil/owner.verifying"),
+        key_store.join("owner.verifying"),
         format!("{}\n", owner_verifying_hex),
     )
     .unwrap();
@@ -189,10 +212,16 @@ fn test_trust_without_matching_seed_refuses() {
     )
     .unwrap();
     let _ = owner_signing_key;
-    cmd_init(&repo.path, false).expect("init");
 
-    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false)
-        .expect_err("trust must refuse without a matching seed");
+    let err = cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect_err("init must refuse without a matching seed");
     assert_eq!(exit_code_of(&err), 20);
     assert!(
         err.to_string()
@@ -205,18 +234,21 @@ fn test_trust_without_matching_seed_refuses() {
             .is_none(),
         "no pin may be written on refusal"
     );
+    assert!(
+        !repo.join(".git-veil").exists(),
+        "the refusal runs before any state is created"
+    );
 }
 
 #[test]
-fn test_trust_ambiguous_seeds_refuse() {
+fn test_init_ambiguous_seeds_refuse() {
     let repo = TempDir::new("ambiguous");
     let key_store = TempDir::new("ambiguous-ks");
     init_git_repo(&repo.path);
 
     let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
     fs::write(
-        repo.join(".git-veil/owner.verifying"),
+        key_store.join("owner.verifying"),
         format!("{}\n", verifying_hex),
     )
     .unwrap();
@@ -227,111 +259,83 @@ fn test_trust_ambiguous_seeds_refuse() {
         format!("{}\n{}\n", seed, seed),
     )
     .unwrap();
-    cmd_init(&repo.path, false).expect("init");
 
-    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false)
-        .expect_err("ambiguous seed matches must refuse");
+    let err = cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect_err("ambiguous seed matches must refuse");
     assert_eq!(exit_code_of(&err), 70);
     assert!(TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
         .unwrap()
         .is_none());
+    assert!(
+        !repo.join(".git-veil").exists(),
+        "the refusal runs before any state is created"
+    );
 }
 
 #[test]
-fn test_trust_wrong_repo_id_fails() {
+fn test_export_pin_wrong_repo_id_refuses() {
     let repo = TempDir::new("wrong-id");
     let key_store = TempDir::new("wrong-id-ks");
+    let elsewhere = TempDir::new("wrong-id-out");
     init_git_repo(&repo.path);
 
-    let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
-    fs::write(
-        repo.join(".git-veil/owner.verifying"),
-        format!("{}\n", verifying_hex),
-    )
-    .unwrap();
-    fs::write(
-        key_store.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(signing_key.to_bytes())),
-    )
-    .unwrap();
-    cmd_init(&repo.path, false).expect("init");
+    // export-pin takes the repo id as an argument and cross-checks it
+    // against the one derived from the remote. The repository id labels
+    // the trust anchor, so a mismatch refuses before anything is written.
+    let (_signing_key, _verifying_hex) = generate_signing_keypair();
 
-    let err = cmd_trust(
+    let out = elsewhere.join("fara.pin");
+    let err = cmd_export_pin(
         &repo.path,
         "wrong+id@github.com",
+        &out,
         "origin",
         &key_store.path,
-        false,
     )
     .expect_err("repo-id mismatch must refuse");
     assert_eq!(exit_code_of(&err), 13);
+    assert!(!out.exists(), "no pin-file may be written on refusal");
 }
 
 #[test]
-fn trust_refuses_root_level_owner_verifying() {
-    let repo = TempDir::new("root-key");
-    let key_store = TempDir::new("root-key-ks");
-    init_git_repo(&repo.path);
-
-    // The root-level owner.verifying is the retired location. Its key
-    // matches the store's seed exactly, and trust still refuses: the only
-    // key it reads is .git-veil/owner.verifying.
-    let (signing_key, verifying_hex) = generate_signing_keypair();
-    fs::write(repo.join("owner.verifying"), format!("{}\n", verifying_hex)).unwrap();
-    fs::write(
-        key_store.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(signing_key.to_bytes())),
-    )
-    .unwrap();
-    cmd_init(&repo.path, false).expect("init");
-    assert!(!repo.join(".git-veil/owner.verifying").exists());
-
-    let err = cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false)
-        .expect_err("trust must ignore a root-level owner.verifying");
-    assert_eq!(exit_code_of(&err), 70);
-    assert!(
-        err.to_string()
-            .contains("no committed owner verifying key file at .git-veil/owner.verifying"),
-        "the refusal names the state-directory path: {err}"
-    );
-    assert!(
-        TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
-            .unwrap()
-            .is_none(),
-        "no pin may be written on refusal"
-    );
-}
-
-#[test]
-fn test_retrust_replaces_pin() {
+fn test_reinit_replaces_pin() {
     let f = Fixture::new("retrust");
 
     let old_pin = TrustPinStore::read_pin(&f.key_store.path, TEST_REPO_ID)
         .unwrap()
         .unwrap();
 
-    // Key rotation: new seed, new committed owner.verifying, re-prove.
+    // Key rotation: a new owner signing key. Trust state is re-established
+    // by a fresh init with the rotated key file, and the pin is replaced.
     let (new_signing_key, new_verifying_hex) = generate_signing_keypair();
-    fs::write(
-        f.repo.join(".git-veil/owner.verifying"),
-        format!("{}\n", new_verifying_hex),
-    )
-    .unwrap();
     fs::write(
         f.key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(new_signing_key.to_bytes())),
     )
     .unwrap();
+    fs::write(
+        f.key_store.join("owner.verifying"),
+        format!("{}\n", new_verifying_hex),
+    )
+    .unwrap();
 
-    cmd_trust(
+    fs::remove_dir_all(f.repo.join(".git-veil")).unwrap();
+    cmd_init(
         &f.repo.path,
-        TEST_REPO_ID,
+        &f.key_store.join("owner.verifying"),
         "origin",
         &f.key_store.path,
         false,
+        false,
     )
-    .expect("re-trust");
+    .expect("re-init with the rotated owner key");
 
     let new_pin = TrustPinStore::read_pin(&f.key_store.path, TEST_REPO_ID)
         .unwrap()
@@ -347,32 +351,21 @@ fn test_retrust_replaces_pin() {
 
 #[test]
 fn test_export_pin_without_matching_seed_refuses() {
-    let repo = TempDir::new("export-no-seed");
-    let key_store = TempDir::new("export-no-seed-ks");
+    let f = Fixture::new("export-no-seed");
     let elsewhere = TempDir::new("export-no-seed-out");
-    init_git_repo(&repo.path);
+    let other_store = TempDir::new("export-no-seed-ks");
 
-    // The repository's owner.verifying is keypair A's public half. The
-    // store holds keypair B's seed, so export must refuse.
-    let (owner_signing_key, owner_verifying_hex) = generate_signing_keypair();
-    let (unrelated_signing_key, _) = generate_signing_keypair();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
-    fs::write(
-        repo.join(".git-veil/owner.verifying"),
-        format!("{}\n", owner_verifying_hex),
-    )
-    .unwrap();
-    fs::write(
-        key_store.join("signing-keys.txt"),
-        format!("{}\n", hex::encode(unrelated_signing_key.to_bytes())),
-    )
-    .unwrap();
-    let _ = owner_signing_key;
-    cmd_init(&repo.path, false).expect("init");
-
+    // The repository carries real trust state, but export-pin runs against a
+    // key store holding no matching seed, so the possession proof fails.
     let out = elsewhere.join("fara.pin");
-    let err = cmd_export_pin(&repo.path, TEST_REPO_ID, &out, "origin", &key_store.path)
-        .expect_err("export-pin must require the possession proof");
+    let err = cmd_export_pin(
+        &f.repo.path,
+        TEST_REPO_ID,
+        &out,
+        "origin",
+        &other_store.path,
+    )
+    .expect_err("export-pin must require the possession proof");
     assert_eq!(exit_code_of(&err), 20);
     assert!(
         !out.exists(),
@@ -447,7 +440,7 @@ fn test_import_inside_repo_refuses() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(&f.repo.path, &in_repo, "origin", &f.key_store.path, false)
+    let err = cmd_trust(&f.repo.path, &in_repo, "origin", &f.key_store.path, false)
         .expect_err("import must refuse a path inside the repository");
     assert_eq!(exit_code_of(&err), 71);
 }
@@ -471,7 +464,7 @@ fn test_import_happy_path_on_storeless_machine() {
     // The store-less machine has no signing key anywhere. Import is its
     // only pin-creation path, and it must work.
     assert!(!fresh_store.path.join("signing-keys.txt").exists());
-    cmd_trust_import(
+    cmd_trust(
         &f.repo.path,
         &pin_file_path,
         "origin",
@@ -508,7 +501,7 @@ fn test_import_repo_id_mismatch_refuses() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(
+    let err = cmd_trust(
         &f.repo.path,
         &pin_file_path,
         "origin",
@@ -550,7 +543,7 @@ fn test_import_key_mismatch_refuses() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(
+    let err = cmd_trust(
         &f.repo.path,
         &pin_file_path,
         "origin",
@@ -591,7 +584,7 @@ fn test_import_fingerprint_mismatch_refuses() {
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "00".repeat(32));
     trust.save_to_file(&trust_path).unwrap();
 
-    let err = cmd_trust_import(
+    let err = cmd_trust(
         &f.repo.path,
         &pin_file_path,
         "origin",
@@ -636,7 +629,7 @@ fn test_import_missing_metadata_fingerprint_refuses() {
     });
     fs::write(&trust_path, serde_json::to_string_pretty(&legacy).unwrap()).unwrap();
 
-    let err = cmd_trust_import(
+    let err = cmd_trust(
         &f.repo.path,
         &pin_file_path,
         "origin",
@@ -657,11 +650,34 @@ fn test_import_missing_metadata_fingerprint_refuses() {
 #[test]
 fn test_no_pin_fails_closed() {
     let repo = TempDir::new("no-pin");
+    let init_store = TempDir::new("no-pin-init-ks");
     let key_store = TempDir::new("no-pin-ks");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path, false).expect("init");
 
-    // Committed trust.json entry, but no local pin.
+    // Trust state is established from one key store; the gated command
+    // runs against an empty store, which holds no pin for this machine.
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(
+        init_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    fs::write(
+        init_store.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+    cmd_init(
+        &repo.path,
+        &init_store.join("owner.verifying"),
+        "origin",
+        &init_store.path,
+        false,
+        false,
+    )
+    .expect("init");
+
+    // Committed trust.json entry, but no local pin in the empty store.
     let mut trust = TrustStore::new();
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
     trust
@@ -701,9 +717,32 @@ fn test_mismatched_pin_fails_closed() {
 #[test]
 fn test_hide_and_tell_fail_without_trust() {
     let repo = TempDir::new("no-trust");
+    let init_store = TempDir::new("no-trust-init-ks");
     let key_store = TempDir::new("no-trust-ks");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path, false).expect("init");
+
+    // Trust state exists (one store pinned it); the gated commands run
+    // against an empty store and fail closed without the pin.
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(
+        init_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    fs::write(
+        init_store.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+    cmd_init(
+        &repo.path,
+        &init_store.join("owner.verifying"),
+        "origin",
+        &init_store.path,
+        false,
+        false,
+    )
+    .expect("init");
 
     assert!(
         cmd_hide(
@@ -761,9 +800,32 @@ fn test_empty_keyring_no_signature_ok() {
 #[test]
 fn test_reveal_no_pin_error_names_both_paths() {
     let repo = TempDir::new("reveal-no-pin");
+    let init_store = TempDir::new("reveal-no-pin-init-ks");
     let key_store = TempDir::new("reveal-no-pin-ks");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path, false).expect("init");
+
+    // Trust state exists (one store pinned it); reveal runs against an
+    // empty store and its no-pin error names both public facts.
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(
+        init_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    fs::write(
+        init_store.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+    cmd_init(
+        &repo.path,
+        &init_store.join("owner.verifying"),
+        "origin",
+        &init_store.path,
+        false,
+        false,
+    )
+    .expect("init");
 
     let mut trust = TrustStore::new();
     trust.set_owner_fingerprint(TEST_REPO_ID.to_string(), "deadbeefdeadbeef".to_string());
@@ -811,38 +873,44 @@ fn test_reveal_no_pin_error_names_both_paths() {
 fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     // The real owner's machine. It holds the real seed and has no pin yet.
     let real_store = TempDir::new("attacker-real-ks");
-    let (real_signing_key, _real_verifying_hex) = generate_signing_keypair();
+    let (real_signing_key, real_verifying_hex) = generate_signing_keypair();
     fs::write(
         real_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(real_signing_key.to_bytes())),
     )
     .unwrap();
+    fs::write(
+        real_store.join("owner.verifying"),
+        format!("{}\n", real_verifying_hex),
+    )
+    .unwrap();
 
     // The attacker's repository is self-consistent. It has its own signing
-    // key, its own committed owner.verifying, its own signed keyring, its own
-    // metadata fingerprint, and a bogus pin-file committed in-repo.
+    // key, its own committed owner.verifying, its own signed keyring, its
+    // own metadata fingerprint, and a bogus pin-file committed in-repo.
     let attacked = TempDir::new("attacker-repo");
     init_git_repo(&attacked.path);
-    cmd_init(&attacked.path, false).expect("init");
-
+    let attacker_store = TempDir::new("attacker-out-ks");
     let (attacker_signing_key, attacker_verifying_hex) = generate_signing_keypair();
     fs::write(
-        attacked.join(".git-veil/owner.verifying"),
+        attacker_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(attacker_signing_key.to_bytes())),
+    )
+    .unwrap();
+    fs::write(
+        attacker_store.join("owner.verifying"),
         format!("{}\n", attacker_verifying_hex),
     )
     .unwrap();
-    let mut trust = TrustStore::new();
-    trust.set_owner_fingerprint(
-        TEST_REPO_ID.to_string(),
-        owner_key_fingerprint(TEST_REPO_ID, &attacker_signing_key.verifying_key()),
-    );
-    trust.set_owner_fingerprint(
-        TEST_REPO_ID.to_string(),
-        owner_key_fingerprint(TEST_REPO_ID, &attacker_signing_key.verifying_key()),
-    );
-    trust
-        .save_to_file(&attacked.join(".git-veil/trust.json"))
-        .unwrap();
+    cmd_init(
+        &attacked.path,
+        &attacker_store.join("owner.verifying"),
+        "origin",
+        &attacker_store.path,
+        false,
+        false,
+    )
+    .expect("the attacker can init their own repo with their own seed");
     fs::write(
         attacked.join("pinned.pin"),
         PinFile {
@@ -853,30 +921,29 @@ fn test_attacker_consistent_repo_refused_on_machine_with_real_seed() {
     )
     .unwrap();
 
-    // The repository supplies its own trust anchor, so the proof fails.
-    // The real seed does not derive the attacker's key.
-    let err = cmd_trust(
+    // The attacker's own key will not re-anchor the repository either:
+    // init never resets established trust, so the self-consistent repo
+    // cannot be re-anchored over its committed state, by its owner or
+    // anyone else.
+    let err = cmd_init(
         &attacked.path,
-        TEST_REPO_ID,
+        &attacker_store.join("owner.verifying"),
         "origin",
-        &real_store.path,
+        &attacker_store.path,
+        false,
         false,
     )
-    .expect_err("a self-consistent attacker repo must not be pinnable by proof");
-    assert_eq!(exit_code_of(&err), 20);
-    assert!(err
-        .to_string()
-        .contains("no local signing key matches this repository owner key"));
+    .expect_err("init must not reset established trust");
+    assert_eq!(exit_code_of(&err), 70);
     assert!(
-        TrustPinStore::read_pin(&real_store.path, TEST_REPO_ID)
-            .unwrap()
-            .is_none(),
-        "no pin may be written for the attacker's repo"
+        err.to_string()
+            .contains("already initialized here; refusing to reset existing trust state"),
+        "the refusal names the reset refusal: {err}"
     );
 
     // The committed bogus pin-file cannot be imported either. It lives
     // inside the repository.
-    let err = cmd_trust_import(
+    let err = cmd_trust(
         &attacked.path,
         &attacked.join("pinned.pin"),
         "origin",
@@ -950,7 +1017,7 @@ fn test_rename_suspicion_no_remedy_on_import() {
     )
     .unwrap();
 
-    let err = cmd_trust_import(
+    let err = cmd_trust(
         &f.repo.path,
         &pin_file_path,
         "origin",
@@ -1008,99 +1075,4 @@ fn test_reconcile_owner_fingerprints_removes_only_non_live_ids() {
     assert!(store.get_owner_fingerprint("a+owner@github.com").is_some());
     assert!(store.get_owner_fingerprint("b+owner@github.com").is_none());
     assert!(store.get_owner_fingerprint("c+owner@github.com").is_some());
-}
-
-/// The observed-live scenario. The repository moved, the old id is a stale
-/// entry in the committed store, and the owner re-runs the possession proof
-/// under the new id. Drives the built binary so the printed removal can be
-/// asserted on stdout.
-#[test]
-fn test_trust_after_a_move_prunes_the_stale_entry_and_prints_the_removal() {
-    let f = Fixture::new("prune-move");
-    rename_remote(&f.repo.path, "git@github.com:owner/fara-moved.git");
-    let new_repo_id = "fara-moved+owner@github.com";
-
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
-        .current_dir(&f.repo.path)
-        .args([
-            "--dangerously-skip-permissions-check",
-            "trust",
-            new_repo_id,
-            "--key-store",
-            f.key_store.path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("run git-veil trust");
-    assert!(
-        output.status.success(),
-        "trust runs: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
-    let expected_line = format!("pruned the stale trusted key entry for {}", TEST_REPO_ID);
-    assert!(
-        stdout.contains(&expected_line),
-        "the removal is printed at reconcile time and names the pruned id: {stdout}"
-    );
-
-    let trust = TrustStore::load_from_file(&f.repo.join(".git-veil/trust.json")).unwrap();
-    assert!(
-        trust.get_owner_fingerprint(TEST_REPO_ID).is_none(),
-        "the stale entry left by the move is gone"
-    );
-    assert!(
-        trust.get_owner_fingerprint(new_repo_id).is_some(),
-        "the entry matching the configured remote is kept"
-    );
-    assert_eq!(
-        trust.owner_fingerprints.len(),
-        1,
-        "the committed store names exactly the ids the remotes derive"
-    );
-}
-
-#[test]
-fn test_trust_reconcile_keeps_one_entry_per_configured_remote() {
-    let f = Fixture::new("prune-multi");
-    let upstream_id = "fara-mirror+owner@github.com";
-
-    // A second configured remote. The repository is also pushed elsewhere.
-    let s = std::process::Command::new("git")
-        .current_dir(&f.repo.path)
-        .args([
-            "remote",
-            "add",
-            "upstream",
-            "git@github.com:owner/fara-mirror.git",
-        ])
-        .status()
-        .expect("git");
-    assert!(s.success());
-
-    // The committed store records one entry per configured remote.
-    let trust_path = f.repo.join(".git-veil/trust.json");
-    let mut store = TrustStore::load_from_file(&trust_path).unwrap();
-    store.set_owner_fingerprint(upstream_id.to_string(), "ab".repeat(32));
-    store.save_to_file(&trust_path).unwrap();
-
-    cmd_trust(
-        &f.repo.path,
-        TEST_REPO_ID,
-        "origin",
-        &f.key_store.path,
-        false,
-    )
-    .expect("re-trust");
-
-    let store = TrustStore::load_from_file(&trust_path).unwrap();
-    assert!(
-        store.get_owner_fingerprint(TEST_REPO_ID).is_some(),
-        "the origin entry is kept"
-    );
-    assert!(
-        store.get_owner_fingerprint(upstream_id).is_some(),
-        "the upstream entry is kept: a multi-remote repository keeps one entry per remote"
-    );
-    assert_eq!(store.owner_fingerprints.len(), 2);
 }

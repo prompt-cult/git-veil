@@ -4,25 +4,48 @@
 .SH NAME
 git\-veil\-init \- Initialize git\-veil state (.git\-veil/) in the current repository
 .SH SYNOPSIS
-\fBgit\-veil init\fR [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil init\fR [\fB\-\-remote\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIVERIFYING_KEY\fR> 
 .SH DESCRIPTION
 Initialize git\-veil state (.git\-veil/) in the current repository
 .SH OPTIONS
 .TP
+\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+Git remote name
+.TP
 \fB\-q\fR, \fB\-\-quiet\fR
 Suppress the CODEOWNERS suggestion and other non\-error output
 .TP
+\fB\-\-suppress\-codeowners\fR
+Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin
+.TP
+\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it
+.TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIVERIFYING_KEY\fR>
+Path to the repo owner\*(Aqs Ed25519 verifying key file, from outside the repository
 .SH EXTRA
-Run init first: trust, add\-key, add\-file and hide all require the .git\-veil/
-state directory it creates (keyring, trust.json, tracked.json, and the
-committed owner.verifying the owner writes there). init never touches .gitignore \-
-the <name>.secret ciphertext files are meant to be committed, so
-gitignoring them would defeat the fresh\-clone decryptability contract.
+Run init first: add\-key, add\-file and hide all require the .git\-veil/
+state directory it creates (keyring, trust.json, tracked.json). init
+also copies the owner verifying key from VERIFYING_KEY into
+\&.git\-veil/owner.verifying and pins the owner key on this machine, in the
+same possession\-proof ceremony the owner\*(Aqs key always required: the
+verifying key passed in must exactly match the key derived from a seed
+in <key store>/signing\-keys.txt, so only the repo owner can run init. A
+remote (default origin) must be configured; the repository id derived
+from it labels the pin.
+
+VERIFYING_KEY must point OUTSIDE the repository worktree: the trust
+anchor travels in from outside, never through the repository itself.
+
+init never touches .gitignore \- the <name>.secret ciphertext files are
+meant to be committed, so gitignoring them would defeat the fresh\-clone
+decryptability contract.
 
 init refuses to reset a repository that already has established trust;
 remove .git\-veil/ explicitly if you really want a fresh start.
 
 EXAMPLES
-  $ git\-veil init    # create .git\-veil/ in the current git repository
+  $ git\-veil init "$HOME/.git\-veil/owner.verifying"

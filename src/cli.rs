@@ -37,22 +37,46 @@ pub struct Cli {
 pub enum Commands {
     /// Initialize git-veil state (.git-veil/) in the current repository
     #[command(after_long_help = "\
-Run init first: trust, add-key, add-file and hide all require the .git-veil/
-state directory it creates (keyring, trust.json, tracked.json, and the
-committed owner.verifying the owner writes there). init never touches .gitignore -
-the <name>.secret ciphertext files are meant to be committed, so
-gitignoring them would defeat the fresh-clone decryptability contract.
+Run init first: add-key, add-file and hide all require the .git-veil/
+state directory it creates (keyring, trust.json, tracked.json). init
+also copies the owner verifying key from VERIFYING_KEY into
+.git-veil/owner.verifying and pins the owner key on this machine, in the
+same possession-proof ceremony the owner's key always required: the
+verifying key passed in must exactly match the key derived from a seed
+in <key store>/signing-keys.txt, so only the repo owner can run init. A
+remote (default origin) must be configured; the repository id derived
+from it labels the pin.
+
+VERIFYING_KEY must point OUTSIDE the repository worktree: the trust
+anchor travels in from outside, never through the repository itself.
+
+init never touches .gitignore - the <name>.secret ciphertext files are
+meant to be committed, so gitignoring them would defeat the fresh-clone
+decryptability contract.
 
 init refuses to reset a repository that already has established trust;
 remove .git-veil/ explicitly if you really want a fresh start.
 
 EXAMPLES
-  $ git-veil init    # create .git-veil/ in the current git repository
+  $ git-veil init \"$HOME/.git-veil/owner.verifying\"
 ")]
     Init {
+        /// Path to the repo owner's Ed25519 verifying key file, from outside the repository
+        verifying_key: PathBuf,
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
         /// Suppress the CODEOWNERS suggestion and other non-error output
         #[arg(long, short = 'q')]
         quiet: bool,
+        /// Suppress the CODEOWNERS warning for this pinned repository; the suppression is
+        /// recorded in the key store next to the pin
+        #[arg(long)]
+        suppress_codeowners: bool,
+        /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its
+        /// pins are the trust boundary for every repository that uses it.
+        #[arg(long)]
+        key_store: Option<PathBuf>,
     },
 
     /// Import your X25519 private key into the git-veil key store
@@ -167,34 +191,26 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Pin this repository's owner key on this machine (possession proof, or pin-file import)
+    /// Pin this repository's owner key on this machine from an exported pin-file
     #[command(after_long_help = "\
-Pin this repository's owner key on this machine. Two
-pin-creation paths exist, and nothing else:
+Pin this repository's owner key on this machine by importing a pin-file
+produced by git-veil export-pin on a machine that proved possession.
+Three mandatory consistency checks: the pin-file's repo-id must match
+this repository; its verifying key must exactly match the committed
+.git-veil/owner.verifying; and its owner key fingerprint must match the
+owner fingerprint recorded in .git-veil/trust.json. Any mismatch ->
+refusal: one of the two channels is compromised.
 
-1. POSSESSION PROOF (default): git-veil trust <repo_id>. The candidate is
-   the repository's committed .git-veil/owner.verifying (64 hex chars on
-   line 1); the proof is an exact match between that key and the verifying
-   key derived from a seed in <key store>/signing-keys.txt. Match -> pin
-   written. No match -> refusal (exit code 20): pins are created only on
-   machines holding the signing key.
-
-2. IMPORT: git-veil trust --import <pin-file>, where the pin-file was
-   produced by git-veil export-pin on a machine that proved possession.
-   Three mandatory consistency checks: the pin-file's repo-id must match
-   this repository; its verifying key must exactly match the committed
-   .git-veil/owner.verifying; and its owner key fingerprint must match the
-   owner fingerprint recorded in .git-veil/trust.json. Any mismatch ->
-   refusal: one of the two channels is compromised.
+There is no possession-proof form: the repo owner pins at init, and every
+other machine imports.
 
 A pin or trust record in the 16 hex character fingerprint format is
 refused as hostile: every gated command fails until trust is re-established.
 See the fingerprint documentation for the derivation.
 
-Both paths refuse a path inside the repository worktree, so a pin-file
+The pin-file must point OUTSIDE the repository worktree, so a pin-file
 always travels out of band (e.g. ssh) - the same model as known_hosts
-provisioning. The pin lives in the key store, never committed; every
-machine (including the owner's fresh clones) pins for itself.
+provisioning. The pin lives in the key store, never committed.
 
 Trust domain: the key store named by --key-store holds this machine's pins
 for EVERY repository that uses that store, so the store and its pins are
@@ -204,17 +220,12 @@ repositories is not advised; use a separate --key-store per trust domain.
 Requires init first. Typical next step: add-key.
 
 EXAMPLES
-  $ git-veil repo-id                              # get the repo id to pass here
-  $ git-veil trust fara+simbo1905@github.com     # possession proof
   $ git-veil trust --import /tmp/fara.pin        # pin-file from export-pin
 ")]
     Trust {
-        /// Repository ID (e.g., fara+simbo1905@github.com); required unless --import
-        #[arg(required_unless_present = "import")]
-        repo_id: Option<String>,
         /// Import a pin-file produced by git-veil export-pin on a machine holding the signing key
-        #[arg(long, value_name = "PIN_FILE", conflicts_with = "repo_id")]
-        import: Option<PathBuf>,
+        #[arg(long, value_name = "PIN_FILE")]
+        import: PathBuf,
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,

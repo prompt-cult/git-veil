@@ -55,19 +55,33 @@ sharing one store across repositories that do not trust each other.
 ### `init`
 
 ```sh
-git-veil init [-q | --quiet]
+git-veil init <verifying-key> [--remote <name>] [-q | --quiet] [--suppress-codeowners]
+              [--key-store <dir>]
 ```
 
-Initialises git-veil state: a `.git-veil/` directory holding `keyring`,
-`trust.json`, `tracked.json` and, once the owner has run the key recipe,
-`owner.verifying`, the verifying key they all protect. Nothing is
-encrypted yet; `trust`, `add-key`, `add-file` and `hide` all require this
-state.
+Initialises git-veil state and pins the owner key in one command. The
+mandatory `verifying-key` argument is the path to the repo owner's
+Ed25519 verifying key file, passed in from OUTSIDE the repository: init
+creates a `.git-veil/` directory holding `keyring`, `trust.json`,
+`tracked.json` and `owner.verifying` (the passed-in key), then runs the
+pin ceremony the owner's key always required: the passed-in key must
+exactly match the verifying key derived from a seed in the key store's
+`signing-keys.txt`, and the repository id is derived from the remote
+(default `origin`) to label the pin. Only the repo owner can run init.
 
-- `-q`, `--quiet` suppresses the CODEOWNERS suggestion and other
-  non-error output. The suggestion is worth acting on: protect
-  `.git-veil/` with a CODEOWNERS file so trust-anchor
-  changes are review gated on the platform.
+- The verifying key file must live outside the repository worktree. The
+  trust anchor travels in from outside, never through the repository
+  itself. Exit 71 otherwise.
+- The possession proof runs before any state is created: a machine
+  without the matching signing seed refuses (exit 20) and the worktree
+  is untouched. A degenerate duplicate seed store is exit 70.
+- A configured remote is required; the repository id derived from it
+  labels the pin, the committed trust record and the owner fingerprint.
+- `--suppress-codeowners` records the CODEOWNERS warning suppression
+  beside the pin. `-q`, `--quiet` suppresses the CODEOWNERS suggestion
+  and other non-error output. The suggestion is worth acting on: protect
+  `.git-veil/` with a CODEOWNERS file so trust-anchor changes are review
+  gated on the platform.
 - `init` never touches `.gitignore`. The `.secret` ciphertexts are meant
   to be committed, so gitignoring them would defeat the fresh-clone
   decryptability contract.
@@ -75,8 +89,10 @@ state.
   `.git-veil/` explicitly if you really want a fresh start. Exit 70.
 
 ```sh
-$ git-veil init
+$ git-veil init "$HOME/.git-veil/owner.verifying"
 git-veil initialized
+trusted the repository owner key
+pinned this repository owner key on this machine
 suggestion: protect the trust-critical paths with a CODEOWNERS file ...
 ```
 
@@ -171,35 +187,25 @@ Exit codes: 30, 1 (the `--yes` guard, or a corrupt store).
 ### `trust`
 
 ```sh
-git-veil trust <repo_id> [--remote <name>] [--suppress-codeowners]
-             [--key-store <dir>]
 git-veil trust --import <pin-file> [--remote <name>] [--suppress-codeowners]
-             [--key-store <dir>]
+              [--key-store <dir>]
 ```
 
-Pins this repository's owner key on this machine. Exactly two
-paths create a pin.
+Pins this repository's owner key on this machine by importing a pin-file
+produced by [`export-pin`](#export-pin) on a machine that proved
+possession. Three mandatory consistency checks: the pin-file's repo id
+must match the one derived from the remote; its verifying key must
+exactly match the committed `.git-veil/owner.verifying`; and its owner
+key fingerprint must match the fingerprint recorded in
+`.git-veil/trust.json`. Any mismatch is a refusal: one of the two
+channels is compromised. Exit 70.
 
-1. **Possession proof** (default). `trust <repo_id>` reads the committed
-   `.git-veil/owner.verifying` (64 hex characters on line 1) and checks it
-   against the verifying key derived from every seed in
-   `<key store>/signing-keys.txt`. An exact match is the proof that this
-   machine holds the signing key, and the pin is written. No match is a
-   refusal: pins are created only on machines holding the signing key.
-   Exit 20.
-2. **Import.** `trust --import <pin-file>` pins from a file produced by
-   [`export-pin`](#export-pin) on a machine that proved possession. Three
-   mandatory consistency checks: the pin-file's repo id must match the one
-   derived from the remote; its verifying key must exactly match the
-   committed `.git-veil/owner.verifying`; and its owner key fingerprint
-   must match the fingerprint recorded in `.git-veil/trust.json`. Any
-   mismatch is a refusal: one of the two channels is compromised. Exit 70.
-
-Both paths refuse a pin-file path inside the repository worktree (exit
-71), so the file always travels out of band, the same model as
+There is no possession-proof form: the repo owner pins at
+[init](#init), and every other machine, including the owner's fresh
+clones, imports. The pin-file must live outside the repository worktree
+(exit 71), so it always travels out of band, the same model as
 `known_hosts` provisioning. The pin lives in the key store, never
-committed; every machine, including the owner's fresh clones, pins for
-itself. A pin or trust record in the 16-hex-character fingerprint
+committed. A pin or trust record in the 16-hex-character fingerprint
 format is refused as hostile until trust is re-established (exit 70).
 
 `--suppress-codeowners` records the CODEOWNERS warning's suppression in
@@ -207,23 +213,18 @@ the key store next to the pin, for repositories that genuinely cannot
 carry a CODEOWNERS file.
 
 Requires [init](#init) first: it creates the `.git-veil/` directory that
-holds the verifying key the proof reads, and every trust command must run
-at the repository worktree root. The verifying key lives at
-`.git-veil/owner.verifying`, committed. A root-level `owner.verifying` is
-not read: the verifying key is read only from
-`.git-veil/owner.verifying`. Typical next step: [add-key](#add-key).
+holds the committed verifying key the import checks, and every trust
+command must run at the repository worktree root. The verifying key
+lives at `.git-veil/owner.verifying`, committed; a root-level
+`owner.verifying` is not read. Typical next step: [add-key](#add-key).
 
 ```sh
-$ git-veil repo-id                               # get the repo id to pass here
-$ git-veil trust demo+example@github.com       # possession proof
 $ git-veil trust --import ~/demo.pin           # pin-file from export-pin
 ```
 
-Exit codes: 13 (repo id does not match the remote), 20 (no matching
-signing seed), 62 (a seed line could not be parsed), 70 (import checks
-failed, ambiguous store, a trust record in the 16-hex-character
-fingerprint format is refused, missing or unreadable verifying key), 71
-(pin-file inside the repository), 30.
+Exit codes: 70 (import checks failed, a trust record in the
+16-hex-character fingerprint format is refused), 71 (pin-file inside the
+repository), 30.
 
 ### `export-pin`
 

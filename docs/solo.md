@@ -25,78 +25,72 @@ Rust `rage` library to work with the keys.
 The examples use the remote `git@github.com:example/demo.git`; substitute
 your own remote and emails throughout.
 
-## 1. Create your keys and back them up
+## 1. One-time repo owner key creation
 
 Two keys, two jobs. The X25519 private key (an `age` identity, made with the
-`age` tooling) encrypts and decrypts secrets. The Ed25519 signing key signs
-the keyring, so a rewritten keyring is caught on this machine. The signing
-key is not an `age` key, and no `age` tool makes it. You make it with
-`openssl` in the next block. Neither private half is ever committed.
-
-The block below writes the verifying key into `.git-veil/`, so run
-`git-veil init` first if you have not (step 2 creates the directory; the
-`mkdir -p` here makes the recipe order-free). Run everything at the
-repository worktree root.
+`age` tooling) encrypts and decrypts secrets. The Ed25519 repo owner signing key will sign the keyring of public age keys that will be committed into the repo. 
 
 ```sh
 umask 077   # everything created below stays private to you
 
-# The X25519 private key, for encryption and decryption.
-age-keygen -o my-age-identity.txt
-# Output includes:
-#   # public key: age1xxxx    your X25519 public key. Share it.
-#   AGE-SECRET-KEY-1...      your X25519 private key. Keep it secret.
+mkdir -p "$HOME/.git-veil/" # you SHOULD backup your keys that live here
 
-# The Ed25519 signing key, for signing the keyring. Made with openssl, not age.
+# An age identiy that has a public and private key for file encryption
+age-keygen -o "$HOME/.git-veil/my-age-identity.txt"
+
+# The repo owner signing key used to signing the keyring. 
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key, the public half of the signing key. Into .git-veil/,
-# committed with the rest of the git-veil state.
-mkdir -p .git-veil
+# The public part that will be commited into each repo. 
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
+  | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/owner.verifying"
 ```
 
-What happened. `signing-keys.txt` holds the 64-hex-character Ed25519 seed.
-It is the last 32 bytes of the key's DER encoding. `.git-veil/owner.verifying`
-holds the matching public key, also as hex.
+What happened? 
+- **Private** `$HOME/.git-veil/my-age-identity.txt` holds an `age` file encryption key. 
+- **Private** `$HOME/.git-veil/signing-keys.txt` holds a repo owner signing key 
+- `$HOME/.git-veil/owner.verifying` holds the matching public key. 
 
-Back both secrets up now. The backup is the `AGE-SECRET-KEY-1...` line from
-`my-age-identity.txt`, plus `ed25519.pem` and `signing-keys.txt`. The last
-two hold the same signing secret in two forms. A password-manager note
-holding the strings is a complete backup. Lose the X25519 private key and
-every ciphertext is unrecoverable. Lose the signing key and you cannot
-re-sign the keyring. You would have to re-key from scratch.
-
-`.git-veil/owner.verifying` is public. Commit it. It is the candidate that
-`trust` proves your seed against.
+You should backup the private keys such as add them into the Apple password application. 
 
 ## 2. Initialize, import, identify
 
 ```sh
-$ git-veil init
+$ git-veil init "$HOME/.git-veil/owner.verifying"
 git-veil initialized
+trusted the repository owner key
+pinned this repository owner key on this machine
 suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
 add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
 .git-veil/ @the-repository-owner
-$ git-veil import my-age-identity.txt
+
+$ git-veil import "$HOME/.git-veil/my-age-identity.txt"
 + imported: age1xxxx
 Summary: 1 imported, 0 skipped
+
 $ git-veil repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
+
 $ git-veil whoami
 Your principal: example@github.com
 ```
 
-What happened. `.git-veil/` now holds `keyring`, `trust.json`,
-`tracked.json` and, once you have run the step 1 recipe, `owner.verifying`,
-the verifying key they all protect. Your X25519 private key lives in the
-per-machine key store, never committed. The behaviour and options of
-`init`, `import`, `repo-id` and `whoami` are in
+What happened. `init` copied your verifying key into `.git-veil/
+owner.verifying` and pinned it on this machine: the key you passed in
+matched the verifying key derived from the signing seed you created in
+step 1, which is the proof that this is your repository. `.git-veil/` now
+holds `keyring`, `trust.json`, `tracked.json` and `owner.verifying`.
+Every gated command checks the keyring signature against this pin first
+and fails closed without it. A fresh clone, even yours, has no pin: it
+imports a pin-file you export with `git-veil export-pin` (see
+[joining.md](joining.md)), or you re-initialize it from scratch.
+Commit `.git-veil/` alongside the ciphertexts. Your X25519 private key
+lives in the per-machine key store, never committed. The behaviour and
+options of `init`, `import`, `repo-id` and `whoami` are in
 [Commands](commands.md#setup).
 
 You should add or edit a CODEOWNERS file that protects the `.git-veil/`
@@ -106,28 +100,7 @@ anchor becomes a review-gated pull request instead of a silent push. The
 file goes at the repository root, or under the platform directory
 (`.github/CODEOWNERS` on GitHub).
 
-## 3. Trust your own key (possession proof)
-
-```sh
-$ git-veil trust demo+example@github.com
-trusted the repository owner key
-pinned this repository owner key on this machine
-warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
-```
-
-What happened. `trust` proved possession of your signing key and
-pinned the owner fingerprint on this machine, outside the repository. The
-fixed-derivation owner fingerprint was recorded in `.git-veil/trust.json`.
-Commit that file alongside the verifying key. The mechanics of the proof
-are in [Commands - trust](commands.md#trust).
-
-Every gated command checks the keyring signature against this pin first and
-fails closed without it. A fresh clone, even yours, has no pin until you
-run `trust` there again. A machine without the signing seed cannot pin
-directly at all. It imports a pin-file you export with `git-veil export-pin`.
-See [joining.md](joining.md) for that flow.
-
-## 4. Put yourself in the keyring
+## 3. Put yourself in the keyring
 
 ```sh
 $ age-keygen -y my-age-identity.txt
@@ -153,7 +126,7 @@ repository nothing is hidden yet, so the first `hide` of `.env` encrypts
 to the current ring from the start, and you can leave the pass
 undelivered. See [Commands - rotate](commands.md#rotate).
 
-## 5. Track, hide, commit
+## 4. Track, hide, commit
 
 ```sh
 $ printf 'API_KEY=hunter2\n' > .env
@@ -194,7 +167,7 @@ Gitignore the plaintext names, such as `.env`. Commit the `.secret` files and
 `.git-veil/`. Never gitignore `*.secret`. That would defeat the fresh-clone
 decryptability contract.
 
-## 6. The daily cycle
+## 5. The daily cycle
 
 Edit, check, hide, commit, reveal. Name the file you are working with:
 
@@ -257,7 +230,7 @@ EOF
 chmod +x .git/hooks/pre-commit
 ```
 
-## 7. A build or deployment script reveals on its own key
+## 6. A build or deployment script reveals on its own key
 
 The ciphertexts are committed, so a clone on a build box already carries
 every secret. Give the box its own X25519 private key and its own pin:
@@ -287,7 +260,7 @@ git-veil reveal .env
 `cat` and `reveal` are never gated by the allowance check. Decryption
 needs only keyring membership, so no `allow` step is needed on the box.
 
-## 8. Health checks
+## 7. Health checks
 
 ```sh
 git-veil verify-keys      # exit 0 only if the signature matches your pin

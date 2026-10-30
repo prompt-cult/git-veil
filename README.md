@@ -37,10 +37,12 @@ Each repository has an ID derived from its git remote push URL. The remote
 Run `git-veil repo-id` to print your repository's ID.
 
 The repository owner's signing key is pinned on each machine. A repository
-can never supply its own trust anchor. The only way to create a pin directly
-is a possession proof. `git-veil trust <repo-id>` checks the repository's
-committed `.git-veil/owner.verifying` against the verifying key derived from
-a seed in your local signing key store. If no seed matches, trust refuses.
+can never supply its own trust anchor. The only command that pins by
+possession proof is `git-veil init <verifying-key>`: it checks the passed-in
+verifying key file against the verifying key derived from a seed in the
+local signing key store, copies it to the committed
+`.git-veil/owner.verifying`, and pins. If no seed matches, init refuses
+before anything is written.
 
 Machines without the signing key get their pin by import. A machine that
 holds a seed runs `git-veil export-pin <repo-id> --output <pin-file>`. The
@@ -96,10 +98,9 @@ command needs a key you do not have, it tells you how to make one and how to
 back it up.
 
 ```sh
-git-veil init                                   # create .git-veil/ state
+git-veil init ~/.git-veil/owner.verifying        # create .git-veil/ state, pin the owner key
 git-veil import my-age-identity.txt             # import your X25519 private key into the local key store
 git-veil repo-id                                # print the repository ID
-git-veil trust demo+example@github.com          # pin the owner key by possession proof
 git-veil export age1xxxx                        # print your public key string
 git-veil add-key example@github.com age1xxxx    # paste the string, adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
@@ -222,8 +223,9 @@ skipped.
 
 The repository owner also needs an Ed25519 keypair for signing the keyring.
 This key is not an `age` key, and no `age` tool makes it. You make it with
-`openssl`, and you back it up. Run this in the repository root, after
-`git-veil init` has created the `.git-veil/` directory:
+`openssl`, and you back it up. Everything lives in your key store, outside
+any repository; `git-veil init <verifying-key>` copies the verifying key
+into a repository when you initialize it:
 
 ```sh
 umask 077
@@ -233,10 +235,10 @@ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key, into the repository's .git-veil/ directory. Commit it.
-# git-veil trust checks your seed against it.
+# The verifying key, in your key store. Commit the copy init made, never this.
+# git-veil init checks your seed against it before it writes anything.
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
+  | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/owner.verifying"
 ```
 
 The signing-key file format is one 64-hex-character Ed25519 seed per line in
