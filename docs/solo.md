@@ -52,11 +52,8 @@ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
-# The verifying key, the public half of the signing key. Into .git-veil/,
-# committed with the rest of the git-veil state.
-mkdir -p .git-veil
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
+  | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/owner.verifying"
 ```
 
 What happened. `signing-keys.txt` holds the 64-hex-character Ed25519 seed.
@@ -78,16 +75,21 @@ re-sign the keyring. You would have to re-key from scratch.
 ```sh
 $ git-veil init
 git-veil initialized
-suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
-add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
-.git-veil/ @the-repository-owner
+
+# Add the repo owner verifying key
+mkdir -p .git-veil
+openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
+  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
+
 $ git-veil import my-age-identity.txt
 + imported: age1xxxx
 Summary: 1 imported, 0 skipped
+
 $ git-veil repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
+
 $ git-veil whoami
 Your principal: example@github.com
 ```
