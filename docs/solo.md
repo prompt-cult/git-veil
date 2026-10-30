@@ -25,56 +25,41 @@ Rust `rage` library to work with the keys.
 The examples use the remote `git@github.com:example/demo.git`; substitute
 your own remote and emails throughout.
 
-## 1. Create your keys and back them up
+## 1. One-time repo owner key creation
 
 Two keys, two jobs. The X25519 private key (an `age` identity, made with the
-`age` tooling) encrypts and decrypts secrets. The Ed25519 signing key signs
-the keyring, so a rewritten keyring is caught on this machine. The signing
-key is not an `age` key, and no `age` tool makes it. You make it with
-`openssl` in the next block. Neither private half is ever committed.
-
-The block below writes the verifying key into `.git-veil/`, so run
-`git-veil init` first if you have not (step 2 creates the directory; the
-`mkdir -p` here makes the recipe order-free). Run everything at the
-repository worktree root.
+`age` tooling) encrypts and decrypts secrets. The Ed25519 repo owner signing key will sign the keyring of public age keys that will be committed into the repo. 
 
 ```sh
 umask 077   # everything created below stays private to you
 
-# The X25519 private key, for encryption and decryption.
-age-keygen -o my-age-identity.txt
-# Output includes:
-#   # public key: age1xxxx    your X25519 public key. Share it.
-#   AGE-SECRET-KEY-1...      your X25519 private key. Keep it secret.
+mkdir -p "$HOME/.git-veil/" # you SHOULD backup your keys that live here
 
-# The Ed25519 signing key, for signing the keyring. Made with openssl, not age.
+# An age identiy that has a public and private key for file encryption
+age-keygen -o "$HOME/.git-veil/my-age-identity.txt"
+
+# The repo owner signing key used to signing the keyring. 
 openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 
+# The public part that will be commited into each repo. 
 openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/owner.verifying"
 ```
 
-What happened. `signing-keys.txt` holds the 64-hex-character Ed25519 seed.
-It is the last 32 bytes of the key's DER encoding. `.git-veil/owner.verifying`
-holds the matching public key, also as hex.
+What happened? 
+- **Private** `$HOME/.git-veil/my-age-identity.txt` holds an `age` file encryption key. 
+- **Private** `$HOME/.git-veil/signing-keys.txt` holds a repo owner signing key 
+- `$HOME/.git-veil/owner.verifying` holds the matching public key. 
 
-Back both secrets up now. The backup is the `AGE-SECRET-KEY-1...` line from
-`my-age-identity.txt`, plus `ed25519.pem` and `signing-keys.txt`. The last
-two hold the same signing secret in two forms. A password-manager note
-holding the strings is a complete backup. Lose the X25519 private key and
-every ciphertext is unrecoverable. Lose the signing key and you cannot
-re-sign the keyring. You would have to re-key from scratch.
-
-`.git-veil/owner.verifying` is public. Commit it. It is the candidate that
-`trust` proves your seed against.
+You should backup the private keys such as add them into the Apple password application. 
 
 ## 2. Initialize, import, identify
 
 ```sh
-$ git-veil init
-git-veil initialized
+$ git-veil init "$HOME/.git-veil/owner.verifying"
+git-veil initialized 
 
 # Add the repo owner verifying key
 mkdir -p .git-veil

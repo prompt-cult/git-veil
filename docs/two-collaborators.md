@@ -14,31 +14,9 @@ tool; see [Commands - export](commands.md#export).
 
 ## Part 1 - the owner sets the repository up
 
-Steps 1–5 of [solo.md](solo.md) cover this in detail. The shape is:
+The repo owner must follow the solo steps for "One-time repo owner key creation". 
 
-```sh
-# One-time key creation. Back up the private halves.
-age-keygen -o my-age-identity.txt
-umask 077
-openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
-openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
-  | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
-
-# The verifying key, into the repository's .git-veil/ state directory.
-git-veil init
-openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
-
-git-veil import my-age-identity.txt
-git-veil trust demo+example@github.com  # possession proof. The seed must match .git-veil/owner.verifying
-git-veil export age1xxxx
-git-veil add-key example@github.com age1xxxx  # the owner must be in the keyring too
-git-veil add-file .env && git-veil hide .env
-git add .gitignore .git-veil .env.secret && git commit -m "Add encrypted secrets"
-git push
-```
-
-## Part 2 - the key handoff (the only manual exchange)
+## Part 2 - the collaborator key handoff (the only manual exchange)
 
 Public keys travel as plain text over any channel you
 both trust. Alice creates her X25519 private key (`age` identity)
