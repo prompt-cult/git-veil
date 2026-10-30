@@ -165,9 +165,19 @@ pub(crate) fn ensure_path_outside_repo(repo_root: &Path, path: &Path) -> Result<
     let repo_canonical = repo_root
         .canonicalize()
         .context("Failed to resolve repository root")?;
+    // A relative path is relative to the process working directory;
+    // absolute-ise before the walk so the canonicalisation below always
+    // has an existing ancestor to resolve against.
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("Failed to resolve the working directory")?
+            .join(path)
+    };
     // The path may not exist yet (export writes it): canonicalise the
     // deepest existing ancestor, then re-attach the remaining components.
-    let mut probe = path.to_path_buf();
+    let mut probe = path;
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     while !probe.exists() {
         match probe.parent() {

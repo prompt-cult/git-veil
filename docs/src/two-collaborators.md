@@ -64,10 +64,8 @@ The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
 
 ```sh
-$ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
-pin-file written to /tmp/demo.pin
-owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
-import it on the target machine with: git-veil trust --import /tmp/demo.pin
+$ git-veil export-pin demo+example@github.com > /tmp/demo.pin
+owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de (stderr)
 ```
 
 The owner transfers `/tmp/demo.pin` to Alice out of band, for example with

@@ -452,7 +452,7 @@ fn fix_committed_ciphertext_needs_no_allowance() {
     cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &pin_file,
+        Some(&pin_file),
         "origin",
         &f.key_store.path,
     )

@@ -30,10 +30,8 @@ can only pin from a pin-file the owner exported. The owner runs this on
 their machine, which holds the signing key:
 
 ```sh
-$ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
-pin-file written to /tmp/demo.pin
-owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
-import it on the target machine with: git-veil trust --import /tmp/demo.pin
+$ git-veil export-pin demo+example@github.com > /tmp/demo.pin
+owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de (stderr)
 $ git-veil add-key newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.

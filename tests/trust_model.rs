@@ -295,7 +295,7 @@ fn test_export_pin_wrong_repo_id_refuses() {
     let err = cmd_export_pin(
         &repo.path,
         "wrong+id@github.com",
-        &out,
+        Some(&out),
         "origin",
         &key_store.path,
     )
@@ -361,7 +361,7 @@ fn test_export_pin_without_matching_seed_refuses() {
     let err = cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &out,
+        Some(&out),
         "origin",
         &other_store.path,
     )
@@ -381,7 +381,7 @@ fn test_export_pin_inside_repo_refuses() {
     let err = cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &out,
+        Some(&out),
         "origin",
         &f.key_store.path,
     )
@@ -399,7 +399,7 @@ fn test_export_pin_writes_importable_pin_file() {
     cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &out,
+        Some(&out),
         "origin",
         &f.key_store.path,
     )
@@ -455,7 +455,7 @@ fn test_import_happy_path_on_storeless_machine() {
     cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &pin_file_path,
+        Some(&pin_file_path),
         "origin",
         &f.key_store.path,
     )
@@ -570,7 +570,7 @@ fn test_import_fingerprint_mismatch_refuses() {
     cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &pin_file_path,
+        Some(&pin_file_path),
         "origin",
         &f.key_store.path,
     )
@@ -611,7 +611,7 @@ fn test_import_missing_metadata_fingerprint_refuses() {
     cmd_export_pin(
         &f.repo.path,
         TEST_REPO_ID,
-        &pin_file_path,
+        Some(&pin_file_path),
         "origin",
         &f.key_store.path,
     )
@@ -641,6 +641,78 @@ fn test_import_missing_metadata_fingerprint_refuses() {
     assert!(TrustPinStore::read_pin(&fresh_store.path, TEST_REPO_ID)
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn test_export_pin_without_output_prints_only_the_artifact_to_stdout() {
+    let f = Fixture::new("export-stdout");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .current_dir(&f.repo.path)
+        .args([
+            "--dangerously-skip-permissions-check",
+            "export-pin",
+            TEST_REPO_ID,
+            "--key-store",
+            f.key_store.path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run git-veil export-pin");
+    assert!(
+        run.status.success(),
+        "export-pin runs: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    // stdout carries the pin artifact alone, byte-exact, so a redirect
+    // such as `> demo.pin` produces a file the import accepts.
+    let stdout = String::from_utf8(run.stdout).expect("stdout is utf8");
+    let expected = format!(
+        "repo-id: {}\nverifying-key: {}\n",
+        TEST_REPO_ID, f.verifying_hex
+    );
+    assert_eq!(
+        stdout, expected,
+        "stdout must be the pin artifact and nothing else"
+    );
+
+    // The verification token and the handoff hint are stderr chatter.
+    let stderr = String::from_utf8(run.stderr).expect("stderr is utf8");
+    let fingerprint = owner_key_fingerprint(TEST_REPO_ID, &f.signing_key.verifying_key());
+    assert!(
+        stderr.contains(&format!("owner key fingerprint: {}", fingerprint)),
+        "the verification token is on stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("git-veil trust --import"),
+        "the hint names the import command: {stderr}"
+    );
+    assert!(
+        stderr.contains("out of the repository worktree"),
+        "stderr reminds the operator about worktree hygiene: {stderr}"
+    );
+}
+
+#[test]
+fn test_export_pin_output_inside_the_worktree_refuses() {
+    let f = Fixture::new("export-in-repo");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .current_dir(&f.repo.path)
+        .args([
+            "--dangerously-skip-permissions-check",
+            "export-pin",
+            TEST_REPO_ID,
+            "--output",
+            "stolen.pin",
+            "--key-store",
+            f.key_store.path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run git-veil export-pin");
+    assert_eq!(run.status.code(), Some(71), "exit 71 inside the worktree");
+    assert!(
+        !f.repo.path.join("stolen.pin").exists(),
+        "no pin may land in the worktree"
+    );
 }
 
 // ---------------------------------------------------------------------------

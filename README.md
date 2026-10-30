@@ -48,10 +48,11 @@ local signing key store, copies it to the committed
 before anything is written.
 
 Machines without the signing key get their pin by import. A machine that
-holds a seed runs `git-veil export-pin <repo-id> --output <pin-file>`. The
-pin-file travels out of band, never through the repository. The target
-machine runs `git-veil trust --import <pin-file>`. Three consistency checks
-tie the pin-file to the repository's committed key and metadata.
+holds a seed runs `git-veil export-pin <repo-id>`: the pin is printed to
+stdout, artifact alone, to pipe straight to the target machine. The pin
+travels out of band, never through the repository. The target machine
+runs `git-veil trust --import <pin-file>`. Three consistency checks
+tie the pin to the repository's committed key and metadata.
 
 The pin lives in the local key store, outside the repository. It is never
 committed, so every machine pins for itself.
@@ -269,7 +270,7 @@ the workflow differ. One payoff is a smaller binary.
 | `export`         | Export an X25519 public key from the local key store                    |
 | `forget`         | Delete a key from the local key store (destructive, local-only)         |
 | `trust`          | Pin the repository owner's key by possession proof, or import a pin-file (per machine) |
-| `export-pin`     | Export this repository's pin-file for import on a machine without the signing key |
+| `export-pin`     | Print this repository's pin (stdout, `--output` optional) for import on a machine without the signing key |
 | `add-key`        | Add a collaborator's public key to the keyring and re-sign it           |
 | `remove-key`     | Remove a collaborator from the keyring and re-sign it                   |
 | `add-file`       | Track files for encryption (auto-gitignores plaintext names; records the allowance on this machine) |

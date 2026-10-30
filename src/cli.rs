@@ -239,39 +239,48 @@ EXAMPLES
         key_store: Option<PathBuf>,
     },
 
-    /// Export this repository's pin-file for import on another machine
+    /// Export this repository's pin for import on another machine
     #[command(name = "export-pin")]
     #[command(after_long_help = "\
-Writes this repository's pin-file for import on a machine WITHOUT the
-signing key (which runs git-veil trust --import <pin-file>). Export
-requires the same possession proof as trust: an exact match between the
-repository's committed .git-veil/owner.verifying and the verifying key
-derived from a seed in <key store>/signing-keys.txt. A machine without the
-matching seed cannot export at all - pins originate only from machines
-holding the signing key; store-less machines are consumers, never producers.
+Prints this repository's pin for import on a machine WITHOUT the signing
+key (which runs git-veil trust --import <pin-file>). Export requires the
+same possession proof as trust: an exact match between the repository's
+committed .git-veil/owner.verifying and a verifying key derived from a
+seed in <key store>/signing-keys.txt. A machine without the matching seed
+cannot export at all - pins originate only from machines holding the
+signing key; store-less machines are consumers, never producers.
 
---output must point OUTSIDE the repository worktree: a committed pin-file
-would be exactly the self-supplied anchor the pin model exists to
-prevent. Transfer the file out of band (e.g. ssh); its integrity rides
-the transport, the same model as known_hosts provisioning.
+The pin itself is public material, printed to stdout: the repository id
+and the owner verifying key. Pipe it straight to the target machine, the
+same model as provisioning known_hosts:
 
-The printed owner key fingerprint is the human out-of-band verification
-token: read it to the importing machine's operator and have them compare
-it against the repository's committed .git-veil/trust.json. It is the
-single documented derivation with the repository id as the label, so it
-is reproducible with stock OS tools; see the fingerprint documentation.
+  $ git-veil export-pin fara+simbo1905@github.com | ssh box 'cat > fara.pin'
+  $ git-veil trust --import fara.pin            # on the target machine
+
+--output writes it to a file instead. The destination must be OUTSIDE the
+repository worktree: a committed pin would be exactly the self-supplied
+anchor the pin model exists to prevent. Keep stdout pins out of the
+worktree the same way.
+
+The owner key fingerprint, on stderr, is the human out-of-band
+verification token: read it to the importing machine's operator and have
+them compare it against the repository's committed .git-veil/trust.json.
+It is the single documented derivation with the repository id as the
+label, so it is reproducible with stock OS tools; see the fingerprint
+documentation.
 
 EXAMPLES
+  $ git-veil export-pin fara+simbo1905@github.com > fara.pin   # artifact only on stdout
+  $ git-veil export-pin fara+simbo1905@github.com | ssh box 'cat > fara.pin'
   $ git-veil export-pin fara+simbo1905@github.com --output /tmp/fara.pin
-  $ scp /tmp/fara.pin box:fara.pin               # out of band
   $ git-veil trust --import fara.pin            # on the target machine
 ")]
     ExportPin {
         /// Repository ID (e.g., fara+simbo1905@github.com)
         repo_id: String,
-        /// Pin-file destination - must be OUTSIDE the repository worktree
+        /// Write the pin to a file instead of stdout - must be OUTSIDE the repository worktree
         #[arg(long)]
-        output: PathBuf,
+        output: Option<PathBuf>,
         /// Git remote name
         #[arg(long, default_value = "origin")]
         remote: String,

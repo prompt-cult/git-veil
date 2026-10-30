@@ -229,29 +229,38 @@ repository), 30.
 ### `export-pin`
 
 ```sh
-git-veil export-pin <repo_id> --output <pin-file> [--remote <name>]
-                   [--key-store <dir>]
+git-veil export-pin <repo_id> > <pin-file>     # stdout, pipe anywhere
+git-veil export-pin <repo_id> [--output <pin-file>] [--remote <name>]
+                                         [--key-store <dir>]
 ```
 
-Writes this repository's pin-file for import on a machine without the
-signing key. The same possession proof as `trust` is required: a machine
-without the matching seed cannot export at all. Store-less machines are
-consumers of pins, never producers.
+Prints this repository's pin for import on a machine without the signing
+key. The same possession proof as `trust` is required: a machine without
+the matching seed cannot export at all. Store-less machines are consumers
+of pins, never producers.
 
-- `--output` must point outside the repository worktree. Exit 71
-  otherwise: a committed pin-file would be exactly the self-supplied
-  anchor the pin model exists to prevent.
-- The command prints the owner key fingerprint. That fingerprint is the
-  human out-of-band verification token: read it to the importing
-  machine's operator and have them compare it with the fingerprint
-  recorded in the committed `.git-veil/trust.json` before importing.
+The pin is public material - the repository id and the owner verifying
+key, the same content `.git-veil/owner.verifying` commits. So the pin
+goes to stdout, artifact alone: read it, copy it, or pipe it straight to
+the target machine over ssh. Redirect it somewhere else only with intent,
+and never into the repository worktree.
+
+- `--output` writes the pin to a file instead. The destination must
+  point outside the repository worktree; exit 71 otherwise: a committed
+  pin-file would be exactly the self-supplied anchor the pin model
+  exists to prevent.
+- The owner key fingerprint is printed on stderr - chatter never shares
+  the artifact's stdout, so a redirect captures the pin alone. The
+  fingerprint is the human out-of-band verification token: read it to
+  the importing machine's operator and have them compare it with the
+  fingerprint recorded in the committed `.git-veil/trust.json` before
+  importing.
 
 ```sh
-$ git-veil export-pin demo+example@github.com --output /tmp/demo.pin
-pin-file written to /tmp/demo.pin
-owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de
-import it on the target machine with: git-veil trust --import /tmp/demo.pin
-$ scp /tmp/demo.pin box:demo.pin               # out of band
+$ git-veil export-pin demo+example@github.com > /tmp/demo.pin
+owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de (on stderr)
+$ git-veil export-pin demo+example@github.com | ssh box 'cat > demo.pin'
+$ git-veil trust --import demo.pin             # on the box
 ```
 
 Exit codes: 20, 71, 30.
