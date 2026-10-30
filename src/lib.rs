@@ -31,7 +31,7 @@ pub use allowance::{allowance_record_key, AllowanceStore};
 pub use codeowners::{
     covers_trust_critical_paths, find as find_codeowners, is_suppressed as codeowners_suppressed,
     record_suppression as record_codeowners_suppression, suggestion_text as codeowners_suggestion,
-    warning_text as codeowners_warning,
+    warning_text as codeowners_warning, CODEOWNERS_LOCATIONS,
 };
 pub use commands::add_file::cmd_add_file;
 pub use commands::add_key::cmd_add_key;

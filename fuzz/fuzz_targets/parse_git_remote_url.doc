@@ -1,0 +1,4 @@
+//! Attacks configured git remote URLs with random data: the strings read
+//! out of git config to derive repository identity. Every push to main
+//! runs this target in the Fuzz Smoke job at
+//! .github/workflows/fuzz-smoke.yml; this file is the target's only home.

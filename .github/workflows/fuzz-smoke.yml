@@ -1,3 +1,9 @@
+# Fuzz Smoke: blanket-fuzzes every attacker-controlled parse surface on
+# each push to main. The targets, what each one attacks, and the oracles
+# it asserts live in fuzz/fuzz_targets/*.rs - one file per target, which
+# is where to look for more. Committed seed corpora live in
+# fuzz/corpus/<target>/.
+
 name: Fuzz Smoke
 
 on:
@@ -17,7 +23,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [keyring_parse, parse_git_remote_url]
+        target:
+          - keyring_parse
+          - parse_git_remote_url
+          - trust_store_load
+          - sanitize_repo_id
+          - tracked_files_load
+          - pin_file_parse
+          - codeowners_parse
+          - verifying_key_parse
+          - x25519_key_parse
 
     steps:
       - name: Checkout code
@@ -28,8 +43,8 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      # Version pinned to match fuzz/README.md. cargo-fuzz 0.13.2 has no
-      # config-file support, so libFuzzer flags are passed per invocation.
+      # cargo-fuzz has no config-file support, so libFuzzer flags are
+      # passed per invocation.
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
 

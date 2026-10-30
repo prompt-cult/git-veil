@@ -1,11 +1,17 @@
+//! Attacks repository ids, derived from git remotes before they become
+//! per-machine pin-file names, with random data. Every push to main runs
+//! this target in the Fuzz Smoke job at
+//! .github/workflows/fuzz-smoke.yml; this file is the target's only home.
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
 use git_veil::TrustPinStore;
+use libfuzzer_sys::fuzz_target;
 use std::path::Path;
 
 fuzz_target!(|data: &[u8]| {
-    let Ok(s) = std::str::from_utf8(data) else { return };
+    let Ok(s) = std::str::from_utf8(data) else {
+        return;
+    };
 
     let sanitized = TrustPinStore::sanitize_repo_id(s);
     // filename-escape guard: the output is a safe single path component

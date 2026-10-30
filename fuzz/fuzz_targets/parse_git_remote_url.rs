@@ -1,18 +1,28 @@
+//! Attacks configured git remote URLs with random data: the strings read
+//! out of git config to derive repository identity. Every push to main
+//! runs this target in the Fuzz Smoke job at
+//! .github/workflows/fuzz-smoke.yml; this file is the target's only home.
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
 use git_veil::{derive_repo_id, parse_git_remote_url};
+use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    let Ok(s) = std::str::from_utf8(data) else { return };
+    let Ok(s) = std::str::from_utf8(data) else {
+        return;
+    };
 
     match parse_git_remote_url(s) {
         Ok((repo, user, service)) => {
             // normalize guarantee: all three components are lowercase, and
             // none of them is empty or carries userinfo/credential material
             assert!(!repo.is_empty() && !user.is_empty() && !service.is_empty());
-            assert!(!repo.contains(['@', ':']) && !user.contains(['@', ':']) && !service.contains(['@', ':']),
-                "no credential material may leak into the identity components");
+            assert!(
+                !repo.contains(['@', ':'])
+                    && !user.contains(['@', ':'])
+                    && !service.contains(['@', ':']),
+                "no credential material may leak into the identity components"
+            );
             for c in repo.chars().chain(user.chars()).chain(service.chars()) {
                 assert!(
                     !c.is_ascii_uppercase(),
@@ -25,7 +35,11 @@ fuzz_target!(|data: &[u8]| {
             // so there is no accidental round-trip confusion
             let repo_id = derive_repo_id(s).expect("derive_repo_id must agree with parse");
             assert_eq!(repo_id, format!("{repo}+{user}@{service}"));
-            assert_eq!(derive_repo_id(s).unwrap(), repo_id, "derive must be deterministic");
+            assert_eq!(
+                derive_repo_id(s).unwrap(),
+                repo_id,
+                "derive must be deterministic"
+            );
             assert!(
                 parse_git_remote_url(&repo_id).is_err(),
                 "the derived repo_id must not re-parse as a remote URL"

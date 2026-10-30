@@ -1,0 +1,4 @@
+//! Attacks repository ids, derived from git remotes before they become
+//! per-machine pin-file names, with random data. Every push to main runs
+//! this target in the Fuzz Smoke job at
+//! .github/workflows/fuzz-smoke.yml; this file is the target's only home.

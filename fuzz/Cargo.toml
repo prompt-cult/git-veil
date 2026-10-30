@@ -48,3 +48,31 @@ path = "fuzz_targets/tracked_files_load.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "pin_file_parse"
+path = "fuzz_targets/pin_file_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "codeowners_parse"
+path = "fuzz_targets/codeowners_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "verifying_key_parse"
+path = "fuzz_targets/verifying_key_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "x25519_key_parse"
+path = "fuzz_targets/x25519_key_parse.rs"
+test = false
+doc = false
+bench = false

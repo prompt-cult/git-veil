@@ -1,11 +1,18 @@
+//! Attacks the committed tracked-file manifest (.git-veil/tracked.json)
+//! and the tracked paths it names with random data: repo content an
+//! attacker can substitute. Every push to main runs this target in the
+//! Fuzz Smoke job at .github/workflows/fuzz-smoke.yml; this file is the
+//! target's only home.
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
 use git_veil::{validate_tracked_path, TrackedFiles};
+use libfuzzer_sys::fuzz_target;
 use std::path::PathBuf;
 
 fuzz_target!(|data: &[u8]| {
-    let Ok(s) = std::str::from_utf8(data) else { return };
+    let Ok(s) = std::str::from_utf8(data) else {
+        return;
+    };
 
     // direct path fuzzing: validate_tracked_path must never panic and must
     // confine anything it accepts under the repo root
