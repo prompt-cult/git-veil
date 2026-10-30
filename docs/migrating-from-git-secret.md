@@ -104,28 +104,27 @@ The owner, in the repo:
 
 ```sh
 $ cargo build --release          # binary: target/release/git-veil
-$ git-veil init
-git-veil initialized
-suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
-add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
-.git-veil/ @the-repository-owner
-$ age-keygen -o my-age-identity.txt
-$ git-veil import my-age-identity.txt
-+ imported: age1xxxx
-Summary: 1 imported, 0 skipped
 $ umask 077
 $ openssl genpkey -algorithm ED25519 -out "$HOME/.git-veil/ed25519.pem"
 $ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/signing-keys.txt"
 $ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
+  | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/owner.verifying"
+$ age-keygen -o my-age-identity.txt
+$ git-veil init "$HOME/.git-veil/owner.verifying"
+git-veil initialized
+trusted the repository owner key
+pinned this repository owner key on this machine
+suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
+add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
+.git-veil/ @the-repository-owner
+$ git-veil import my-age-identity.txt
++ imported: age1xxxx
+Summary: 1 imported, 0 skipped
 $ git-veil repo-id
 Repository ID: demo+example@github.com
 Remote: origin
 Push URL: git@github.com:example/demo.git
-$ git-veil trust demo+example@github.com
-trusted the repository owner key
-pinned this repository owner key on this machine
 ```
 
 Each collaborator, on their machine, creates their own X25519 private key

@@ -887,12 +887,20 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__init)
-            opts="-q -h --quiet --dangerously-skip-permissions-check --help"
+            opts="-q -h --remote --quiet --suppress-codeowners --key-store --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --key-store)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;

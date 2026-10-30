@@ -4,10 +4,10 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add_file, cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_hide, cmd_import, cmd_init,
-    cmd_remove_key, cmd_reveal, cmd_rotate, cmd_trust, cmd_verify_keys,
-    encrypt_to_x25519_public_keys, exit_code_of, extract_content_to_verify_from_keyring,
-    generate_signing_keypair, generate_x25519_private_key, keyring_content_digest,
-    parse_x25519_public_key, x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
+    cmd_remove_key, cmd_reveal, cmd_rotate, cmd_verify_keys, encrypt_to_x25519_public_keys,
+    exit_code_of, extract_content_to_verify_from_keyring, generate_signing_keypair,
+    generate_x25519_private_key, keyring_content_digest, parse_x25519_public_key,
+    x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
 };
 use std::fs;
 use std::path::Path;
@@ -79,21 +79,27 @@ impl Fixture {
             format!("{}\n", identity.to_string().expose_secret()),
         )
         .unwrap();
-        fs::create_dir_all(repo.join(".git-veil")).unwrap();
-        fs::write(
-            repo.join(".git-veil/owner.verifying"),
-            format!("{}\n{}\n", verifying_hex, recipient),
-        )
-        .unwrap();
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
         )
         .unwrap();
+        fs::write(
+            key_store.join("owner.verifying"),
+            format!("{}\n{}\n", verifying_hex, recipient),
+        )
+        .unwrap();
 
-        cmd_init(&repo.path, false).expect("init");
+        cmd_init(
+            &repo.path,
+            &key_store.join("owner.verifying"),
+            "origin",
+            &key_store.path,
+            false,
+            false,
+        )
+        .expect("init copies the owner key in and pins");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self { repo, key_store }
     }

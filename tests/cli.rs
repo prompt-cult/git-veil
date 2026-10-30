@@ -10,7 +10,7 @@ use clap::Parser as _;
 use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add_file, cmd_add_key, cmd_cat, cmd_changes, cmd_clean, cmd_forget, cmd_hide, cmd_import,
-    cmd_init, cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal, cmd_trust,
+    cmd_init, cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal,
     cmd_verify_keys, cmd_whoami, exit_code_of, export_public_key, generate_signing_keypair,
     generate_x25519_private_key, x25519_public_key_encoding, ExitCode, Keyring, TrackedFiles,
     TrustStore,
@@ -80,9 +80,6 @@ fn init_git_repo(dir: &Path) {
     assert!(status.success());
 }
 
-/// The repo_id that `derive_repo_id` will produce for the test remote.
-const TEST_REPO_ID: &str = "fara+owner@github.com";
-
 /// A complete test fixture: git repo, key store, owner X25519 private key, owner signing key.
 struct TestRepo {
     repo: TempDir,
@@ -117,25 +114,32 @@ impl TestRepo {
         // The committed owner.verifying: verifying key hex on line 1, the
         // owner's X25519 public key encoding on line 2. trust proves
         // possession of the matching seed and pins the key.
-        fs::create_dir_all(repo.join(".git-veil")).unwrap();
-        fs::write(
-            repo.join(".git-veil/owner.verifying"),
-            format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
-        )
-        .expect("write owner.verifying");
-
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(owner_signing_key.to_bytes())),
         )
         .expect("write signing-keys.txt");
 
-        cmd_init(&repo.path, false).expect("init");
+        // The owner verifying key file lives outside the repository, in
+        // the key store; init copies it into .git-veil/ and pins.
+        fs::write(
+            key_store.join("owner.verifying"),
+            format!("{}\n{}\n", owner_verifying_key_hex, owner_recipient),
+        )
+        .expect("write owner.verifying");
+
+        cmd_init(
+            &repo.path,
+            &key_store.join("owner.verifying"),
+            "origin",
+            &key_store.path,
+            false,
+            false,
+        )
+        .expect("init copies the owner key in and pins");
 
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path)
             .expect("import owner identity");
-
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self {
             repo,
@@ -216,14 +220,39 @@ impl TestRepo {
 #[test]
 fn test_init_creates_state() {
     let repo = TempDir::new("init");
+    let key_store = TempDir::new("init-ks");
     init_git_repo(&repo.path);
 
-    cmd_init(&repo.path, false).expect("init");
+    let (_signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(
+        key_store.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+    fs::write(
+        key_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(_signing_key.to_bytes())),
+    )
+    .unwrap();
+
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("init");
 
     assert!(repo.join(".git-veil").is_dir());
     assert!(repo.join(".git-veil/keyring").exists());
     assert!(repo.join(".git-veil/trust.json").exists());
     assert!(repo.join(".git-veil/tracked.json").exists());
+    assert!(
+        repo.join(".git-veil/owner.verifying").exists(),
+        "init copies the owner verifying key into the state directory"
+    );
 
     let keyring_text = fs::read_to_string(repo.join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
@@ -233,9 +262,30 @@ fn test_init_creates_state() {
 #[test]
 fn test_init_refuses_reinit_with_trust() {
     let repo = TempDir::new("reinit");
+    let key_store = TempDir::new("reinit-ks");
     init_git_repo(&repo.path);
 
-    cmd_init(&repo.path, false).expect("first init");
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(
+        key_store.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+    fs::write(
+        key_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("first init");
 
     let mut trust = TrustStore::new();
     trust.set_owner_fingerprint("test+user@github.com".to_string(), "abc123".to_string());
@@ -243,7 +293,14 @@ fn test_init_refuses_reinit_with_trust() {
         .save_to_file(&repo.join(".git-veil/trust.json"))
         .unwrap();
 
-    let result = cmd_init(&repo.path, false);
+    let result = cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    );
     assert!(result.is_err(), "re-init with trust should fail");
     assert!(result
         .unwrap_err()
@@ -380,9 +437,32 @@ fn test_verify_keys_succeeds_after_add_key() {
 #[test]
 fn test_verify_keys_fails_without_trust() {
     let repo = TempDir::new("verify-no-trust");
+    let init_store = TempDir::new("verify-no-trust-init-ks");
     let key_store = TempDir::new("verify-no-trust-keys");
     init_git_repo(&repo.path);
-    cmd_init(&repo.path, false).expect("init");
+
+    // Trust state is established from one key store; verify-keys runs
+    // against an empty store and fails closed without the pin.
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    fs::write(
+        init_store.join("owner.verifying"),
+        format!("{}\n", verifying_hex),
+    )
+    .unwrap();
+    fs::write(
+        init_store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    cmd_init(
+        &repo.path,
+        &init_store.join("owner.verifying"),
+        "origin",
+        &init_store.path,
+        false,
+        false,
+    )
+    .expect("init");
 
     let result = cmd_verify_keys(&repo.path, "origin", &key_store.path);
     assert!(result.is_err());
@@ -586,21 +666,27 @@ fn test_hide_no_keys_fails() {
         format!("{}\n", identity.to_string().expose_secret()),
     )
     .unwrap();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
-    fs::write(
-        repo.join(".git-veil/owner.verifying"),
-        format!("{}\n{}\n", verifying_hex, recipient),
-    )
-    .unwrap();
     fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
     .unwrap();
+    fs::write(
+        key_store.join("owner.verifying"),
+        format!("{}\n{}\n", verifying_hex, recipient),
+    )
+    .unwrap();
 
-    cmd_init(&repo.path, false).expect("init");
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("init");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-    cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
     fs::write(repo.join(".env"), "SECRET=hello\n").unwrap();
     cmd_add_file(

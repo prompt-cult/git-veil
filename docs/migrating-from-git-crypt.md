@@ -157,10 +157,9 @@ an Ed25519 signing key, made with `openssl`. git-veil generates no keys.
 On the owner's machine:
 
 ```sh
-git-veil init                                # create .git-veil/ state
+git-veil init ~/.git-veil/owner.verifying    # create .git-veil/ state; pins the owner key by possession proof
 git-veil import my-age-identity.txt          # owner's X25519 private key into the local key store
 git-veil repo-id                             # print the repository ID, e.g. demo+example@github.com
-git-veil trust demo+example@github.com        # possession proof. Pin the owner key.
 git-veil add-key example@github.com age1xxxx  # the owner must be in the keyring too; the key is the pasted public key string
 git-veil add-key alice@example.com age1xxxx  # once per collaborator; paste the key alice sent
 ```

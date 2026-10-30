@@ -1,20 +1,12 @@
-//! Pin creation. Possession proof is the only way to create a pin
-//! directly, and no keyfile argument is accepted. A repository must never
-//! be able to supply its own trust anchor.
+//! Pin creation. The repo owner pins at init (see commands/init.rs);
+//! this module owns the import path and the plumbing both share.
 //!
-//! Two pin-creation paths exist, and nothing else.
+//! `git-veil trust --import <pin-file>` - a pin-file produced by
+//! `git-veil export-pin` on a machine that proved possession. Three
+//! mandatory consistency checks tie the pin-file to the repository's
+//! committed key and metadata. Any mismatch is a refusal.
 //!
-//! 1. `git-veil trust <repo_id>` - possession proof. The candidate is the
-//!    repository's committed `owner.verifying`. The proof is an exact match
-//!    between that candidate and the verifying key derived from a seed in
-//!    the signing key store (`<key store>/signing-keys.txt`). A machine
-//!    without the matching seed cannot pin.
-//! 2. `git-veil trust --import <pin-file>` - a pin-file produced by
-//!    `git-veil export-pin` on a machine that proved possession. Three
-//!    mandatory consistency checks tie the pin-file to the repository's
-//!    committed key and metadata. Any mismatch is a refusal.
-//!
-//! Both commands refuse paths inside the repository worktree, so a bogus
+//! The import refuses paths inside the repository worktree, so a bogus
 //! pin-file cannot travel through the repository itself.
 
 use anyhow::{Context, Result};
@@ -35,11 +27,27 @@ use crate::{
     import_x25519_public_key_to_store, TrustPinStore, TrustStore,
 };
 
-/// The repository's committed owner verifying key, inside the .git-veil
-/// state directory. Line 1 is the 64-hex Ed25519 verifying key. Line 2,
-/// when present, is the owner's X25519 public key encoding (imported into
-/// the key store as a convenience).
-pub(crate) const OWNER_VERIFYING: &str = ".git-veil/owner.verifying";
+/// Parses owner verifying key content: line 1 is the 64-hex Ed25519
+/// verifying key, line 2 when present is the owner's X25519 public key
+/// encoding.
+pub(crate) fn parse_owner_verifying(
+    content: &str,
+    what: &str,
+) -> Result<(VerifyingKey, String, Option<String>)> {
+    let mut lines = content.lines();
+    let verifying_key_hex = lines
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| coded(ExitCode::KeyParseFailure, format!("the {} is empty", what)))?;
+    let verifying_key = parse_verifying_key(verifying_key_hex)?;
+    let public_key = lines
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.starts_with("age1"))
+        .map(String::from);
+    Ok((verifying_key, verifying_key_hex.to_string(), public_key))
+}
 
 /// Reads and parses the repository's committed owner verifying key at
 /// `.git-veil/owner.verifying`.
@@ -68,27 +76,28 @@ pub(crate) fn read_owner_verifying(
             "this repository has no committed owner verifying key file at .git-veil/owner.verifying. The owner must create and commit it. See the setup documentation.".to_string(),
         )
     })?;
-    let mut lines = content.lines();
-    let verifying_key_hex = lines
-        .next()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            coded(
-                ExitCode::KeyParseFailure,
-                format!(
-                    "the committed owner verifying key file {} is empty",
-                    OWNER_VERIFYING
-                ),
-            )
-        })?;
-    let verifying_key = parse_verifying_key(verifying_key_hex)?;
-    let public_key = lines
-        .next()
-        .map(str::trim)
-        .filter(|s| !s.is_empty() && s.starts_with("age1"))
-        .map(String::from);
-    Ok((verifying_key, verifying_key_hex.to_string(), public_key))
+    parse_owner_verifying(
+        &content,
+        "committed owner verifying key file .git-veil/owner.verifying",
+    )
+}
+
+/// Reads and parses an owner verifying key file passed in from outside
+/// the repository: line 1 is the 64-hex Ed25519 verifying key, line 2
+/// when present is the owner's X25519 public key encoding.
+pub(crate) fn read_verifying_key_file(
+    path: &Path,
+) -> Result<(VerifyingKey, String, Option<String>)> {
+    let content = fs::read_to_string(path).map_err(|_| {
+        coded(
+            ExitCode::Refused,
+            format!(
+                "the owner verifying key file {} could not be read. Pass the path to the file holding the 64-hex Ed25519 verifying key, created outside the repository.",
+                path.display()
+            ),
+        )
+    })?;
+    parse_owner_verifying(&content, "owner verifying key file passed to init")
 }
 
 /// The possession proof: the signing key store must hold a seed whose
@@ -143,9 +152,10 @@ pub(crate) fn append_verifying_key_to_store(
 }
 
 /// Refuses (exit code 71) when `path` resolves inside the repository
-/// worktree. Pin-files must travel out of band: an attacker with repo write
-/// access could otherwise commit a bogus pin-file (import) or sweep one
-/// into a commit (export), and without a pin the tool refuses all other
+/// worktree. Trust anchor material travels out of band: an attacker with
+/// repo write access could otherwise commit a bogus pin-file (import),
+/// sweep one into a commit (export), or hand init a key that lives in the
+/// worktree it is about to own. Without a pin the tool refuses all other
 /// operations, so the pin cannot travel through git-veil's own tracked-file
 /// mechanism either.
 ///
@@ -186,7 +196,7 @@ pub(crate) fn ensure_path_outside_repo(repo_root: &Path, path: &Path) -> Result<
 /// and a reset of the keyring freshness baseline (re-pinning is the
 /// documented recovery for an intended keyring rollback, so the baseline
 /// must not outlive the ceremony).
-fn write_pin_state(
+pub(crate) fn write_pin_state(
     repo_root: &Path,
     key_store: &Path,
     repo_id: &str,
@@ -258,47 +268,11 @@ fn write_pin_state(
     Ok(())
 }
 
-/// `git-veil trust <repo_id>`: pin the repository's owner key by proving
-/// possession of the matching signing seed.
-pub fn cmd_trust(
-    repo_root: &Path,
-    repo_id: &str,
-    remote_name: &str,
-    key_store: &Path,
-    suppress_codeowners: bool,
-) -> Result<()> {
-    let push_url = get_remote_push_url(repo_root, remote_name)?;
-    let computed_repo_id = derive_repo_id(&push_url)?;
-    if repo_id != computed_repo_id {
-        return Err(coded(
-            ExitCode::TrustRepoIdMismatch,
-            "the provided repository id does not match the one derived from the remote. See the trust documentation.".to_string(),
-        ));
-    }
-
-    // The candidate is the repository's committed owner.verifying, never
-    // an argument. The proof: a seed in the signing key store derives to
-    // exactly this key.
-    let (verifying_key, verifying_key_hex, public_key) = read_owner_verifying(repo_root)?;
-    prove_possession(key_store, &verifying_key)?;
-
-    write_pin_state(
-        repo_root,
-        key_store,
-        repo_id,
-        &verifying_key,
-        &verifying_key_hex,
-        public_key,
-        true,
-    )?;
-    codeowners_notice(repo_root, key_store, repo_id, suppress_codeowners)
-}
-
 /// `git-veil trust --import <pin-file>`: pin from a pin-file exported by a
 /// machine that proved possession. Three mandatory consistency checks tie
 /// the pin-file to this repository. A mismatch on any of them means one of
 /// the two channels is compromised.
-pub fn cmd_trust_import(
+pub fn cmd_trust(
     repo_root: &Path,
     pin_file_path: &Path,
     remote_name: &str,
@@ -393,7 +367,7 @@ pub fn cmd_trust_import(
 /// possession-proofed command. Warn when no CODEOWNERS file covers
 /// the trust-critical paths. Stay silent otherwise. Never refuses,
 /// never alters the exit code.
-fn codeowners_notice(
+pub(crate) fn codeowners_notice(
     repo_root: &Path,
     key_store: &Path,
     repo_id: &str,

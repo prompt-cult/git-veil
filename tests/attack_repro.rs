@@ -6,8 +6,8 @@
 use age::secrecy::ExposeSecret;
 use git_veil::{
     cmd_add_file, cmd_add_key, cmd_allow, cmd_export_pin, cmd_hide, cmd_import, cmd_init,
-    cmd_remove_file, cmd_remove_key, cmd_reveal, cmd_rotate, cmd_trust, cmd_trust_import,
-    cmd_verify_keys, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
+    cmd_remove_file, cmd_remove_key, cmd_reveal, cmd_rotate, cmd_trust, cmd_verify_keys,
+    exit_code_of, generate_signing_keypair, generate_x25519_private_key,
     x25519_public_key_encoding, TrackedFiles,
 };
 
@@ -82,21 +82,27 @@ impl Fixture {
             format!("{}\n", identity.to_string().expose_secret()),
         )
         .unwrap();
-        fs::create_dir_all(repo.join(".git-veil")).unwrap();
-        fs::write(
-            repo.join(".git-veil/owner.verifying"),
-            format!("{}\n{}\n", verifying_hex, recipient),
-        )
-        .unwrap();
         fs::write(
             key_store.join("signing-keys.txt"),
             format!("{}\n", hex::encode(signing_key.to_bytes())),
         )
         .unwrap();
+        fs::write(
+            key_store.join("owner.verifying"),
+            format!("{}\n{}\n", verifying_hex, recipient),
+        )
+        .unwrap();
 
-        cmd_init(&repo.path, false).expect("init");
+        cmd_init(
+            &repo.path,
+            &key_store.join("owner.verifying"),
+            "origin",
+            &key_store.path,
+            false,
+            false,
+        )
+        .expect("init copies the owner key in and pins");
         cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-        cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
         Self { repo, key_store }
     }
@@ -247,18 +253,20 @@ fn fix_keyring_rollback_refused_by_freshness_baseline() {
     // what she always could, but no new secret can flow to her. Hide
     // refused.
 
-    // Recovery: a genuinely intended rollback is re-anchored with trust,
-    // which resets the freshness baseline along with the pin.
-    cmd_trust(
+    // Recovery: a genuinely intended rollback is re-anchored with a fresh
+    // init, which resets the freshness baseline along with the pin.
+    fs::remove_dir_all(f.repo.join(".git-veil")).unwrap();
+    cmd_init(
         &f.repo.path,
-        TEST_REPO_ID,
+        &f.key_store.join("owner.verifying"),
         "origin",
         &f.key_store.path,
         false,
+        false,
     )
-    .expect("re-trust");
+    .expect("re-init re-anchors and resets the baseline");
     cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
-        .expect("verify succeeds after the re-trust reset the baseline");
+        .expect("verify succeeds after the re-init reset the baseline");
     let _ = carol;
 }
 
@@ -449,7 +457,7 @@ fn fix_committed_ciphertext_needs_no_allowance() {
         &f.key_store.path,
     )
     .expect("export-pin");
-    cmd_trust_import(&f.repo.path, &pin_file, "origin", &fresh_store.path, false).expect("import");
+    cmd_trust(&f.repo.path, &pin_file, "origin", &fresh_store.path, false).expect("import");
 
     // The ciphertext is in the git index, so hide proceeds with no
     // allowance on this machine.

@@ -31,11 +31,15 @@ _git-veil() {
         case $line[1] in
             (init)
 _arguments "${_arguments_options[@]}" : \
+'--remote=[Git remote name]:REMOTE:_default' \
+'--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
 '-q[Suppress the CODEOWNERS suggestion and other non-error output]' \
 '--quiet[Suppress the CODEOWNERS suggestion and other non-error output]' \
+'--suppress-codeowners[Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
+':verifying_key -- Path to the repo owner'\''s Ed25519 verifying key file, from outside the repository:_files' \
 && ret=0
 ;;
 (import)
@@ -69,14 +73,13 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (trust)
 _arguments "${_arguments_options[@]}" : \
-'()--import=[Import a pin-file produced by git-veil export-pin on a machine holding the signing key]:PIN_FILE:_files' \
+'--import=[Import a pin-file produced by git-veil export-pin on a machine holding the signing key]:PIN_FILE:_files' \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
 '--suppress-codeowners[Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-'::repo_id -- Repository ID (e.g., fara+simbo1905@github.com); required unless --import:_default' \
 && ret=0
 ;;
 (export-pin)
@@ -423,7 +426,7 @@ _git-veil_commands() {
 'import:Import your X25519 private key into the git-veil key store' \
 'export:Export an X25519 public key from the local key store' \
 'forget:Remove a key from the local key store (destructive, local-only)' \
-'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
+'trust:Pin this repository'\''s owner key on this machine from an exported pin-file' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
 'add-key:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
@@ -517,7 +520,7 @@ _git-veil__subcmd__help_commands() {
 'import:Import your X25519 private key into the git-veil key store' \
 'export:Export an X25519 public key from the local key store' \
 'forget:Remove a key from the local key store (destructive, local-only)' \
-'trust:Pin this repository'\''s owner key on this machine (possession proof, or pin-file import)' \
+'trust:Pin this repository'\''s owner key on this machine from an exported pin-file' \
 'export-pin:Export this repository'\''s pin-file for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
 'add-key:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \

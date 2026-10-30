@@ -59,14 +59,14 @@ You should backup the private keys such as add them into the Apple password appl
 
 ```sh
 $ git-veil init "$HOME/.git-veil/owner.verifying"
-git-veil initialized 
+git-veil initialized
+trusted the repository owner key
+pinned this repository owner key on this machine
+suggestion: protect the trust-critical paths with a CODEOWNERS file so changes to the trust anchor are review gated on the platform
+add a CODEOWNERS file at the repository root, or under the platform directory, and give the trust-critical paths an owner, for example:
+.git-veil/ @the-repository-owner
 
-# Add the repo owner verifying key
-mkdir -p .git-veil
-openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
-  | tail -c 32 | xxd -p -c 32 > .git-veil/owner.verifying
-
-$ git-veil import my-age-identity.txt
+$ git-veil import "$HOME/.git-veil/my-age-identity.txt"
 + imported: age1xxxx
 Summary: 1 imported, 0 skipped
 
@@ -79,11 +79,18 @@ $ git-veil whoami
 Your principal: example@github.com
 ```
 
-What happened. `.git-veil/` now holds `keyring`, `trust.json`,
-`tracked.json` and, once you have run the step 1 recipe, `owner.verifying`,
-the verifying key they all protect. Your X25519 private key lives in the
-per-machine key store, never committed. The behaviour and options of
-`init`, `import`, `repo-id` and `whoami` are in
+What happened. `init` copied your verifying key into `.git-veil/
+owner.verifying` and pinned it on this machine: the key you passed in
+matched the verifying key derived from the signing seed you created in
+step 1, which is the proof that this is your repository. `.git-veil/` now
+holds `keyring`, `trust.json`, `tracked.json` and `owner.verifying`.
+Every gated command checks the keyring signature against this pin first
+and fails closed without it. A fresh clone, even yours, has no pin: it
+imports a pin-file you export with `git-veil export-pin` (see
+[joining.md](joining.md)), or you re-initialize it from scratch.
+Commit `.git-veil/` alongside the ciphertexts. Your X25519 private key
+lives in the per-machine key store, never committed. The behaviour and
+options of `init`, `import`, `repo-id` and `whoami` are in
 [Commands](commands.md#setup).
 
 You should add or edit a CODEOWNERS file that protects the `.git-veil/`
@@ -93,28 +100,7 @@ anchor becomes a review-gated pull request instead of a silent push. The
 file goes at the repository root, or under the platform directory
 (`.github/CODEOWNERS` on GitHub).
 
-## 3. Trust your own key (possession proof)
-
-```sh
-$ git-veil trust demo+example@github.com
-trusted the repository owner key
-pinned this repository owner key on this machine
-warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.
-```
-
-What happened. `trust` proved possession of your signing key and
-pinned the owner fingerprint on this machine, outside the repository. The
-fixed-derivation owner fingerprint was recorded in `.git-veil/trust.json`.
-Commit that file alongside the verifying key. The mechanics of the proof
-are in [Commands - trust](commands.md#trust).
-
-Every gated command checks the keyring signature against this pin first and
-fails closed without it. A fresh clone, even yours, has no pin until you
-run `trust` there again. A machine without the signing seed cannot pin
-directly at all. It imports a pin-file you export with `git-veil export-pin`.
-See [joining.md](joining.md) for that flow.
-
-## 4. Put yourself in the keyring
+## 3. Put yourself in the keyring
 
 ```sh
 $ age-keygen -y my-age-identity.txt
@@ -140,7 +126,7 @@ repository nothing is hidden yet, so the first `hide` of `.env` encrypts
 to the current ring from the start, and you can leave the pass
 undelivered. See [Commands - rotate](commands.md#rotate).
 
-## 5. Track, hide, commit
+## 4. Track, hide, commit
 
 ```sh
 $ printf 'API_KEY=hunter2\n' > .env
@@ -181,7 +167,7 @@ Gitignore the plaintext names, such as `.env`. Commit the `.secret` files and
 `.git-veil/`. Never gitignore `*.secret`. That would defeat the fresh-clone
 decryptability contract.
 
-## 6. The daily cycle
+## 5. The daily cycle
 
 Edit, check, hide, commit, reveal. Name the file you are working with:
 
@@ -244,7 +230,7 @@ EOF
 chmod +x .git/hooks/pre-commit
 ```
 
-## 7. A build or deployment script reveals on its own key
+## 6. A build or deployment script reveals on its own key
 
 The ciphertexts are committed, so a clone on a build box already carries
 every secret. Give the box its own X25519 private key and its own pin:
@@ -274,7 +260,7 @@ git-veil reveal .env
 `cat` and `reveal` are never gated by the allowance check. Decryption
 needs only keyring membership, so no `allow` step is needed on the box.
 
-## 8. Health checks
+## 7. Health checks
 
 ```sh
 git-veil verify-keys      # exit 0 only if the signature matches your pin

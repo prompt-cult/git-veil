@@ -73,10 +73,9 @@ Install the binary first: see [Installation](installation.md). Then, in the
 root of a git repository:
 
 ```sh
-git-veil init                                   # creates .git-veil/ state in the repo
+git-veil init ~/.git-veil/owner.verifying        # creates .git-veil/ state and pins the owner key
 git-veil import private-key.txt                 # your X25519 private key, made by age-keygen
 git-veil repo-id                                # prints the ID trust wants, e.g. demo+example@github.com
-git-veil trust demo+example@github.com          # possession proof: pins the owner key on this machine
 git-veil export age1xxxx                        # your public key string
 git-veil add-key example@github.com age1xxxx    # adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env

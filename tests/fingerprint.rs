@@ -6,10 +6,10 @@
 
 use age::secrecy::ExposeSecret;
 use git_veil::{
-    cmd_add_key, cmd_import, cmd_init, cmd_trust, cmd_verify_keys, exit_code_of,
-    fingerprint_for_public_key, generate_signing_keypair, generate_x25519_private_key,
-    is_16_hex_pin_shape, owner_key_fingerprint, parse_verifying_key, x25519_public_key_encoding,
-    ExitCode, TrustPinStore, TrustStore,
+    cmd_add_key, cmd_import, cmd_init, cmd_verify_keys, exit_code_of, fingerprint_for_public_key,
+    generate_signing_keypair, generate_x25519_private_key, is_16_hex_pin_shape,
+    owner_key_fingerprint, parse_verifying_key, x25519_public_key_encoding, ExitCode,
+    TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -270,21 +270,27 @@ fn trusted_fixture(label: &str) -> (TempDir, TempDir) {
         format!("{}\n", identity.to_string().expose_secret()),
     )
     .unwrap();
-    fs::create_dir_all(repo.join(".git-veil")).unwrap();
-    fs::write(
-        repo.join(".git-veil/owner.verifying"),
-        format!("{}\n{}\n", verifying_hex, recipient),
-    )
-    .unwrap();
     fs::write(
         key_store.join("signing-keys.txt"),
         format!("{}\n", hex::encode(signing_key.to_bytes())),
     )
     .unwrap();
+    fs::write(
+        key_store.join("owner.verifying"),
+        format!("{}\n{}\n", verifying_hex, recipient),
+    )
+    .unwrap();
 
-    cmd_init(&repo.path, false).expect("init");
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("init copies the owner key in and pins");
     cmd_import(&repo.path, &["owner.age".to_string()], &key_store.path).expect("import");
-    cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("trust");
 
     (repo, key_store)
 }
@@ -341,9 +347,18 @@ fn test_legacy_pin_and_record_refuse_as_hostile_and_nothing_is_rewritten() {
     assert_eq!(fs::read_to_string(&pin_path).unwrap(), pin_before);
     assert_eq!(fs::read_to_string(&trust_path).unwrap(), record_before);
 
-    // Recovery is re-establishing trust. After the possession proof runs
-    // again, the gated command passes with the new pin.
-    cmd_trust(&repo.path, TEST_REPO_ID, "origin", &key_store.path, false).expect("re-trust");
+    // Recovery is re-establishing trust: a fresh init with the owner key
+    // file rewrites the pin, and the gated command passes with the new pin.
+    fs::remove_dir_all(repo.join(".git-veil")).unwrap();
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("re-init re-establishes trust");
     let pin_after = fs::read_to_string(&pin_path).unwrap();
     assert_eq!(pin_after.trim().len(), 64, "the rewritten pin is 64-hex");
     cmd_verify_keys(&repo.path, "origin", &key_store.path)

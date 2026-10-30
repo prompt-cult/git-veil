@@ -53,7 +53,7 @@ pub use commands::remove_key::cmd_remove_key;
 pub use commands::repo_id::cmd_repo_id;
 pub use commands::reveal::cmd_reveal;
 pub use commands::rotate::cmd_rotate;
-pub use commands::trust::{cmd_trust, cmd_trust_import};
+pub use commands::trust::cmd_trust;
 pub use commands::verify_keys::{cmd_verify_keys, verify_keyring_against_trust};
 pub use commands::whoami::cmd_whoami;
 pub use exit_codes::{coded, exit_code_of, CodedError, ExitCode};
