@@ -4,12 +4,12 @@
 .SH NAME
 git\-veil\-trust\-permissions \- Acknowledge the key store\*(Aqs current permissions as trusted
 .SH SYNOPSIS
-\fBgit\-veil trust\-permissions\fR [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil trust\-permissions\fR [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Acknowledge the key store\*(Aqs current permissions as trusted
 .SH OPTIONS
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -31,4 +31,4 @@ GIT_VEIL_SKIP_PERMISSIONS=1.
 
 EXAMPLES
   $ git\-veil trust\-permissions
-  $ git\-veil trust\-permissions \-\-key\-store /path/to/store
+  $ git\-veil trust\-permissions \-\-git\-veil\-home /path/to/store

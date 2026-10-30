@@ -69,7 +69,7 @@ pub(crate) fn for_each_store_line(
 /// set or both are empty, instead of silently falling back to a
 /// world-writable location such as `/tmp`, where an attacker on a
 /// multi-user system could plant or tamper with key material. An explicit
-/// `--key-store` on the CLI always overrides both.
+/// `--git-veil-home` on the CLI always overrides both.
 pub fn default_key_store() -> Result<PathBuf> {
     std::env::var("GIT_VEIL_HOME")
         .ok()

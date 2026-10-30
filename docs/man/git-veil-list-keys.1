@@ -4,15 +4,15 @@
 .SH NAME
 git\-veil\-list\-keys \- List keyring keys after verifying the keyring signature
 .SH SYNOPSIS
-\fBgit\-veil list\-keys\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil list\-keys\fR [\fB\-\-git\-remote\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 List keyring keys after verifying the keyring signature
 .SH OPTIONS
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -27,4 +27,4 @@ no local pin fails closed like every other gated command.
 
 EXAMPLES
   $ git\-veil list\-keys
-  $ git\-veil list\-keys \-\-remote upstream
+  $ git\-veil list\-keys \-\-git\-remote upstream

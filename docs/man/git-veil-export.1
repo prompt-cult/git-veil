@@ -4,15 +4,15 @@
 .SH NAME
 git\-veil\-export \- Export an X25519 public key from the local key store
 .SH SYNOPSIS
-\fBgit\-veil export\fR [\fB\-\-output\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+\fBgit\-veil export\fR [\fB\-\-outfile\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
 Export an X25519 public key from the local key store
 .SH OPTIONS
 .TP
-\fB\-\-output\fR \fI<OUTPUT>\fR
+\fB\-\-outfile\fR \fI<OUTPUT>\fR
 Write the public key encoding to this file instead of stdout
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -21,7 +21,7 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 <\fIIDENTIFIER\fR>
 X25519 public key encoding (age1xxxx) of the key to export
 .SH EXTRA
-Prints \- or with \-\-output writes \- the X25519 public key ("age"
+Prints \- or with \-\-outfile writes \- the X25519 public key ("age"
 recipient), bech32\-encoded (age1xxxx), for the given key, read from the
 local key store on this machine ($GIT_VEIL_HOME or $HOME/.git\-veil). This
 is the key handoff between collaborators without any external tool: the
@@ -42,4 +42,4 @@ export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
   $ git\-veil export age1xxxx                     # to stdout
-  $ git\-veil export age1xxxx \-\-output alice.pub  # hand\-off file
+  $ git\-veil export age1xxxx \-\-outfile alice.pub  # hand\-off file

@@ -55,7 +55,7 @@ The pin travels out of band (a pipe over ssh, USB, read aloud), never through th
 | --- | --- | --- |
 | `init <verifying-key>` | Possession proof; copies the passed-in key to committed `.git-veil/owner.verifying`, records the fingerprint, pins | 13, 20, 62, 70, 71, 30 |
 | `trust --import <pin-file>` | Pin from an exported pin-file, out of band | 70, 71, 30 |
-| `export-pin` | Print the pin (stdout default, `--output` optional) for machines without the signing key | 20, 71, 30 |
+| `export-pin` | Print the pin (stdout default, `--outfile` optional) for machines without the signing key | 20, 71, 30 |
 | `fingerprint <label> <public_key>` | Pure `SHA-256(label:encoding)` derivation, no state | usage errors (2) |
 | `verify-keys` | Cheap health check of the gate above | 10, 11, 12, 14, 63, 70, 30 |
 | `trust-permissions` | Acknowledge key-store permission state (exit 30) | 30 |

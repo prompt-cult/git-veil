@@ -29,14 +29,14 @@ subcommand):
 
 | Flag | Effect |
 |------|--------|
-| `--key-store <dir>` | Key store directory. Default: `$GIT_VEIL_HOME` or `$HOME/.git-veil` |
+| `--git-veil-home <dir>` | Key store directory. Default: `$GIT_VEIL_HOME` or `$HOME/.git-veil` |
 | `--dangerously-skip-permissions-check` | Bypass the key store permission checks (exit 30). Also settable as `GIT_VEIL_SKIP_PERMISSIONS=1` |
 
 Accepted by every command that resolves the repository identity:
 
 | Flag | Effect |
 |------|--------|
-| `--remote <name>` | Git remote to derive the repository ID from. Default: `origin` |
+| `--git-remote <name>` | Git remote to derive the repository ID from. Default: `origin` |
 
 Accepted by the decrypting commands (`reveal`, `cat`, `changes`) and
 `whoami`:
@@ -55,8 +55,8 @@ sharing one store across repositories that do not trust each other.
 ### `init`
 
 ```sh
-git-veil init <verifying-key> [--remote <name>] [-q | --quiet] [--suppress-codeowners]
-              [--key-store <dir>]
+git-veil init <verifying-key> [--git-remote <name>] [-q | --quiet] [--suppress-codeowners]
+              [--git-veil-home <dir>]
 ```
 
 Initialises git-veil state and pins the owner key in one command. The
@@ -99,7 +99,7 @@ suggestion: protect the trust-critical paths with a CODEOWNERS file ...
 ### `import`
 
 ```sh
-git-veil import <files>... [--key-store <dir>]
+git-veil import <files>... [--git-veil-home <dir>]
 ```
 
 Imports X25519 private keys (the `AGE-SECRET-KEY-1...` lines produced by
@@ -131,10 +131,10 @@ parsed), 1 (a named file could not be read).
 ### `export`
 
 ```sh
-git-veil export <identifier> [--output <file>] [--key-store <dir>]
+git-veil export <identifier> [--outfile <file>] [--git-veil-home <dir>]
 ```
 
-Prints, or with `--output` writes, the X25519 public key encoding
+Prints, or with `--outfile` writes, the X25519 public key encoding
 (`age1xxxx`) for the given key, read from the local key store on this
 machine. This is the key handoff between collaborators: each collaborator
 runs `export` on their own machine and sends the public key encoding to
@@ -157,7 +157,7 @@ store).
 ### `forget`
 
 ```sh
-git-veil forget <identifier> [--yes] [--key-store <dir>]
+git-veil forget <identifier> [--yes] [--git-veil-home <dir>]
 ```
 
 Drops key material from the local key store: every X25519 private key in
@@ -187,8 +187,8 @@ Exit codes: 30, 1 (the `--yes` guard, or a corrupt store).
 ### `trust`
 
 ```sh
-git-veil trust --import <pin-file> [--remote <name>] [--suppress-codeowners]
-              [--key-store <dir>]
+git-veil trust --import <pin-file> [--git-remote <name>] [--suppress-codeowners]
+              [--git-veil-home <dir>]
 ```
 
 Pins this repository's owner key on this machine by importing a pin-file
@@ -230,8 +230,8 @@ repository), 30.
 
 ```sh
 git-veil export-pin <repo_id> > <pin-file>     # stdout, pipe anywhere
-git-veil export-pin <repo_id> [--output <pin-file>] [--remote <name>]
-                                         [--key-store <dir>]
+git-veil export-pin <repo_id> [--outfile <pin-file>] [--git-remote <name>]
+                                         [--git-veil-home <dir>]
 ```
 
 Prints this repository's pin for import on a machine without the signing
@@ -245,7 +245,7 @@ goes to stdout, artifact alone: read it, copy it, or pipe it straight to
 the target machine over ssh. Redirect it somewhere else only with intent,
 and never into the repository worktree.
 
-- `--output` writes the pin to a file instead. The destination must
+- `--outfile` writes the pin to a file instead. The destination must
   point outside the repository worktree; exit 71 otherwise: a committed
   pin-file would be exactly the self-supplied anchor the pin model
   exists to prevent.
@@ -299,7 +299,7 @@ Exit codes: none beyond usage errors (2).
 ### `verify-keys`
 
 ```sh
-git-veil verify-keys [--remote <name>] [--key-store <dir>]
+git-veil verify-keys [--git-remote <name>] [--git-veil-home <dir>]
 ```
 
 Verifies the keyring's signature against the pinned trusted key for this
@@ -320,7 +320,7 @@ record in the 16-hex-character fingerprint format is refused), 30.
 ### `trust-permissions`
 
 ```sh
-git-veil trust-permissions [--key-store <dir>]
+git-veil trust-permissions [--git-veil-home <dir>]
 ```
 
 Records the key store's current permission state, for the store directory
@@ -345,8 +345,8 @@ Exit codes: 30.
 ### `add-key`
 
 ```sh
-git-veil add-key <email> <public_key> [--remote <name>]
-                 [--signing-key <verifying-key>] [--key-store <dir>]
+git-veil add-key <email> <public_key> [--git-remote <name>]
+                 [--signing-key <verifying-key>] [--git-veil-home <dir>]
 ```
 
 Adds a collaborator's X25519 public key to the repository keyring and
@@ -385,8 +385,8 @@ plus the gated-chain codes 10/11/12/14/63, plus 30.
 ### `remove-key`
 
 ```sh
-git-veil remove-key <email> [--remote <name>]
-                    [--signing-key <verifying-key>] [--key-store <dir>]
+git-veil remove-key <email> [--git-remote <name>]
+                    [--signing-key <verifying-key>] [--git-veil-home <dir>]
 ```
 
 Removes a collaborator's entry from the keyring and re-signs it with the
@@ -416,7 +416,7 @@ gated-chain codes 10/11/12/14/63, plus 30.
 ### `list-keys`
 
 ```sh
-git-veil list-keys [--remote <name>] [--key-store <dir>]
+git-veil list-keys [--git-remote <name>] [--git-veil-home <dir>]
 ```
 
 Lists all keys in the keyring after verifying its signature against the
@@ -443,7 +443,7 @@ Exit codes: the gated-chain codes 10/11/12/14/63, plus 30.
 ### `add-file`
 
 ```sh
-git-veil add-file <files>... [--remote <name>]
+git-veil add-file <files>... [--git-remote <name>]
 ```
 
 Tracks files for encryption in `.git-veil/tracked.json` (stored
@@ -473,7 +473,7 @@ Exit codes: 40 (warning; the exit stays 0), 71 (path safety).
 ### `allow`
 
 ```sh
-git-veil allow <files>... [--remote <name>]
+git-veil allow <files>... [--git-remote <name>]
 ```
 
 Records paths in the machine-local allowance store in your key store:
@@ -552,8 +552,8 @@ Exit codes: none.
 ### `hide`
 
 ```sh
-git-veil hide <files>... [--keep-plaintext] [--remote <name>]
-             [--key-store <dir>]
+git-veil hide <files>... [--keep-plaintext] [--git-remote <name>]
+             [--git-veil-home <dir>]
 ```
 
 Encrypts each named tracked file to every key in the keyring and leaves a
@@ -598,7 +598,7 @@ crypto codes 60/61/63 and the gated-chain codes, plus 30.
 ### `rotate`
 
 ```sh
-git-veil rotate [--remote <name>] [--key-store <dir>]
+git-veil rotate [--git-remote <name>] [--git-veil-home <dir>]
 ```
 
 Delivers the due ring-change pass: re-encrypts every tracked ciphertext
@@ -652,8 +652,8 @@ digest no longer match the committed ring), 42 (orphaned ciphertext),
 ### `reveal`
 
 ```sh
-git-veil reveal <files>... [--email <address>] [--remote <name>]
-              [--key-store <dir>]
+git-veil reveal <files>... [--email <address>] [--git-remote <name>]
+              [--git-veil-home <dir>]
 ```
 
 Decrypts each named tracked file back to its plaintext path, using your
@@ -689,8 +689,8 @@ gated-chain codes 10/11/12/14, plus 30.
 ### `cat`
 
 ```sh
-git-veil cat <file> [--email <address>] [--remote <name>]
-            [--key-store <dir>]
+git-veil cat <file> [--email <address>] [--git-remote <name>]
+            [--git-veil-home <dir>]
 ```
 
 Decrypts a single tracked file to stdout without touching disk state:
@@ -709,8 +709,8 @@ Exit codes: as [reveal](#reveal), for the one file.
 ### `changes`
 
 ```sh
-git-veil changes [files]... [--email <address>] [--remote <name>]
-               [--key-store <dir>]
+git-veil changes [files]... [--email <address>] [--git-remote <name>]
+               [--git-veil-home <dir>]
 ```
 
 Reports where the on-disk plaintext differs from the last hidden version:
@@ -736,13 +736,13 @@ Exit codes: as [reveal](#reveal), minus the writes.
 ### `repo-id`
 
 ```sh
-git-veil repo-id [--remote <name>]
+git-veil repo-id [--git-remote <name>]
 ```
 
 Prints the repository ID derived from the git remote push URL: the exact
 string [trust](#trust) expects as its `repo_id` argument, since `trust`
 re-derives the id from the live remote and refuses a mismatch. Pass
-`--remote` if your remote is not `origin`.
+`--git-remote` if your remote is not `origin`.
 
 ```sh
 $ git-veil repo-id
@@ -756,7 +756,7 @@ Exit codes: none beyond usage errors (2).
 ### `whoami`
 
 ```sh
-git-veil whoami [--email <address>] [--key-store <dir>]
+git-veil whoami [--email <address>] [--git-veil-home <dir>]
 ```
 
 Prints the principal git-veil will use for you: `git config user.email`,

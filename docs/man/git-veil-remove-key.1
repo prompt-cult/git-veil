@@ -4,18 +4,18 @@
 .SH NAME
 git\-veil\-remove\-key \- Remove a collaborator from the keyring and re\-sign it
 .SH SYNOPSIS
-\fBgit\-veil remove\-key\fR [\fB\-\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
+\fBgit\-veil remove\-key\fR [\fB\-\-git\-remote\fR] [\fB\-\-signing\-key\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIEMAIL\fR> 
 .SH DESCRIPTION
 Remove a collaborator from the keyring and re\-sign it
 .SH OPTIONS
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
 \fB\-\-signing\-key\fR \fI<VERIFYING_KEY>\fR
 Signing key to use: its full 64\-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR

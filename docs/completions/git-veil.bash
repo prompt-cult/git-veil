@@ -205,13 +205,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__add__subcmd__file)
-            opts="-h --remote --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -223,13 +223,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__add__subcmd__key)
-            opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --signing-key --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -237,7 +237,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -249,13 +249,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__allow)
-            opts="-h --remote --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -267,7 +267,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__cat)
-            opts="-h --email --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -277,11 +277,11 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -293,7 +293,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__changes)
-            opts="-h --email --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -303,11 +303,11 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -361,17 +361,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__export)
-            opts="-h --output --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --outfile --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --output)
+                --outfile)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -383,21 +383,21 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__export__subcmd__pin)
-            opts="-h --output --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --outfile --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --output)
+                --outfile)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -423,13 +423,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__forget)
-            opts="-h --yes --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --yes --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -847,17 +847,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__hide)
-            opts="-h --remote --key-store --keep-plaintext --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --keep-plaintext --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -869,13 +869,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__import)
-            opts="-h --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -887,17 +887,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__init)
-            opts="-q -h --remote --quiet --suppress-codeowners --key-store --dangerously-skip-permissions-check --help"
+            opts="-q -h --git-remote --quiet --suppress-codeowners --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -923,17 +923,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__list__subcmd__keys)
-            opts="-h --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -973,13 +973,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__remove__subcmd__key)
-            opts="-h --remote --signing-key --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --signing-key --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -987,7 +987,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -999,13 +999,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__repo__subcmd__id)
-            opts="-h --remote --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1017,7 +1017,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__reveal)
-            opts="-h --email --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1027,11 +1027,11 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1043,17 +1043,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__rotate)
-            opts="-h --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1065,7 +1065,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__trust)
-            opts="-h --import --remote --suppress-codeowners --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --import --git-remote --suppress-codeowners --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1075,11 +1075,11 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1091,13 +1091,13 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__trust__subcmd__permissions)
-            opts="-h --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1109,17 +1109,17 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__verify__subcmd__keys)
-            opts="-h --remote --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --remote)
+                --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1131,7 +1131,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__whoami)
-            opts="-h --email --key-store --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-veil-home --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1141,7 +1141,7 @@ _git__veil() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --key-store)
+                --git-veil-home)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

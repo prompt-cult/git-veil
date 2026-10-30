@@ -64,7 +64,7 @@ EXAMPLES
         /// Path to the repo owner's Ed25519 verifying key file, from outside the repository
         verifying_key: PathBuf,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Suppress the CODEOWNERS suggestion and other non-error output
         #[arg(long, short = 'q')]
@@ -75,7 +75,7 @@ EXAMPLES
         suppress_codeowners: bool,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its
         /// pins are the trust boundary for every repository that uses it.
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -102,20 +102,20 @@ is not duplicated.
 EXAMPLES
   $ age-keygen -o my-age-identity.txt      # create + print the recipe
   $ git-veil import my-age-identity.txt
-  $ git-veil import a.txt b.txt --key-store /path/to/store
+  $ git-veil import a.txt b.txt --git-veil-home /path/to/store
 ")]
     Import {
         /// File(s) containing AGE-SECRET-KEY-1... lines (age-keygen output works as-is)
         #[arg(required = true)]
         files: Vec<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
     /// Export an X25519 public key from the local key store
     #[command(after_long_help = "\
-Prints - or with --output writes - the X25519 public key (\"age\"
+Prints - or with --outfile writes - the X25519 public key (\"age\"
 recipient), bech32-encoded (age1xxxx), for the given key, read from the
 local key store on this machine ($GIT_VEIL_HOME or $HOME/.git-veil). This
 is the key handoff between collaborators without any external tool: the
@@ -136,16 +136,16 @@ export does not touch the repository and needs no init or trust state.
 
 EXAMPLES
   $ git-veil export age1xxxx                     # to stdout
-  $ git-veil export age1xxxx --output alice.pub  # hand-off file
+  $ git-veil export age1xxxx --outfile alice.pub  # hand-off file
 ")]
     Export {
         /// X25519 public key encoding (age1xxxx) of the key to export
         identifier: String,
         /// Write the public key encoding to this file instead of stdout
-        #[arg(long)]
+        #[arg(long = "outfile")]
         output: Option<PathBuf>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -177,7 +177,7 @@ per-store summary prints the public key encodings removed.
 EXAMPLES
   $ git-veil forget age1xxxx                 # exact public key encoding
   $ git-veil forget age1xxxx --yes           # confirm only-private-key removal
-  $ git-veil forget age1xxxx --key-store /path/to/store
+  $ git-veil forget age1xxxx --git-veil-home /path/to/store
 ")]
     Forget {
         /// Exact X25519 public key encoding (age1xxxx) of the key to remove
@@ -187,7 +187,7 @@ EXAMPLES
         #[arg(long)]
         yes: bool,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -212,10 +212,10 @@ The pin-file must point OUTSIDE the repository worktree, so a pin-file
 always travels out of band (e.g. ssh) - the same model as known_hosts
 provisioning. The pin lives in the key store, never committed.
 
-Trust domain: the key store named by --key-store holds this machine's pins
+Trust domain: the key store named by --git-veil-home holds this machine's pins
 for EVERY repository that uses that store, so the store and its pins are
 one trust boundary. Sharing a single store across mutually distrusting
-repositories is not advised; use a separate --key-store per trust domain.
+repositories is not advised; use a separate --git-veil-home per trust domain.
 
 Requires init first. Typical next step: add-key.
 
@@ -227,7 +227,7 @@ EXAMPLES
         #[arg(long, value_name = "PIN_FILE")]
         import: PathBuf,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Suppress the CODEOWNERS warning for this pinned repository; the suppression is
         /// recorded in the key store next to the pin
@@ -235,7 +235,7 @@ EXAMPLES
         suppress_codeowners: bool,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its
         /// pins are the trust boundary for every repository that uses it.
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -257,7 +257,7 @@ same model as provisioning known_hosts:
   $ git-veil export-pin fara+simbo1905@github.com | ssh box 'cat > fara.pin'
   $ git-veil trust --import fara.pin            # on the target machine
 
---output writes it to a file instead. The destination must be OUTSIDE the
+--outfile writes it to a file instead. The destination must be OUTSIDE the
 repository worktree: a committed pin would be exactly the self-supplied
 anchor the pin model exists to prevent. Keep stdout pins out of the
 worktree the same way.
@@ -272,20 +272,20 @@ documentation.
 EXAMPLES
   $ git-veil export-pin fara+simbo1905@github.com > fara.pin   # artifact only on stdout
   $ git-veil export-pin fara+simbo1905@github.com | ssh box 'cat > fara.pin'
-  $ git-veil export-pin fara+simbo1905@github.com --output /tmp/fara.pin
+  $ git-veil export-pin fara+simbo1905@github.com --outfile /tmp/fara.pin
   $ git-veil trust --import fara.pin            # on the target machine
 ")]
     ExportPin {
         /// Repository ID (e.g., fara+simbo1905@github.com)
         repo_id: String,
         /// Write the pin to a file instead of stdout - must be OUTSIDE the repository worktree
-        #[arg(long)]
+        #[arg(long = "outfile")]
         output: Option<PathBuf>,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -357,13 +357,13 @@ EXAMPLES
         /// The collaborator's bech32 X25519 public key encoding (age1xxxx), pasted literally
         public_key: String,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Signing key to use: its full 64-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)
         #[arg(long, value_name = "VERIFYING_KEY", value_parser = verifying_key_selection)]
         signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -392,13 +392,13 @@ EXAMPLES
         /// Email of the collaborator to remove
         email: String,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Signing key to use: its full 64-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)
         #[arg(long, value_name = "VERIFYING_KEY", value_parser = verifying_key_selection)]
         signing_key: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -428,7 +428,7 @@ EXAMPLES
         #[arg(required = true)]
         files: Vec<String>,
         /// Git remote name (derives the repository id for the allowance store)
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
     },
 
@@ -460,7 +460,7 @@ EXAMPLES
         #[arg(required = true)]
         files: Vec<String>,
         /// Git remote name (derives the repository id for the allowance store)
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
     },
 
@@ -552,16 +552,16 @@ separate command: git-veil rotate.
 EXAMPLES
   $ git-veil hide .env    # encrypt .env and delete the plaintext (the default)
   $ git-veil hide .env --keep-plaintext
-  $ git-veil hide .env --remote upstream
+  $ git-veil hide .env --git-remote upstream
   $ git-veil hide .env config.yml    # encrypt exactly the named files
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
 ")]
     Hide {
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
         /// Leave plaintext files beside their ciphertexts instead of deleting them
         #[arg(long)]
@@ -605,10 +605,10 @@ EXAMPLES
 ")]
     Rotate {
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -645,10 +645,10 @@ EXAMPLES
         #[arg(long)]
         email: Option<String>,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
         /// Tracked files to reveal
         #[arg(value_name = "FILE", required = true)]
@@ -673,10 +673,10 @@ EXAMPLES
         #[arg(long)]
         email: Option<String>,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -699,10 +699,10 @@ EXAMPLES
         #[arg(long)]
         email: Option<String>,
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -710,16 +710,16 @@ EXAMPLES
     #[command(after_long_help = "\
 Prints the repository ID derived from the git remote push URL - the
 exact string trust expects as its repo_id argument (trust re-derives it
-from the remote and refuses a mismatch). Pass --remote if your remote is
+from the remote and refuses a mismatch). Pass --git-remote if your remote is
 not 'origin'.
 
 EXAMPLES
   $ git-veil repo-id
-  $ git-veil repo-id --remote upstream
+  $ git-veil repo-id --git-remote upstream
 ")]
     RepoId {
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
     },
 
@@ -739,7 +739,7 @@ EXAMPLES
         #[arg(long)]
         email: Option<String>,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -754,14 +754,14 @@ before touching secrets.
 
 EXAMPLES
   $ git-veil verify-keys
-  $ git-veil verify-keys --remote upstream
+  $ git-veil verify-keys --git-remote upstream
 ")]
     VerifyKeys {
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -777,14 +777,14 @@ no local pin fails closed like every other gated command.
 
 EXAMPLES
   $ git-veil list-keys
-  $ git-veil list-keys --remote upstream
+  $ git-veil list-keys --git-remote upstream
 ")]
     ListKeys {
         /// Git remote name
-        #[arg(long, default_value = "origin")]
+        #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 
@@ -807,11 +807,11 @@ GIT_VEIL_SKIP_PERMISSIONS=1.
 
 EXAMPLES
   $ git-veil trust-permissions
-  $ git-veil trust-permissions --key-store /path/to/store
+  $ git-veil trust-permissions --git-veil-home /path/to/store
 ")]
     TrustPermissions {
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
-        #[arg(long)]
+        #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
     },
 

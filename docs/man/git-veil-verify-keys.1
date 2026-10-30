@@ -4,15 +4,15 @@
 .SH NAME
 git\-veil\-verify\-keys \- Verify the keyring signature against the pinned trusted key
 .SH SYNOPSIS
-\fBgit\-veil verify\-keys\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil verify\-keys\fR [\fB\-\-git\-remote\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Verify the keyring signature against the pinned trusted key
 .SH OPTIONS
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -27,4 +27,4 @@ before touching secrets.
 
 EXAMPLES
   $ git\-veil verify\-keys
-  $ git\-veil verify\-keys \-\-remote upstream
+  $ git\-veil verify\-keys \-\-git\-remote upstream

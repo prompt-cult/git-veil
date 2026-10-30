@@ -24,7 +24,7 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 }
 
 /// Resolves the key store location for commands that consume a key_store.
-/// An explicit `--key-store` wins, then `$GIT_VEIL_HOME`, then
+/// An explicit `--git-veil-home` wins, then `$GIT_VEIL_HOME`, then
 /// `$HOME/.git-veil`. Resolved lazily so HOME-free subcommands
 /// (remove-file/list/clean/repo-id/error-codes) never fail on an unset
 /// HOME. add-file, allow and list-keys are not in that set: add-file and
