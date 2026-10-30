@@ -66,32 +66,18 @@ The boundary:
 3. `docs/src/design.md` ("Terminology") carries the mapping table as the translation reference; keep the two in step.
 4. Two boundary tokens remain, named here as the contract: the on-disk key store file names `identities.txt` (X25519 private keys) and `recipients.txt` (X25519 public keys) are format constants, and the upstream `age` crate's type names (`age::x25519::Identity`, `age::x25519::Recipient`) appear at the single import site in `src/age_crypto.rs`, aliased to `X25519PrivateKey` / `X25519PublicKey`. New identifiers use the crypto column from birth.
 
-## Writing law (all documentation)
+## One home per fact (law)
 
-Documentation - README.md, everything under `docs/`, and CLI help text - is
-plain UK English in the GOV.UK style, the way GOV.UK wrote in the mid-2010s.
-Write like a person. If a sentence sounds like a press release, rewrite it.
+No fact is documented twice. Every fact about the tool lives in one file,
+at the place that owns it: the logic itself, the workflow it runs under,
+the config it reads. Documentation outside the source is one of two
+things: the home of a fact that has no closer owner, or a signpost that
+points to that home. Standalone training material that teaches use
+without restating mechanics is a signpost's content in the operator's
+words; it exists at mdBook-friendly paths and stays sync-free by
+pointing, not copying. A document that repeats source content is toxic:
+it exists to rot and to confuse. Delete it, or reduce it to a signpost.
 
-- Short sentences. One idea per sentence. Aim for under 20 words.
-- Active voice. "You run `git-veil hide`", not "`git-veil hide` can be run".
-- Common words. "use", not "utilise" or "leverage". "help", not "facilitate".
-- Front-load the point. The first sentence of a section says what the section
-  is about.
-- UK spelling: behaviour, colour, centre, defence, licence (noun), catalogue,
-  grey, programme, travelling, labelled, modelling.
-- Banned outright: em-dashes (use a comma, a colon, or " - "), exclamation
-  marks in prose, rhetorical questions, and every AI-slop marker. The banned
-  list: delve, seamless, robust, leverage, streamline, harness, elevate,
-  holistic, cutting-edge, state-of-the-art, game-changer, unlock, journey,
-  myriad, plethora, testament, tapestry, landscape as a metaphor, crucial,
-  vital, essential, facilitate, utilise, commence, furthermore, moreover,
-  additionally, "important to note", "worth noting", "dive in", "dive deep",
-  "let's", "in this guide", "in conclusion", "fast-paced", "navigate the
-  complexities", empower, foster, realm, beacon, cornerstone, takeaway,
-  synergy, "welcome to". Filler marketing words are banned too: "modern",
-  "powerful", "simple", "easy" when they only pad the sentence.
-- Do not bold every other word. Bold a term once, if it helps.
-- Explain jargon in plain words the first time it appears.
 ## GIT COMMENTS ARE NEVER TRUTH (law)
 
 Commit messages, release notes, decision-log claims and any agent narrative
