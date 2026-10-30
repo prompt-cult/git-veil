@@ -84,7 +84,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (export-pin)
 _arguments "${_arguments_options[@]}" : \
-'--output=[Pin-file destination - must be OUTSIDE the repository worktree]:OUTPUT:_files' \
+'--output=[Write the pin to a file instead of stdout - must be OUTSIDE the repository worktree]:OUTPUT:_files' \
 '--remote=[Git remote name]:REMOTE:_default' \
 '--key-store=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
@@ -427,7 +427,7 @@ _git-veil_commands() {
 'export:Export an X25519 public key from the local key store' \
 'forget:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine from an exported pin-file' \
-'export-pin:Export this repository'\''s pin-file for import on another machine' \
+'export-pin:Export this repository'\''s pin for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
 'add-key:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'remove-key:Remove a collaborator from the keyring and re-sign it' \
@@ -521,7 +521,7 @@ _git-veil__subcmd__help_commands() {
 'export:Export an X25519 public key from the local key store' \
 'forget:Remove a key from the local key store (destructive, local-only)' \
 'trust:Pin this repository'\''s owner key on this machine from an exported pin-file' \
-'export-pin:Export this repository'\''s pin-file for import on another machine' \
+'export-pin:Export this repository'\''s pin for import on another machine' \
 'fingerprint:Print the git-veil fingerprint of a labelled public key' \
 'add-key:Add a collaborator'\''s X25519 public key to the keyring and re-sign it' \
 'remove-key:Remove a collaborator from the keyring and re-sign it' \

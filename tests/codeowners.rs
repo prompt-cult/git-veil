@@ -232,7 +232,7 @@ fn test_pin_ceremony_warns_or_suppresses_without_touching_the_exit_code() {
     cmd_export_pin(
         &repo.path,
         "fara+owner@github.com",
-        &pin,
+        Some(&pin),
         "origin",
         &store.path,
     )

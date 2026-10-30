@@ -163,7 +163,7 @@ fn run() -> Result<()> {
             cmd_export_pin(
                 &repo_root,
                 &repo_id,
-                &output,
+                output.as_deref(),
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
             )?;
