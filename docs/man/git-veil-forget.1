@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-forget \- Remove a key from the local key store (destructive, local\-only)
 .SH SYNOPSIS
-\fBgit\-veil forget\fR [\fB\-\-yes\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
+\fBgit\-veil forget\fR [\fB\-\-yes\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIIDENTIFIER\fR> 
 .SH DESCRIPTION
 Remove a key from the local key store (destructive, local\-only)
 .SH OPTIONS
@@ -12,7 +12,7 @@ Remove a key from the local key store (destructive, local\-only)
 \fB\-\-yes\fR
 Confirm destructive removal: required when the target is the only private key in the store
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -47,4 +47,4 @@ per\-store summary prints the public key encodings removed.
 EXAMPLES
   $ git\-veil forget age1xxxx                 # exact public key encoding
   $ git\-veil forget age1xxxx \-\-yes           # confirm only\-private\-key removal
-  $ git\-veil forget age1xxxx \-\-key\-store /path/to/store
+  $ git\-veil forget age1xxxx \-\-git\-veil\-home /path/to/store

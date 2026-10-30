@@ -4,12 +4,12 @@
 .SH NAME
 git\-veil\-repo\-id \- Show the repository ID derived from the git remote push URL
 .SH SYNOPSIS
-\fBgit\-veil repo\-id\fR [\fB\-\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil repo\-id\fR [\fB\-\-git\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Show the repository ID derived from the git remote push URL
 .SH OPTIONS
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -17,9 +17,9 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Prints the repository ID derived from the git remote push URL \- the
 exact string trust expects as its repo_id argument (trust re\-derives it
-from the remote and refuses a mismatch). Pass \-\-remote if your remote is
+from the remote and refuses a mismatch). Pass \-\-git\-remote if your remote is
 not \*(Aqorigin\*(Aq.
 
 EXAMPLES
   $ git\-veil repo\-id
-  $ git\-veil repo\-id \-\-remote upstream
+  $ git\-veil repo\-id \-\-git\-remote upstream

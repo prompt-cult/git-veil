@@ -1,6 +1,6 @@
 //! `git-veil export-pin <repo_id>` prints the pin to stdout (the pin
 //! artifact alone) so it can be piped straight to the machine that will
-//! run `git-veil trust --import`; `--output <pin-file>` writes it to a
+//! run `git-veil trust --import`; `--outfile <pin-file>` writes it to a
 //! file instead.
 //!
 //! Export requires the same possession proof as `trust`: an exact
@@ -8,7 +8,7 @@
 //! verifying key derived from a seed in the signing key store. A
 //! machine without the matching seed cannot export at all. Pins
 //! originate only from machines holding the signing key. Store-less
-//! machines are consumers, never producers. An `--output` path must be
+//! machines are consumers, never producers. An `--outfile` path must be
 //! outside the repository worktree.
 
 use anyhow::Result;
@@ -41,7 +41,7 @@ pub fn cmd_export_pin(
     // against the repository's committed metadata. Chatter lives on
     // stderr so a redirected stdout captures the pin artifact alone.
     //
-    // With --output the artifact goes to the file. The destination must
+    // With --outfile the artifact goes to the file. The destination must
     // not land inside the repository: it would be committed, and a
     // committed pin is exactly the self-supplied anchor the pin model
     // exists to prevent. A redirected stdout owes the same discipline to

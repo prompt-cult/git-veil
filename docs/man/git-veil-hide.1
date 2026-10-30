@@ -4,15 +4,15 @@
 .SH NAME
 git\-veil\-hide \- Encrypt named tracked files to the keyring
 .SH SYNOPSIS
-\fBgit\-veil hide\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-\-keep\-plaintext\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil hide\fR [\fB\-\-git\-remote\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-\-keep\-plaintext\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Encrypt named tracked files to the keyring
 .SH OPTIONS
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-\-keep\-plaintext\fR
@@ -71,6 +71,6 @@ separate command: git\-veil rotate.
 EXAMPLES
   $ git\-veil hide .env    # encrypt .env and delete the plaintext (the default)
   $ git\-veil hide .env \-\-keep\-plaintext
-  $ git\-veil hide .env \-\-remote upstream
+  $ git\-veil hide .env \-\-git\-remote upstream
   $ git\-veil hide .env config.yml    # encrypt exactly the named files
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files

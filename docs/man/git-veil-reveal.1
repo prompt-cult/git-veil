@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-reveal \- Decrypt named tracked files back to plaintext
 .SH SYNOPSIS
-\fBgit\-veil reveal\fR [\fB\-\-email\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+\fBgit\-veil reveal\fR [\fB\-\-email\fR] [\fB\-\-git\-remote\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
 .SH DESCRIPTION
 Decrypt named tracked files back to plaintext
 .SH OPTIONS
@@ -12,10 +12,10 @@ Decrypt named tracked files back to plaintext
 \fB\-\-email\fR \fI<EMAIL>\fR
 Your email address
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR

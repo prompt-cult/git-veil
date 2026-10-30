@@ -4,12 +4,12 @@
 .SH NAME
 git\-veil\-import \- Import your X25519 private key into the git\-veil key store
 .SH SYNOPSIS
-\fBgit\-veil import\fR [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil import\fR [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
 .SH DESCRIPTION
 Import your X25519 private key into the git\-veil key store
 .SH OPTIONS
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -39,4 +39,4 @@ is not duplicated.
 EXAMPLES
   $ age\-keygen \-o my\-age\-identity.txt      # create + print the recipe
   $ git\-veil import my\-age\-identity.txt
-  $ git\-veil import a.txt b.txt \-\-key\-store /path/to/store
+  $ git\-veil import a.txt b.txt \-\-git\-veil\-home /path/to/store

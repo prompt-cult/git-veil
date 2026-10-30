@@ -4,7 +4,7 @@
 .SH NAME
 git\-veil\-trust \- Pin this repository\*(Aqs owner key on this machine from an exported pin\-file
 .SH SYNOPSIS
-\fBgit\-veil trust\fR <\fB\-\-import\fR> [\fB\-\-remote\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil trust\fR <\fB\-\-import\fR> [\fB\-\-git\-remote\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Pin this repository\*(Aqs owner key on this machine from an exported pin\-file
 .SH OPTIONS
@@ -12,13 +12,13 @@ Pin this repository\*(Aqs owner key on this machine from an exported pin\-file
 \fB\-\-import\fR \fI<PIN_FILE>\fR
 Import a pin\-file produced by git\-veil export\-pin on a machine holding the signing key
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
 \fB\-\-suppress\-codeowners\fR
 Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil). The store and its pins are the trust boundary for every repository that uses it
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -43,10 +43,10 @@ The pin\-file must point OUTSIDE the repository worktree, so a pin\-file
 always travels out of band (e.g. ssh) \- the same model as known_hosts
 provisioning. The pin lives in the key store, never committed.
 
-Trust domain: the key store named by \-\-key\-store holds this machine\*(Aqs pins
+Trust domain: the key store named by \-\-git\-veil\-home holds this machine\*(Aqs pins
 for EVERY repository that uses that store, so the store and its pins are
 one trust boundary. Sharing a single store across mutually distrusting
-repositories is not advised; use a separate \-\-key\-store per trust domain.
+repositories is not advised; use a separate \-\-git\-veil\-home per trust domain.
 
 Requires init first. Typical next step: add\-key.
 

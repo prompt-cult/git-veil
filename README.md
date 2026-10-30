@@ -66,7 +66,7 @@ The key store and its pins are the trust boundary for every repository that
 uses that store. Do not share one store across repositories that do not
 trust each other. Set `GIT_VEIL_HOME` to isolate a project's keys from your
 default `$HOME/.git-veil` (for example `GIT_VEIL_HOME=~/keys/project-a`).
-`--key-store` overrides both for one-off use.
+`--git-veil-home` overrides both for one-off use.
 
 ## Key store permissions
 
@@ -270,7 +270,7 @@ the workflow differ. One payoff is a smaller binary.
 | `export`         | Export an X25519 public key from the local key store                    |
 | `forget`         | Delete a key from the local key store (destructive, local-only)         |
 | `trust`          | Pin the repository owner's key by possession proof, or import a pin-file (per machine) |
-| `export-pin`     | Print this repository's pin (stdout, `--output` optional) for import on a machine without the signing key |
+| `export-pin`     | Print this repository's pin (stdout, `--outfile` optional) for import on a machine without the signing key |
 | `add-key`        | Add a collaborator's public key to the keyring and re-sign it           |
 | `remove-key`     | Remove a collaborator from the keyring and re-sign it                   |
 | `add-file`       | Track files for encryption (auto-gitignores plaintext names; records the allowance on this machine) |

@@ -4,18 +4,18 @@
 .SH NAME
 git\-veil\-export\-pin \- Export this repository\*(Aqs pin for import on another machine
 .SH SYNOPSIS
-\fBgit\-veil export\-pin\fR [\fB\-\-output\fR] [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> 
+\fBgit\-veil export\-pin\fR [\fB\-\-outfile\fR] [\fB\-\-git\-remote\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPO_ID\fR> 
 .SH DESCRIPTION
 Export this repository\*(Aqs pin for import on another machine
 .SH OPTIONS
 .TP
-\fB\-\-output\fR \fI<OUTPUT>\fR
+\fB\-\-outfile\fR \fI<OUTPUT>\fR
 Write the pin to a file instead of stdout \- must be OUTSIDE the repository worktree
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR
@@ -39,7 +39,7 @@ same model as provisioning known_hosts:
   $ git\-veil export\-pin fara+simbo1905@github.com | ssh box \*(Aqcat > fara.pin\*(Aq
   $ git\-veil trust \-\-import fara.pin            # on the target machine
 
-\-\-output writes it to a file instead. The destination must be OUTSIDE the
+\-\-outfile writes it to a file instead. The destination must be OUTSIDE the
 repository worktree: a committed pin would be exactly the self\-supplied
 anchor the pin model exists to prevent. Keep stdout pins out of the
 worktree the same way.
@@ -54,5 +54,5 @@ documentation.
 EXAMPLES
   $ git\-veil export\-pin fara+simbo1905@github.com > fara.pin   # artifact only on stdout
   $ git\-veil export\-pin fara+simbo1905@github.com | ssh box \*(Aqcat > fara.pin\*(Aq
-  $ git\-veil export\-pin fara+simbo1905@github.com \-\-output /tmp/fara.pin
+  $ git\-veil export\-pin fara+simbo1905@github.com \-\-outfile /tmp/fara.pin
   $ git\-veil trust \-\-import fara.pin            # on the target machine

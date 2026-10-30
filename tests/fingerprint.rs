@@ -189,8 +189,8 @@ fn test_fingerprint_command_matches_owner_vector() {
 fn test_fingerprint_command_has_no_flags() {
     // One mode, no flags: key store, remote and output options do not exist.
     for args in [
-        vec!["fingerprint", "a", "b", "--key-store", "/tmp/x"],
-        vec!["fingerprint", "a", "b", "--output", "/tmp/x"],
+        vec!["fingerprint", "a", "b", "--git-veil-home", "/tmp/x"],
+        vec!["fingerprint", "a", "b", "--outfile", "/tmp/x"],
         vec!["fingerprint", "a", "b", "c"],
         vec!["fingerprint", "only-one-arg"],
     ] {
@@ -424,7 +424,7 @@ fn test_list_keys_prints_the_binding_fingerprint_per_principal() {
         .args([
             "--dangerously-skip-permissions-check",
             "list-keys",
-            "--key-store",
+            "--git-veil-home",
             key_store.path.to_str().unwrap(),
         ])
         .output()

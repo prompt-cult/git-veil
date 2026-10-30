@@ -525,7 +525,7 @@ fn test_remove_file_untracks_file() {
 
 #[test]
 fn test_allow_parses_files_and_remote() {
-    let cli = Cli::try_parse_from(["git-veil", "allow", ".env", "--remote", "upstream"])
+    let cli = Cli::try_parse_from(["git-veil", "allow", ".env", "--git-remote", "upstream"])
         .expect("allow parses");
     match cli.command {
         Commands::Allow { files, remote } => {
@@ -1103,7 +1103,7 @@ fn test_whoami_prints_the_principal_label() {
         .arg("whoami")
         .arg("--email")
         .arg("alice@example.com")
-        .arg("--key-store")
+        .arg("--git-veil-home")
         .arg(&key_store.path)
         .env("GIT_VEIL_SKIP_PERMISSIONS", "1")
         .output()

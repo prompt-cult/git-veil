@@ -4,15 +4,15 @@
 .SH NAME
 git\-veil\-rotate \- Re\-encrypt every tracked ciphertext to the current keyring
 .SH SYNOPSIS
-\fBgit\-veil rotate\fR [\fB\-\-remote\fR] [\fB\-\-key\-store\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBgit\-veil rotate\fR [\fB\-\-git\-remote\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Re\-encrypt every tracked ciphertext to the current keyring
 .SH OPTIONS
 .TP
-\fB\-\-remote\fR \fI<REMOTE>\fR [default: origin]
+\fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
 .TP
-\fB\-\-key\-store\fR \fI<KEY_STORE>\fR
+\fB\-\-git\-veil\-home\fR \fI<KEY_STORE>\fR
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-h\fR, \fB\-\-help\fR

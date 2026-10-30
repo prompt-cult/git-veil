@@ -652,7 +652,7 @@ fn test_export_pin_without_output_prints_only_the_artifact_to_stdout() {
             "--dangerously-skip-permissions-check",
             "export-pin",
             TEST_REPO_ID,
-            "--key-store",
+            "--git-veil-home",
             f.key_store.path.to_str().unwrap(),
         ])
         .output()
@@ -701,9 +701,9 @@ fn test_export_pin_output_inside_the_worktree_refuses() {
             "--dangerously-skip-permissions-check",
             "export-pin",
             TEST_REPO_ID,
-            "--output",
+            "--outfile",
             "stolen.pin",
-            "--key-store",
+            "--git-veil-home",
             f.key_store.path.to_str().unwrap(),
         ])
         .output()
