@@ -15,6 +15,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual rebuilds: Actions tab - pages - Run workflow, or
+  # `gh workflow run pages`. The deploy is gated on push, so a manual run
+  # must also be able to deploy; see the dispatch condition below.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -72,13 +76,13 @@ jobs:
           sys.exit(1 if broken else 0)
           PY
       - uses: actions/upload-pages-artifact@v3
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         with:
           path: _book
 
   deploy:
     needs: build
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # Least privilege: the build job only ever reads the repository, and only
     # the deployment needs the Pages token and the OIDC exchange.
