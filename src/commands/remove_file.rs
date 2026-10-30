@@ -20,7 +20,7 @@ use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, Tracked
 /// same step. This is the fail-closed default. A de-tracked but
 /// committed ciphertext would otherwise be silently skipped by the
 /// next hide, leaving it decryptable by collaborators removed in a
-/// later rotation. See "Orphaned ciphertext" in docs/design.md. Hide
+/// later rotation. See "Orphaned ciphertext" in docs/src/design.md. Hide
 /// refuses such orphans with exit 42. The ciphertext is committed
 /// content, so deletion is recoverable from git history.
 /// `--keep-ciphertext` leaves the ciphertext in place for callers that

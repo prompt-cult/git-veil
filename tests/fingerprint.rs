@@ -17,7 +17,7 @@ use std::process::Command;
 
 /// The golden vectors: (label, public-key-encoding, expected fingerprint)
 /// triples produced by the documented stock-tool one-liners, printed in
-/// docs/design.md ("Fingerprints"):
+/// docs/src/design.md ("Fingerprints"):
 ///
 /// ```text
 /// printf '%s:%s' 'alice@example.com' "$(age-keygen -y identity.txt)" | sha256sum

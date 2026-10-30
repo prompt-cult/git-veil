@@ -13,7 +13,7 @@
 //!
 //! The derivation is a pure function over public values with a fixed,
 //! documented shape, so a user on a clean host reproduces the exact value
-//! with stock OS tools (see docs/design.md, "Fingerprints").
+//! with stock OS tools (see docs/src/design.md, "Fingerprints").
 //!
 //! ```text
 //! printf '%s:%s' 'principal-label' "$(age-keygen -y private-key.txt)" | sha256sum

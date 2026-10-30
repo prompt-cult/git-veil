@@ -1,7 +1,7 @@
 //! X25519 encryption and decryption over the age format
 //! (age-encryption.org/v1, X25519 per RFC 7748).
 //!
-//! Terminology (see "Terminology" in docs/design.md): the core speaks
+//! Terminology (see "Terminology" in docs/src/design.md): the core speaks
 //! RFC-standard cryptography only. The one boundary with the age crate's
 //! own vocabulary is this import, where the upstream type names are aliased
 //! to the crypto terms used everywhere else.

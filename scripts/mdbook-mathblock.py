@@ -5,7 +5,7 @@ markdown and stash them as raw HTML comments.
 mdBook renders markdown with pulldown-cmark, whose CommonMark escape rules
 mangle TeX inside a math block: the array row separators (`\\\\`) collapse to
 `\\`, and `\\{`/`\\}` lose their braces, so the algorithm listings in
-docs/design.md render on one line. This preprocessor replaces each `$$` block
+docs/src/design.md render on one line. This preprocessor replaces each `$$` block
 with an HTML comment carrying the base64 of the full block. HTML comments pass
 through the markdown renderer untouched; docs/tex-mj3.js decodes them back into
 the page before MathJax typesets.

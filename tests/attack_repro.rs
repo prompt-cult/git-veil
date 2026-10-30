@@ -362,7 +362,7 @@ fn fix_malformed_version_lines_are_parse_failures() {
 // path. Hide refuses to first-encrypt a tracked path that has a plaintext
 // on disk, no committed ciphertext in the index, and no allowance on this
 // machine. The allowance record lives in the key store, keyed to the trust
-// pin and the principal. See "Allowance" in docs/design.md.
+// pin and the principal. See "Allowance" in docs/src/design.md.
 // ---------------------------------------------------------------------------
 
 #[test]

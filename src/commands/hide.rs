@@ -130,7 +130,7 @@ pub fn cmd_hide(
     let (established, _orphans) = index_state(repo_root, &tracked)?;
 
     // Encryption-allowance gate (exit 72, see "Allowance" in
-    // docs/design.md). tracked.json is committed and unsigned, so a repo
+    // docs/src/design.md). tracked.json is committed and unsigned, so a repo
     // writer can nominate a path. A tracked path with a plaintext on disk,
     // no committed ciphertext in the index and no allowance on this machine
     // is exactly a nominated first-encrypt: encrypting it would write the
@@ -290,7 +290,7 @@ pub fn cmd_hide(
         )));
     }
 
-    // Plaintext deletion is the default (docs/design.md "Plaintext
+    // Plaintext deletion is the default (docs/src/design.md "Plaintext
     // lifecycle"). The plaintext's only worktree protection is a
     // .gitignore line, so it is deleted once every ciphertext is durably
     // on disk. --keep-plaintext opts out. The delete happens only after

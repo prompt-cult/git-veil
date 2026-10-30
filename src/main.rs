@@ -29,7 +29,7 @@ fn resolve_email(repo_root: &std::path::Path, email: Option<String>) -> Result<S
 /// (remove-file/list/clean/repo-id/error-codes) never fail on an unset
 /// HOME. add-file, allow and list-keys are not in that set: add-file and
 /// allow record the machine-local allowance store in the key store (see
-/// "Allowance" in docs/design.md), and list-keys verifies the keyring
+/// "Allowance" in docs/src/design.md), and list-keys verifies the keyring
 /// signature against the pinned key, so all three consume a key_store
 /// like every other gated command.
 ///

@@ -134,7 +134,7 @@ fn decrypt_with_any_store_key(
 }
 
 /// The ring-change pass: re-encrypts every tracked ciphertext to the
-/// current keyring (docs/design.md "The ring-change ceremony"). Run it
+/// current keyring (docs/src/design.md "The ring-change ceremony"). Run it
 /// after add-key or remove-key so the committed ciphertext reflects the
 /// updated keyring.
 ///

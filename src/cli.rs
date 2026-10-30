@@ -160,7 +160,7 @@ This is destructive and LOCAL-ONLY: it does not touch any repository,
 keyring or trust state, and it does NOT revoke anything. Removing a
 private key from the store does not stop old ciphertext that was
 encrypted to it from being decryptable by whoever holds it. Revoking a
-departing collaborator is remove-key + re-hide (docs/departing.md);
+departing collaborator is remove-key + re-hide (docs/src/departing.md);
 forget is the departing user's housekeeping step for their own
 machine's store.
 
@@ -329,7 +329,7 @@ cannot encrypt is never signed into the ring.
 
 The keyring is signed with the TRUSTED key - the one whose owner key
 fingerprint is pinned for this repository. signing-keys.txt must contain
-that seed; git-veil never generates it (docs/solo.md step 1 has the
+that seed; git-veil never generates it (docs/src/solo.md step 1 has the
 recipe). With several signing keys present, --signing-key names one by
 its full 64 hex character Ed25519 verifying key (the public half, never
 the seed). A missing signing key exits with code 20 and the
@@ -812,7 +812,7 @@ Prints the table of documented exit codes - number, enum name, and
 meaning - that every deliberate failure exits with. Failures without a
 more specific code exit 1, and command-line usage errors exit 2. The
 codes are public API: they are never renumbered, only appended, and the
-specification lives in docs/design.md.
+specification lives in docs/src/design.md.
 
 EXAMPLES
   $ git-veil error-codes

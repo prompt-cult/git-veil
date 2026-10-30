@@ -87,11 +87,11 @@ fn test_completions_match_committed_docs() {
 }
 
 /// The error-codes table must list every documented code. A new code added
-/// to the enum but missing from docs/design.md is a spec gap, and the table
+/// to the enum but missing from docs/src/design.md is a spec gap, and the table
 /// is the public exit-code contract.
 #[test]
 fn test_error_codes_are_all_documented() {
-    let design = fs::read_to_string(repo_root().join("docs/design.md")).unwrap();
+    let design = fs::read_to_string(repo_root().join("docs/src/design.md")).unwrap();
     for code in git_veil::ExitCode::ALL {
         let needle_num = format!("| {} ", *code as u8);
         let found = design
@@ -99,7 +99,7 @@ fn test_error_codes_are_all_documented() {
             .any(|line| line.starts_with(&needle_num) && line.contains(code.name()));
         assert!(
             found,
-            "exit code {} ({}) is missing from the docs/design.md exit-code table - the table is the public spec",
+            "exit code {} ({}) is missing from the docs/src/design.md exit-code table - the table is the public spec",
             *code as u8,
             code.name()
         );
@@ -149,7 +149,7 @@ fn test_no_legacy_fingerprint_code_remains_in_src() {
 /// ageisms, the age vocabulary for key material, are forbidden in src/
 /// outside user-surface string literals: `recipient` for the bech32
 /// X25519 public key and `identity`/`identities` for the bech32 X25519
-/// private key (docs/design.md, "Terminology"). This grep test strips
+/// private key (docs/src/design.md, "Terminology"). This grep test strips
 /// string and char literals from every src/*.rs. The user surface lives
 /// in string literals, where the bracketed `(age ...)` spanning form is
 /// allowed when advising age tooling. The test fails on any remaining
@@ -159,7 +159,7 @@ fn test_no_legacy_fingerprint_code_remains_in_src() {
 /// the contract: the upstream `age` crate's own type and trait names
 /// (aliased to the crypto terms at the one import site in
 /// src/age_crypto.rs) and the two on-disk key store file names, which are
-/// format constants documented in docs/design.md.
+/// format constants documented in docs/src/design.md.
 #[test]
 fn test_no_ageisms_in_src_outside_string_literals() {
     const MASKED: &[&str] = &[
@@ -345,12 +345,12 @@ fn strip_string_literals(src: &str) -> String {
     String::from_utf8(out).expect("blanking preserves utf8")
 }
 
-/// docs/design.md carries the crypto to ageisms mapping table, and
+/// docs/src/design.md carries the crypto to ageisms mapping table, and
 /// AGENTS.md carries the terminology law: the ageisms definition, the
 /// boundary, and the table.
 #[test]
 fn test_terminology_law_is_carried() {
-    let design = fs::read_to_string(repo_root().join("docs/design.md")).unwrap();
+    let design = fs::read_to_string(repo_root().join("docs/src/design.md")).unwrap();
     let agents = fs::read_to_string(repo_root().join("AGENTS.md")).unwrap();
     for needle in [
         "ageism",
@@ -363,7 +363,7 @@ fn test_terminology_law_is_carried() {
     ] {
         assert!(
             design.contains(needle),
-            "docs/design.md terminology mapping table must mention `{needle}`"
+            "docs/src/design.md terminology mapping table must mention `{needle}`"
         );
         assert!(
             agents.contains(needle),
@@ -372,11 +372,11 @@ fn test_terminology_law_is_carried() {
     }
     assert!(
         design.contains("## Terminology"),
-        "docs/design.md carries the prominent terminology section"
+        "docs/src/design.md carries the prominent terminology section"
     );
     assert!(
         design.contains("Crypto term (git-veil core and code)"),
-        "docs/design.md carries the mapping table header"
+        "docs/src/design.md carries the mapping table header"
     );
 }
 

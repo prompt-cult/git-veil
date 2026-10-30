@@ -14,7 +14,7 @@ use crate::tracked_files::{
 use crate::{cmd_verify_keys, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
-/// index. See docs/design.md "Ignore safety" gate 4.
+/// index. See docs/src/design.md "Ignore safety" gate 4.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
     if is_tracked_in_git(repo_root, file) {
         return Err(coded(
@@ -124,7 +124,7 @@ pub fn cmd_reveal(
         // replace the link. Refuse for consistency with the read gates.
         ensure_regular_file(repo_root, file)?;
 
-        // Tracked-plaintext gate (exit 43, docs/design.md "Ignore safety"
+        // Tracked-plaintext gate (exit 43, docs/src/design.md "Ignore safety"
         // gate 4). A plaintext tracked in git is ordinary repository
         // content, not a secret. Overwriting it from committed ciphertext
         // is the reveal-clobber channel: a repo writer nominates a source

@@ -7,7 +7,7 @@
 //! git user, has allowed these paths. It lives in the key store, outside
 //! the repository and permission-checked, because anything committed would
 //! be attacker-writable and the refusal void. One repo-relative path per
-//! line, no JSON, no header. See "Allowance" in docs/design.md.
+//! line, no JSON, no header. See "Allowance" in docs/src/design.md.
 
 use anyhow::{Context, Result};
 use std::fs;

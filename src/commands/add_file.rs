@@ -22,7 +22,7 @@ use crate::tracked_files::{
 /// (src/allowance.rs): tracked.json is committed and attacker-writable, so
 /// hide refuses to first-encrypt a path that neither has a committed
 /// ciphertext nor was allowed on this machine. See "Allowance" in
-/// docs/design.md.
+/// docs/src/design.md.
 pub fn cmd_add_file(
     repo_root: &Path,
     files: Vec<String>,
@@ -85,7 +85,7 @@ pub(crate) fn is_gitignored(repo_root: &Path, relative_path: &str) -> Result<boo
 
 /// True when the repo-relative path is tracked in the git index, staged
 /// or committed. Shared by reveal's tracked-plaintext
-/// refusal (exit 43, docs/design.md "Ignore safety" gate 4). A
+/// refusal (exit 43, docs/src/design.md "Ignore safety" gate 4). A
 /// git-tracked plaintext is ordinary repository content, not a
 /// secret, and overwriting it from attacker-committed ciphertext is
 /// the reveal-clobber channel.

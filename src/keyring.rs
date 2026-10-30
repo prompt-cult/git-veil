@@ -8,7 +8,7 @@ pub const END_MARKER: &str = "-----END GIT-VEIL KEYRING-----";
 /// The `version:` line prefix inside the keyring block. The line is part of
 /// the signed payload, so the monotonic counter it carries cannot be forged
 /// without the owner key. See "Keyring format and freshness" in
-/// docs/design.md.
+/// docs/src/design.md.
 const VERSION_PREFIX: &str = "version:";
 
 #[derive(Debug, Clone)]

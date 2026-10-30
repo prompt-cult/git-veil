@@ -41,7 +41,7 @@ pub enum ExitCode {
     /// Tracked plaintext on disk is not git-ignored (a warning, the exit code stays 0).
     PlaintextNotIgnored = 41,
     /// A committed `.secret` ciphertext path is not tracked (the
-    /// whole-manifest pass refuses it; see docs/design.md "Orphaned
+    /// whole-manifest pass refuses it; see docs/src/design.md "Orphaned
     /// ciphertext").
     OrphanedCiphertext = 42,
     /// The plaintext is tracked in git (fatal in `reveal`).

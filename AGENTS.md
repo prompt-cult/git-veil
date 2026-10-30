@@ -46,7 +46,7 @@ Otherwise CI-facing docs drift from the real CLI.
 
 ## Domain gotchas (git-veil is a secrets tool)
 
-- Failures use documented exit codes, not a generic 1 (trust 10–13, missing keys 20–22, permissions 30, gitignore 40–41, crypto 60–63, policy 70–71). Spec: `git-veil error-codes` and `docs/design.md`. Preserve these codes when changing error paths.
+- Failures use documented exit codes, not a generic 1 (trust 10–13, missing keys 20–22, permissions 30, gitignore 40–41, crypto 60–63, policy 70–71). Spec: `git-veil error-codes` and `docs/src/design.md`. Preserve these codes when changing error paths.
 - Key store permission checks (exit 30) apply to `$HOME/.git-veil` or `GIT_VEIL_HOME`; tests isolate state via `GIT_VEIL_HOME`. If local tests fail with exit 30, your real key store has loose modes - `chmod 700/600` it; do not weaken the check.
 - Ciphertexts must stay standard age format (age-encryption.org/v1) - `age`/`rage` interoperability is a contract, so avoid baking git-veil-specific data into encrypted payloads.
 
@@ -63,7 +63,7 @@ The boundary:
 
 1. Core and code (`src/`, internals, comments, error messages, commit messages) use the crypto column only. An ageism in `src/` outside a user-surface string literal is a defect; `tests/docs_drift.rs` (`test_no_ageisms_in_src_outside_string_literals`) greps for exactly that and fails the build.
 2. The user surface (CLI help text, operator docs) uses crypto terminology too, EXCEPT where the documentation advises the operator how to do something in age (run this age command, interoperate with age/rage tooling). In those places only, age terminology appears, and where both vocabularies must span, the form is crypto terminology then brackets (ageism) - e.g. "X25519 private key (age identity)".
-3. `docs/design.md` ("Terminology") carries the mapping table as the translation reference; keep the two in step.
+3. `docs/src/design.md` ("Terminology") carries the mapping table as the translation reference; keep the two in step.
 4. Two boundary tokens remain, named here as the contract: the on-disk key store file names `identities.txt` (X25519 private keys) and `recipients.txt` (X25519 public keys) are format constants, and the upstream `age` crate's type names (`age::x25519::Identity`, `age::x25519::Recipient`) appear at the single import site in `src/age_crypto.rs`, aliased to `X25519PrivateKey` / `X25519PublicKey`. New identifiers use the crypto column from birth.
 
 ## Writing law (all documentation)

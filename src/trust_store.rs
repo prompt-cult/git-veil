@@ -156,7 +156,7 @@ impl TrustPinStore {
     /// SHA-256 digest of the accepted signed content at that version. It
     /// lives beside the pin, outside the repository. A committed baseline
     /// would be attacker-writable and the rollback refusal would be void.
-    /// See "Keyring format and freshness" in docs/design.md.
+    /// See "Keyring format and freshness" in docs/src/design.md.
     ///
     /// File format: line 1 is the version digits. Line 2 is optional and
     /// holds the hex digest. A baseline written before the digest field
@@ -226,7 +226,7 @@ impl TrustPinStore {
 ///
 /// `add-key` and `remove-key` write the stamp after they write the re-signed
 /// keyring; `rotate` requires it, verifies the committed ring against
-/// it, and clears it after a successful pass (docs/design.md "The
+/// it, and clears it after a successful pass (docs/src/design.md "The
 /// ring-change ceremony"). The stamp lives in the key store, outside the
 /// repository, so committed repo content can neither forge nor clear it.
 ///

@@ -4,7 +4,7 @@
 //! A pure function of its two arguments: no repository, no key store,
 //! no pin, no network. The printed value is the single derivation
 //! every git-veil fingerprint uses, reproducible with stock OS tools.
-//! See docs/design.md, "Fingerprints".
+//! See docs/src/design.md, "Fingerprints".
 
 use crate::fingerprint::fingerprint_for_public_key;
 

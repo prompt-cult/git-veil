@@ -175,7 +175,7 @@ pub fn verify_keyring_against_trust(
     }
 
     // Freshness check (see "Keyring format and freshness" in
-    // docs/design.md). A valid signature proves the owner signed this
+    // docs/src/design.md). A valid signature proves the owner signed this
     // keyring at some point, not that it is current. A `git revert` of a
     // remove-key commit would otherwise silently return a revoked
     // collaborator to the keyring. The per-machine baseline, the highest

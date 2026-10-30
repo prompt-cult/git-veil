@@ -49,7 +49,7 @@ pub fn cmd_remove_key(
     // Bump the monotonic freshness counter before signing. The bump is
     // part of the signed payload, so a later `git revert` of this commit
     // restores an old version too and the per-machine baseline refuses it
-    // (docs/design.md "Keyring format and freshness").
+    // (docs/src/design.md "Keyring format and freshness").
     keyring.bump_version()?;
 
     // Serialize keyring without signature
@@ -78,7 +78,7 @@ pub fn cmd_remove_key(
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
-    // Stamp the ring-change pass as due (docs/design.md "The ring-change
+    // Stamp the ring-change pass as due (docs/src/design.md "The ring-change
     // ceremony"). The stamp records the version and the signed-content
     // digest just written, in this machine's key store: the whole-manifest
     // pass runs only against this exact ring, only on this machine, and
@@ -88,7 +88,7 @@ pub fn cmd_remove_key(
     RingPassStore::write(key_store, &repo_id, version, &digest)?;
 
     // Purge the removed principal's allowance records in the key store
-    // this machine runs against (docs/design.md "Allowance"). The pin was
+    // this machine runs against (docs/src/design.md "Allowance"). The pin was
     // verified equal to the committed fingerprint above, so it keys the
     // same record the principal's commands wrote. Scope, stated honestly:
     // this machine's key store only.

@@ -69,7 +69,7 @@ pub fn cmd_add_key(
     keyring.add_entry(email.to_string(), public_key_str.to_string())?;
 
     // Bump the monotonic freshness counter before signing, so the counter
-    // is covered by the new signature (see docs/design.md "Keyring format and
+    // is covered by the new signature (see docs/src/design.md "Keyring format and
     // freshness"). The counter lives in the signed payload and needs no
     // state outside the keyring, so no clock and no cross-machine bookkeeping.
     keyring.bump_version()?;
@@ -100,7 +100,7 @@ pub fn cmd_add_key(
     write_atomic(&keyring_path, keyring.serialize().as_bytes())
         .context("Failed to write keyring file")?;
 
-    // Stamp the ring-change pass as due (docs/design.md "The ring-change
+    // Stamp the ring-change pass as due (docs/src/design.md "The ring-change
     // ceremony"). The stamp records the version and the signed-content
     // digest just written, in this machine's key store: the whole-manifest
     // pass runs only against this exact ring, only on this machine, and

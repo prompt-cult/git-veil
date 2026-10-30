@@ -82,7 +82,7 @@ Failures exit with documented codes, not an anonymous 1: trust failures are
 10–13, missing keys 20–22, unsafe permissions 30, gitignore collisions 40–41,
 crypto failures 60–63, and policy/path refusals 70–71. `git-veil error-codes`
 prints the full table with names and meanings; the specification is in
-[docs/design.md](docs/design.md).
+[docs/src/design.md](docs/src/design.md).
 
 ## Quick start (solo)
 
@@ -139,7 +139,7 @@ git-veil hide .env      # re-encrypt one file; every other ciphertext is untouch
 ```
 
 Name the files explicitly; see
-[docs/two-collaborators.md](docs/two-collaborators.md).
+[docs/src/two-collaborators.md](docs/src/two-collaborators.md).
 
 ## The hide gate: allow
 
@@ -148,7 +148,7 @@ so anyone with write access to the repository can nominate a path in it.
 Before `hide` first-encrypts a path you never allowed on this machine, it
 refuses and asks, and you answer with `git-veil allow`. The full walkthrough
 with real output is in
-[docs/two-collaborators.md](docs/two-collaborators.md); the mechanics,
+[docs/src/two-collaborators.md](docs/src/two-collaborators.md); the mechanics,
 including the cases that never ask, are in
 [docs/src/commands.md](docs/src/commands.md#allow).
 
@@ -298,14 +298,14 @@ a workflow discussion with examples. Rendered man pages live in `docs/man/`.
 
 Step-by-step guides are in `docs/`:
 
-- Solo developer: [docs/solo.md](docs/solo.md)
-- Two collaborators: [docs/two-collaborators.md](docs/two-collaborators.md)
-- Joining user: [docs/joining.md](docs/joining.md)
-- Departing user: [docs/departing.md](docs/departing.md)
-- Migrating from git-secret: [docs/migrating-from-git-secret.md](docs/migrating-from-git-secret.md)
-- Migrating from git-crypt: [docs/migrating-from-git-crypt.md](docs/migrating-from-git-crypt.md)
+- Solo developer: [docs/src/solo.md](docs/src/solo.md)
+- Two collaborators: [docs/src/two-collaborators.md](docs/src/two-collaborators.md)
+- Joining user: [docs/src/joining.md](docs/src/joining.md)
+- Departing user: [docs/src/departing.md](docs/src/departing.md)
+- Migrating from git-secret: [docs/src/migrating-from-git-secret.md](docs/src/migrating-from-git-secret.md)
+- Migrating from git-crypt: [docs/src/migrating-from-git-crypt.md](docs/src/migrating-from-git-crypt.md)
 
-[docs/design.md](docs/design.md) specifies how repository identity, trust
+[docs/src/design.md](docs/src/design.md) specifies how repository identity, trust
 anchoring, key validity, crash safety and path safety work.
 
 ## Compatibility with `age` and `rage`

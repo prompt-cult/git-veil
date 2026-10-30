@@ -28,7 +28,7 @@ default-theme = "light"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/prompt-cult/git-veil"
 edit-url-template = "https://github.com/prompt-cult/git-veil/edit/main/docs/src/{path}"
-# docs/design.md carries the algorithm listings as display-math blocks
+# docs/src/design.md carries the algorithm listings as display-math blocks
 # ($$ ... $$) using \multicolumn, \textsc and array environments. The
 # built-in mathjax-support flag uses MathJax 2, which cannot render those
 # macros, so the book loads MathJax 3's tex-svg output instead: see
