@@ -38,37 +38,6 @@ environment. You do not need to look at the secret part of the key nor cut
 and paste it or transmit it. You simply copy the public part of the key and
 pass it to `git-veil add-key`.
 
-The preceding paragraphs may read like a very radical idea. Yet consider
-the alternatives; you have to maintain a system to distribute and backup
-your deployment secrets. Your author is shocked at how many software
-platforms (e.g. mobile application tooling, mobile backend) have you commit
-plaintext certificates into a private git database. Your author has seen
-and used a lot of enterprise systems where certificates and crypto
-materials were supposed to be automated. In practice your author has often
-seen them stepped around:
-
-- Testing the final deployment of production keys into production takes
-  time and effort, and just as you got it right in some test environment
-  does not mean it is going to go right first time in pro. `git-veil` means
-  that your secret management pipeline is your code deployment pipeline.
-- The moment doing things "properly" is not "just works" people end up
-  cutting/pasting/emailing the certs, passwords or keys around. The effort
-  of getting your keys securely deployed should not be left at the point
-  when you are under pressure to go live. The effort of `git-veil` is in
-  the initial setup and in learning how to use it. Once you know the drill
-  you can move to a model where your deployment secrets are not being
-  pasted over slack channels.
-- Your author has many times seen crypto materials expiring some months
-  past go-live and lots of lost time and bad optics on trying to
-  retroactively fix the mess. This is why your author added automated
-  testing to the mighty git-secret project. Perfection, and complexity, is
-  the enemy of secure.
-- Your author is convinced that the net result is quite a lot of security
-  theatre and security-by-obscurity. Or even the worst of all worlds; a
-  central secret management tool that is a concentration risk combined with
-  work arounds that are pasting around certs when sites go down a year
-  after go-live.
-
 The aim of `git-veil` is to bring self-sovereign public-key encryption of
 your application deployment secrets to the masses. History tells us that it
 is developer hubris to build your own security tooling. Leave it to the
