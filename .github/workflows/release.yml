@@ -37,9 +37,6 @@ jobs:
           - os: blacksmith-6vcpu-macos-15
             target: aarch64-apple-darwin
             asset_name: git-veil-macos-aarch64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            asset_name: git-veil-windows-x86_64.msi
 
     steps:
       - name: Checkout code
@@ -77,43 +74,20 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Strip binary (Unix)
-        if: runner.os != 'Windows'
+      - name: Strip binary
         run: strip target/${{ matrix.target }}/release/git-veil
 
-      - name: Rename binary (Unix)
-        if: runner.os != 'Windows'
+      - name: Rename binary
         run: |
           cp target/${{ matrix.target }}/release/git-veil ${{ matrix.asset_name }}
 
-      - name: Install WiX Toolset
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: dotnet tool install --global wix
-
-      - name: Build Windows MSI
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\scripts\build-msi.ps1 -OutputDirectory release-dist
-
-      - name: Stage Windows MSI
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: Copy-Item release-dist\*.msi ${{ matrix.asset_name }}
-
-      - name: Generate checksum (Unix)
-        if: runner.os != 'Windows'
+      - name: Generate checksum
         run: |
           if [ "$RUNNER_OS" == "macOS" ]; then
             shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
           else
             sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
           fi
-
-      - name: Generate checksum (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: "(Get-FileHash -Algorithm SHA256 ${{ matrix.asset_name }}).Hash.ToLower() + '  ' + '${{ matrix.asset_name }}' | Set-Content -NoNewline '${{ matrix.asset_name }}.sha256'"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
@@ -197,7 +171,7 @@ jobs:
             - Linux (x86_64): `git-veil-linux-x86_64`
             - macOS (x86_64): `git-veil-macos-x86_64`
             - macOS (Apple Silicon): `git-veil-macos-aarch64`
-            - Windows (x86_64 MSI): `git-veil-windows-x86_64.msi`
+            - Windows (x86_64 MSI): run the `windows-msi` workflow for this tag
             - Man pages: `git-veil-man-pages.tar.gz`
 
             SHA-256 checksums are provided for every asset (`*.sha256`).

@@ -1,0 +1,111 @@
+name: Windows MSI
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and attach to (for example, v0.7.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: write
+
+jobs:
+  build-msi:
+    name: Build Windows x86_64 MSI
+    runs-on: blacksmith-4vcpu-windows-2025
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo git
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-x86_64-pc-windows-msvc-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-x86_64-pc-windows-msvc-cargo-build-release-
+
+      - name: Build and test release binary
+        run: cargo test --release --locked --target x86_64-pc-windows-msvc
+
+      - name: Install WiX Toolset v4
+        shell: pwsh
+        run: dotnet tool install --global wix
+
+      - name: Build MSI
+        shell: pwsh
+        run: .\scripts\build-msi.ps1 -OutputDirectory release-dist
+
+      - name: Stage MSI with stable release asset name
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem release-dist\*.msi | Select-Object -First 1
+          if ($null -eq $msi) { throw 'The MSI build produced no installer.' }
+          Copy-Item $msi.FullName git-veil-windows-x86_64.msi
+          $hash = (Get-FileHash -Algorithm SHA256 git-veil-windows-x86_64.msi).Hash.ToLower()
+          "$hash  git-veil-windows-x86_64.msi" | Set-Content -NoNewline git-veil-windows-x86_64.msi.sha256
+
+      - name: Upload MSI workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: git-veil-windows-x86_64-${{ inputs.tag }}
+          path: |
+            git-veil-windows-x86_64.msi
+            git-veil-windows-x86_64.msi.sha256
+
+      - name: Check whether the tag has a GitHub release
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            'exists=true' >> $env:GITHUB_OUTPUT
+          } else {
+            'exists=false' >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Attach MSI to existing GitHub release
+        if: steps.release.outputs.exists == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --clobber git-veil-windows-x86_64.msi git-veil-windows-x86_64.msi.sha256
+
+      - name: Report missing GitHub release
+        if: steps.release.outputs.exists != 'true'
+        run: echo "No GitHub release exists for ${{ inputs.tag }}; the MSI is available as this workflow's artifact."
