@@ -11,7 +11,7 @@
     <mask id="shield-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="650" height="724">
       <rect width="650" height="724" fill="white" />
       <!-- Same three-node trunk and branch geometry as the official Git mark. -->
-      <path d="M 120 40 L 264 192 L 264 502 M 264 270 L 452 458" fill="none" stroke="black" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M 120 40 L 264 192 L 264 502 M 264 192 L 452 458" fill="none" stroke="black" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" />
       <circle cx="264" cy="192" r="48" fill="black" />
       <circle cx="264" cy="502" r="48" fill="black" />
       <circle cx="452" cy="458" r="48" fill="black" />
