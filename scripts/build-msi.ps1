@@ -44,6 +44,10 @@ if (-not $versionMatch.Success) {
 $version = $versionMatch.Groups[1].Value
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$icon = Join-Path $root "installer\git-veil.ico"
+if (-not (Test-Path $icon)) {
+    throw "Missing $icon. Run scripts\generate-brand-assets.ps1 first."
+}
 $targetRoot = $env:CARGO_TARGET_DIR
 if ([string]::IsNullOrWhiteSpace($targetRoot)) {
     $targetRoot = Join-Path $root "target"
@@ -63,6 +67,7 @@ $msi = Join-Path $output "git-veil-$version-windows-x86_64.msi"
     -arch x64 `
     -d "ProductVersion=$version" `
     -d "BinaryPath=$binary" `
+    -d "IconPath=$icon" `
     -o $msi `
     --acceptEula true
 if ($LASTEXITCODE -ne 0) {

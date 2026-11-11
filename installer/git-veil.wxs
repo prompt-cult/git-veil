@@ -6,6 +6,8 @@
     Version="$(var.ProductVersion)"
     UpgradeCode="7C6F7F7D-0C5F-4F31-9B7A-3B3B1A1F9D5B"
     Scope="perMachine">
+    <Icon Id="GitVeilIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="GitVeilIcon" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of git-veil is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
