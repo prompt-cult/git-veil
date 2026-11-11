@@ -1,7 +1,7 @@
 # git-veil
 
 git-veil stores encrypted secrets in a git repository. It is written in Rust.
-It encrypt files using [`age`][age] identity keys (via the pure-Rust [`age` crate][age-crate]). The public part of the identies are committed into the git repo. That keyring of `age` public keys are signed with an [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]) key pair you generate using `openssl`.
+It encrypts files using [`age`][age] identity keys (via the pure-Rust [`age` crate][age-crate]). The public parts of the identities are committed into the git repo. That keyring of `age` public keys is signed with an [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]) key pair you generate using `openssl`.
 
 In the following, `age` refers to the open source `age` encryption tooling,
 which may be installed separately to securely create and maintain
@@ -9,7 +9,7 @@ cryptographic keys outside of the git repo; the `git-veil` software uses the
 Rust `rage` library to work with the keys.
 
 The `age` format is an encryption format designed by Filippo Valsorda.
-Thi means that `git-veil`'s ciphertexts are standard `age` encrypted files. Any compliant `age` tool can decrypt them.
+This means that `git-veil`'s ciphertexts are standard `age` encrypted files. Any compliant `age` tool can decrypt them.
 
 [age]: https://age-encryption.org
 [age-crate]: https://crates.io/crates/age
@@ -351,13 +351,13 @@ consistently within any given repository.
 
 ## Responsible Disclosure
 
-Contract the copyright holder at firstname at firstname surname dot org. 
+Contact the copyright holder at firstname at firstname surname dot org.
 
 ## License
 
 This is a FOSS security tool where I would like folks to share fixes. If you 
 want to privately use your own copy somewhere be my guest. If you want to 
-distribute or share then I am insisting your make the code public for inspection so that we can all benefit. 
+distribute or share then I am insisting you make the code public for inspection so that we can all benefit.
 
 SPDX-License-Identifier: GPL-3.0-or-later
 git-veil Copyright © 2026 Simon J. Massey
