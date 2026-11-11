@@ -45,9 +45,8 @@ platforms (e.g. mobile application tooling) have you commit
 plaintext certificates into a private git database. Your author has seen
 and used a lot of enterprise systems where certificates and crypto
 materials were supposed to be automated. In practice your author has never
-seen them work well at the point of go-live. Your author is convinced that the default case is either security theatre and security-by-obscurity. Or even the worst of all worlds; a central secret management tool that is a concentration risk combined with certs being pasted around to get it set up at the last minute. 
+seen them work well at the point of go-live. Your author is convinced that the default case is either security theatre and security-by-obscurity. Or even the worst of all worlds; a central secret management tool that is a concentration risk combined with certs being pasted around to get it set up at the last minute.
 
->>>>>>> c144fad (docs)
 The aim of `git-veil` is to bring self-sovereign public-key encryption of
 your application deployment secrets to the masses. History tells us that it
 is developer hubris to build your own security tooling. Leave it to the
