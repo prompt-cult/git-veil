@@ -16,17 +16,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [blacksmith-4vcpu-ubuntu-2404, blacksmith-6vcpu-macos-15]
+        os: [blacksmith-4vcpu-ubuntu-2404, blacksmith-6vcpu-macos-15, windows-latest]
         build-mode: [debug, release]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (Unix)
+        if: runner.os != 'Windows'
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
         uses: actions/cache@v4

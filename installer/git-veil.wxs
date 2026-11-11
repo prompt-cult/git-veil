@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="git-veil"
+    Manufacturer="git-veil contributors"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="7C6F7F7D-0C5F-4F31-9B7A-3B3B1A1F9D5B"
+    Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of git-veil is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="MainFeature" Title="git-veil" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="git-veil" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="GitVeilExecutable" Guid="*">
+        <File Id="GitVeilExe" Source="$(var.BinaryPath)" KeyPath="yes" />
+        <Environment
+          Id="GitVeilPath"
+          Name="PATH"
+          Value="[INSTALLFOLDER]"
+          Permanent="no"
+          Part="last"
+          Action="set"
+          System="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
