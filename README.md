@@ -20,11 +20,37 @@ Thi means that `git-veil`'s ciphertexts are standard `age` encrypted files. Any 
 
 ## Why
 
-The point of `git-veil` is that your application deployment secret material is versioned alongside the code. The ciphertexts are committed, so every clone carries the exact secrets that work with that version of the code. The plaintext never has to leave your machine to reach a build box: you simply create a `age` identify file per CI pipeline or per enviroment or per VM. Then your deployment script or your production server can run `git-veil reveal` to use its own `age` identity to decrypt the secrets your code needs. 
+The point of `git-veil` is that your application deployment secret material
+is versioned alongside the code. The ciphertexts are committed, so every
+clone carries the exact secrets that work with that version of the code.
+The plaintext never has to leave your machine to reach a build box: you
+simply create an `age` identity file per CI pipeline or per environment or
+per VM. Then your deployment script or your production server can run
+`git-veil reveal` to use its own `age` identity to decrypt the secrets your
+code needs.
 
-Under such a model you should `ssh` into your dev, test and prod environments and run the commadns to create the `age` identity in that environment. You do not need to look at the secret part of the key nor cut and paste it or transmit it. You simply copy the public part of the key and pass it to `git veil add-key`. 
+Under such a model you should `ssh` into your dev, test and prod
+environments and run the commands to create the `age` identity in that
+environment. You do not need to look at the secret part of the key nor cut
+and paste it or transmit it. You simply copy the public part of the key and
+pass it to `git-veil add-key`.
 
-The aim of `git-veil` is to bring self-soveriegn public-key encryption of your application deployment secrets to the masses. History tells use that it is developer hubris to build your own security tooling. Leave it to the professional cryptographers working in the open with other profession cryptographers. Your author's response to the charge of hubris is to ask that you hold my beer; but first buy me a beer for you to hold. By which I mean raise me a PR and join the discussion. 
+The preceding paragraphs may read like a very radical idea. Yet consider
+the alternatives; you have to maintain a system to distribute and backup
+your deployment secrets. Your author is shocked at how many software
+platforms (e.g. mobile application tooling) have you commit
+plaintext certificates into a private git database. Your author has seen
+and used a lot of enterprise systems where certificates and crypto
+materials were supposed to be automated. In practice your author has never
+seen them work well at the point of go-live. Your author is convinced that the default case is either security theatre and security-by-obscurity. Or even the worst of all worlds; a central secret management tool that is a concentration risk combined with certs being pasted around to get it set up at the last minute. 
+
+The aim of `git-veil` is to bring self-sovereign public-key encryption of
+your application deployment secrets to the masses. History tells us that it
+is developer hubris to build your own security tooling. Leave it to the
+professional cryptographers working in the open with other professional
+cryptographers. Your author's response to the charge of hubris is to ask
+that you hold my beer; but first buy me a beer for you to hold. By which I
+mean raise me a PR and join the discussion.
 
 ## Trust model
 
