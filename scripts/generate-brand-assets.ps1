@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-if (-not $Source) { $Source = Join-Path $root "docs\src\assets\logo@2x.png" }
+if (-not $Source) { $Source = Join-Path $root "docs\src\assets\logo.png" }
 if (-not $AssetDirectory) { $AssetDirectory = Join-Path $root "docs\src\assets" }
 if (-not $InstallerIcon) { $InstallerIcon = Join-Path $root "installer\git-veil.ico" }
 
