@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  git-veil logo. The branch motif is derived from the Git logo by Jason Long,
+  licensed under CC BY 3.0: https://creativecommons.org/licenses/by/3.0/
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2172 724" role="img" aria-labelledby="title desc">
+  <title id="title">git-veil</title>
+  <desc id="desc">A navy shield with a transparent Git branch cut through its upper-left edge, followed by the git-veil wordmark.</desc>
+
+  <defs>
+    <mask id="shield-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="650" height="724">
+      <rect width="650" height="724" fill="white" />
+      <!-- Same three-node trunk and branch geometry as the official Git mark. -->
+      <path d="M 151 79 L 264 192 L 264 454" fill="none" stroke="black" stroke-width="38" stroke-linecap="square" />
+      <path d="M 264 270 L 452 458" fill="none" stroke="black" stroke-width="38" stroke-linecap="square" />
+      <circle cx="264" cy="192" r="48" fill="black" />
+      <circle cx="264" cy="502" r="48" fill="black" />
+      <circle cx="452" cy="458" r="48" fill="black" />
+    </mask>
+  </defs>
+
+  <path
+    fill="#071b49"
+    mask="url(#shield-cut)"
+    d="M 50 109 L 335 8 L 620 109 L 620 361 C 620 520 529 653 335 724 C 141 653 50 520 50 361 Z" />
+
+  <text
+    x="686"
+    y="500"
+    fill="#071b49"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="394"
+    font-weight="900"
+    letter-spacing="-24">git-veil</text>
+</svg>

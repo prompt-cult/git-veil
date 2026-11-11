@@ -26,6 +26,7 @@ command = "mdbook-mermaid"
 # which is what a subpath deployment needs.
 default-theme = "light"
 preferred-dark-theme = "navy"
+favicon = "assets/favicon.png"
 git-repository-url = "https://github.com/prompt-cult/git-veil"
 edit-url-template = "https://github.com/prompt-cult/git-veil/edit/main/docs/src/{path}"
 # docs/src/design.md carries the algorithm listings as display-math blocks
