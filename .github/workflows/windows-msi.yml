@@ -88,6 +88,9 @@ jobs:
           Copy-Item $msi.FullName git-veil-windows-x86_64.msi
           $hash = (Get-FileHash -Algorithm SHA256 git-veil-windows-x86_64.msi).Hash.ToLower()
           "$hash  git-veil-windows-x86_64.msi" | Set-Content -NoNewline git-veil-windows-x86_64.msi.sha256
+          Copy-Item target\x86_64-pc-windows-msvc\release\git-veil.exe git-veil-windows-x86_64.exe
+          $exeHash = (Get-FileHash -Algorithm SHA256 git-veil-windows-x86_64.exe).Hash.ToLower()
+          "$exeHash  git-veil-windows-x86_64.exe" | Set-Content -NoNewline git-veil-windows-x86_64.exe.sha256
 
       - name: Upload MSI workflow artifact
         uses: actions/upload-artifact@v4
@@ -96,6 +99,8 @@ jobs:
           path: |
             git-veil-windows-x86_64.msi
             git-veil-windows-x86_64.msi.sha256
+            git-veil-windows-x86_64.exe
+            git-veil-windows-x86_64.exe.sha256
 
       - name: Check whether the tag has a GitHub release
         id: release
@@ -118,7 +123,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-        run: gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --clobber git-veil-windows-x86_64.msi git-veil-windows-x86_64.msi.sha256
+        run: gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --clobber git-veil-windows-x86_64.msi git-veil-windows-x86_64.msi.sha256 git-veil-windows-x86_64.exe git-veil-windows-x86_64.exe.sha256
 
       - name: Report missing GitHub release
         if: steps.release.outputs.exists != 'true'
