@@ -74,7 +74,7 @@ jobs:
 
       - name: Install WiX Toolset
         shell: pwsh
-        run: dotnet tool install --global wix
+        run: dotnet tool install --global wix --version 7.0.1
 
       - name: Build MSI
         shell: pwsh
@@ -91,6 +91,22 @@ jobs:
           Copy-Item target\x86_64-pc-windows-msvc\release\git-veil.exe git-veil-windows-x86_64.exe
           $exeHash = (Get-FileHash -Algorithm SHA256 git-veil-windows-x86_64.exe).Hash.ToLower()
           "$exeHash  git-veil-windows-x86_64.exe" | Set-Content -NoNewline git-veil-windows-x86_64.exe.sha256
+
+      - name: Install MSI and run installed executable
+        shell: pwsh
+        run: |
+          $msi = Join-Path $PWD 'git-veil-windows-x86_64.msi'
+          $install = Start-Process msiexec.exe -ArgumentList @('/i', $msi, '/qn', '/norestart', '/l*v', 'msi-install.log') -Wait -PassThru
+          if ($install.ExitCode -notin @(0, 3010)) { Get-Content msi-install.log -Tail 80; throw "MSI install failed: $($install.ExitCode)" }
+          try {
+            $installed = Join-Path $env:ProgramFiles 'git-veil\git-veil.exe'
+            & $installed --version
+            if ($LASTEXITCODE -ne 0) { throw 'Installed executable failed.' }
+            if ((Get-FileHash $installed).Hash -ne (Get-FileHash 'git-veil-windows-x86_64.exe').Hash) { throw 'Installed binary differs from release executable.' }
+          } finally {
+            $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $msi, '/qn', '/norestart') -Wait -PassThru
+            if ($uninstall.ExitCode -notin @(0, 3010)) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
+          }
 
       - name: Upload MSI workflow artifact
         uses: actions/upload-artifact@v4

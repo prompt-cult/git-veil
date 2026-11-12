@@ -69,7 +69,7 @@ $msi = Join-Path $output "git-veil-$version-windows-x86_64.msi"
     -d "BinaryPath=$binary" `
     -d "IconPath=$icon" `
     -o $msi `
-    --acceptEula true
+    -acceptEula wix7
 if ($LASTEXITCODE -ne 0) {
     throw "WiX failed with exit code $LASTEXITCODE"
 }
