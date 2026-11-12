@@ -138,12 +138,7 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    # Non-blocking by design: cargo audit currently flags known advisories
-    # on the locked dependency tree (RUSTSEC-2023-0071 rsa Marvin Attack,
-    # no fixed upgrade available upstream; RUSTSEC-2026-0190 anyhow
-    # unsoundness; yanked spin). It keeps running so new advisories
-    # surface.
-    continue-on-error: true
+    # Security advisories and unmaintained dependencies block changes.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -157,4 +152,4 @@ jobs:
         run: cargo install cargo-audit --locked
 
       - name: Run security audit
-        run: cargo audit
+        run: cargo audit --deny warnings
