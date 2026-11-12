@@ -44,6 +44,15 @@ environment. You do not need to look at the secret part of the key nor cut
 and paste it or transmit it. You simply copy the public part of the key and
 pass it to `git-veil add-key`.
 
+The preceding paragraphs may read like a very radical idea. Yet consider
+the alternatives; you have to maintain a system to distribute and backup
+your deployment secrets. Your author is shocked at how many software
+platforms (e.g. mobile application tooling) have you commit
+plaintext certificates into a private git database. Your author has seen
+and used a lot of enterprise systems where certificates and crypto
+materials were supposed to be automated. In practice your author has never
+seen them work well at the point of go-live. Your author is convinced that the default case is either security theatre and security-by-obscurity. Or even the worst of all worlds; a central secret management tool that is a concentration risk combined with certs being pasted around to get it set up at the last minute.
+
 The aim of `git-veil` is to bring self-sovereign public-key encryption of
 your application deployment secrets to the masses. History tells us that it
 is developer hubris to build your own security tooling. Leave it to the
@@ -56,10 +65,9 @@ mean raise me a PR and join the discussion.
 
 Three ideas carry the whole design.
 
-1. **Encryption in place.** `hide` turns `.env` into `.env.secret`, a
+1. **Encryption in place.** `git-veil hide` turns `.env` into `.env.secret`, a
    standard `age` file encrypted to every key in the keyring, and deletes
-   the plaintext. You gitignore the plaintext names and commit the
-   `.secret` files. `reveal` brings a plaintext back.
+   the plaintext. You gitignore the plaintext to prevent accidental commits. You commit the `.secret` files. `git-veil reveal` brings a plaintext back.
 2. **A signed keyring.** `.git-veil/keyring` names who can decrypt. It is
    signed with the repository owner's Ed25519 key. Every gated command
    verifies that signature against a pin held in your local key store
