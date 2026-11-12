@@ -1,6 +1,11 @@
 name: Windows MSI
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -56,10 +61,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-x86_64-pc-windows-msvc-cargo-build-release-
 
-      - name: Build and test release binary
+      - name: Build release binary
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+
+      - name: Test release binary
         run: cargo test --release --locked --target x86_64-pc-windows-msvc
 
-      - name: Install WiX Toolset v4
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install WiX Toolset
         shell: pwsh
         run: dotnet tool install --global wix
 
@@ -97,6 +110,7 @@ jobs:
           } else {
             'exists=false' >> $env:GITHUB_OUTPUT
           }
+          exit 0
 
       - name: Attach MSI to existing GitHub release
         if: steps.release.outputs.exists == 'true'
@@ -108,4 +122,4 @@ jobs:
 
       - name: Report missing GitHub release
         if: steps.release.outputs.exists != 'true'
-        run: echo "No GitHub release exists for ${{ inputs.tag }}; the MSI is available as this workflow's artifact."
+        run: Write-Host 'The MSI is available as this workflow artifact; no existing release matched the selected ref.'

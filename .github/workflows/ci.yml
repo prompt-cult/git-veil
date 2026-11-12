@@ -4,13 +4,30 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      windows_msi:
+        description: Build and test the Windows MSI only
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
+  windows-msi:
+    if: github.event_name == 'workflow_dispatch' && inputs.windows_msi
+    permissions:
+      contents: write
+    uses: ./.github/workflows/windows-msi.yml
+    with:
+      tag: ${{ github.sha }}
+
   test:
+    if: github.event_name != 'workflow_dispatch' || !inputs.windows_msi
     name: Test (${{ matrix.os }}, ${{ matrix.build-mode }})
     runs-on: ${{ matrix.os }}
     strategy:
