@@ -1,5 +1,11 @@
 # git-veil
 
+<p align="center">
+  <img src="assets/git-veil.svg" alt="git-veil" width="760">
+</p>
+
+<p align="center"><small>Branch motif adapted from the Git logo by Jason Long, licensed under CC BY 3.0.</small></p>
+
 git-veil stores encrypted secrets in a git repository. It is written in Rust.
 It encrypts files using [`age`][age] identity keys (via the pure-Rust
 [`age` crate][age-crate]). The public parts of the identities are committed

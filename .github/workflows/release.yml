@@ -18,7 +18,26 @@ permissions:
   contents: write
 
 jobs:
+  prepare-release:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Ensure the release exists before uploading platform assets
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          fi
+
+  windows-msi:
+    needs: prepare-release
+    uses: ./.github/workflows/windows-msi.yml
+    with:
+      tag: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
   build-release:
+    needs: prepare-release
     name: Build Release - ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -171,6 +190,7 @@ jobs:
             - Linux (x86_64): `git-veil-linux-x86_64`
             - macOS (x86_64): `git-veil-macos-x86_64`
             - macOS (Apple Silicon): `git-veil-macos-aarch64`
+            - Windows (x86_64): `git-veil-windows-x86_64.exe` and `git-veil-windows-x86_64.msi` (uploaded by the independent Windows job)
             - Man pages: `git-veil-man-pages.tar.gz`
 
             SHA-256 checksums are provided for every asset (`*.sha256`).
