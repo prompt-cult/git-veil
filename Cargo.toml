@@ -1,6 +1,6 @@
 [package]
 name = "git-veil"
-version = "0.15.1"
+version = "0.15.2"
 edition = "2021"
 authors = ["git-veil contributors"]
 description = "Store encrypted secrets in a git repository using age encryption"
@@ -64,6 +64,12 @@ serial_test = "3.1"
 # tests/docs_drift.rs drives the real clap definition directly.
 clap = { version = "4.5", features = ["derive", "string"] }
 clap_complete = "4"
+
+# Until crates.io releases carry the audited fixes, use the upstream source
+# revisions that move age to the patched P-256 stack and replace basic-toml.
+[patch.crates-io]
+age = { git = "https://github.com/str4d/rage.git", rev = "b5b68c4f4f7ea5c368bc060f6fe0237549c3a13f" }
+i18n-config = { git = "https://github.com/kellpossible/cargo-i18n.git", rev = "11b49ea83a12d96bd3689b561262d4db47615311" }
 
 # cargo-binstall support. Release assets are raw binaries named
 # git-veil-<os>-<arch> with sidecar .sha256 files. No archive, no version
