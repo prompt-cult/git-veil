@@ -494,12 +494,14 @@ EXAMPLES
 
     /// List all tracked files
     #[command(after_long_help = "\
-Prints every file tracked in .git-veil/tracked.json. Whether the
-plaintext or its .secret ciphertext currently exists on disk is not
-checked.
+Prints every file tracked in .git-veil/tracked.json, one path per line
+on stdout: no header, no bullets, so the output pipes into xargs, while
+read and friends. An empty list prints nothing. Whether the plaintext
+or its .secret ciphertext currently exists on disk is not checked.
 
 EXAMPLES
   $ git-veil list
+  $ git-veil list | while read f; do echo \"[$f]\"; done
 ")]
     List,
 
@@ -710,8 +712,9 @@ EXAMPLES
     #[command(after_long_help = "\
 Prints the repository ID derived from the git remote push URL - the
 exact string trust expects as its repo_id argument (trust re-derives it
-from the remote and refuses a mismatch). Pass --git-remote if your remote is
-not 'origin'.
+from the remote and refuses a mismatch). One bare value on stdout; the
+remote name and push URL behind it are git remote's to show. Pass
+--git-remote if your remote is not 'origin'.
 
 EXAMPLES
   $ git-veil repo-id
@@ -726,9 +729,10 @@ EXAMPLES
     /// Show the principal git-veil will use for you
     #[command(after_long_help = "\
 Prints the principal git-veil will use for you: git config user.email, or
-the --email override. The principal label is committed in the public
-keyring, so naming it leaks nothing. Use it to check which keyring entry
-reveal/cat will look up before they fail on a missing private key.
+the --email override. One bare value on stdout. The principal label is
+committed in the public keyring, so naming it leaks nothing. Use it to
+check which keyring entry reveal/cat will look up before they fail on a
+missing private key.
 
 EXAMPLES
   $ git-veil whoami
@@ -746,11 +750,11 @@ EXAMPLES
     /// Verify the keyring signature against the pinned trusted key
     #[command(after_long_help = "\
 Verifies the keyring's signature against the pinned trusted key for this
-repository. Fail-closed: without an established trust pin (git-veil
-trust) on this machine, or when the signature does not verify, the
-command exits with an error. Every gated command (hide, reveal, cat,
-changes, add-key, remove-key, list-keys) runs this same check
-before touching secrets.
+repository. Silent on success: exit 0 and no output. Fail-closed:
+without an established trust pin (git-veil trust) on this machine, or
+when the signature does not verify, the command exits with an error on
+stderr. Every gated command (hide, reveal, cat, changes, add-key,
+remove-key, list-keys) runs this same check before touching secrets.
 
 EXAMPLES
   $ git-veil verify-keys
@@ -769,11 +773,14 @@ EXAMPLES
     #[command(name = "list-keys")]
     #[command(after_long_help = "\
 Lists all keys in the keyring after verifying its signature against the
-pinned trusted key. On failure the unverified content is still printed
-under a loud invalid-signature banner (an auditor must SEE the tampered
-content), but the command exits nonzero so scripts never mistake an audit
-of a tampered ring for a clean one. A repo with no trust established or
-no local pin fails closed like every other gated command.
+pinned trusted key. Each stdout line is one `principal fingerprint`
+pair: bare data, one key per line, for grep, cut and while read. Success
+carries no banner and no prose; exit 0 is the verification statement. On
+failure the unverified content is still printed (an auditor must SEE the
+tampered ring), but the warning and the failure reason go to stderr and
+the command exits nonzero so scripts never mistake an audit of a tampered
+ring for a clean one. A repo with no trust established or no local pin
+fails closed like every other gated command.
 
 EXAMPLES
   $ git-veil list-keys

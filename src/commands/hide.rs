@@ -210,7 +210,7 @@ pub fn cmd_hide(
     for file in &scoped {
         let relative_str = file.to_string_lossy();
         if repo_root.join(file).exists() && !is_gitignored(repo_root, &relative_str)? {
-            println!(
+            eprintln!(
                 "warning: the tracked plaintext is not git-ignored with error code 41. A blind add of every file would commit it: {}",
                 relative_str
             );

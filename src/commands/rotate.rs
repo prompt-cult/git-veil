@@ -237,7 +237,7 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
         if ciphertext_path.exists() {
             scoped.push(file.clone());
         } else {
-            println!(
+            eprintln!(
                 "skipped: no .secret ciphertext on disk, nothing to re-encrypt: {}",
                 file.display()
             );

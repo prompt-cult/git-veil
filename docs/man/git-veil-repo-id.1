@@ -17,8 +17,9 @@ Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Prints the repository ID derived from the git remote push URL \- the
 exact string trust expects as its repo_id argument (trust re\-derives it
-from the remote and refuses a mismatch). Pass \-\-git\-remote if your remote is
-not \*(Aqorigin\*(Aq.
+from the remote and refuses a mismatch). One bare value on stdout; the
+remote name and push URL behind it are git remote\*(Aqs to show. Pass
+\-\-git\-remote if your remote is not \*(Aqorigin\*(Aq.
 
 EXAMPLES
   $ git\-veil repo\-id

@@ -101,7 +101,7 @@ pub fn cmd_remove_key(
     // One plain line for the due pass: the fact, the verb, and the
     // follow-up command. After a removal the pass is the rotation step:
     // without it, existing ciphertext stays decryptable by the removed
-    // principal.
-    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
+    // principal. A future-action hint: stderr, never stdout.
+    eprintln!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
     Ok(())
 }
