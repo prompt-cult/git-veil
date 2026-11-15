@@ -860,6 +860,36 @@ tool refusing beats overwriting. Which path-resolution contract each
 command uses is pinned down per caller in `PathResolveMode`
 (src/tracked_files.rs).
 
+## Output policy: silent unix, stderr for what comes next
+
+Every command's output follows one policy so stdout stays usable by
+humans and scripts alike, and so agents or operators always see the
+proper flow:
+
+- **Introspection commands** — the ones run again and again just to see
+  what is going on (`list`, `list-keys`, `verify-keys`, `whoami`,
+  `repo-id`, `fingerprint`, `cat`, `changes`) — are pure unix. An error
+  prints to stderr and exits nonzero with its documented code. Success
+  exits 0: data commands print bare data on stdout, one value per line,
+  with no header, bullets or decoration (`list-keys` pairs, `list`
+  paths, single bare values for `whoami` and `repo-id`); pure checks
+  print nothing at all (`verify-keys`, the unchanged files of
+  `changes`). Empty data is empty stdout.
+- **Setup and mutating commands** report what they did on stdout
+  (`added 2 files`, `Decrypted: .env`, `files hidden`) and put warnings
+  and **future-action hints** on stderr. A future-action hint names an
+  action someone should do at some point; it is never an error and
+  never changes an exit code. The canonical example is the rotate
+  reminder after `add-key`/`remove-key`: the tool does not rotate for
+  the operator — they may add three keys and then rotate once — so it
+  says so, on stderr, every time the ring changes. The CODEOWNERS
+  suggestion and warning (`init`, `trust`), the `hide`
+  plaintext-not-ignored warning, and the `export-pin` out-of-band
+  guidance are the same kind of aid.
+
+Exit codes are unaffected by this policy: they are governed by
+[Exit codes](#exit-codes) below.
+
 ## Exit codes
 
 Every deliberate failure exits with a documented code (`ExitCode`,
