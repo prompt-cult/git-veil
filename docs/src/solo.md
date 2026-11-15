@@ -71,12 +71,10 @@ $ git-veil import "$HOME/.git-veil/my-age-identity.txt"
 Summary: 1 imported, 0 skipped
 
 $ git-veil repo-id
-Repository ID: demo+example@github.com
-Remote: origin
-Push URL: git@github.com:example/demo.git
+demo+example@github.com
 
 $ git-veil whoami
-Your principal: example@github.com
+example@github.com
 ```
 
 What happened. `init` copied your verifying key into `.git-veil/
@@ -188,8 +186,6 @@ Deleted plaintext: .env
 files hidden
 $ git add .env.secret && git commit -m "Rotate API key"
 $ git-veil reveal .env          # bring one file back
-keyring signature verified
-keys in keyring: 1
 Decrypted: .env
 files revealed
 ```

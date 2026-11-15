@@ -213,6 +213,20 @@ impl TestRepo {
     }
 }
 
+/// Runs the built binary inside the fixture's repository with the
+/// fixture's key store. Use this whenever a test must assert on separated
+/// stdout/stderr streams: in-process command calls print to the test
+/// process's own streams, which the harness captures.
+fn run_cli(fixture: &TestRepo, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .args(args)
+        .env("GIT_VEIL_SKIP_PERMISSIONS", "1")
+        .env("GIT_VEIL_HOME", &fixture.key_store.path)
+        .current_dir(&fixture.repo.path)
+        .output()
+        .expect("run git-veil")
+}
+
 // ---------------------------------------------------------------------------
 // init
 // ---------------------------------------------------------------------------
@@ -434,6 +448,27 @@ fn test_verify_keys_succeeds_after_add_key() {
         .expect("verify-keys should succeed");
 }
 
+/// Success is silence: exit 0 and no stdout output at all. Binary-driven
+/// so an accidental banner would fail the stream assertion.
+#[test]
+fn test_verify_keys_binary_is_silent_on_success() {
+    let fixture = TestRepo::new("verify-silent");
+
+    fixture.add_collaborator("alice@example.com");
+
+    let output = run_cli(&fixture, &["verify-keys"]);
+    assert!(
+        output.status.success(),
+        "verify-keys failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("verify-keys stdout is utf8");
+    assert!(
+        stdout.is_empty(),
+        "a successful verification prints nothing: {stdout}"
+    );
+}
+
 #[test]
 fn test_verify_keys_fails_without_trust() {
     let repo = TempDir::new("verify-no-trust");
@@ -498,6 +533,54 @@ fn test_add_file_and_list_files() {
     assert_eq!(tracked.files.len(), 2);
     assert!(tracked.files.contains(&PathBuf::from(".env")));
     assert!(tracked.files.contains(&PathBuf::from("config.yml")));
+}
+
+/// `list` is pure unix: stdout is exactly one repo-relative tracked path
+/// per line, no header, no bullets, so it pipes into xargs and while
+/// read. Binary-driven so the streams are actually separated.
+#[test]
+fn test_list_binary_prints_one_path_per_line() {
+    let fixture = TestRepo::new("list-binary");
+
+    fixture.add_file(".env", b"SECRET=hello\n");
+    fixture.add_file("config.yml", b"key: value\n");
+
+    let output = run_cli(&fixture, &["list"]);
+    assert!(
+        output.status.success(),
+        "list failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("list stdout is utf8");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines, vec![".env", "config.yml"], "one bare path per line");
+    assert!(
+        !stdout.contains("Tracked files:"),
+        "no header in the bare listing: {stdout}"
+    );
+    assert!(
+        !stdout.contains("  - "),
+        "no bullets in the bare listing: {stdout}"
+    );
+}
+
+/// An empty tracked set prints nothing on stdout; exit 0 is the only
+/// statement that nothing is tracked.
+#[test]
+fn test_list_binary_silent_on_empty() {
+    let fixture = TestRepo::new("list-empty");
+
+    let output = run_cli(&fixture, &["list"]);
+    assert!(
+        output.status.success(),
+        "list failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("list stdout is utf8");
+    assert!(
+        stdout.is_empty(),
+        "an empty tracked set prints nothing: {stdout}"
+    );
 }
 
 #[test]
@@ -894,6 +977,65 @@ fn test_changes_no_modification() {
     assert!(changed.is_empty(), "no changes expected");
 }
 
+/// stdout carries only the diff data (`changed: <file>` header plus
+/// `-`/`+` lines); the closing summary and the unchanged chatter are
+/// gone. The summary belongs on stderr now. Binary-driven through the
+/// full add-file -> hide -> edit -> changes pipeline so the streams are
+/// actually separated.
+#[test]
+fn test_changes_binary_splits_diff_data_and_summary_streams() {
+    let fixture = TestRepo::new("changes-binary");
+
+    let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+
+    fixture.add_file(".env", b"ORIGINAL=value\n");
+
+    cmd_hide(
+        &fixture.repo.path,
+        "origin",
+        &fixture.key_store.path,
+        true,
+        fixture.tracked_names(),
+    )
+    .expect("hide");
+
+    fs::write(fixture.repo.join(".env"), b"MODIFIED=different\n").unwrap();
+
+    let output = run_cli(
+        &fixture,
+        &["changes", ".env", "--email", "alice@example.com"],
+    );
+    assert!(
+        output.status.success(),
+        "changes failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("changes stdout is utf8");
+    let stderr = String::from_utf8(output.stderr).expect("changes stderr is utf8");
+
+    assert!(
+        stdout.contains("changed: .env"),
+        "stdout carries the changed header: {stdout}"
+    );
+    assert!(
+        stdout.contains("- ORIGINAL=value") && stdout.contains("+ MODIFIED=different"),
+        "stdout carries the -/+ diff lines: {stdout}"
+    );
+    assert!(
+        !stdout.contains("unchanged:"),
+        "unchanged is silence, not a stdout line: {stdout}"
+    );
+    assert!(
+        !stdout.contains("files with changes"),
+        "the summary must not be on stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("1 files with changes"),
+        "the closing summary is a stderr note: {stderr}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // remove-key
 // ---------------------------------------------------------------------------
@@ -1071,6 +1213,43 @@ fn test_list_keys_succeeds() {
     cmd_list_keys(&fixture.repo.path, "origin", &fixture.key_store.path).expect("list-keys");
 }
 
+/// Success stdout is exactly one `principal fingerprint` pair per line:
+/// no banner, no header, no footer. The fingerprint is computed the same
+/// way list-keys computes it. Binary-driven so the streams are actually
+/// separated.
+#[test]
+fn test_list_keys_binary_prints_bare_pairs() {
+    let fixture = TestRepo::new("list-keys-binary");
+
+    let (_, recipient) = fixture.add_collaborator("alice@example.com");
+    let fingerprint = git_veil::fingerprint_for_public_key("alice@example.com", &recipient);
+
+    let output = run_cli(&fixture, &["list-keys"]);
+    assert!(
+        output.status.success(),
+        "list-keys failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("list-keys stdout is utf8");
+    assert_eq!(
+        stdout.trim(),
+        format!("alice@example.com {}", fingerprint),
+        "one bare pair, exactly"
+    );
+    assert!(
+        !stdout.contains("keyring signature verified"),
+        "no banner in the bare listing: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Keys in keyring:"),
+        "no header in the bare listing: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Total:"),
+        "no footer in the bare listing: {stdout}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // repo-id
 // ---------------------------------------------------------------------------
@@ -1080,6 +1259,36 @@ fn test_repo_id() {
     let fixture = TestRepo::new("repo-id");
 
     cmd_repo_id(&fixture.repo.path, "origin").expect("repo-id");
+}
+
+/// stdout is exactly the derived repo id on one bare line: no
+/// "Repository ID:"/"Remote:"/"Push URL:" labels. The fixture's remote is
+/// git@github.com:owner/fara.git, which derives fara+owner@github.com.
+/// Binary-driven so the streams are actually separated.
+#[test]
+fn test_repo_id_binary_prints_one_bare_line() {
+    let fixture = TestRepo::new("repo-id-binary");
+
+    let output = run_cli(&fixture, &["repo-id"]);
+    assert!(
+        output.status.success(),
+        "repo-id failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("repo-id stdout is utf8");
+    assert_eq!(stdout.trim(), "fara+owner@github.com", "one bare value");
+    assert!(
+        !stdout.contains("Repository ID:"),
+        "no label in the bare output: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Remote:"),
+        "no remote line in the bare output: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Push URL:"),
+        "no push URL line in the bare output: {stdout}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1114,9 +1323,10 @@ fn test_whoami_prints_the_principal_label() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
-    assert!(
-        stdout.contains("alice@example.com"),
-        "whoami prints the principal label: {stdout}"
+    assert_eq!(
+        stdout.trim(),
+        "alice@example.com",
+        "whoami prints the bare principal, exactly: {stdout}"
     );
 }
 
@@ -1753,7 +1963,8 @@ fn test_hide_all_is_a_clap_usage_error() {
 
 /// The ring-change note names the follow-up command. The note prints on
 /// every add-key and remove-key, so the operator is never left guessing
-/// what delivers the pass.
+/// what delivers the pass. The note is a hint, not report data: it
+/// prints on stderr, keeping stdout for the factual report.
 #[test]
 fn test_add_key_and_remove_key_note_names_rotate() {
     let fixture = TestRepo::new("rotate-note");
@@ -1777,12 +1988,12 @@ fn test_add_key_and_remove_key_note_names_rotate() {
         "add-key failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let stdout = String::from_utf8(out.stdout).expect("add-key stdout is utf8");
+    let stderr = String::from_utf8(out.stderr).expect("add-key stderr is utf8");
     assert!(
-        stdout.contains(
+        stderr.contains(
             "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
         ),
-        "add-key prints the rotate note: {stdout}"
+        "add-key prints the rotate note on stderr: {stderr}"
     );
 
     let out = run(&["remove-key", "bob@example.com"]);
@@ -1791,12 +2002,12 @@ fn test_add_key_and_remove_key_note_names_rotate() {
         "remove-key failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let stdout = String::from_utf8(out.stdout).expect("remove-key stdout is utf8");
+    let stderr = String::from_utf8(out.stderr).expect("remove-key stderr is utf8");
     assert!(
-        stdout.contains(
+        stderr.contains(
             "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
         ),
-        "remove-key prints the rotate note: {stdout}"
+        "remove-key prints the rotate note on stderr: {stderr}"
     );
 }
 

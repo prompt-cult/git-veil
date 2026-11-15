@@ -12,9 +12,11 @@ List all tracked files
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
-Prints every file tracked in .git\-veil/tracked.json. Whether the
-plaintext or its .secret ciphertext currently exists on disk is not
-checked.
+Prints every file tracked in .git\-veil/tracked.json, one path per line
+on stdout: no header, no bullets, so the output pipes into xargs, while
+read and friends. An empty list prints nothing. Whether the plaintext
+or its .secret ciphertext currently exists on disk is not checked.
 
 EXAMPLES
   $ git\-veil list
+  $ git\-veil list | while read f; do echo "[$f]"; done

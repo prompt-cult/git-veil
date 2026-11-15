@@ -108,8 +108,6 @@ Now she can decrypt:
 
 ```sh
 $ git-veil reveal .env
-keyring signature verified
-keys in keyring: 2
 Decrypted: .env
 files revealed
 $ git-veil cat .env        # peek to stdout. Touches no disk state.
@@ -185,8 +183,6 @@ The answer is cached, so a later hide of the same path does not ask again:
 
 ```sh
 $ git-veil reveal deploy.env
-keyring signature verified
-keys in keyring: 2
 Decrypted: deploy.env
 files revealed
 $ git-veil hide deploy.env

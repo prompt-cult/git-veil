@@ -304,9 +304,10 @@ git-veil verify-keys [--git-remote <name>] [--git-veil-home <dir>]
 
 Verifies the keyring's signature against the pinned trusted key for this
 repository. This is the check every gated command runs before touching
-secrets; running it directly is the cheap health check. Fail closed:
-without a pin on this machine, or when the signature does not verify, the
-command exits nonzero and nothing is touched.
+secrets; running it directly is the cheap health check. Silent on
+success: exit 0 and no output. Fail closed: without a pin on this
+machine, or when the signature does not verify, the command exits
+nonzero and nothing is touched.
 
 ```sh
 $ git-veil verify-keys
@@ -420,20 +421,19 @@ git-veil list-keys [--git-remote <name>] [--git-veil-home <dir>]
 ```
 
 Lists all keys in the keyring after verifying its signature against the
-pinned trusted key. On failure the unverified content is still printed
-under a loud invalid-signature banner, because an auditor must see the
-tampered content, but the command exits nonzero so a script never
-mistakes an audit of a tampered ring for a clean one. A repository with
-no local pin fails closed like every other gated command.
+pinned trusted key. Each stdout line is one `principal fingerprint` pair:
+bare data, one key per line, for `grep`, `cut` and `while read`. Success
+carries no banner and no prose; exit 0 is the verification statement. On
+failure the unverified content is still printed so an auditor can see the
+tampered ring, but the warning and the failure reason go to stderr and
+the command exits nonzero, so a script never mistakes an audit of a
+tampered ring for a clean one. A repository with no local pin fails
+closed like every other gated command.
 
 ```sh
 $ git-veil list-keys
-keyring signature verified and made by the pinned trusted key
-Keys in keyring:
-  example@github.com f16cbd29abdf10be29c866b943ec014d2b69312371f7f4a323e1caeccb6a35db
-  alice@example.com ef8782d2038bd96851a455eb183dd8a31edb6aca728857d74e493c973e71ca54
-
-Total: 2 keys
+example@github.com f16cbd29abdf10be29c866b943ec014d2b69312371f7f4a323e1caeccb6a35db
+alice@example.com ef8782d2038bd96851a455eb183dd8a31edb6aca728857d74e493c973e71ca54
 ```
 
 Exit codes: the gated-chain codes 10/11/12/14/63, plus 30.
@@ -536,8 +536,10 @@ Exit codes: none beyond usage errors (2).
 git-veil list
 ```
 
-Prints every file tracked in `.git-veil/tracked.json`. Whether the
-plaintext or its ciphertext currently exists on disk is not checked.
+Prints every file tracked in `.git-veil/tracked.json`, one path per line
+on stdout: no header, no bullets, so the output pipes. Whether the
+plaintext or its ciphertext currently exists on disk is not checked. An
+empty list prints nothing.
 
 ```sh
 $ git-veil list
@@ -675,8 +677,6 @@ verified against the pin before any decryption.
 
 ```sh
 $ git-veil reveal .env
-keyring signature verified
-keys in keyring: 2
 Decrypted: .env
 files revealed
 ```
@@ -742,13 +742,12 @@ git-veil repo-id [--git-remote <name>]
 Prints the repository ID derived from the git remote push URL: the exact
 string [trust](#trust) expects as its `repo_id` argument, since `trust`
 re-derives the id from the live remote and refuses a mismatch. Pass
-`--git-remote` if your remote is not `origin`.
+`--git-remote` if your remote is not `origin`. One bare value on stdout;
+the remote name and push URL behind it are `git remote`'s to show.
 
 ```sh
 $ git-veil repo-id
-Repository ID: demo+example@github.com
-Remote: origin
-Push URL: git@github.com:example/demo.git
+demo+example@github.com
 ```
 
 Exit codes: none beyond usage errors (2).
@@ -767,7 +766,7 @@ private key.
 
 ```sh
 $ git-veil whoami
-Your principal: example@github.com
+example@github.com
 ```
 
 Exit codes: none beyond usage errors (2).

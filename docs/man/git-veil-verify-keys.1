@@ -19,11 +19,11 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Verifies the keyring\*(Aqs signature against the pinned trusted key for this
-repository. Fail\-closed: without an established trust pin (git\-veil
-trust) on this machine, or when the signature does not verify, the
-command exits with an error. Every gated command (hide, reveal, cat,
-changes, add\-key, remove\-key, list\-keys) runs this same check
-before touching secrets.
+repository. Silent on success: exit 0 and no output. Fail\-closed:
+without an established trust pin (git\-veil trust) on this machine, or
+when the signature does not verify, the command exits with an error on
+stderr. Every gated command (hide, reveal, cat, changes, add\-key,
+remove\-key, list\-keys) runs this same check before touching secrets.
 
 EXAMPLES
   $ git\-veil verify\-keys

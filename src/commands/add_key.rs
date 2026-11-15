@@ -114,7 +114,8 @@ pub fn cmd_add_key(
     // One plain line for the due pass: the fact, the verb, and the
     // follow-up command. The stamp is written on every add-key, so the
     // notice is unconditional: the fresh-start flow reaches the same
-    // pass on its first rotate.
-    println!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
+    // pass on its first rotate. A future-action hint: stderr, never
+    // stdout.
+    eprintln!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
     Ok(())
 }

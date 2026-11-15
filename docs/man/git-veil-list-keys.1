@@ -19,11 +19,14 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Lists all keys in the keyring after verifying its signature against the
-pinned trusted key. On failure the unverified content is still printed
-under a loud invalid\-signature banner (an auditor must SEE the tampered
-content), but the command exits nonzero so scripts never mistake an audit
-of a tampered ring for a clean one. A repo with no trust established or
-no local pin fails closed like every other gated command.
+pinned trusted key. Each stdout line is one `principal fingerprint`
+pair: bare data, one key per line, for grep, cut and while read. Success
+carries no banner and no prose; exit 0 is the verification statement. On
+failure the unverified content is still printed (an auditor must SEE the
+tampered ring), but the warning and the failure reason go to stderr and
+the command exits nonzero so scripts never mistake an audit of a tampered
+ring for a clean one. A repo with no trust established or no local pin
+fails closed like every other gated command.
 
 EXAMPLES
   $ git\-veil list\-keys

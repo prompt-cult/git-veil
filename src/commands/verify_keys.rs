@@ -237,12 +237,15 @@ pub fn verify_keyring_against_trust(
 }
 
 /// Verifies the keyring signature against the trusted signing key.
+///
+/// Pure unix: silent on success (exit 0 and no output is the
+/// verification statement); failures exit with their coded error on
+/// stderr, exactly as every gated command reports them.
 pub fn cmd_verify_keys(repo_root: &Path, remote_name: &str, key_store: &Path) -> Result<()> {
-    let (repo_id, fingerprint, keyring) =
+    let (repo_id, fingerprint, _keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
+    // The verified facts are consumed, not printed: success is silence.
     let _ = (&repo_id, &fingerprint);
-    println!("keyring signature verified");
-    println!("keys in keyring: {}", keyring.entries.len());
     Ok(())
 }

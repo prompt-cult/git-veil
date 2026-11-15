@@ -14,7 +14,7 @@ pub fn cmd_whoami(repo_root: &Path, email_override: Option<&str>, _key_store: &P
 
     // The principal label is committed in the public keyring. It is a
     // public repository fact, not secret material, so naming it is the
-    // whole point of asking.
-    println!("Your principal: {}", email);
+    // whole point of asking. One bare value on stdout.
+    println!("{}", email);
     Ok(())
 }

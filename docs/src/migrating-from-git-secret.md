@@ -122,9 +122,7 @@ $ git-veil import my-age-identity.txt
 + imported: age1xxxx
 Summary: 1 imported, 0 skipped
 $ git-veil repo-id
-Repository ID: demo+example@github.com
-Remote: origin
-Push URL: git@github.com:example/demo.git
+demo+example@github.com
 ```
 
 Each collaborator, on their machine, creates their own X25519 private key
@@ -193,20 +191,14 @@ $ git clone git@github.com:example/demo.git && cd demo
 $ git config user.email alice@example.com
 $ git-veil import alice-age-identity.txt      # once per machine
 $ git-veil repo-id                             # print the ID trust wants
-Repository ID: demo+example@github.com
+demo+example@github.com
 $ git-veil trust --import ~/demo.pin          # pin-file from the owner, out of band
 trusted the repository owner key
 pinned this repository owner key on this machine
 $ git-veil list-keys
-keyring signature verified and made by the pinned trusted key
-Keys in keyring:
-  example@github.com ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
-  alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
-
-Total: 2 keys
+example@github.com ad2468b2394c184e79f1f972f5a1f6939e1ba2187e9ccdb4154ec356f50550a8
+alice@example.com ea0ab7b15666042b7e0d000b04354e866d6806a79675456cfc68e06162819b80
 $ git-veil reveal .env
-keyring signature verified
-keys in keyring: 2
 Decrypted: .env
 files revealed
 $ git-veil cat .env            # spot-check contents match pre-migration

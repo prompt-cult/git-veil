@@ -163,7 +163,7 @@ pub fn cmd_trust_permissions(key_store: &Path) -> Result<()> {
     for entry in &entries {
         println!("  {} with mode {:04o}", entry.path, entry.mode);
     }
-    println!("If any of these change again, git-veil will refuse until you re-acknowledge.");
+    eprintln!("If any of these change again, git-veil will refuse until you re-acknowledge.");
     Ok(())
 }
 

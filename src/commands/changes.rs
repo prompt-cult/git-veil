@@ -17,9 +17,13 @@ fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
 /// (encrypted) version.
 ///
 /// Differences are data, not errors: the returned list names the tracked
-/// files whose plaintext differs from the decrypted ciphertext. Files with
-/// no ciphertext, or with no plaintext on disk, are skipped with a note and
-/// are not counted as changed.
+/// files whose plaintext differs from the decrypted ciphertext. stdout
+/// carries only the diff data: a `changed: <file>` header per differing
+/// file plus its `-`/`+` lines. Unchanged files print nothing. Skip
+/// conditions (no ciphertext, plaintext absent because hidden, a binary
+/// size difference) and the closing summary are notes on stderr, never
+/// stdout chatter. Files with no ciphertext, or with no plaintext on
+/// disk, are skipped with a note and are not counted as changed.
 ///
 /// The user-supplied paths are resolved to their repo-relative forms the
 /// same way cmd_cat resolves them (canonicalise-and-strip, relative paths
@@ -92,7 +96,7 @@ pub fn cmd_changes(
 
         // No ciphertext yet: the file was never hidden
         if !encrypted_path.exists() {
-            println!("no hidden version: {}", file.display());
+            eprintln!("no hidden version: {}", file.display());
             continue;
         }
 
@@ -100,8 +104,8 @@ pub fn cmd_changes(
         let on_disk = match fs::read(repo_root.join(file)) {
             Ok(bytes) => bytes,
             Err(_) => {
-                println!(
-                    "  not present on disk because it is hidden: {}",
+                eprintln!(
+                    "not present on disk because it is hidden: {}",
                     file.display()
                 );
                 continue;
@@ -120,7 +124,7 @@ pub fn cmd_changes(
         let hidden = decrypt_with_x25519_private_key(&ciphertext, &private_key)?;
 
         if hidden == on_disk {
-            println!("unchanged: {}", file.display());
+            // Unchanged is silence: stdout carries only diff data.
             continue;
         }
 
@@ -149,8 +153,8 @@ pub fn cmd_changes(
                 }
             }
         } else {
-            println!(
-                "  differs in size {} bytes against {} bytes: {}",
+            eprintln!(
+                "differs in size {} bytes against {} bytes: {}",
                 hidden.len(),
                 on_disk.len(),
                 file.display()
@@ -159,6 +163,6 @@ pub fn cmd_changes(
         changed.push(file.clone());
     }
 
-    println!("\n{} files with changes", changed.len());
+    eprintln!("{} files with changes", changed.len());
     Ok(changed)
 }

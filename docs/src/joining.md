@@ -104,9 +104,7 @@ key up: without it the ciphertexts are unrecoverable. See
 
 ```sh
 $ git-veil repo-id
-Repository ID: demo+example@github.com
-Remote: origin
-Push URL: git@github.com:example/demo.git
+demo+example@github.com
 ```
 
 What happened. The ID is derived from the remote push URL, not from your
@@ -134,13 +132,9 @@ That human check is the out-of-band anchor.
 
 ```sh
 $ git-veil list-keys
-keyring signature verified and made by the pinned trusted key
-Keys in keyring:
-  example@github.com f16cbd29abdf10be29c866b943ec014d2b69312371f7f4a323e1caeccb6a35db
-  alice@example.com ef8782d2038bd96851a455eb183dd8a31edb6aca728857d74e493c973e71ca54
-  newcomer@example.com b99513f38695d87f9bd565735aa9070ce66b39930405fab69d5519a765cbaaa4
-
-Total: 3 keys
+example@github.com f16cbd29abdf10be29c866b943ec014d2b69312371f7f4a323e1caeccb6a35db
+alice@example.com ef8782d2038bd96851a455eb183dd8a31edb6aca728857d74e493c973e71ca54
+newcomer@example.com b99513f38695d87f9bd565735aa9070ce66b39930405fab69d5519a765cbaaa4
 ```
 
 What happened. The keyring signature verified against your fresh pin, and
@@ -150,8 +144,6 @@ yet. Nothing on your side can fix that.
 ### 6. Reveal
 ```sh
 $ git-veil reveal .env deploy.env
-keyring signature verified
-keys in keyring: 3
 Decrypted: .env
 Decrypted: deploy.env
 files revealed

@@ -19,9 +19,10 @@ Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH EXTRA
 Prints the principal git\-veil will use for you: git config user.email, or
-the \-\-email override. The principal label is committed in the public
-keyring, so naming it leaks nothing. Use it to check which keyring entry
-reveal/cat will look up before they fail on a missing private key.
+the \-\-email override. One bare value on stdout. The principal label is
+committed in the public keyring, so naming it leaks nothing. Use it to
+check which keyring entry reveal/cat will look up before they fail on a
+missing private key.
 
 EXAMPLES
   $ git\-veil whoami

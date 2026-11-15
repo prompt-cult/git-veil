@@ -391,7 +391,8 @@ pub(crate) fn codeowners_notice(
         return Ok(());
     }
     if !covers_trust_critical_paths(repo_root) {
-        println!("{}", warning_text());
+        // A warning and a future-action hint: stderr, never stdout.
+        eprintln!("{}", warning_text());
     }
     Ok(())
 }

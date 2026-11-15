@@ -118,8 +118,9 @@ pub fn cmd_init(
 
     // Suggest CODEOWNERS coverage for the trust-critical paths. Once, in
     // plain text, with opt-out via -q. Never a prompt, never a block.
+    // A future-action hint: stderr, never stdout.
     if !quiet && !covers_trust_critical_paths(repo_root) {
-        println!("{}", suggestion_text());
+        eprintln!("{}", suggestion_text());
     }
     codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners)
 }
