@@ -80,7 +80,7 @@ deploy-tap version:
       end
     end
     EOF
-    jq -n --arg m "feat: git-veil ${V} (automated)" --arg c "$(base64 -w0 /tmp/git-veil-formula.rb)" --arg s "$SHA" '{message:$m, content:$c, sha:$s}' > /tmp/payload.json
+    jq -n --arg m "feat: git-veil ${V} (automated)" --arg c "$(base64 -i /tmp/git-veil-formula.rb)" --arg s "$SHA" '{message:$m, content:$c, sha:$s}' > /tmp/payload.json
     gh api -X PUT repos/prompt-cult/tap/contents/Formula/git-veil.rb --input /tmp/payload.json -q .commit.sha
 
 # Verify the tap-installed binary matches the current release.
