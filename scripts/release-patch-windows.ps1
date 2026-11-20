@@ -59,20 +59,35 @@ if ($LASTEXITCODE -ne 0) { throw "gen-winget-manifests.ps1 failed with exit code
 #    owner's own GitHub identity. The branch waits there; the "Create pull
 #    request" click is NOT made by this script.
 & gh repo fork $WingetUpstream --clone=false --default-branch-only
-$worktree = Join-Path $env:TEMP "git-veil-winget-pkgs"
-if (Test-Path $worktree) { Remove-Item -Recurse -Force $worktree }
-git clone --quiet --single-branch --depth 1 "https://github.com/$ForkOwner/winget-pkgs.git" $worktree
+
+# Built through the GitHub API: a clone of winget-pkgs is hundreds of megabytes
+# and 785520 files, while the branch needs only three blobs on top of master.
 $login = gh api user -q ".login"
 $email = gh api user -q ".email"
-if (-not $email) { $email = "$login@users.noreply.github.com" }
-git -C $worktree config user.name $login
-git -C $worktree config user.email $email
-git -C $worktree switch -c "git-veil-$new"
-Copy-Item -Recurse -Force (Join-Path $PSScriptRoot "..\dist\winget\manifests\*") (Join-Path $worktree "manifests")
-git -C $worktree add manifests
-git -C $worktree commit -m "Add $PackageIdentifier $new"
-git -C $worktree push -q origin "git-veil-$new"
-Remove-Item -Recurse -Force $worktree
+if (-not $email -or $email -eq "null") { $email = "$login@users.noreply.github.com" }
+$now = [datetime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+$versionManifest = Join-Path $outDir "$PackageIdentifier.yml"
+$localeManifest = Join-Path $outDir "$PackageIdentifier.locale.yml"
+$installerManifest = Join-Path $outDir "$PackageIdentifier.installer.yml"
+
+function New-GitBlob([string]$Repo, [string]$Path) {
+    $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes($Path))
+    return gh api "repos/$Repo/git/blobs" -f content=$content -f encoding="base64" -q ".sha"
+}
+
+$blobs = @(
+    @{ path = "manifests/p/PromptCult/GitVeil/$version/$PackageIdentifier.yml"; sha = (New-GitBlob "$ForkOwner/winget-pkgs" $versionManifest) },
+    @{ path = "manifests/p/PromptCult/GitVeil/$version/$PackageIdentifier.locale.yml"; sha = (New-GitBlob "$ForkOwner/winget-pkgs" $localeManifest) },
+    @{ path = "manifests/p/PromptCult/GitVeil/$version/$PackageIdentifier.installer.yml"; sha = (New-GitBlob "$ForkOwner/winget-pkgs" $installerManifest) }
+)
+$masterSha = gh api "repos/$WingetUpstream/git/ref/heads/master" -q ".object.sha"
+$masterTree = gh api "repos/$WingetUpstream/git/commits/$masterSha" -q ".tree.sha"
+$blobTree = $blobs | ConvertTo-Json -Compress -AsArray
+$tree = gh api "repos/$ForkOwner/winget-pkgs/git/trees" -f base_tree=$masterTree -f "tree=$blobTree" -q ".sha"
+$commitBody = "{`"name`": `"$login`", `"email`": `"$email`", `"date`": `"$now`"}"
+$commit = gh api "repos/$ForkOwner/winget-pkgs/git/commits" -f message="Add $PackageIdentifier $new" -f tree=$tree -f parents="[`"$masterSha`"]" -f author=$commitBody -f committer=$commitBody -q ".sha"
+$null = gh api "repos/$ForkOwner/winget-pkgs/git/refs" -f ref="refs/heads/git-veil-$new" -f sha=$commit
 $compare = "https://github.com/$WingetUpstream/compare/master...${ForkOwner}:winget-pkgs:git-veil-$new`?quick_pull=1"
 Write-Host ""
 Write-Host "winget submission primed: the manifests wait on the fork branch git-veil-$new."
