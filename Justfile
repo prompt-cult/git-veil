@@ -30,7 +30,7 @@ release-patch:
     just deploy-tap "$new"
     brew tap prompt-cult/tap https://github.com/prompt-cult/tap >/dev/null 2>&1 || true
     brew upgrade prompt-cult/tap/git-veil 2>/dev/null || brew install prompt-cult/tap/git-veil
-    got="$(git-veil --version | awk '{print $2}')"
+    got="$(/opt/homebrew/bin/git-veil --version | awk '{print $2}')"
     echo "installed via tap: $got (want $new)"
     test "$got" = "$new"
 
@@ -89,6 +89,6 @@ verify:
     #!/usr/bin/env bash
     set -euo pipefail
     want="$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)"
-    got="$(git-veil --version | awk '{print $2}')"
+    got="$(/opt/homebrew/bin/git-veil --version | awk '{print $2}')"
     echo "cargo: $want  tap-installed: $got"
     test "$got" = "$want"
