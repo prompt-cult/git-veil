@@ -1,0 +1,72 @@
+# ------------------------------------------------------------------------------
+# LOCAL SITE TESTING ONLY — NOT A SHIPPING ARTIFACT
+#
+# Builds the mdBook documentation site exactly as .github/workflows/pages.yml
+# does (mdbook + mdbook-mermaid installed --locked, mdbook build from the repo
+# root, including the mdbook-mathblock preprocessor, mdbook-mermaid diagrams and
+# MathJax 3 blocks) and serves the result with nginx on port 8080.
+#
+# IMPORTANT: this host is macOS on Apple Silicon running colima with an arm64
+# VM. Both stages resolve natively to aarch64. There is deliberately NO
+# --platform flag and no emulation.
+#
+#         build (from the repo root):
+#             docker build -f docs/Dockerfile.site -t git-veil-site:local .
+#         run:
+#             docker run --rm -p 8080:8080 git-veil-site:local
+#         then open:
+#             http://localhost:8080/
+# ------------------------------------------------------------------------------
+
+# Debian trixie slim with the stable Rust toolchain (rust:slim-trixie IS
+# Debian trixie-slim + rust, the arm64 manifest is native). This mirrors the
+# pages.yml build, which installs a stable toolchain before installing mdbook.
+FROM rust:slim-trixie AS builder
+
+# python3 runs scripts/mdbook-mathblock.py, the book's math preprocessor
+# (book.toml [preprocessor.mathblock]). Also required by the pages.yml build
+# environment.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Same installs, same --locked flags, as .github/workflows/pages.yml.
+RUN cargo install mdbook --locked \
+    && cargo install mdbook-mermaid --locked
+
+WORKDIR /work
+
+# Only what the book build reads: book.toml, the book sources (docs/), the
+# mathblock preprocessor (scripts/), and the additional-js assets that
+# book.toml references at the repo root (mermaid.min.js, mermaid-init.js;
+# docs/tex-mj3.js comes in with docs/).
+COPY book.toml ./
+COPY docs/ ./docs/
+COPY scripts/ ./scripts/
+COPY mermaid.min.js mermaid-init.js ./
+
+# create-missing = false in book.toml: a missing SUMMARY entry fails the
+# build, same as CI.
+RUN mdbook build
+
+# ------------------------------------------------------------------------------
+# Runtime: nginx on Debian trixie.
+#
+# Tag note: the ticket's first choice, nginx:stable-trixie-slim, does not
+# exist — Docker Hub's library/nginx publishes Debian 13 (trixie) images only
+# non-slim ("stable-trixie", "mainline-trixie", ...; the -slim suffix in the
+# nginx image family is used for Alpine only). nginx:stable-trixie is the
+# Debian trixie equivalent of nginx:stable-trixie-slim and is a native arm64
+# manifest, so no platform override is needed.
+# ------------------------------------------------------------------------------
+FROM nginx:stable-trixie
+
+# Minimal server block for local site testing (docs/nginx.site.conf),
+# listening on 8080 as an unprivileged port.
+COPY docs/nginx.site.conf /etc/nginx/conf.d/default.conf
+
+COPY --from=builder /work/_book /usr/share/nginx/html
+
+EXPOSE 8080
+
+# nginx's default CMD (nginx -g daemon off;) is inherited and fine here.
