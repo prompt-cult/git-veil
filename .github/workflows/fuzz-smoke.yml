@@ -11,15 +11,29 @@ on:
   # red than value (see the run history), so it is gone.
   push:
     branches: [main]
+    # Fuzz targets are Rust parsers: a push that only touches prose or the
+    # mdBook config cannot change their behaviour. On push this workflow is
+    # advisory (no required check depends on it), so skipping is safe.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'book.toml'
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
+# Nine matrix targets per push to main is the most expensive thing here.
+# Only the newest push matters, so superseded runs are cancelled outright.
+concurrency:
+  group: fuzz-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fuzz-smoke:
     name: Fuzz Smoke - ${{ matrix.target }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

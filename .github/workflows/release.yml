@@ -20,6 +20,7 @@ permissions:
 jobs:
   prepare-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -40,6 +41,7 @@ jobs:
     needs: prepare-release
     name: Build Release - ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -119,6 +121,7 @@ jobs:
   man-pages:
     name: Man Pages
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -172,6 +175,7 @@ jobs:
     name: Create Release
     needs: [build-release, man-pages]
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
