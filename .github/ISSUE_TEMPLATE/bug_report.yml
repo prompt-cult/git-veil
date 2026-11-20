@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in git-veil misbehaves. Security tool: precise repro matters.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please redact all secrets, keys, ciphertexts and keyring contents before posting.
+        If this bug involves exposed secrets or a crypto failure, use the private
+        security advisory link instead of this form.
+  - type: input
+    id: version
+    attributes:
+      label: git-veil version
+      description: Output of `git-veil --version`
+      placeholder: "git-veil 0.17.1"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and arch
+      placeholder: "macOS 15 arm64 / Ubuntu 24.04 x86_64"
+    validations:
+      required: true
+  - type: input
+    id: exitcode
+    attributes:
+      label: Exit code
+      description: git-veil uses documented exit codes (see `git-veil error-codes`). Paste the code and its name.
+      placeholder: "e.g. 73 DuplicatePrincipalLabel"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands, in order. Use a scratch repo under a temp GIT_VEIL_HOME.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs / output
+      description: Paste command output with all key material and secrets removed.
+      render: shell
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have removed all secrets, private keys, ciphertexts and keyring contents from this report
+          required: true
