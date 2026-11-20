@@ -14,7 +14,8 @@ release-patch:
     echo "bumping $old -> $new"
     sed -i '' "s/^version = \"$old\"/version = \"$new\"/" Cargo.toml
     cargo check -q  # refreshes Cargo.lock to $new
-    git add Cargo.toml Cargo.lock
+    sh scripts/gen-docs.sh >/dev/null  # committed man pages/completions carry the version
+    git add Cargo.toml Cargo.lock docs/man docs/completions
     git commit -m "chore: bump version to $new"
     git tag "v$new"
     git push origin HEAD:main
@@ -80,7 +81,7 @@ deploy-tap version:
       end
     end
     EOF
-    jq -n --arg m "feat: git-veil ${V} (automated)" --arg c "$(base64 -w0 /tmp/git-veil-formula.rb)" --arg s "$SHA" '{message:$m, content:$c, sha:$s}' > /tmp/payload.json
+    jq -n --arg m "feat: git-veil ${V} (automated)" --arg c "$(base64 -i /tmp/git-veil-formula.rb)" --arg s "$SHA" '{message:$m, content:$c, sha:$s}' > /tmp/payload.json
     gh api -X PUT repos/prompt-cult/tap/contents/Formula/git-veil.rb --input /tmp/payload.json -q .commit.sha
 
 # Verify the tap-installed binary matches the current release.
