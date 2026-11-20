@@ -7,7 +7,7 @@ use git_veil::{
     cmd_remove_key, cmd_reveal, cmd_rotate, cmd_verify_keys, encrypt_to_x25519_public_keys,
     exit_code_of, extract_content_to_verify_from_keyring, generate_signing_keypair,
     generate_x25519_private_key, keyring_content_digest, parse_x25519_public_key,
-    x25519_public_key_encoding, Keyring, RingPassStore, TrackedFiles,
+    x25519_public_key_encoding, ExitCode, Keyring, RingPassStore, TrackedFiles,
 };
 use std::fs;
 use std::path::Path;
@@ -507,15 +507,16 @@ fn test_changes_binary_file() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_add_key_updates_existing_email() {
+fn test_add_key_duplicate_email_refuses() {
     let f = Fixture::new("add-key-update");
 
-    let _id1 = f.add_collab("alice@example.com");
+    f.add_collab("alice@example.com");
 
-    // Add-key again with a new key for the same email
+    // Add-key again with a new key for the same email is refused: a key
+    // is never replaced (exit code 73).
     let id2 = generate_x25519_private_key();
     let r2 = x25519_public_key_encoding(&id2);
-    cmd_add_key(
+    let err = cmd_add_key(
         &f.repo.path,
         "alice@example.com",
         &r2,
@@ -523,14 +524,20 @@ fn test_add_key_updates_existing_email() {
         &f.key_store.path,
         None,
     )
-    .expect("add-key update");
+    .expect_err("add-key must refuse an existing label");
+    assert_eq!(
+        exit_code_of(&err),
+        ExitCode::DuplicatePrincipalLabel as i32,
+        "the refusal exits with the documented duplicate-label code"
+    );
 
+    // The original key is untouched.
     let keyring_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
     let keyring = Keyring::parse(&keyring_text).expect("parse");
     assert_eq!(keyring.entries.len(), 1, "should still have one entry");
     assert_eq!(
-        keyring.entries[0].public_key, r2,
-        "recipient should be updated"
+        keyring.entries[0].email, "alice@example.com",
+        "the entry is still the original one"
     );
 }
 

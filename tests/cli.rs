@@ -341,6 +341,59 @@ fn test_add_key_adds_collaborator() {
 }
 
 #[test]
+fn test_add_key_duplicate_label_refuses_with_code_73() {
+    let fixture = TestRepo::new("add-key-dup");
+
+    let (_, first_recipient) = fixture.add_collaborator("alice@example.com");
+
+    let attacker_identity = generate_x25519_private_key();
+    let attacker_recipient = x25519_public_key_encoding(&attacker_identity);
+
+    // Same label, different key: refused, exit 73.
+    let err = cmd_add_key(
+        &fixture.repo.path,
+        "alice@example.com",
+        &attacker_recipient,
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect_err("add-key must refuse an existing label");
+    assert_eq!(
+        exit_code_of(&err),
+        ExitCode::DuplicatePrincipalLabel as i32,
+        "the refusal exits with the documented duplicate-label code"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("never replaces a key"),
+        "the refusal states the rule: {message}"
+    );
+    assert!(
+        message.contains("remove-key"),
+        "the refusal names the lost-key remedy: {message}"
+    );
+
+    // Case-insensitive label match is refused too.
+    let err = cmd_add_key(
+        &fixture.repo.path,
+        "ALICE@EXAMPLE.COM",
+        &attacker_recipient,
+        "origin",
+        &fixture.key_store.path,
+        None,
+    )
+    .expect_err("label matching is case-insensitive");
+    assert_eq!(exit_code_of(&err), ExitCode::DuplicatePrincipalLabel as i32);
+
+    // The keyring is untouched: one entry, the original key.
+    let keyring_text = fs::read_to_string(fixture.repo.join(".git-veil/keyring")).unwrap();
+    let keyring = Keyring::parse(&keyring_text).expect("parse keyring");
+    assert_eq!(keyring.entries.len(), 1);
+    assert_eq!(keyring.entries[0].public_key, first_recipient);
+}
+
+#[test]
 fn test_add_key_canary_encrypts_before_signing() {
     let fixture = TestRepo::new("add-key-canary");
 
