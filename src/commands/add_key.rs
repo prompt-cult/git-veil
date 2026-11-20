@@ -62,7 +62,7 @@ pub fn cmd_add_key(
     let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_content =
         fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
-    let keyring = Keyring::parse(&keyring_content)?;
+    let mut keyring = Keyring::parse(&keyring_content)?;
 
     // The label must be new. Replacing the key under an existing label is
     // banned (exit 73): an attacker who asks for a "lost key" replacement
@@ -85,7 +85,6 @@ the same label."
 
     // Add the two-field entry (principal, X25519 public key). The binding
     // fingerprint is computed on demand and never stored.
-    let mut keyring = keyring;
     keyring.add_entry(email.to_string(), public_key_str.to_string())?;
 
     // Bump the monotonic freshness counter before signing, so the counter
