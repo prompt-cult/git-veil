@@ -14,7 +14,7 @@ tool; see [Commands - export](commands.md#export).
 
 ## Part 1 - the owner sets the repository up
 
-The repo owner must follow the solo steps for "One-time repo owner key creation". 
+The repo owner must follow the solo steps for [One-time repo owner key creation](solo.md#1-one-time-repo-owner-key-creation).
 
 ## Part 2 - the collaborator key handoff (the only manual exchange)
 
