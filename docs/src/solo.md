@@ -229,8 +229,21 @@ chmod +x .git/hooks/pre-commit
 ## 6. A build or deployment script reveals on its own key
 
 The ciphertexts are committed, so a clone on a build box already carries
-every secret. Give the box its own X25519 private key and its own pin:
+every secret. Give the box its own X25519 private key, its own pin, and
+its own email:
 
+- Give every box its own `git config user.email`. The email is the label
+  of the keyring entry. Name the box in it, for example
+  `ci-runner-01@example.com`. Never use your own email.
+- A box key only decrypts. It never signs the keyring. Only you can sign.
+  So a non-person email takes nothing away. It makes clear which machine
+  the key belongs to.
+- Make the key on the box itself, as in step 1. Do not make it on your
+  machine and copy it over.
+- After `add-key`, run `git-veil list-keys`. The list must have one more
+  entry than before.
+- The labels sit in the committed keyring. Anyone who can read the repo
+  can read them. Name the box. Do not name anything sensitive.
 - Import the box's private key: `git-veil import <key-file>`.
 - Pin the owner key with `trust --import` and a pin-file you export with
   `git-veil export-pin`. That is the joining-user flow; see
@@ -239,6 +252,7 @@ every secret. Give the box its own X25519 private key and its own pin:
   deliver the ring-change pass with `git-veil rotate`: the box's
   ciphertexts carry a stanza for the box after one rotate. See
   [Commands - rotate](commands.md#rotate).
+- When a box is retired, remove its key, then rotate.
 
 The script then reads what it needs straight from the committed
 ciphertexts:
