@@ -64,20 +64,23 @@ Every repository is identified by a `repo_id` derived from its git remote push
 URL (`parse_git_remote_url`, `derive_repo_id`, src/repo_identity.rs):
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 1} \quad \textsc{DeriveRepoId}(pushURL) \to \mathit{repoId}} \\
-1: & \textbf{function } \textsc{DeriveRepoId}(pushURL) \\
-2: & \quad \textbf{match } pushURL \text{ against } \text{user@host:owner/repo} \lor \text{scheme://[user[:pass]@]host[:port]/owner/repo},\\
-   & \quad\quad scheme \in \{ssh, git, https\} \quad . \text{ no other scheme, no IPv6 literal, no extra path segments} \\
-3: & \quad \textbf{if no shape matches then refuse } \text{fixed message, the URL never echoed} \\
-4: & \quad \text{strip userinfo} \quad . \text{ credentials never enter the identity, never echoed} \\
-5: & \quad \text{discard the port;} \text{ strip a trailing .git and a trailing slash} \\
-6: & \quad \textbf{for all } c \in \{host, owner, repo\} \textbf{ do } c \leftarrow \text{lowercase}(c) \quad \textbf{end for} \\
-7: & \quad \textbf{guard } @ \notin owner \land @ \notin repo \land @ \notin \text{scp user} \quad . \text{ credential-shaped input is rejected, not laundered} \\
-8: & \quad \textbf{return } \langle repo \rangle + \langle owner \rangle @ \langle host \rangle \quad . \text{ e.g. git@github.com:example/demo.git} \to \text{demo+example@github.com} \\
-9: & \textbf{end function}
+\begin{array}{l}
+\textbf{function } \textsc{DeriveRepoId}(pushURL) \\
+\quad \textbf{match } pushURL \text{ against } \text{user@host:owner/repo} \lor \text{scheme://[user[:pass]@]host[:port]/owner/repo},\\
+\quad\quad scheme \in \{ssh, git, https\} \quad . \text{ no other scheme, no IPv6 literal, no extra path segments} \\
+\quad \textbf{if no shape matches then refuse } \text{fixed message, the URL never echoed} \\
+\quad \text{strip userinfo} \quad . \text{ credentials never enter the identity, never echoed} \\
+\quad \text{discard the port;} \text{ strip a trailing .git and a trailing slash} \\
+\quad \textbf{for all } c \in \{host, owner, repo\} \textbf{ do } c \leftarrow \text{lowercase}(c) \quad \textbf{end for} \\
+\quad \textbf{guard } @ \notin owner \land @ \notin repo \land @ \notin \text{scp user} \quad . \text{ credential-shaped input is rejected, not laundered} \\
+\quad \textbf{return } \langle repo \rangle + \langle owner \rangle @ \langle host \rangle \quad . \text{ e.g. git@github.com:example/demo.git} \to \text{demo+example@github.com} \\
+\textbf{end function}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 1 - DeriveRepoId(pushURL) → repoId</strong>
+</p>
 
 `repo-id` prints the derived id. `trust` re-derives it from the live
 remote and refuses a provided `repo_id` that does not match the computed one
@@ -147,39 +150,42 @@ pair; Algorithm 4 is the reconcile that keeps the committed store honest
 after a move.
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 2} \quad \textsc{Trust} \text{ - the possession proof (} \texttt{cmd\_trust} \text{, src/commands/trust.rs)}} \\
-\multicolumn{2}{l}{\textit{Permanent state: } T \text{ = committed } \texttt{.git-veil/trust.json} \text{ (} \mathit{ownerFingerprints} \text{ map);} \ S \text{ = the machine key store}} \\
-\multicolumn{2}{l}{\textit{Machine state: } P \text{ = per-machine pins;} \ B \text{ = freshness baselines}} \\
-1: & \textbf{upon } \textsc{Trust}(\mathit{providedId}) \\
-2: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
-3: & \quad \textbf{guard } \mathit{providedId} = \mathit{derivedId} \quad \textbf{else refuse} \ . \ \text{exit 13} \\
-4: & \quad \mathit{cand} \leftarrow \text{line 1 of the committed } \texttt{.git-veil/owner.verifying} \quad . \ \text{64-hex Ed25519 verifying key} \\
-5: & \quad \textbf{if line 2 of } \texttt{.git-veil/owner.verifying} \text{ starts with the bech32 encoding then import it into } S \\
-6: & \quad \textbf{function } \textsc{ProvePossession}(\mathit{cand}) \\
-7: & \quad\quad seeds \leftarrow \text{lines of } \texttt{signing-keys.txt} \quad . \ \text{a present-but-garbage line is a parse refusal, exit 62} \\
-8: & \quad\quad M \leftarrow \{ s \in seeds : \text{verifying}(s) = \mathit{cand} \} \\
-9: & \quad\quad \textbf{if } |M| = 0 \textbf{ then refuse } \ . \ \text{exit 20} \\
-10: & \quad\quad \textbf{if } |M| > 1 \textbf{ then refuse on ambiguity} \ . \ \text{exit 70; a degenerate duplicated store} \\
-11: & \quad\quad \textbf{return} \ \text{the unique seed} \\
-12: & \quad\quad \textbf{end function} \\
-13: & \quad \textsc{ProvePossession}(\mathit{cand}) \\
-14: & \quad \text{append } \mathit{cand} \text{ to } \texttt{verifying-keys.txt} \\
-15: & \quad \mathit{fp} \leftarrow \textsc{Fingerprint}(\mathit{derivedId}, \mathit{cand}) \\
-16: & \quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside the verifying key in .git-veil} \\
-17: & \quad \textsc{Reconcile}(T) \\
-18: & \quad P[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the machine pin, outside the repository} \\
-19: & \quad B[\mathit{derivedId}] \leftarrow \bot \quad . \ \text{re-pinning is the recovery ceremony, so the baseline resets with it} \\
-20: & \quad \textsc{CodeownersNotice} \quad . \ \text{non-blocking warning or suppression record; never alters an exit code} \\
-21: & \textbf{end upon} \\[2mm]
-\multicolumn{2}{l}{\textbf{function } \textsc{Reconcile}(T) \ . \ \text{issue \#43}} \\
-a: & \quad live \leftarrow \{ \textsc{DeriveRepoId}(\text{pushURL}(r)) : r \in \text{configured remotes} \} \\
-b: & \quad \textbf{for all } id \in \text{keys}(T.\mathit{ownerFingerprints}) \text{ with } id \notin live \textbf{ do} \\
-c: & \quad\quad \text{delete } T.\mathit{ownerFingerprints}[id] \,; \text{ print the pruned } id \quad . \ \text{repository ids are public repository facts} \\
-d: & \quad \textbf{end for} \\
-e: & \textbf{end function}
+\begin{array}{l}
+\textbf{upon } \textsc{Trust}(\mathit{providedId}) \\
+\quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
+\quad \textbf{guard } \mathit{providedId} = \mathit{derivedId} \quad \textbf{else refuse} \ . \ \text{exit 13} \\
+\quad \mathit{cand} \leftarrow \text{line 1 of the committed } \texttt{.git-veil/owner.verifying} \quad . \ \text{64-hex Ed25519 verifying key} \\
+\quad \textbf{if line 2 of } \texttt{.git-veil/owner.verifying} \text{ starts with the bech32 encoding then import it into } S \\
+\quad \textbf{function } \textsc{ProvePossession}(\mathit{cand}) \\
+\quad\quad seeds \leftarrow \text{lines of } \texttt{signing-keys.txt} \quad . \ \text{a present-but-garbage line is a parse refusal, exit 62} \\
+\quad\quad M \leftarrow \{ s \in seeds : \text{verifying}(s) = \mathit{cand} \} \\
+\quad\quad \textbf{if } |M| = 0 \textbf{ then refuse } \ . \ \text{exit 20} \\
+\quad\quad \textbf{if } |M| > 1 \textbf{ then refuse on ambiguity} \ . \ \text{exit 70; a degenerate duplicated store} \\
+\quad\quad \textbf{return} \ \text{the unique seed} \\
+\quad\quad \textbf{end function} \\
+\quad \textsc{ProvePossession}(\mathit{cand}) \\
+\quad \text{append } \mathit{cand} \text{ to } \texttt{verifying-keys.txt} \\
+\quad \mathit{fp} \leftarrow \textsc{Fingerprint}(\mathit{derivedId}, \mathit{cand}) \\
+\quad T.\mathit{ownerFingerprints}[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{trust.json written BEFORE the pin: a death between the writes fails closed; the owner commits the updated trust.json alongside the verifying key in .git-veil} \\
+\quad \textsc{Reconcile}(T) \\
+\quad P[\mathit{derivedId}] \leftarrow \mathit{fp} \quad . \ \text{the machine pin, outside the repository} \\
+\quad B[\mathit{derivedId}] \leftarrow \bot \quad . \ \text{re-pinning is the recovery ceremony, so the baseline resets with it} \\
+\quad \textsc{CodeownersNotice} \quad . \ \text{non-blocking warning or suppression record; never alters an exit code} \\
+\textbf{end upon} \\[2mm]
+\textbf{function } \textsc{Reconcile}(T) \ . \ \text{issue \#43} \\
+\quad live \leftarrow \{ \textsc{DeriveRepoId}(\text{pushURL}(r)) : r \in \text{configured remotes} \} \\
+\quad \textbf{for all } id \in \text{keys}(T.\mathit{ownerFingerprints}) \text{ with } id \notin live \textbf{ do} \\
+\quad\quad \text{delete } T.\mathit{ownerFingerprints}[id] \,; \text{ print the pruned } id \quad . \ \text{repository ids are public repository facts} \\
+\quad \textbf{end for} \\
+\textbf{end function}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 2 - Trust - the possession proof (cmd_trust, src/commands/trust.rs)</strong><br>
+<em>Permanent state: T = committed <code>.git-veil/trust.json</code> (ownerFingerprints map); S = the machine key store</em><br>
+<em>Machine state: P = per-machine pins; B = freshness baselines</em>
+</p>
 
 A repository move or rename leaves the old id in the committed store only
 until the next possession proof: Algorithm 2's reconcile prunes every id no
@@ -187,27 +193,30 @@ configured remote derives and prints each removal, so a multi-remote
 repository keeps exactly one entry per remote.
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 3} \quad \textsc{ExportPin} \text{ and } \textsc{ImportPin} \text{ (} \texttt{cmd\_export\_pin} \text{, } \texttt{cmd\_trust\_import} \text{)}} \\
-\multicolumn{2}{l}{\textit{Pin-file format: two lines} \ \texttt{repo-id: <repo\_id>} \ \text{and} \ \texttt{verifying-key: <64-hex Ed25519 verifying key>}} \\
-1: & \textbf{upon } \textsc{ExportPin}(\mathit{repoId}, out) \\
-2: & \quad \text{run Algorithm 2's possession proof} \quad . \ \text{a machine without the matching seed cannot export, exit 20} \\
-3: & \quad \textbf{guard } out \notin \text{repository worktree} \quad \textbf{else refuse} \ . \ \text{exit 71; the pin-file must travel out of band} \\
-4: & \quad \text{write the two-line pin-file to } out \,; \text{ print } \textsc{Fingerprint}(\mathit{repoId}, \mathit{vk}) \ . \ \text{the human out-of-band token} \\
-5: & \textbf{end upon} \\
-6: & \textbf{upon } \textsc{ImportPin}(\mathit{path}) \\
-7: & \quad \textbf{guard } \mathit{path} \notin \text{repository worktree} \quad \textbf{else refuse} \ . \ \text{exit 71; an attacker must not be able to ship the pin-file in the repo} \\
-8: & \quad (\mathit{pinId}, \mathit{pinVK}) \leftarrow \text{parse the pin-file} \\
-9: & \quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
-10: & \quad \textbf{check (a): } \mathit{pinId} = \mathit{derivedId} \\
-11: & \quad \textbf{check (b): } \mathit{pinVK} = \text{the committed } \texttt{.git-veil/owner.verifying} \\
-12: & \quad \textbf{check (c): } \textsc{Fingerprint}(\mathit{pinId}, \mathit{pinVK}) = T.\mathit{ownerFingerprints}[\mathit{derivedId}] \\
-   & \quad\quad . \ \text{an absent metadata field refuses: the owner must refresh it on a seed-holding machine} \\
-13: & \quad \textbf{if any check fails then refuse} \ . \ \text{exit 70; one of the two channels is compromised} \\
-14: & \quad \text{write the pin and reset the baseline as in Algorithm 2, without the reconcile} \\
-15: & \textbf{end upon}
+\begin{array}{l}
+\textbf{upon } \textsc{ExportPin}(\mathit{repoId}, out) \\
+\quad \text{run Algorithm 2's possession proof} \quad . \ \text{a machine without the matching seed cannot export, exit 20} \\
+\quad \textbf{guard } out \notin \text{repository worktree} \quad \textbf{else refuse} \ . \ \text{exit 71; the pin-file must travel out of band} \\
+\quad \text{write the two-line pin-file to } out \,; \text{ print } \textsc{Fingerprint}(\mathit{repoId}, \mathit{vk}) \ . \ \text{the human out-of-band token} \\
+\textbf{end upon} \\
+\textbf{upon } \textsc{ImportPin}(\mathit{path}) \\
+\quad \textbf{guard } \mathit{path} \notin \text{repository worktree} \quad \textbf{else refuse} \ . \ \text{exit 71; an attacker must not be able to ship the pin-file in the repo} \\
+\quad (\mathit{pinId}, \mathit{pinVK}) \leftarrow \text{parse the pin-file} \\
+\quad \mathit{derivedId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \\
+\quad \textbf{check (a): } \mathit{pinId} = \mathit{derivedId} \\
+\quad \textbf{check (b): } \mathit{pinVK} = \text{the committed } \texttt{.git-veil/owner.verifying} \\
+\quad \textbf{check (c): } \textsc{Fingerprint}(\mathit{pinId}, \mathit{pinVK}) = T.\mathit{ownerFingerprints}[\mathit{derivedId}] \\
+\quad\quad . \ \text{an absent metadata field refuses: the owner must refresh it on a seed-holding machine} \\
+\quad \textbf{if any check fails then refuse} \ . \ \text{exit 70; one of the two channels is compromised} \\
+\quad \text{write the pin and reset the baseline as in Algorithm 2, without the reconcile} \\
+\textbf{end upon}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 3 - ExportPin and ImportPin (cmd_export_pin, cmd_trust_import)</strong><br>
+<em>Pin-file format: two lines <code>repo-id: &lt;repo_id&gt;</code> and <code>verifying-key: &lt;64-hex Ed25519 verifying key&gt;</code></em>
+</p>
 
 The pin-file is the anchor; the repository's committed key and fingerprint
 are the witnesses. Owner fingerprint derivation is fixed and documented
@@ -248,27 +257,30 @@ Every gated command verifies the keyring signature through
 `verify_keyring_against_trust` (src/commands/verify_keys.rs):
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 4} \quad \textsc{VerifyKeyring} \text{ - run by every gated command}} \\
-1: & \textbf{upon any gated command} \\
-2: & \quad \mathit{repoId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \,; \ T \leftarrow \text{load } \texttt{.git-veil/trust.json} \\
-3: & \quad \textbf{if } \mathit{repoId} \notin \text{keys}(T.\mathit{ownerFingerprints}) \textbf{ then} \\
-4: & \quad\quad \textbf{if } T.\mathit{ownerFingerprints} = \emptyset \textbf{ then refuse} \ . \ \text{exit 10: no trust record} \\
-5: & \quad\quad \textbf{else refuse} \ . \ \text{exit 10: rename suspicion, naming the recorded and derived ids as the clue} \\
-6: & \quad \mathit{claimed} \leftarrow T.\mathit{ownerFingerprints}[\mathit{repoId}] \\
-7: & \quad \textbf{guard } \mathit{claimed} \text{ and the pin are not 16-hex values} \quad \textbf{else refuse} \ . \ \text{exit 70; hostile format, nothing rewritten} \\
-8: & \quad \mathit{pin} \leftarrow \text{read } P[\mathit{repoId}] \\
-9: & \quad \textbf{if } \mathit{pin} = \bot \textbf{ then refuse} \ . \ \text{exit 11, naming } \mathit{repoId} \text{ and the remote it came from} \\
-10: & \quad \textbf{guard } \mathit{pin} = \mathit{claimed} \text{ (case-insensitively)} \quad \textbf{else refuse} \ . \ \text{exit 12} \\
-11: & \quad \mathit{vk} \leftarrow \text{the key store verifying key } k \text{ with } \textsc{Fingerprint}(\mathit{repoId}, \text{enc}(k)) = \mathit{claimed} \\
-12: & \quad \mathit{ring} \leftarrow \text{parse } \texttt{.git-veil/keyring} \quad . \ \text{a three-field entry refuses, exit 62} \\
-13: & \quad \textbf{if the keyring carries a signature then verify it over the canonical content with } \mathit{vk} \\
-   & \quad\quad \textbf{else if the keyring has entries then refuse} \ . \ \text{exit 63: an unsigned ring with entries launders trust} \\
-14: & \quad \textsc{FreshnessGate}(\mathit{repoId}, \mathit{ring}) \quad . \ \text{Algorithm 5} \\
-15: & \quad \textbf{return } (\mathit{repoId}, \mathit{claimed}, \mathit{ring}) \\
-16: & \textbf{end upon}
+\begin{array}{l}
+\textbf{upon any gated command} \\
+\quad \mathit{repoId} \leftarrow \textsc{DeriveRepoId}(\text{pushURL(remote)}) \,; \ T \leftarrow \text{load } \texttt{.git-veil/trust.json} \\
+\quad \textbf{if } \mathit{repoId} \notin \text{keys}(T.\mathit{ownerFingerprints}) \textbf{ then} \\
+\quad\quad \textbf{if } T.\mathit{ownerFingerprints} = \emptyset \textbf{ then refuse} \ . \ \text{exit 10: no trust record} \\
+\quad\quad \textbf{else refuse} \ . \ \text{exit 10: rename suspicion, naming the recorded and derived ids as the clue} \\
+\quad \mathit{claimed} \leftarrow T.\mathit{ownerFingerprints}[\mathit{repoId}] \\
+\quad \textbf{guard } \mathit{claimed} \text{ and the pin are not 16-hex values} \quad \textbf{else refuse} \ . \ \text{exit 70; hostile format, nothing rewritten} \\
+\quad \mathit{pin} \leftarrow \text{read } P[\mathit{repoId}] \\
+\quad \textbf{if } \mathit{pin} = \bot \textbf{ then refuse} \ . \ \text{exit 11, naming } \mathit{repoId} \text{ and the remote it came from} \\
+\quad \textbf{guard } \mathit{pin} = \mathit{claimed} \text{ (case-insensitively)} \quad \textbf{else refuse} \ . \ \text{exit 12} \\
+\quad \mathit{vk} \leftarrow \text{the key store verifying key } k \text{ with } \textsc{Fingerprint}(\mathit{repoId}, \text{enc}(k)) = \mathit{claimed} \\
+\quad \mathit{ring} \leftarrow \text{parse } \texttt{.git-veil/keyring} \quad . \ \text{a three-field entry refuses, exit 62} \\
+\quad \textbf{if the keyring carries a signature then verify it over the canonical content with } \mathit{vk} \\
+\quad\quad \textbf{else if the keyring has entries then refuse} \ . \ \text{exit 63: an unsigned ring with entries launders trust} \\
+\quad \textsc{FreshnessGate}(\mathit{repoId}, \mathit{ring}) \quad . \ \text{Algorithm 5} \\
+\quad \textbf{return } (\mathit{repoId}, \mathit{claimed}, \mathit{ring}) \\
+\textbf{end upon}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 4 - VerifyKeyring - run by every gated command</strong>
+</p>
 
 Every refusal in Algorithm 4 is a plain ASCII statement that prints no
 command line; the remedy is this document, which the operator reads
@@ -395,19 +407,22 @@ repository next to the pin
 TrustPinStore, src/trust_store.rs):
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 5} \quad \textsc{FreshnessGate}(\mathit{repoId}, \mathit{ring}) \ . \ \text{invoked from Algorithm 4, step 14}} \\
-\multicolumn{2}{l}{\textit{Machine state: } B[\mathit{repoId}] = (\mathit{version}, \mathit{digest}) \ \text{or} \ \bot} \\
-1: & v \leftarrow \mathit{ring}.\mathit{version} \quad . \ \text{a versionless ring counts as 0} \\
-2: & \textbf{if } \mathit{ring} \text{ is unsigned with zero entries then} \\
-3: & \quad \textbf{if } B = \bot \textbf{ then return} \ . \ \text{accepted as version 0; the fresh-init state is never recorded} \\
-4: & \quad \textbf{refuse} \ . \ \text{exit 14: on a baselined machine an unsigned ring is a rollback to no collaborators} \\
-5: & \textbf{if } B \ne \bot \textbf{ then} \\
-6: & \quad \textbf{if } v < B.\mathit{version} \textbf{ then refuse} \ . \ \text{exit 14: rollback} \\
-7: & \quad \textbf{if } v = B.\mathit{version} \land \text{digest}(\mathit{ring}) \ne B.\mathit{digest} \textbf{ then refuse} \ . \ \text{exit 14: fork, equal-version substitution} \\
-8: & \textbf{if the ring is signed then } B \leftarrow (v, \text{digest}(\mathit{ring})) \quad . \ \text{only a signed ring moves the baseline} \\
+\begin{array}{l}
+v \leftarrow \mathit{ring}.\mathit{version} \quad . \ \text{a versionless ring counts as 0} \\
+\textbf{if } \mathit{ring} \text{ is unsigned with zero entries then} \\
+\quad \textbf{if } B = \bot \textbf{ then return} \ . \ \text{accepted as version 0; the fresh-init state is never recorded} \\
+\quad \textbf{refuse} \ . \ \text{exit 14: on a baselined machine an unsigned ring is a rollback to no collaborators} \\
+\textbf{if } B \ne \bot \textbf{ then} \\
+\quad \textbf{if } v < B.\mathit{version} \textbf{ then refuse} \ . \ \text{exit 14: rollback} \\
+\quad \textbf{if } v = B.\mathit{version} \land \text{digest}(\mathit{ring}) \ne B.\mathit{digest} \textbf{ then refuse} \ . \ \text{exit 14: fork, equal-version substitution} \\
+\textbf{if the ring is signed then } B \leftarrow (v, \text{digest}(\mathit{ring})) \quad . \ \text{only a signed ring moves the baseline} \\
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 5 - FreshnessGate(repoId, ring) - invoked from Algorithm 4, step 14</strong><br>
+<em>Machine state: B[repoId] = (version, digest) or ⊥</em>
+</p>
 
 The fork rule (step 7) exists because two curating machines that do not
 pull in between would otherwise produce two differently-populated
@@ -436,23 +451,26 @@ creation recipe, and exit with a documented code - not to silently manufacture
 credentials (`src/key_discovery.rs`).
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 6} \quad \textsc{DiscoverSigningKey}(S, \mathit{repoId}, \mathit{claimed}, \mathit{explicitVK}) \ . \ \text{used by add-key and remove-key}} \\
-\multicolumn{2}{l}{\textit{S = the key store;} \ \texttt{signing-keys.txt} \text{ holds one 64-hex seed per line, } \texttt{\#} \text{ comments and blank lines skipped}} \\
-1: & \textbf{function } \textsc{DiscoverSigningKey} \\
-2: & \quad keys \leftarrow \text{load signing keys} \quad . \ \text{a garbage line is a parse refusal, exit 62, never silently no keys} \\
-3: & \quad \textbf{if } keys = \emptyset \textbf{ then refuse} \ . \ \text{exit 20 with the create-and-back-up recipe} \\
-4: & \quad \textbf{if } \mathit{explicitVK} \ne \bot \textbf{ then} \\
-5: & \quad\quad M \leftarrow \{ k \in keys : \text{hex}(\text{verifying}(k)) = \mathit{explicitVK} \} \quad . \ \text{the ONLY explicit form: the full 64-hex verifying key} \\
-   & \quad\quad . \ \text{the 1-based index and the 64-hex seed forms are parse errors; a 16-hex fingerprint form is not a selection form} \\
-6: & \quad\quad \textbf{if } |M| = 0 \textbf{ then refuse} \ . \ \text{exit 20} \,; \ \textbf{if } |M| > 1 \textbf{ then refuse} \ . \ \text{exit 70} \\
-7: & \quad\quad \textbf{return } \text{the unique } k \in M \\
-8: & \quad M \leftarrow \{ k \in keys : \textsc{Fingerprint}(\mathit{repoId}, \text{enc}(\text{verifying}(k))) = \mathit{claimed} \} \\
-9: & \quad \textbf{if } M = \emptyset \textbf{ then refuse} \ . \ \text{exit 20 with the recipe} \\
-10: & \quad \textbf{return } \text{the unique match} \quad . \ \text{the pin, not list order, selects the key; deterministic, no menu} \\
-11: & \textbf{end function}
+\begin{array}{l}
+\textbf{function } \textsc{DiscoverSigningKey} \\
+\quad keys \leftarrow \text{load signing keys} \quad . \ \text{a garbage line is a parse refusal, exit 62, never silently no keys} \\
+\quad \textbf{if } keys = \emptyset \textbf{ then refuse} \ . \ \text{exit 20 with the create-and-back-up recipe} \\
+\quad \textbf{if } \mathit{explicitVK} \ne \bot \textbf{ then} \\
+\quad\quad M \leftarrow \{ k \in keys : \text{hex}(\text{verifying}(k)) = \mathit{explicitVK} \} \quad . \ \text{the ONLY explicit form: the full 64-hex verifying key} \\
+\quad\quad . \ \text{the 1-based index and the 64-hex seed forms are parse errors; a 16-hex fingerprint form is not a selection form} \\
+\quad\quad \textbf{if } |M| = 0 \textbf{ then refuse} \ . \ \text{exit 20} \,; \ \textbf{if } |M| > 1 \textbf{ then refuse} \ . \ \text{exit 70} \\
+\quad\quad \textbf{return } \text{the unique } k \in M \\
+\quad M \leftarrow \{ k \in keys : \textsc{Fingerprint}(\mathit{repoId}, \text{enc}(\text{verifying}(k))) = \mathit{claimed} \} \\
+\quad \textbf{if } M = \emptyset \textbf{ then refuse} \ . \ \text{exit 20 with the recipe} \\
+\quad \textbf{return } \text{the unique match} \quad . \ \text{the pin, not list order, selects the key; deterministic, no menu} \\
+\textbf{end function}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 6 - DiscoverSigningKey(S, repoId, claimed, explicitVK) - used by add-key and remove-key</strong><br>
+<em>S = the key store; <code>signing-keys.txt</code> holds one 64-hex seed per line, <code>#</code> comments and blank lines skipped</em>
+</p>
 
 **X25519 private keys** (`discover_x25519_private_key`): decrypting commands
 resolve their keyring entry by principal, then look up the matching X25519
@@ -468,18 +486,21 @@ The key store is checked at load time the way gpg checks `~/.gnupg`
 (`src/permissions.rs`, Unix only):
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 7} \quad \textsc{PermissionsGate}(S) \ . \ \text{runs once in main, before any key material is read}} \\
-\multicolumn{2}{l}{\textit{Permanent state: } A \text{ = acknowledged findings, } \texttt{permissions-ack.json} \text{ (mode 0600)}} \\
-1: & \textbf{function } \textsc{PermissionsGate} \\
-2: & \quad findings \leftarrow \{ S \} \cup \{ \texttt{identities.txt}, \texttt{signing-keys.txt} \} \text{ filtered to paths with group or world bits} \\
-3: & \quad \textbf{for all } f \in findings \textbf{ do} \\
-4: & \quad\quad \textbf{if } (f, mode(f)) \in A \textbf{ then continue} \quad . \ \text{exact (path, mode) pairs; any later change fails again} \\
-5: & \quad\quad \textbf{refuse} \ . \ \text{exit 30, listing each path with its observed mode and the fix} \\
-6: & \quad \textbf{end for} \\
-7: & \textbf{end function}
+\begin{array}{l}
+\textbf{function } \textsc{PermissionsGate} \\
+\quad findings \leftarrow \{ S \} \cup \{ \texttt{identities.txt}, \texttt{signing-keys.txt} \} \text{ filtered to paths with group or world bits} \\
+\quad \textbf{for all } f \in findings \textbf{ do} \\
+\quad\quad \textbf{if } (f, mode(f)) \in A \textbf{ then continue} \quad . \ \text{exact (path, mode) pairs; any later change fails again} \\
+\quad\quad \textbf{refuse} \ . \ \text{exit 30, listing each path with its observed mode and the fix} \\
+\quad \textbf{end for} \\
+\textbf{end function}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 7 - PermissionsGate(S) - runs once in main, before any key material is read</strong><br>
+<em>Permanent state: A = acknowledged findings, <code>permissions-ack.json</code> (mode 0600)</em>
+</p>
 
 git-veil **never chmods a file it did not create**. The acknowledgment
 model follows git's dubious-ownership pattern:
@@ -520,15 +541,18 @@ plus `write_atomic` of the whole accumulated content - an accepted O(n) trade
 so a torn private-key store (which would brick all decryption) is impossible.
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 8} \quad \textsc{TwoPhase} \text{ - the hide/reveal commit discipline}} \\
-1: & \textbf{phase 1 (in memory): } \text{read and validate every target;} \text{ compute all outputs} \\
-   & \quad \text{any failure aborts with nothing changed on disk} \\
-2: & \textbf{phase 2 (commit): } \text{write each output atomically;} \text{ a part-way failure is reported with written/total counts, exit non-zero} \\
-3: & \textbf{hide (default): } \text{delete each plaintext after its ciphertext is durably on disk} \ . \ \texttt{--keep-plaintext} \text{ opts out} \\
-4: & \textbf{invariant: at worst both copies exist, never neither}
+\begin{array}{l}
+\textbf{phase 1 (in memory): } \text{read and validate every target;} \text{ compute all outputs} \\
+\quad \text{any failure aborts with nothing changed on disk} \\
+\textbf{phase 2 (commit): } \text{write each output atomically;} \text{ a part-way failure is reported with written/total counts, exit non-zero} \\
+\textbf{hide (default): } \text{delete each plaintext after its ciphertext is durably on disk} \ . \ \texttt{--keep-plaintext} \text{ opts out} \\
+\textbf{invariant: at worst both copies exist, never neither}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 8 - TwoPhase - the hide/reveal commit discipline</strong>
+</p>
 
 **Plaintext lifecycle.** Deleting by default is a deliberate posture: the
 plaintext's only protection in the worktree is a `.gitignore` line, so the
@@ -728,21 +752,24 @@ is no history check and no cache: the git index either carries the
 ciphertext path or it does not.
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 9} \quad \textsc{Hide} \text{ - the gate sequence before any encryption (} \texttt{cmd\_hide} \text{)}} \\
-\multicolumn{2}{l}{\textit{Machine state: } A[\mathit{repoId}] \text{ = the allowance records in the key store, one file per (pin, principal) pair; } S[\mathit{repoId}] \text{ = the ring-change stamp in the key store; } W \text{ = the working set: exactly the named files; there is no bare } \texttt{hide}} \\
-1: & \textbf{upon } \textsc{Hide} \\
-2: & \quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4; yields } \mathit{repoId} \text{ and the pin fingerprint} \\
-3: & \quad W \leftarrow \text{the named paths, resolved; a name outside } tracked \text{ refuses, exit 71} \\
-4: & \quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
-5: & \quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \quad . \ \text{a committed file named exactly .secret is warned and skipped} \\
-6: & \quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
-   & \quad\quad . \ \text{exit 72, naming the paths; the remedy is this document} \\
-7: & \quad \text{gates 40 and 41 over } W \text{: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
-8: & \quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
-9: & \textbf{end upon}
+\begin{array}{l}
+\textbf{upon } \textsc{Hide} \\
+\quad \textsc{VerifyKeyring} \quad . \ \text{Algorithm 4; yields } \mathit{repoId} \text{ and the pin fingerprint} \\
+\quad W \leftarrow \text{the named paths, resolved; a name outside } tracked \text{ refuses, exit 71} \\
+\quad index \leftarrow \text{ciphertext paths in the git index} \quad . \ \text{read verbatim, core.quotePath=false, -z} \\
+\quad established \leftarrow \{ \text{plaintext}(c) : c \in index, \text{plaintext}(c) \in tracked \} \quad . \ \text{a committed file named exactly .secret is warned and skipped} \\
+\quad \textbf{for all } p \in W \text{ with } \text{plaintext}(p) \text{ on disk, } p \notin established, \ p \notin A[\mathit{repoId}] \text{ keyed by } (\mathit{pin}, \mathit{principal}) \textbf{ then refuse} \\
+\quad\quad . \ \text{exit 72, naming the paths; the remedy is this document} \\
+\quad \text{gates 40 and 41 over } W \text{: refuse git-ignored future ciphertext paths (exit 40); warn on non-gitignored tracked plaintexts (exit stays 0)} \\
+\quad \text{encrypt phase 1 to the full ring in memory, then commit per Algorithm 8} \\
+\textbf{end upon}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 9 - Hide - the gate sequence before any encryption (cmd_hide)</strong><br>
+<em>Machine state: A[repoId] = the allowance records in the key store, one file per (pin, principal) pair; S[repoId] = the ring-change stamp in the key store; W = the working set: exactly the named files; there is no bare <code>hide</code></em>
+</p>
 
 The exit-72 refusal names the offending tracked paths. They are public
 repository facts, read in the committed `tracked.json`, so naming them
@@ -823,21 +850,24 @@ Tracked paths are repo-relative strings in `.git-veil/tracked.json`. Four
 layers guard them:
 
 $$
-\begin{array}{ll}
-\multicolumn{2}{l}{\textbf{Algorithm 10} \quad \textsc{AcceptTrackedPath} \text{ - and the decryption-write gate}} \\
-1: & \textbf{function } \textsc{AcceptTrackedPath}(\mathit{input}) \\
-2: & \quad \textbf{guard } \mathit{input} \text{ is non-empty and relative, every component Normal} \quad \textbf{else refuse} \ . \ \text{exit 71 (} \texttt{validate\_tracked\_path} \text{)} \\
-3: & \quad \textbf{guard } \text{canonicalise}(\mathit{input}, \text{symlinks resolved, } \texttt{..} \text{ collapsed}) \subseteq \text{repository root} \\
-   & \quad\quad \textbf{else refuse} \ . \ \text{exit 71; a link to } \text{/home/victim/.ssh/id\_rsa} \text{ fails here at add time} \\
-4: & \quad \textbf{guard } \text{lstat}(\mathit{path}) \text{ is a regular file or absent} \quad \textbf{else refuse} \ . \ \text{exit 71; a committed symlink is refused on every use} \\
-5: & \quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root} \quad \textbf{else refuse} \ . \ \text{exit 71} \\
-6: & \textbf{end function} \\[2mm]
-\multicolumn{2}{l}{\textbf{upon } \textsc{Reveal} \text{ (the decryption-write gate)}} \\
-a: & \quad \textbf{guard } \text{the target plaintext is not tracked in the git index, case-insensitively} \\
-   & \quad\quad \textbf{else refuse} \ . \ \text{exit 43, naming the path; cat is not gated, it never writes} \\
-b: & \textbf{end upon}
+\begin{array}{l}
+\textbf{function } \textsc{AcceptTrackedPath}(\mathit{input}) \\
+\quad \textbf{guard } \mathit{input} \text{ is non-empty and relative, every component Normal} \quad \textbf{else refuse} \ . \ \text{exit 71 (} \texttt{validate\_tracked\_path} \text{)} \\
+\quad \textbf{guard } \text{canonicalise}(\mathit{input}, \text{symlinks resolved, } \texttt{..} \text{ collapsed}) \subseteq \text{repository root} \\
+\quad\quad \textbf{else refuse} \ . \ \text{exit 71; a link to } \text{/home/victim/.ssh/id\_rsa} \text{ fails here at add time} \\
+\quad \textbf{guard } \text{lstat}(\mathit{path}) \text{ is a regular file or absent} \quad \textbf{else refuse} \ . \ \text{exit 71; a committed symlink is refused on every use} \\
+\quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root} \quad \textbf{else refuse} \ . \ \text{exit 71} \\
+\textbf{end function} \\[2mm]
+\textbf{upon } \textsc{Reveal} \text{ (the decryption-write gate)} \\
+\quad \textbf{guard } \text{the target plaintext is not tracked in the git index, case-insensitively} \\
+\quad\quad \textbf{else refuse} \ . \ \text{exit 43, naming the path; cat is not gated, it never writes} \\
+\textbf{end upon}
 \end{array}
 $$
+
+<p align="center">
+<strong>Algorithm 10 - AcceptTrackedPath - and the decryption-write gate</strong>
+</p>
 
 Layer 1 is `validate_tracked_path`, layer 2 the add-time
 canonicalise-and-reject (`resolve_repo_relative_input` with
