@@ -12,8 +12,8 @@ release-patch:
     IFS='.' read -r major minor patch <<< "$old"
     new="${major}.${minor}.$((patch + 1))"
     echo "bumping $old -> $new"
-    sed -i '' "0,/^version = \"$old\"/s//version = \"$new\"/" Cargo.toml
-    sed -i '' "0,/^version = \"$old\"/s//version = \"$new\"/" Cargo.lock
+    sed -i '' "s/^version = \"$old\"/version = \"$new\"/" Cargo.toml
+    cargo check -q  # refreshes Cargo.lock to $new
     git add Cargo.toml Cargo.lock
     git commit -m "chore: bump version to $new"
     git tag "v$new"
