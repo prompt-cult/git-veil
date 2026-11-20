@@ -142,9 +142,11 @@ impl Keyring {
         result
     }
 
-    /// Adds an entry, or updates the existing entry in place when the email
-    /// already exists (matched case-insensitively. The first-seen stored
-    /// casing is preserved). Clears the signature so the keyring gets
+    /// Adds an entry with a label that must be new. A label that already
+    /// exists, matched case-insensitively, is refused: a key is never
+    /// replaced. The caller's remedy for a lost key is a full removal
+    /// (remove-key, then the ring-change pass) followed by a fresh add-key.
+    /// Clears the signature so the keyring gets
     /// re-signed.
     ///
     /// # Format constraint
@@ -163,15 +165,17 @@ impl Keyring {
                  because it is the keyring line field separator"
             );
         }
-        if let Some(existing) = self
+        if self
             .entries
-            .iter_mut()
-            .find(|e| e.email.eq_ignore_ascii_case(&email))
+            .iter()
+            .any(|e| e.email.eq_ignore_ascii_case(&email))
         {
-            existing.public_key = public_key;
-        } else {
-            self.entries.push(KeyringEntry { email, public_key });
+            anyhow::bail!(
+                "The principal label {email} is already in the keyring. \
+                 A key is never replaced."
+            );
         }
+        self.entries.push(KeyringEntry { email, public_key });
         self.signature = None;
         Ok(())
     }

@@ -921,3 +921,4 @@ codes are never renumbered, only appended.
 | 70   | Refused                      | Policy refusal (e.g. `init` over established trust, `clean` without `--yes`, `rotate` without a due ring-change stamp) |
 | 71   | UnsafePath                   | Path-safety refusal (symlink, outside repository, unsafe tracked path) |
 | 72   | UnintendedEncryption         | `hide` refuses to first-encrypt a tracked path never allowed on this machine (see "Allowance") |
+| 73   | DuplicatePrincipalLabel      | `add-key` refuses a keyring label that already exists; a key is never replaced (a lost key needs full removal, then a fresh `add-key`) |

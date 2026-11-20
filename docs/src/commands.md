@@ -362,8 +362,11 @@ re-signs the keyring with the owner's Ed25519 signing key.
   `--signing-key` names one by its full 64-hex Ed25519 verifying key (the
   public half, never the seed). A missing signing key exits with code 20
   and prints the create-and-back-up recipe.
-- Adding the same email twice updates the entry instead of duplicating
-  it.
+- The keyring label (the first argument) must be new. `add-key` refuses a
+  label that is already in the keyring (exit 73) and never replaces a
+  key. A lost key needs a full removal first:
+  [remove-key](#remove-key), then the rotate pass, then `add-key` of the
+  new key under the same label.
 - After re-signing, the ring-change pass is due on this machine, and
   [rotate](#rotate) delivers it.
 
@@ -381,7 +384,8 @@ note: the keyring has changed. To re-encrypt to the updated keyring, run the rot
 ```
 
 Exit codes: 20 (missing signing key), 61 (the canary would not encrypt),
-plus the gated-chain codes 10/11/12/14/63, plus 30.
+73 (the label already exists; a key is never replaced), plus the
+gated-chain codes 10/11/12/14/63, plus 30.
 
 ### `remove-key`
 

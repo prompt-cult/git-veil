@@ -62,10 +62,30 @@ pub fn cmd_add_key(
     let keyring_path = repo_root.join(".git-veil/keyring");
     let keyring_content =
         fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
-    let mut keyring = Keyring::parse(&keyring_content)?;
+    let keyring = Keyring::parse(&keyring_content)?;
+
+    // The label must be new. Replacing the key under an existing label is
+    // banned (exit 73): an attacker who asks for a "lost key" replacement
+    // under a collaborator's - or the owner's - own label would otherwise
+    // take over that keyring entry and receive the secrets on the next
+    // ring-change pass. The documented remedy for a lost key is a full
+    // removal cycle: remove-key, deliver the ring-change pass, then
+    // add-key the new key fresh.
+    if keyring.find_by_email(email).is_some() {
+        return Err(coded(
+            ExitCode::DuplicatePrincipalLabel,
+            format!(
+                "'{email}' is already in the keyring. add-key never replaces a key. \
+A lost key needs a full removal first: run git-veil remove-key '{email}', \
+deliver the rotate pass, then run git-veil add-key with the new key under \
+the same label."
+            ),
+        ));
+    }
 
     // Add the two-field entry (principal, X25519 public key). The binding
     // fingerprint is computed on demand and never stored.
+    let mut keyring = keyring;
     keyring.add_entry(email.to_string(), public_key_str.to_string())?;
 
     // Bump the monotonic freshness counter before signing, so the counter

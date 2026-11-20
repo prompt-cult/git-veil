@@ -37,6 +37,13 @@ keyring signature is verified against the pinned trusted key before any
 modification, and a canary is test\-encrypted to the new key so a key that
 cannot encrypt is never signed into the ring.
 
+The keyring label (the first argument) must be new. add\-key refuses a
+label that is already in the keyring and never replaces a key (exit 73).
+This is a security rule: writing a new key under an existing label hands
+the label\*(Aqs secrets to the new key. A lost key needs a full removal
+first: run git\-veil remove\-key on the label, deliver the rotate pass,
+then add the new key with git\-veil add\-key under the same label.
+
 The keyring is signed with the TRUSTED key \- the one whose owner key
 fingerprint is pinned for this repository. signing\-keys.txt must contain
 that seed; git\-veil never generates it (docs/src/solo.md step 1 has the

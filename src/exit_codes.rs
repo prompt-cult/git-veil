@@ -61,6 +61,9 @@ pub enum ExitCode {
     /// `hide` refuses to first-encrypt a tracked path that was never
     /// allowed on this machine.
     UnintendedEncryption = 72,
+    /// `add-key` refuses a label that is already in the keyring; a key is
+    /// never replaced.
+    DuplicatePrincipalLabel = 73,
 }
 
 impl ExitCode {
@@ -87,6 +90,7 @@ impl ExitCode {
         ExitCode::Refused,
         ExitCode::UnsafePath,
         ExitCode::UnintendedEncryption,
+        ExitCode::DuplicatePrincipalLabel,
     ];
 
     /// The enum name, as printed by `git-veil error-codes`.
@@ -113,6 +117,7 @@ impl ExitCode {
             ExitCode::Refused => "Refused",
             ExitCode::UnsafePath => "UnsafePath",
             ExitCode::UnintendedEncryption => "UnintendedEncryption",
+            ExitCode::DuplicatePrincipalLabel => "DuplicatePrincipalLabel",
         }
     }
 
@@ -159,6 +164,9 @@ impl ExitCode {
             }
             ExitCode::UnintendedEncryption => {
                 "hide refuses to first-encrypt a tracked path never allowed on this machine"
+            }
+            ExitCode::DuplicatePrincipalLabel => {
+                "add-key refuses a label already in the keyring; a key is never replaced"
             }
         }
     }

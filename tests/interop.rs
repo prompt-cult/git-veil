@@ -231,6 +231,27 @@ fn test_keyring_rejects_colon_in_email() {
 }
 
 #[test]
+fn test_keyring_never_replaces_a_label() {
+    let mut keyring = Keyring::new();
+    keyring
+        .add_entry("alice@example.com".to_string(), "age1xxx".to_string())
+        .expect("first add succeeds");
+
+    // Same casing.
+    let second = keyring.add_entry("alice@example.com".to_string(), "age1yyy".to_string());
+    assert!(second.is_err(), "a key is never replaced");
+    // Case-insensitive label match.
+    let third = keyring.add_entry("ALICE@EXAMPLE.COM".to_string(), "age1zzz".to_string());
+    assert!(third.is_err(), "label matching is case-insensitive");
+
+    assert_eq!(keyring.entries.len(), 1, "no duplicate entry was added");
+    assert_eq!(
+        keyring.entries[0].public_key, "age1xxx",
+        "the original key is untouched"
+    );
+}
+
+#[test]
 fn test_keyring_remove_clears_signature() {
     let mut keyring = Keyring::new();
     keyring
