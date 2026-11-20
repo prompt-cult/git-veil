@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a change. git-veil core stays small on purpose; rich features belong in opt-in plugins/integrations.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        git-veil is a security tool with a deliberately minimal core. Features that
+        grow the trusted computing base are unlikely to be accepted into core.
+        Please address the plugin/integration angle below.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem you are trying to solve
+      description: What is hard or impossible today? Who hits it?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: plugin
+    attributes:
+      label: Why does this not fit an opt-in plugin or integration?
+      description: e.g. compatibility shims for tools users migrate from (git-secret, gpg), new scopes, external tool integrations. If it does fit a plugin, say so — that is the preferred home.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This change keeps the core trust boundary unchanged (no new crypto, no new key handling, no new network paths)
+          required: true
