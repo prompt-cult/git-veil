@@ -50,47 +50,8 @@ function Wait-Workflow([string]$Workflow) {
     }
     throw "$Workflow never completed on v$new"
 }
-Wait-Workflow release.yml
-Wait-Workflow windows-msi.yml
-# 3. Generate and validate the winget manifests for v$new.
-powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "gen-winget-manifests.ps1") -Tag "v$new" -PackageIdentifier $PackageIdentifier
-if ($LASTEXITCODE -ne 0) { throw "gen-winget-manifests.ps1 failed with exit code $LASTEXITCODE" }
-# 4. Push the manifests to the owner's winget-pkgs fork, committed under the
-#    owner's own GitHub identity. The branch waits there; the "Create pull
-#    request" click is NOT made by this script.
-& gh repo fork $WingetUpstream --clone=false --default-branch-only
-
-# Built through the GitHub API: a clone of winget-pkgs is hundreds of megabytes
-# and 785520 files, while the branch needs only three blobs on top of master.
-$login = gh api user -q ".login"
-$email = gh api user -q ".email"
-if (-not $email -or $email -eq "null") { $email = "$login@users.noreply.github.com" }
-$now = [datetime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-
-$versionManifest = Join-Path $outDir "$PackageIdentifier.yml"
-$localeManifest = Join-Path $outDir "$PackageIdentifier.locale.yml"
-$installerManifest = Join-Path $outDir "$PackageIdentifier.installer.yml"
-
-function New-GitBlob([string]$Repo, [string]$Path) {
-    $content = [Convert]::ToBase64String([IO.File]::ReadAllBytes($Path))
-    return gh api "repos/$Repo/git/blobs" -f content=$content -f encoding="base64" -q ".sha"
-}
-
-$blobs = @(
-    @{ path = "manifests/p/PromptCult/GitVeil/$version/$PackageIdentifier.yml"; sha = (New-GitBlob "$ForkOwner/winget-pkgs" $versionManifest) },
-    @{ path = "manifests/p/PromptCult/GitVeil/$version/$PackageIdentifier.locale.yml"; sha = (New-GitBlob "$ForkOwner/winget-pkgs" $localeManifest) },
-    @{ path = "manifests/p/PromptCult/GitVeil/$version/$PackageIdentifier.installer.yml"; sha = (New-GitBlob "$ForkOwner/winget-pkgs" $installerManifest) }
-)
-$masterSha = gh api "repos/$WingetUpstream/git/ref/heads/master" -q ".object.sha"
-$masterTree = gh api "repos/$WingetUpstream/git/commits/$masterSha" -q ".tree.sha"
-$blobTree = $blobs | ConvertTo-Json -Compress -AsArray
-$tree = gh api "repos/$ForkOwner/winget-pkgs/git/trees" -f base_tree=$masterTree -f "tree=$blobTree" -q ".sha"
-$commitBody = "{`"name`": `"$login`", `"email`": `"$email`", `"date`": `"$now`"}"
-$commit = gh api "repos/$ForkOwner/winget-pkgs/git/commits" -f message="Add $PackageIdentifier $new" -f tree=$tree -f parents="[`"$masterSha`"]" -f author=$commitBody -f committer=$commitBody -q ".sha"
-$null = gh api "repos/$ForkOwner/winget-pkgs/git/refs" -f ref="refs/heads/git-veil-$new" -f sha=$commit
-$compare = "https://github.com/$WingetUpstream/compare/master...${ForkOwner}:winget-pkgs:git-veil-$new`?quick_pull=1"
-Write-Host ""
-Write-Host "winget submission primed: the manifests wait on the fork branch git-veil-$new."
-Write-Host "Open the compare, review, and click 'Create pull request' under your own identity:"
-Write-Host $compare
-Start-Process $compare
+Wait-Workflow release.yml  # release.yml calls windows-msi.yml and (after the fix) gates on it
+# 3. Winget prep: generate + validate manifests, push the fork branch (prep only;
+#    the Create pull request click stays with the owner, ticket #86).
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "push-winget-fork.ps1") -Version $new -PackageIdentifier $PackageIdentifier -Slug $Slug -WingetUpstream $WingetUpstream -ForkOwner $ForkOwner
+if ($LASTEXITCODE -ne 0) { throw "push-winget-fork.ps1 failed with exit code $LASTEXITCODE" }

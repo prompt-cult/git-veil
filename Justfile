@@ -105,3 +105,8 @@ release-patch-windows:
 # from the published v{{version}} assets; nothing is submitted).
 deploy-winget-windows version:
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gen-winget-manifests.ps1 -Tag "v{{version}}"
+
+# Windows: push the validated winget manifests for version $1 to the fork (prep only).
+# Owner-run submission variant: just push-winget-windows 0.17.3 -Submit
+push-winget-windows version:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/push-winget-fork.ps1 -Version "{{version}}"
