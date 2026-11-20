@@ -1,0 +1,9 @@
+/* Algorithm listings (the gv-math display-math blocks decoded by
+ * docs/tex-mj3.js) are wider than the 750px text column on narrow windows.
+ * MathJax centers display math and the column clips overflowing SVGs on the
+ * right. Left-align the blocks with the prose and let each one scroll
+ * horizontally instead of clipping. */
+#mdbook-content mjx-container[jax="SVG"][display="true"] {
+  text-align: left;
+  overflow-x: auto;
+}
