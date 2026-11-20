@@ -170,7 +170,10 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [build-release, man-pages]
+    # windows-msi is a required gate: a release is only published when the
+    # Windows x86_64 assets built and uploaded successfully (see issue #86 -
+    # v0.17.2 shipped without them because this job's failure did not block).
+    needs: [build-release, man-pages, windows-msi]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout code
