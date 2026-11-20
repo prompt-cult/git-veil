@@ -174,7 +174,14 @@ including the cases that never ask, are in
 
 ## Installation
 
-Prebuilt binaries are attached to every [GitHub release](https://github.com/prompt-cult/git-veil/releases):
+Homebrew (macOS and Linux), from the prompt-cult tap:
+
+```sh
+brew tap prompt-cult/tap
+brew install prompt-cult/tap/git-veil
+```
+
+Or take a prebuilt binary from every [GitHub release](https://github.com/prompt-cult/git-veil/releases):
 
 ```sh
 # Linux x86_64 example. macOS binaries sit beside it in the same release.
@@ -184,15 +191,8 @@ chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/g
 ```
 
 `cargo binstall git-veil` resolves the same release assets (manifest wired
-into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned.
-
-Build from source with cargo:
-
-```sh
-cargo build --release
-```
-
-The binary lands at `target/release/git-veil`.
+into Cargo.toml). `cargo install git-veil` follows once the crate is
+published on crates.io.
 
 Man pages and shell completions are generated from the CLI definition itself:
 
