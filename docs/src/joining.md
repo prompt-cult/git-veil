@@ -85,6 +85,11 @@ keyring, trust.json and tracked.json. Decrypting commands resolve your
 principal from `git config user.email`. You can also pass `--email`
 explicitly.
 
+Your email is the label of your keyring entry. Give every machine you use
+its own email. Two machines with one email share one label, and
+`add-key` with that label replaces the key that is already there. See
+[solo.md section 6](solo.md#6-a-build-or-deployment-script-reveals-on-its-own-key).
+
 ### 2. Import your own X25519 private key
 
 ```sh
