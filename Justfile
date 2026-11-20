@@ -14,7 +14,8 @@ release-patch:
     echo "bumping $old -> $new"
     sed -i '' "s/^version = \"$old\"/version = \"$new\"/" Cargo.toml
     cargo check -q  # refreshes Cargo.lock to $new
-    git add Cargo.toml Cargo.lock
+    sh scripts/gen-docs.sh >/dev/null  # committed man pages/completions carry the version
+    git add Cargo.toml Cargo.lock docs/man docs/completions
     git commit -m "chore: bump version to $new"
     git tag "v$new"
     git push origin HEAD:main
