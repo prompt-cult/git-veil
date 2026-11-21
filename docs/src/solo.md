@@ -162,10 +162,12 @@ decryptability contract.
 
 ## 5. The daily cycle
 
-Edit, check, hide, commit, reveal. Name the file you are working with:
+Peek at secrets with `git-veil cat`; decrypt in place with `git-veil
+reveal` when you need to edit:
 
 ```sh
-$ git-veil reveal .env          # decrypt one file in place
+$ git-veil cat .env             # plaintext to stdout; nothing on disk is touched
+$ git-veil reveal .env          # alternative: decrypt one file in place
 Decrypted: .env
 files revealed
 ... edit .env ...
@@ -190,9 +192,7 @@ path and leaves the `.secret` files in place. `hide .env` re-encrypted one
 file and left every other tracked file alone. `changes` decrypts each
 ciphertext and diffs it against the plaintext beside it. Where there is no
 diff to show, it prints `unchanged: …`, `no hidden version: …` or
-`not present on disk (hidden): …`. To peek without disturbing anything,
-`git-veil cat .env` writes the plaintext to stdout only. Neither the
-plaintext nor the ciphertext on disk is touched.
+`not present on disk (hidden): …`.
 
 Every `hide` and `reveal` names its file(s); there is no bare form. The
 command acts on exactly the paths you give it, so keep the naming habit:
@@ -200,6 +200,11 @@ it is the habit that matters in a team, where a whole-manifest pass would
 touch every ciphertext and the commit would look like you edited every
 secret when you edited a few. See the
 [two-collaborators guide](two-collaborators.md).
+
+Pro tip: `git-veil reveal` leaves the plaintext on disk, which you want when
+you are editing it. If you simply want to use the secrets, script
+`git-veil cat` to load them as environment variables in your deployment
+scripts instead.
 
 For the tightest solo posture, no plaintext lingers on disk. That is the
 default. `hide` deletes the plaintext. Pass `--keep-plaintext` if you want
