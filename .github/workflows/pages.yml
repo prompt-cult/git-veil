@@ -23,14 +23,22 @@ on:
 permissions:
   contents: read
 
-# One deployment at a time; the last push to main is the one that ships.
-concurrency:
-  group: pages
-  cancel-in-progress: false
+# The book build and the deployment want opposite treatment, so the two jobs
+# are governed separately (see the `concurrency` key on each). The workflow
+# used to hold one global `group: pages` lock for everything, which serialised
+# every pull request's book build behind whatever main was deploying.
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Per-ref and cancelable: a superseded push should not spend minutes
+    # installing mdBook from source to build a book nobody will read. `build`
+    # is a required status check, but checks are per commit, so the newest
+    # commit of a ref always gets an uncancelled run.
+    concurrency:
+      group: pages-build-${{ github.ref }}
+      cancel-in-progress: true
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -84,6 +92,14 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    # Deployments are deliberately *not* cancelable: cancelling mid-flight can
+    # leave the Pages environment pointing at a half-published artifact. A
+    # single unfiltered group keeps the old "one deployment at a time"
+    # guarantee, now without holding up builds.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    timeout-minutes: 10
     # Least privilege: the build job only ever reads the repository, and only
     # the deployment needs the Pages token and the OIDC exchange.
     permissions:
