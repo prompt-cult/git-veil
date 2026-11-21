@@ -1,10 +1,8 @@
 # git-veil
 
 <p align="center">
-  <img src="assets/git-veil.svg" alt="git-veil" width="760">
+  <img src="assets/git-veil.svg" alt="git-veil logo. Branch motif adapted from the Git logo by Jason Long, licensed under CC BY 3.0." width="760">
 </p>
-
-<p align="center"><small>Branch motif adapted from the Git logo by Jason Long, licensed under CC BY 3.0.</small></p>
 
 git-veil stores encrypted secrets in a git repository. It is written in Rust.
 It encrypts files using [`age`][age] identity keys (via the pure-Rust
@@ -43,15 +41,6 @@ environments and run the commands to create the `age` identity in that
 environment. You do not need to look at the secret part of the key nor cut
 and paste it or transmit it. You simply copy the public part of the key and
 pass it to `git-veil add-key`.
-
-The preceding paragraphs may read like a very radical idea. Yet consider
-the alternatives; you have to maintain a system to distribute and backup
-your deployment secrets. Your author is shocked at how many software
-platforms (e.g. mobile application tooling) have you commit
-plaintext certificates into a private git database. Your author has seen
-and used a lot of enterprise systems where certificates and crypto
-materials were supposed to be automated. In practice your author has never
-seen them work well at the point of go-live. Your author is convinced that the default case is either security theatre and security-by-obscurity. Or even the worst of all worlds; a central secret management tool that is a concentration risk combined with certs being pasted around to get it set up at the last minute.
 
 The aim of `git-veil` is to bring self-sovereign public-key encryption of
 your application deployment secrets to the masses. History tells us that it
