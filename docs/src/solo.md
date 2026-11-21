@@ -77,19 +77,14 @@ $ git-veil whoami
 example@github.com
 ```
 
-What happened. `init` copied your verifying key into `.git-veil/
-owner.verifying` and pinned it on this machine: the key you passed in
-matched the verifying key derived from the signing seed you created in
-step 1, which is the proof that this is your repository. `.git-veil/` now
-holds `keyring`, `trust.json`, `tracked.json` and `owner.verifying`.
-Every gated command checks the keyring signature against this pin first
-and fails closed without it. A fresh clone, even yours, has no pin: it
-imports a pin-file you export with `git-veil export-pin` (see
-[joining.md](joining.md)), or you re-initialize it from scratch.
-Commit `.git-veil/` alongside the ciphertexts. Your X25519 private key
-lives in the per-machine key store, never committed. The behaviour and
-options of `init`, `import`, `repo-id` and `whoami` are in
-[Commands](commands.md#setup).
+What happened. `init` copied your verifying key into `.git-veil/owner.verifying`
+and pinned it on this machine. Every gated command checks the keyring
+signature against that pin and fails closed without it. A fresh clone has
+no pin: import a pin-file (`git-veil export-pin`, see
+[joining.md](joining.md)) or re-initialize from scratch. Commit
+`.git-veil/` alongside the ciphertexts; your X25519 private key stays in
+the per-machine key store, never committed. Options for `init`, `import`,
+`repo-id` and `whoami` are in [Commands](commands.md#setup).
 
 You should add or edit a CODEOWNERS file that protects the `.git-veil/`
 folder as owned by you. The suggestion above is the line to add. On a
