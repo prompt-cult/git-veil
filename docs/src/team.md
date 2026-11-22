@@ -27,8 +27,9 @@ What makes it safe to share:
 
 - **Setting up a shared repository** - the owner runs the solo steps, then
   exchanges public keys and pin-files with the first collaborator. The
-  full walkthrough, including the exit-72 gate with real output, is in
-  [Two collaborators](two-collaborators.md).
+  walkthrough, including the exit-72 gate, is in
+  [Two collaborators](two-collaborators.md); the real refusal output and
+  fix are in [Troubleshooting - Exit 72](troubleshooting.md#exit-72-the-allowance-question).
 - **Someone joins** - the owner exports a pin-file, runs `add-key`, and
   delivers the ring-change pass before the newcomer can decrypt anything.
   The newcomer's own checklist is in

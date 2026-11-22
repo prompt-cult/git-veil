@@ -113,88 +113,29 @@ files revealed
 $ git-veil cat .env        # peek to stdout. Touches no disk state.
 ```
 
-## Part 4 - name the files: churn and the allow gate
+## Part 4. The allow gate
 
-### Ciphertext churn
+`tracked.json` is committed and unsigned, so any repo writer can nominate a
+path for encryption. Before `hide` first-encrypts a path, it asks - as an
+error and never as a blocking prompt - whether this machine's user wants
+that path shared with the keyring.
 
-Hide covers exactly the files you name. So the team habit is to name
-only the files you touched:
+### The exit-72 gate
 
-```sh
-$ git-veil hide .env     # re-encrypt .env only; every other ciphertext is untouched
-Encrypted: .env
-Deleted plaintext: .env
-files hidden
-$ git-veil reveal .env   # restore .env only
-```
-
-A rotation after `add-key` or `remove-key` is different work: the
-ring-change pass, delivered with `git-veil rotate`. See
-[Commands - rotate](commands.md#rotate).
-
-### The exit-72 question
-
-`tracked.json` is committed and unsigned, so any repo writer can nominate
-a path in it. Before `hide` first-encrypts a path, it asks, as an error
-code and never as a blocking prompt: are you sure this file is one you
-want to share with the others in the keyring? The refusal is exit code 72
-and it names the paths.
-
-Here is the flow with real output. Alice nominated a second file and
-pushed the manifest before hiding it:
+If `hide` refuses with exit 72, the path was tracked but never allowed on
+this machine; hiding it would write its plaintext into a ciphertext every
+keyring member can read. Nothing was encrypted. Answer deliberately:
 
 ```sh
-$ printf 'DEPLOY_HOST=staging.example.com\nDEPLOY_USER=alice\n' > deploy.env
-$ git-veil add-file deploy.env
-file not in .gitignore, adding: deploy.env
-added 1 files
-$ git add .gitignore .git-veil/tracked.json
-$ git commit -m "Track deploy.env"
-$ git push
+$ git-veil allow <path>
+$ git-veil hide <path>
 ```
 
-The owner keeps his own `deploy.env` on disk. He pulls Alice's manifest
-change and names the file:
-
-```sh
-$ git-veil hide deploy.env
-error: refusing to hide: paths are tracked but were never allowed for encryption on this machine. tracked.json may have been modified by someone else. Allow the paths deliberately if the tracking is wanted. Error code 72. The offending tracked paths:
-  deploy.env
-```
-
-Nothing was encrypted. The question is exactly the right one: `deploy.env`
-is a file the owner did not nominate on this machine, and hiding it would
-write its contents into a ciphertext every keyring member can read. He
-answers with `allow`, then names the file:
-
-```sh
-$ git-veil allow deploy.env
-allowed 1 files
-$ git-veil hide deploy.env
-Encrypted: deploy.env
-Deleted plaintext: deploy.env
-files hidden
-$ git add .gitignore .git-veil/tracked.json deploy.env.secret
-$ git commit -m "Allow deploy.env and hide it"
-$ git push
-```
-
-The answer is cached, so a later hide of the same path does not ask again:
-
-```sh
-$ git-veil reveal deploy.env
-Decrypted: deploy.env
-files revealed
-$ git-veil hide deploy.env
-Encrypted: deploy.env
-Deleted plaintext: deploy.env
-files hidden
-```
-
-Three facts keep the gate out of the way, and the rules, including the
-cases that never ask, are in [Commands - allow](commands.md#allow):
-`add-file` implies `allow`, re-encryption of an established ciphertext
-never asks, and the record keys on your git user (`git config user.email`).
+`add-file` implies allow, and re-encryption of an established ciphertext
+never asks; the full rules, including the cases that never ask, are in
+[Commands - allow](commands.md#allow). Who triggers the gate, why it
+refuses, and the full fix are in
+[Troubleshooting - Exit 72](troubleshooting.md#exit-72-the-allowance-question).
 
 ## Who can decrypt what
 

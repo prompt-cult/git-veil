@@ -111,7 +111,9 @@ error: user not found in the keyring. Check the principal, or ask the owner to a
 
 Together these are the whole story. The tool refuses bob on new
 keyrings. No software can make the ciphertext already in his possession
-unreadable.
+unreadable - and if bob ever saw a secret in plaintext while he had
+access, it is already compromised: the only true revocation is changing
+the secret.
 
 ## Checklist
 
