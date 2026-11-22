@@ -11,7 +11,16 @@ on:
   # red than value (see the run history), so it is gone.
   push:
     branches: [main]
+    # Docs-only pushes never touch the fuzz targets; skip the run.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
+
+# One run per ref; a superseded push cancels the still-running previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +29,8 @@ jobs:
   fuzz-smoke:
     name: Fuzz Smoke - ${{ matrix.target }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # A hung fuzz run must not bill GitHub's 6-hour default.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
