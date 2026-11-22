@@ -32,10 +32,10 @@ What is dropped:
   - `<pre class="mermaid">` diagram sources, which are drawings, not prose;
   - images and inputs; links keep their text and lose their markup.
 
-Known loss, accepted for now: the display-math algorithm listings in the
-design chapter live only inside the dropped comments, so their bodies are
-absent from the text while every heading, paragraph and code block around
-them is present. The surrounding prose still describes each algorithm.
+Math fallback: the preprocessor also emits each display-math block's TeX
+source inside a `<noscript><pre>` (rendered in a browser exactly when
+scripting is disabled). This renderer keeps that block, so the plain text
+carries the math as text instead of losing it.
 
 Standard library only: the same python3 runtime the Pages runner and the
 docker build image already have. The script fails with a non-zero exit if
@@ -55,7 +55,7 @@ BLOCK_TAGS = frozenset(
     (
         "address", "blockquote", "dd", "div", "dl", "dt", "figure",
         "figcaption", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header",
-        "hr", "li", "main", "ol", "p", "pre", "section", "summary", "table",
+        "hr", "li", "main", "noscript", "ol", "p", "pre", "section", "summary", "table",
         "tbody", "thead", "tfoot", "tr", "ul",
     )
 )
