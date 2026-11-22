@@ -1,4 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# Runs under uv (https://docs.astral.sh/uv/): `uv run scripts/gen-plain-txt.py`
+# or `./scripts/gen-plain-txt.py`. MINIMUM PYTHON: 3.9 (requires-python below).
+# MINIMUM UV: any recent version. Standard library only, so the dependency
+# block is empty on purpose.
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
 """Render the built mdBook print page to plain text (plain.txt).
 
 mdBook's print page (print.html) already carries every chapter of the book
