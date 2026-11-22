@@ -88,10 +88,11 @@ treats it as a security event, not a rename: gated commands refuse with
 exit 10 and print no remedy, on purpose. No automated patch or re-pin path
 exists, and none will be added.
 
-The procedure is manual: remove `.git-veil/` from the repository and commit
-the removal (the trust chain stays in git history; nothing is lost), then
-re-run `git-veil init` on a machine holding the owner signing seed, re-add
-the collaborator keys, and re-pin each machine with the normal `export-pin`
+The procedure is manual: remove `.git-veil/` from the repository, commit
+the removal and push it so every clone sees the old trust state go (the
+trust chain stays in git history; nothing is lost), then re-run `git-veil
+init` on a machine holding the new owner's signing seed, re-add the
+collaborator keys, and re-pin each machine with the normal `export-pin`
 / `trust --import` ceremony. In a real transfer the people change too: this
 is a fresh start.
 

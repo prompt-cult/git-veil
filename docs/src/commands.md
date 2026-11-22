@@ -85,8 +85,10 @@ exactly match the verifying key derived from a seed in the key store's
 - `init` never touches `.gitignore`. The `.secret` ciphertexts are meant
   to be committed, so gitignoring them would defeat the fresh-clone
   decryptability contract.
-- Refuses to reset a repository with established trust. Remove
-  `.git-veil/` explicitly if you really want a fresh start. Exit 70.
+- Refuses to reset a repository with established trust, in the working
+  tree or in the committed tree: a bare local deletion of `.git-veil/`
+  is not a fresh start while the committed anchor rides in HEAD. Remove
+  and commit the removal if you really want a fresh start. Exit 70.
 
 ```sh
 $ git-veil init "$HOME/.git-veil/owner.verifying"

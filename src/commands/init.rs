@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 use super::trust::{
     codeowners_notice, ensure_path_outside_repo, prove_possession, read_verifying_key_file,
@@ -10,6 +11,31 @@ use crate::codeowners::{covers_trust_critical_paths, suggestion_text};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
 use crate::{derive_repo_id, get_remote_push_url, Keyring, TrackedFiles, TrustStore};
+
+/// Reads the committed trust.json from the HEAD tree, not the worktree.
+/// Returns None when the repo carries no committed trust state, which
+/// includes a repo with no commits yet.
+fn committed_trust_json(repo_root: &Path) -> Option<String> {
+    let present = Command::new("git")
+        .current_dir(repo_root)
+        .args(["cat-file", "-e", "HEAD:.git-veil/trust.json"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()?;
+    if !present.success() {
+        return None;
+    }
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(["cat-file", "blob", "HEAD:.git-veil/trust.json"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
 
 /// `git-veil init <VERIFYING_KEY>`: creates the `.git-veil/` state
 /// directory, copies the repo owner's verifying key in, and runs the pin
@@ -60,6 +86,30 @@ pub fn cmd_init(
                 ExitCode::Refused,
                 "git-veil is already initialized here; refusing to reset existing trust state \
                  remove .git-veil/ explicitly if you really want a fresh start",
+            ));
+        }
+    }
+
+    // The same refusal against the COMMITTED tree: a re-init must refuse
+    // while trust state rides in HEAD, even when the directory is gone
+    // from the worktree. A local rm -rf of .git-veil/ leaves exactly that
+    // state, and the committed anchor is still the live one every clone
+    // carries. The only sanctioned fresh start is a committed removal of
+    // .git-veil/, so an unreadable committed trust.json refuses too
+    // rather than guessing.
+    if let Some(json) = committed_trust_json(repo_root) {
+        let committed_trust = serde_json::from_str::<TrustStore>(&json).map_err(|_| {
+            coded(
+                ExitCode::Refused,
+                "git-veil is already initialized in the committed history but its trust.json is \
+                 unreadable; refusing a fresh init over it",
+            )
+        })?;
+        if !committed_trust.owner_fingerprints.is_empty() {
+            return Err(coded(
+                ExitCode::Refused,
+                "git-veil is already initialized in the committed history; refusing to reset \
+                 existing trust state remove .git-veil/ and commit the removal first",
             ));
         }
     }

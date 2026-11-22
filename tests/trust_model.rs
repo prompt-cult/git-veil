@@ -279,6 +279,159 @@ fn test_init_ambiguous_seeds_refuse() {
     );
 }
 
+/// Runs git in `dir` and asserts success.
+fn git(dir: &Path, args: &[&str]) {
+    let s = std::process::Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .status()
+        .expect("git");
+    assert!(s.success(), "git {:?} failed in {}", args, dir.display());
+}
+
+/// True when `rel_path` is tracked in the committed HEAD tree.
+fn path_in_head(dir: &Path, rel_path: &str) -> bool {
+    std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["cat-file", "-e", &format!("HEAD:{rel_path}")])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn write_seed_and_verifying(
+    store: &TempDir,
+    signing_key: &ed25519_dalek::SigningKey,
+    verifying_hex: &str,
+) {
+    fs::write(
+        store.join("signing-keys.txt"),
+        format!("{}\n", hex::encode(signing_key.to_bytes())),
+    )
+    .unwrap();
+    fs::write(store.join("owner.verifying"), format!("{verifying_hex}\n")).unwrap();
+}
+
+#[test]
+fn test_init_succeeds_after_committed_removal_of_state() {
+    // The wipe-and-reset discipline: a fresh start is valid only when
+    // the wipe is DURABLE - committed, so the removal reaches every
+    // clone and the push. Init after a committed removal of .git-veil/
+    // is the one sanctioned way to re-establish trust state.
+    let repo = TempDir::new("committed-wipe");
+    let key_store = TempDir::new("committed-wipe-ks");
+    init_git_repo(&repo.path);
+
+    let (signing_key, verifying_hex) = generate_signing_keypair();
+    write_seed_and_verifying(&key_store, &signing_key, &verifying_hex);
+
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("first init");
+
+    // The wipe is a committed change, not a local file deletion.
+    git(&repo.path, &["add", ".git-veil"]);
+    git(&repo.path, &["commit", "--quiet", "-m", "init"]);
+    git(&repo.path, &["rm", "-r", "--quiet", ".git-veil"]);
+    git(&repo.path, &["commit", "--quiet", "-m", "wipe"]);
+    assert!(
+        !path_in_head(&repo.path, ".git-veil/trust.json"),
+        "the removal must be committed before a fresh init runs"
+    );
+    assert!(!repo.join(".git-veil").exists());
+
+    cmd_init(
+        &repo.path,
+        &key_store.join("owner.verifying"),
+        "origin",
+        &key_store.path,
+        false,
+        false,
+    )
+    .expect("init after a committed removal of .git-veil/ succeeds");
+    assert!(repo.join(".git-veil/trust.json").exists());
+    assert!(TrustPinStore::read_pin(&key_store.path, TEST_REPO_ID)
+        .unwrap()
+        .is_some());
+}
+
+#[test]
+fn test_init_refuses_reinit_over_committed_trust_state_absent_from_disk() {
+    // The flip side of the same discipline: while .git-veil/ is present
+    // in the COMMITTED tree, a re-init must refuse even when the
+    // directory is absent on disk. A local `rm -rf .git-veil/` (sloppy
+    // operator) or an attacker staging half a wipe leaves exactly this
+    // state, and the committed trust anchor is still the live one every
+    // clone carries. Re-init over it would silently re-anchor trust.
+    let repo = TempDir::new("absent-disk");
+    let owner_store = TempDir::new("absent-disk-owner-ks");
+    init_git_repo(&repo.path);
+
+    let (owner_key, owner_verifying_hex) = generate_signing_keypair();
+    write_seed_and_verifying(&owner_store, &owner_key, &owner_verifying_hex);
+
+    cmd_init(
+        &repo.path,
+        &owner_store.join("owner.verifying"),
+        "origin",
+        &owner_store.path,
+        false,
+        false,
+    )
+    .expect("first init");
+
+    // Establish the trust state in the committed tree.
+    git(&repo.path, &["add", ".git-veil"]);
+    git(&repo.path, &["commit", "--quiet", "-m", "init"]);
+    assert!(path_in_head(&repo.path, ".git-veil/trust.json"));
+    assert!(path_in_head(&repo.path, ".git-veil/owner.verifying"));
+
+    // The directory vanishes from the worktree but NOT from HEAD.
+    fs::remove_dir_all(repo.join(".git-veil")).expect("remove the local state dir");
+    assert!(!repo.join(".git-veil").exists());
+
+    // A different seed (attacker, or a confused new owner before the
+    // org move is final) must not be able to re-init over the committed
+    // trust anchor: init must refuse on the committed tree alone.
+    let attacker_store = TempDir::new("absent-disk-attacker-ks");
+    let (attacker_key, attacker_verifying_hex) = generate_signing_keypair();
+    write_seed_and_verifying(&attacker_store, &attacker_key, &attacker_verifying_hex);
+
+    let err = cmd_init(
+        &repo.path,
+        &attacker_store.join("owner.verifying"),
+        "origin",
+        &attacker_store.path,
+        false,
+        false,
+    )
+    .expect_err("init must refuse while .git-veil/ is committed in HEAD, even when absent on disk");
+    assert_eq!(exit_code_of(&err), 70);
+    assert!(
+        err.to_string().contains("already initialized"),
+        "the refusal names the reset refusal: {err}"
+    );
+
+    // The old owner cannot re-anchor over the committed state either:
+    // the only sanctioned fresh start is the committed wipe above.
+    let err = cmd_init(
+        &repo.path,
+        &owner_store.join("owner.verifying"),
+        "origin",
+        &owner_store.path,
+        false,
+        false,
+    )
+    .expect_err("init must refuse for the old owner too while committed state exists");
+    assert_eq!(exit_code_of(&err), 70);
+}
+
 #[test]
 fn test_export_pin_wrong_repo_id_refuses() {
     let repo = TempDir::new("wrong-id");
