@@ -73,7 +73,7 @@ jobs:
             end
 
             test do
-              assert_match "git-veil \#{version}", shell_output("\#{bin}/git-veil --version")
+              assert_match "git-veil #{version}", shell_output("#{bin}/git-veil --version")
             end
           end
           EOF
