@@ -19,7 +19,7 @@ serve:
 	docker build -f Dockerfile.site -t git-veil-site:local ..
 	docker rm -f git-veil-site 2>/dev/null || true
 	docker run -d --name git-veil-site -p 8080:8080 git-veil-site:local
-	@echo "site: http://localhost:8080/  (design: /design.html, trust: /trust-model.html)"
+	@echo "site: http://localhost:8080/  (design: /design.html, trust: /trust-model.html, plain text: /plain.txt)"
 
 # Stop the detached container started by serve
 stop:

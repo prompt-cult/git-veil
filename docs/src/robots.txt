@@ -1,0 +1,13 @@
+# robots.txt for the published mdBook site (https://prompt-cult.github.io/git-veil/).
+# mdBook copies files in the book source tree that are not chapters into the
+# book output, so this file lands at the site root in every build: the Pages
+# workflow and the local docker site (docs/Dockerfile.site) both run plain
+# mdbook build over this source tree, and neither lists files one by one.
+
+# Everything the site serves is public documentation; crawlers are welcome.
+User-agent: *
+Allow: /
+
+# The sitemap is a planned addition; the line is here now so crawlers can
+# pick the sitemap up as soon as it exists.
+Sitemap: https://prompt-cult.github.io/git-veil/sitemap.xml
