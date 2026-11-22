@@ -7,3 +7,12 @@
   text-align: left;
   overflow-x: auto;
 }
+
+/* The index page would show the word "git-veil" twice in a row: as the
+ * markdown section h1 and again as the wordmark inside the logo banner that
+ * follows it. Sighted readers only need the banner; text-only readers (lynx,
+ * the print page, LLM extraction) ignore CSS and must keep the h1, so it
+ * stays in the document and is hidden visually only. */
+h1#git-veil {
+  display: none;
+}
