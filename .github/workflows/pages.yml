@@ -55,6 +55,14 @@ jobs:
         run: pip install uv
       - name: Generate plain.txt
         run: ./scripts/gen-plain-txt.py
+      # Crawler layer, all generated here so it can never drift: sitemap.xml
+      # (chapters in SUMMARY.md order, print.html last), llms.txt (llmstxt.org
+      # v2, pointing at the two whole-book single-fetch assets), and
+      # canonical/meta-description/Open Graph tags injected into every built
+      # page. The description is the book-level one from book.toml. See the
+      # script header for what is deliberately skipped (og:image).
+      - name: Generate crawler metadata
+        run: ./scripts/gen-crawler-meta.py
       # mdBook resolves links between its own pages at build time but does not
       # verify that a link target exists. This does: every relative href in the
       # built HTML must resolve to a file in the build directory, and every
