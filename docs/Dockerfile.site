@@ -49,6 +49,12 @@ COPY mermaid.min.js mermaid-init.js ./
 # build, same as CI.
 RUN mdbook build
 
+# Same generation step as .github/workflows/pages.yml: plain.txt, the whole
+# book rendered as one plain-text file, is produced from the print page the
+# build has just written, never hand-maintained. python3 is already
+# installed above for the mathblock preprocessor.
+RUN python3 scripts/gen-plain-txt.py
+
 # ------------------------------------------------------------------------------
 # Runtime: nginx on Debian trixie.
 #
