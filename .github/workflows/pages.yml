@@ -45,6 +45,16 @@ jobs:
       # file that does not exist a build failure rather than a generated stub.
       - name: Build the book
         run: mdbook build
+      # plain.txt: the whole book as one plain-text file at the site root.
+      # mdBook's print page (print.html) carries every chapter in one page;
+      # this renders that output as text, in the build, so the published
+      # plain.txt can never drift from the HTML it comes from. The script is
+      # a uv script (PEP 723, standard library only, python >= 3.9), so the
+      # runner needs uv; the same script runs in docs/Dockerfile.site.
+      - name: Install uv
+        run: pip install uv
+      - name: Generate plain.txt
+        run: ./scripts/gen-plain-txt.py
       # mdBook resolves links between its own pages at build time but does not
       # verify that a link target exists. This does: every relative href in the
       # built HTML must resolve to a file in the build directory, and every

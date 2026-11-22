@@ -49,6 +49,14 @@ COPY mermaid.min.js mermaid-init.js ./
 # build, same as CI.
 RUN mdbook build
 
+# Same generation step as .github/workflows/pages.yml: plain.txt, the whole
+# book rendered as one plain-text file, is produced from the print page the
+# build has just written, never hand-maintained. The script is a uv script
+# (PEP 723, standard library only, python >= 3.9), so uv is copied in from
+# its official image (native arm64 manifest, like every other stage here).
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+RUN ./scripts/gen-plain-txt.py
+
 # ------------------------------------------------------------------------------
 # Runtime: nginx on Debian trixie.
 #

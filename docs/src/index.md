@@ -141,3 +141,5 @@ loop with real output.
   and rotate failure stories, and recovery.
 - [Design specification](design.md) - how trust anchoring, pinning and
   keyring signing work under the hood.
+- [Plain-text version of the whole book](plain.txt) - every chapter of this
+  book as one plain-text file.
