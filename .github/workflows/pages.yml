@@ -31,16 +31,29 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       # mdBook is not a project dependency, so it is not in Cargo.lock and is
-      # not installed by the crate build: it is installed here, `--locked`, so
-      # the book is built by the same reproducible install every time.
+      # not installed by the crate build. The two binaries are version-pinned
+      # and cached: a runner reusing the cache skips both compiles entirely,
+      # which are the slowest steps of this job otherwise. Bump both the
+      # versions and the cache key together.
+      - name: Cache mdBook and mdbook-mermaid
+        uses: actions/cache@v4
+        id: mdbook-cache
+        with:
+          path: |
+            ~/.cargo/bin/mdbook
+            ~/.cargo/bin/mdbook-mermaid
+          key: mdbook-${{ runner.os }}-mdbook-0.5.4-mermaid-0.17.1
       - name: Install mdBook
-        run: cargo install mdbook --locked
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        run: cargo install mdbook --version 0.5.4 --locked
       - name: Install mdbook-mermaid
-        run: cargo install mdbook-mermaid --locked
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        run: cargo install mdbook-mermaid --version 0.17.1 --locked
       # `create-missing = false` in book.toml makes a SUMMARY entry naming a
       # file that does not exist a build failure rather than a generated stub.
       - name: Build the book
@@ -102,6 +115,7 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Least privilege: the build job only ever reads the repository, and only
     # the deployment needs the Pages token and the OIDC exchange.
     permissions:
