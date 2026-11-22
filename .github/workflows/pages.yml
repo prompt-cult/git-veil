@@ -1,7 +1,7 @@
 name: pages
 
 # Documentation site only: the mdBook is built from `book.toml` + `docs/src/`
-# and deployed to GitHub Pages. No binary is built in this job — that is the
+# and deployed to GitHub Pages. No binary is built in this job - that is the
 # release workflow's job.
 #
 # The official Pages deployment path is used (upload-pages-artifact /
