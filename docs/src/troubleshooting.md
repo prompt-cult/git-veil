@@ -80,6 +80,21 @@ this machine before touching anything. The refusals, and what to do:
 A trust record whose fingerprint is 16 hex characters is refused as
 hostile: re-establish trust with `trust`.
 
+### Organization transfer
+
+Moving a repository to another GitHub organization is a transfer of
+control of the repository, possibly a transfer of legal ownership. git-veil
+treats it as a security event, not a rename: gated commands refuse with
+exit 10 and print no remedy, on purpose. No automated patch or re-pin path
+exists, and none will be added.
+
+The procedure is manual: remove `.git-veil/` from the repository and commit
+the removal (the trust chain stays in git history; nothing is lost), then
+re-run `git-veil init` on a machine holding the owner signing seed, re-add
+the collaborator keys, and re-pin each machine with the normal `export-pin`
+/ `trust --import` ceremony. In a real transfer the people change too: this
+is a fresh start.
+
 ## The newcomer's failure shapes
 
 Most "it doesn't work" cases on a fresh clone are an owner step that has
