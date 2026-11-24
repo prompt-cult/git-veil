@@ -97,6 +97,10 @@ def write_llms_txt(root: pathlib.Path, title: str, desc: str, order: list[str]) 
         f"- [Full book, one HTML page]( {BASE_URL}print.html )",
         "- [Full book, plain text]( plain.txt )",  # placeholder, fixed below
         "",
+        "## Agent surfaces",
+        "",
+        f"- [git-veil skill for agents, the everyday routine]( {BASE_URL}SKILL.md )",
+        "",
         "## Chapters",
         "",
     ]

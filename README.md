@@ -11,6 +11,11 @@ Rust `rage` library to work with the keys.
 The `age` format is an encryption format designed by Filippo Valsorda.
 This means that `git-veil`'s ciphertexts are standard `age` encrypted files. Any compliant `age` tool can decrypt them.
 
+Docs and the agent skill: the full documentation and links to every use
+case live at <https://prompt-cult.github.io/git-veil/llms.txt>, including
+the everyday-use skill for agents (also at [SKILL.md](SKILL.md) in this
+repository root) and the install channels.
+
 [age]: https://age-encryption.org
 [age-crate]: https://crates.io/crates/age
 [ed25519]: https://en.wikipedia.org/wiki/EdDSA#Ed25519

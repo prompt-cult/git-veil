@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------------
-# LOCAL SITE TESTING ONLY — NOT A SHIPPING ARTIFACT
+# LOCAL SITE TESTING ONLY - NOT A SHIPPING ARTIFACT
 #
 # Builds the mdBook documentation site exactly as .github/workflows/pages.yml
 # does (mdbook + mdbook-mermaid installed --locked, mdbook build from the repo
@@ -41,6 +41,7 @@ WORKDIR /work
 # book.toml references at the repo root (mermaid.min.js, mermaid-init.js;
 # docs/tex-mj3.js comes in with docs/).
 COPY book.toml ./
+COPY SKILL.md ./
 COPY docs/ ./docs/
 COPY scripts/ ./scripts/
 COPY mermaid.min.js mermaid-init.js ./
@@ -48,6 +49,10 @@ COPY mermaid.min.js mermaid-init.js ./
 # create-missing = false in book.toml: a missing SUMMARY entry fails the
 # build, same as CI.
 RUN mdbook build
+
+# Same publish step as .github/workflows/pages.yml: the repository-root
+# SKILL.md is copied into the site so local preview matches CI exactly.
+RUN cp SKILL.md _book/SKILL.md
 
 # Same generation step as .github/workflows/pages.yml: plain.txt, the whole
 # book rendered as one plain-text file, is produced from the print page the
@@ -66,7 +71,7 @@ RUN ./scripts/gen-crawler-meta.py
 # Runtime: nginx on Debian trixie.
 #
 # Tag note: the ticket's first choice, nginx:stable-trixie-slim, does not
-# exist — Docker Hub's library/nginx publishes Debian 13 (trixie) images only
+# exist - Docker Hub's library/nginx publishes Debian 13 (trixie) images only
 # non-slim ("stable-trixie", "mainline-trixie", ...; the -slim suffix in the
 # nginx image family is used for Alpine only). nginx:stable-trixie is the
 # Debian trixie equivalent of nginx:stable-trixie-slim and is a native arm64
