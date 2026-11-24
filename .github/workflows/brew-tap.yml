@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag to publish, e.g. v0.17.4. Empty means the latest release.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -11,19 +16,32 @@ permissions:
 jobs:
   update-tap:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Compute asset sha256s and update prompt-cult/tap
         env:
           GH_TOKEN: ${{ secrets.TAP_UPDATE_TOKEN }}
-          VERSION: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.version }}
         run: |
           set -e
+          # Dispatch carries no release event, so the tag comes from the
+          # input; empty input means the latest published release.
+          if [ -n "$RELEASE_TAG" ]; then
+            VERSION="$RELEASE_TAG"
+          elif [ -n "$INPUT_TAG" ]; then
+            VERSION="$INPUT_TAG"
+          else
+            VERSION=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
+          fi
           V="${VERSION#v}"
-          sha() { curl -sL "https://github.com/prompt-cult/git-veil/releases/download/${VERSION}/$1" | sha256sum | cut -d' ' -f1; }
+          sha() { curl -fsSL "https://github.com/prompt-cult/git-veil/releases/download/${VERSION}/$1" | sha256sum | cut -d' ' -f1; }
           ARM=$(sha git-veil-macos-aarch64)
           INTEL=$(sha git-veil-macos-x86_64)
           LINUX=$(sha git-veil-linux-x86_64)
-          gh api repos/prompt-cult/tap/contents/Formula/git-veil.rb -q .sha > /tmp/sha
+          # The tap file may not exist yet on a first push; PUT without the
+          # current sha creates it, PUT with it updates in place.
+          SHA=$(gh api "repos/prompt-cult/tap/contents/Formula/git-veil.rb" -q .sha 2>/dev/null || true)
           cat > /tmp/formula.rb <<EOF
           # typed: false
           # frozen_string_literal: true
@@ -31,6 +49,13 @@ jobs:
           class GitVeil < Formula
             desc "Secret management for git repositories using age X25519 encryption"
             homepage "https://prompt-cult.github.io/git-veil/"
+            # The top-level url and sha256 are the Linux channel: one
+            # x86_64 binary, no aarch64 asset exists. on_macos overrides
+            # them for macOS. on_linux blocks may not carry url or sha256
+            # (brew audit), so the top level is the only audit-clean home,
+            # and url precedes license per rubocop component order.
+            url "https://github.com/prompt-cult/git-veil/releases/download/v${V}/git-veil-linux-x86_64"
+            sha256 "${LINUX}"
             license "GPL-3.0-or-later"
 
             on_macos do
@@ -43,25 +68,16 @@ jobs:
                 sha256 "${INTEL}"
               end
             end
-            on_linux do
-              on_arm do
-                url "https://github.com/prompt-cult/git-veil/releases/download/v${V}/git-veil-linux-x86_64"
-                sha256 "${LINUX}"
-              end
-              on_intel do
-                url "https://github.com/prompt-cult/git-veil/releases/download/v${V}/git-veil-linux-x86_64"
-                sha256 "${LINUX}"
-              end
-            end
 
             def install
               bin.install Dir["git-veil-*"].first => "git-veil"
             end
 
             test do
-              assert_match "git-veil #{version}", shell_output("\#{bin}/git-veil --version")
+              assert_match "git-veil #{version}", shell_output("#{bin}/git-veil --version")
             end
           end
           EOF
-          jq -n --arg m "feat: git-veil ${V} (automated)" --arg c "$(base64 -w0 /tmp/formula.rb)" --arg s "$(cat /tmp/sha)" '{message:$m, content:$c, sha:$s}' > /tmp/payload.json
+          jq -n --arg m "feat: git-veil ${V} (automated)" --arg c "$(base64 -w0 /tmp/formula.rb)" --arg s "${SHA:-}" \
+            'if $s == "" then {message:$m, content:$c} else {message:$m, content:$c, sha:$s} end' > /tmp/payload.json
           gh api -X PUT repos/prompt-cult/tap/contents/Formula/git-veil.rb --input /tmp/payload.json -q .commit.sha

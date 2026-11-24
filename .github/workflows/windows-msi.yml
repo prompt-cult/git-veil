@@ -24,6 +24,7 @@ jobs:
   build-msi:
     name: Build Windows x86_64 MSI
     runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 45
 
     steps:
       - name: Checkout release tag

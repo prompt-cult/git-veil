@@ -14,16 +14,16 @@ flowchart TD
   B -- "yes: repo owner, signing seed in local key store" --> C["git-veil init &lt;verifying-key&gt;"]
   B -- "no: consumer machine" --> D["Obtain pin-file out of band"]
   C --> C2{"Passed-in key path inside the worktree?"}
-  C2 -- "yes" --> X0["Refuse — exit 71"]
+  C2 -- "yes" --> X0["Refuse - exit 71"]
   C --> C3{"Matches verifying key derived from a seed in signing-keys.txt?"}
-  C3 -- "no match" --> X1["Refuse — exit 20"]
+  C3 -- "no match" --> X1["Refuse - exit 20"]
   C3 -- "exact match" --> E["Copy the key to committed .git-veil/owner.verifying"]
   E --> G["Fingerprint into trust.json, pin written to key store"]
   D --> H["git-veil trust --import &lt;pin-file&gt;"]
   H --> I{"3 consistency checks"}
   I -- "all pass" --> G
-  I -- "any mismatch" --> X2["Refuse — exit 70"]
-  H -- "pin-file inside the worktree" --> X3["Refuse — exit 71"]
+  I -- "any mismatch" --> X2["Refuse - exit 70"]
+  H -- "pin-file inside the worktree" --> X3["Refuse - exit 71"]
 ```
 
 ## How the pinned trust anchor is used
@@ -42,12 +42,30 @@ flowchart TD
   E -- "agrees" --> F{"Keyring rollback below freshness baseline?"}
   F -- "yes" --> E14["exit 14"]
   F -- "no" --> G{"Signature valid?"}
-  G -- "valid" --> OK["Proceed — secrets may be touched"]
+  G -- "valid" --> OK["Proceed - secrets may be touched"]
 ```
 
 ## The export-pin → import ceremony
 
 The pin travels out of band (a pipe over ssh, USB, read aloud), never through the repository - the `known_hosts` provisioning model.
+
+## Attack vector: repository transfer and re-ownership
+
+`init` is the only command that writes a fresh trust anchor, and a
+possession proof of any seed pair qualifies to run it. The dangerous
+moment is a hand-over: the old verifying key stops being the right
+anchor exactly when someone reaches for init.
+
+Init refuses a re-init in two places: the working tree, and the committed
+tree. The committed check is load-bearing. A local-only deletion of
+`.git-veil/` leaves the trust anchor that every clone carries, so a
+re-init over that state would reset trust for machines that never agreed
+to the hand-over; a pushed `.git-veil/` still cannot forge a per-machine
+pin, so clones stay protected by their pins either way.
+
+The rule: a fresh start comes from a committed state, never from
+local-only files. The procedure is
+[Organization transfer](troubleshooting.md#organization-transfer).
 
 ## Trust commands and exit codes
 

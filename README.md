@@ -11,6 +11,11 @@ Rust `rage` library to work with the keys.
 The `age` format is an encryption format designed by Filippo Valsorda.
 This means that `git-veil`'s ciphertexts are standard `age` encrypted files. Any compliant `age` tool can decrypt them.
 
+Docs and the agent skill: the full documentation and links to every use
+case live at <https://prompt-cult.github.io/git-veil/llms.txt>, including
+the everyday-use skill for agents (also at [SKILL.md](SKILL.md) in this
+repository root) and the install channels.
+
 [age]: https://age-encryption.org
 [age-crate]: https://crates.io/crates/age
 [ed25519]: https://en.wikipedia.org/wiki/EdDSA#Ed25519
@@ -174,25 +179,12 @@ including the cases that never ask, are in
 
 ## Installation
 
-Prebuilt binaries are attached to every [GitHub release](https://github.com/prompt-cult/git-veil/releases):
-
 ```sh
-# Linux x86_64 example. macOS binaries sit beside it in the same release.
-curl -sLO https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64
-echo "$(curl -sL https://github.com/prompt-cult/git-veil/releases/latest/download/git-veil-linux-x86_64.sha256)  git-veil-linux-x86_64" | sha256sum -c -
-chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
+brew tap prompt-cult/tap
+brew install prompt-cult/tap/git-veil
 ```
 
-`cargo binstall git-veil` resolves the same release assets (manifest wired
-into Cargo.toml). `cargo install git-veil` and a Homebrew tap are planned.
-
-Build from source with cargo:
-
-```sh
-cargo build --release
-```
-
-The binary lands at `target/release/git-veil`.
+Prebuilt binaries for every release are on the [releases page](https://github.com/prompt-cult/git-veil/releases).
 
 Man pages and shell completions are generated from the CLI definition itself:
 

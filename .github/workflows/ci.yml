@@ -30,6 +30,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || !inputs.windows_msi
     name: Test (${{ matrix.os }}, ${{ matrix.build-mode }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -83,6 +84,7 @@ jobs:
   lint:
     name: Format Check
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -98,6 +100,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
     # Clippy is blocking. Any warning is a failure.
     steps:
       - name: Checkout code
@@ -138,6 +141,7 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
     # Security advisories and unmaintained dependencies block changes.
     steps:
       - name: Checkout code

@@ -7,3 +7,138 @@
   text-align: left;
   overflow-x: auto;
 }
+
+/* The index page would show the word "git-veil" twice in a row: as the
+ * markdown section h1 and again as the wordmark inside the logo banner that
+ * follows it. Sighted readers only need the banner; text-only readers (lynx,
+ * the print page, LLM extraction) ignore CSS and must keep the h1, so it
+ * stays in the document and is hidden visually only. */
+h1#git-veil {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * WCAG 2.1 AA contrast repairs (1.4.3 body text 4.5:1, 1.4.11 UI states and UI
+ * components 3:1).
+ *
+ * The failing colour pairs live in mdBook's generated theme stylesheets
+ * (variables.css plus the highlight themes), which are produced by the mdBook
+ * binary at every build, so the compliant replacements are declared here as
+ * per-theme overrides. site.css is the last stylesheet in the document head,
+ * so these win the cascade over the generated defaults and survive rebuilds
+ * without touching generated output. Each replacement keeps the hue family of
+ * the value it replaces and only moves lightness until every affected surface
+ * clears the threshold.
+ * ------------------------------------------------------------------------- */
+
+.navy {
+  /* Links and the active sidebar marker both sit around 2.8:1 on their dark
+   * surfaces; search header, hit highlight and footnote pulse sit below AA. */
+  --links: #429acd;
+  --sidebar-active: #4ea0d0;
+  --searchresults-header-fg: #8d90a0;
+  --search-mark-bg: #232734;
+  --footnote-highlight: #244561;
+}
+
+.coal {
+  /* Same family of failures as navy, plus menu bar icons at 1.98:1. */
+  --links: #4a9ecf;
+  --sidebar-active: #5f9ece;
+  --icons: #616870;
+  --searchresults-header-fg: #8e969f;
+  --search-mark-bg: #252b32;
+  --footnote-highlight: #254865;
+}
+
+.ayu {
+  /* Ayu links, sidebar and icons already pass; its search header, hit
+   * highlight and footnote pulse do not (the hit highlight and pulse need a
+   * dark background so the light text riding on them clears AA). */
+  --searchresults-header-fg: #8b949c;
+  --search-mark-bg: #1b2128;
+  --footnote-highlight: #174163;
+}
+
+.rust {
+  /* Link colour must read on the rust family of light surfaces: page
+   * background, quote background, alternate table rows and focused search
+   * results, not just the page background. */
+  --links: #1d4f6d;
+}
+
+/* No-JS visitors with a dark system preference get the coal palette through
+ * variables.css; give them the same corrected variables. */
+@media (prefers-color-scheme: dark) {
+  html:not(.js) {
+    --links: #4a9ecf;
+    --sidebar-active: #5f9ece;
+    --icons: #616870;
+    --searchresults-header-fg: #8e969f;
+    --search-mark-bg: #252b32;
+    --footnote-highlight: #254865;
+  }
+}
+
+/* Coal and navy both load the tomorrow-night highlight theme, whose red token
+ * family measures 4.46:1 on the code background. Nudge it just over AA; the
+ * selector list mirrors the family defined in the generated stylesheet. */
+:is(html.coal, html.navy) .hljs-variable,
+:is(html.coal, html.navy) .hljs-attribute,
+:is(html.coal, html.navy) .hljs-attr,
+:is(html.coal, html.navy) .hljs-tag,
+:is(html.coal, html.navy) .hljs-regexp,
+:is(html.coal, html.navy) .ruby .hljs-constant,
+:is(html.coal, html.navy) .xml .hljs-tag .hljs-title,
+:is(html.coal, html.navy) .xml .hljs-pi,
+:is(html.coal, html.navy) .xml .hljs-doctype,
+:is(html.coal, html.navy) .html .hljs-doctype,
+:is(html.coal, html.navy) .css .hljs-id,
+:is(html.coal, html.navy) .css .hljs-class,
+:is(html.coal, html.navy) .css .hljs-pseudo {
+  color: #cf6e6e;
+}
+
+/* The ayu highlight theme ships comments and tags far below AA on its code
+ * background (2.9:1 and 2.2:1). */
+html.ayu .hljs-comment,
+html.ayu .hljs-quote {
+  color: #7d8997;
+}
+
+html.ayu .hljs-tag {
+  color: #0089fa;
+}
+
+/* The footnote target indicator draws a box with var(--footnote-highlight),
+ * which now doubles as a dark pulse background for the reference itself, so as
+ * a border it would drop under 3:1 against the dark page background. Draw the
+ * box with the theme link colour instead, which clears 3:1 in all three dark
+ * themes. */
+:is(html.coal, html.navy, html.ayu) .footnote-definition > li:target::before {
+  border-color: var(--links);
+}
+
+/* Skip-to-content link injected by docs/a11y.js. Off screen until focused, then
+ * pinned at the top of the page in theme colours so it reads in every theme. */
+#skip-to-content {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  left: -10000px;
+  top: auto;
+  overflow: hidden;
+}
+
+#skip-to-content:focus {
+  left: var(--page-padding);
+  top: var(--page-padding);
+  width: auto;
+  height: auto;
+  overflow: visible;
+  z-index: 1000;
+  padding: 8px 16px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}

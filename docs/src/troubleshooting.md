@@ -80,6 +80,22 @@ this machine before touching anything. The refusals, and what to do:
 A trust record whose fingerprint is 16 hex characters is refused as
 hostile: re-establish trust with `trust`.
 
+### Organization transfer
+
+Moving a repository to another GitHub organization is a transfer of
+control of the repository, possibly a transfer of legal ownership. git-veil
+treats it as a security event, not a rename: gated commands refuse with
+exit 10 and print no remedy, on purpose. No automated patch or re-pin path
+exists, and none will be added.
+
+The procedure is manual: remove `.git-veil/` from the repository, commit
+the removal and push it so every clone sees the old trust state go (the
+trust chain stays in git history; nothing is lost), then re-run `git-veil
+init` on a machine holding the new owner's signing seed, re-add the
+collaborator keys, and re-pin each machine with the normal `export-pin`
+/ `trust --import` ceremony. In a real transfer the people change too: this
+is a fresh start.
+
 ## The newcomer's failure shapes
 
 Most "it doesn't work" cases on a fresh clone are an owner step that has
@@ -93,11 +109,6 @@ imported. The four shapes, what each message means and the fix, are in
 `hide` refuses before it writes anything, so a refusal never leaves a
 half-encrypted tree:
 
-- **Exit 72, the allowance question.** The path is tracked but was never
-  allowed for encryption on this machine: `tracked.json` may have been
-  modified by someone else. If the tracking is wanted,
-  `git-veil allow <path>` and hide again. A path you added yourself never
-  asks; a path whose ciphertext is already committed never asks.
 - **Exit 40**. The `.secret` ciphertext path is itself git-ignored, for
   example swallowed by a parent rule like `.tmp/`. Fix the ignore rules
   so the ciphertext will be committed.
@@ -106,6 +117,34 @@ half-encrypted tree:
   plaintext name.
 - **Exit 71**. A named file is not tracked, or a path is unsafe (a
   symlink escaping the repository, a path outside it).
+
+## Exit 72: the allowance question
+
+Who: any repo writer can nominate a path. `tracked.json` is committed and
+unsigned, so the manifest can arrive from someone else - say, a
+collaborator who ran `add-file` and pushed before hiding.
+
+Why the error: `hide` refuses with exit 72 when a path was tracked but
+never allowed on this machine. Hiding it would write its plaintext into a
+ciphertext every keyring member can read, so the tool makes you answer
+that deliberately - as an error that names the paths, never as a blocking
+prompt. Nothing is encrypted.
+
+How to fix: allow the path, then hide again.
+
+```sh
+$ git-veil allow deploy.env
+allowed 1 files
+$ git-veil hide deploy.env
+Encrypted: deploy.env
+Deleted plaintext: deploy.env
+files hidden
+```
+
+The answer is cached per machine and per git user, so a later hide of the
+same path does not ask again. A path you added yourself never asks; a
+path whose ciphertext is already committed never asks. Full rules are in
+[Commands - allow](commands.md#allow).
 
 ## The rotate refusals
 

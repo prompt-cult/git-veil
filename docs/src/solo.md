@@ -77,19 +77,14 @@ $ git-veil whoami
 example@github.com
 ```
 
-What happened. `init` copied your verifying key into `.git-veil/
-owner.verifying` and pinned it on this machine: the key you passed in
-matched the verifying key derived from the signing seed you created in
-step 1, which is the proof that this is your repository. `.git-veil/` now
-holds `keyring`, `trust.json`, `tracked.json` and `owner.verifying`.
-Every gated command checks the keyring signature against this pin first
-and fails closed without it. A fresh clone, even yours, has no pin: it
-imports a pin-file you export with `git-veil export-pin` (see
-[joining.md](joining.md)), or you re-initialize it from scratch.
-Commit `.git-veil/` alongside the ciphertexts. Your X25519 private key
-lives in the per-machine key store, never committed. The behaviour and
-options of `init`, `import`, `repo-id` and `whoami` are in
-[Commands](commands.md#setup).
+What happened. `init` copied your verifying key into `.git-veil/owner.verifying`
+and pinned it on this machine. Every gated command checks the keyring
+signature against that pin and fails closed without it. A fresh clone has
+no pin: import a pin-file (`git-veil export-pin`, see
+[joining.md](joining.md)) or re-initialize from scratch. Commit
+`.git-veil/` alongside the ciphertexts; your X25519 private key stays in
+the per-machine key store, never committed. Options for `init`, `import`,
+`repo-id` and `whoami` are in [Commands](commands.md#setup).
 
 You should add or edit a CODEOWNERS file that protects the `.git-veil/`
 folder as owned by you. The suggestion above is the line to add. On a
@@ -167,10 +162,12 @@ decryptability contract.
 
 ## 5. The daily cycle
 
-Edit, check, hide, commit, reveal. Name the file you are working with:
+Peek at secrets with `git-veil cat`; decrypt in place with `git-veil
+reveal` when you need to edit:
 
 ```sh
-$ git-veil reveal .env          # decrypt one file in place
+$ git-veil cat .env             # plaintext to stdout; nothing on disk is touched
+$ git-veil reveal .env          # alternative: decrypt one file in place
 Decrypted: .env
 files revealed
 ... edit .env ...
@@ -195,9 +192,7 @@ path and leaves the `.secret` files in place. `hide .env` re-encrypted one
 file and left every other tracked file alone. `changes` decrypts each
 ciphertext and diffs it against the plaintext beside it. Where there is no
 diff to show, it prints `unchanged: …`, `no hidden version: …` or
-`not present on disk (hidden): …`. To peek without disturbing anything,
-`git-veil cat .env` writes the plaintext to stdout only. Neither the
-plaintext nor the ciphertext on disk is touched.
+`not present on disk (hidden): …`.
 
 Every `hide` and `reveal` names its file(s); there is no bare form. The
 command acts on exactly the paths you give it, so keep the naming habit:
@@ -205,6 +200,11 @@ it is the habit that matters in a team, where a whole-manifest pass would
 touch every ciphertext and the commit would look like you edited every
 secret when you edited a few. See the
 [two-collaborators guide](two-collaborators.md).
+
+Pro tip: `git-veil reveal` leaves the plaintext on disk, which you want when
+you are editing it. If you simply want to use the secrets, script
+`git-veil cat` to load them as environment variables in your deployment
+scripts instead.
 
 For the tightest solo posture, no plaintext lingers on disk. That is the
 default. `hide` deletes the plaintext. Pass `--keep-plaintext` if you want

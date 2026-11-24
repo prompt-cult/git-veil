@@ -33,7 +33,10 @@ edit-url-template = "https://github.com/prompt-cult/git-veil/edit/main/docs/src/
 # built-in mathjax-support flag uses MathJax 2, which cannot render those
 # macros, so the book loads MathJax 3's tex-svg output instead: see
 # docs/tex-mj3.js, wired in below.
-additional-js = ["docs/tex-mj3.js", "mermaid.min.js", "mermaid-init.js"]
+# docs/a11y.js labels the search input and injects the skip-to-content link,
+# two pieces of theme chrome that only exist in the generated index.hbs
+# template; injecting them from script avoids freezing a template copy here.
+additional-js = ["docs/tex-mj3.js", "docs/a11y.js", "mermaid.min.js", "mermaid-init.js"]
 # Shared site stylesheet: left-aligns the wide algorithm display-math SVGs
 # with the text column so they scroll instead of clipping on narrow windows.
 additional-css = ["docs/site.css"]

@@ -1,7 +1,7 @@
 name: pages
 
 # Documentation site only: the mdBook is built from `book.toml` + `docs/src/`
-# and deployed to GitHub Pages. No binary is built in this job — that is the
+# and deployed to GitHub Pages. No binary is built in this job - that is the
 # release workflow's job.
 #
 # The official Pages deployment path is used (upload-pages-artifact /
@@ -31,20 +31,56 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       # mdBook is not a project dependency, so it is not in Cargo.lock and is
-      # not installed by the crate build: it is installed here, `--locked`, so
-      # the book is built by the same reproducible install every time.
+      # not installed by the crate build. The two binaries are version-pinned
+      # and cached: a runner reusing the cache skips both compiles entirely,
+      # which are the slowest steps of this job otherwise. Bump both the
+      # versions and the cache key together.
+      - name: Cache mdBook and mdbook-mermaid
+        uses: actions/cache@v4
+        id: mdbook-cache
+        with:
+          path: |
+            ~/.cargo/bin/mdbook
+            ~/.cargo/bin/mdbook-mermaid
+          key: mdbook-${{ runner.os }}-mdbook-0.5.4-mermaid-0.17.1
       - name: Install mdBook
-        run: cargo install mdbook --locked
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        run: cargo install mdbook --version 0.5.4 --locked
       - name: Install mdbook-mermaid
-        run: cargo install mdbook-mermaid --locked
+        if: steps.mdbook-cache.outputs.cache-hit != 'true'
+        run: cargo install mdbook-mermaid --version 0.17.1 --locked
       # `create-missing = false` in book.toml makes a SUMMARY entry naming a
       # file that does not exist a build failure rather than a generated stub.
       - name: Build the book
         run: mdbook build
+      # SKILL.md lives at the repository root so a clone shows it beside the
+      # tool; the site publishes the same file, copied by the build so it can
+      # never drift from the source of truth.
+      - name: Publish SKILL.md at the site root
+        run: cp SKILL.md _book/SKILL.md
+      # plain.txt: the whole book as one plain-text file at the site root.
+      # mdBook's print page (print.html) carries every chapter in one page;
+      # this renders that output as text, in the build, so the published
+      # plain.txt can never drift from the HTML it comes from. The script is
+      # a uv script (PEP 723, standard library only, python >= 3.9), so the
+      # runner needs uv; the same script runs in docs/Dockerfile.site.
+      - name: Install uv
+        run: pip install uv
+      - name: Generate plain.txt
+        run: ./scripts/gen-plain-txt.py
+      # Crawler layer, all generated here so it can never drift: sitemap.xml
+      # (chapters in SUMMARY.md order, print.html last), llms.txt (llmstxt.org
+      # v2, pointing at the two whole-book single-fetch assets), and
+      # canonical/meta-description/Open Graph tags injected into every built
+      # page. The description is the book-level one from book.toml. See the
+      # script header for what is deliberately skipped (og:image).
+      - name: Generate crawler metadata
+        run: ./scripts/gen-crawler-meta.py
       # mdBook resolves links between its own pages at build time but does not
       # verify that a link target exists. This does: every relative href in the
       # built HTML must resolve to a file in the build directory, and every
@@ -84,6 +120,7 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Least privilege: the build job only ever reads the repository, and only
     # the deployment needs the Pages token and the OIDC exchange.
     permissions:
