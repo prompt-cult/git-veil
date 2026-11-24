@@ -28,9 +28,9 @@ if ($LASTEXITCODE -ne 0) { throw "gen-winget-manifests.ps1 failed with exit code
 
 $outDir = Join-Path $PSScriptRoot "..\dist\winget\manifests\p\PromptCult\GitVeil\$v"
 $files = @(
-    @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.yml"; local = Join-Path $outDir "$PackageIdentifier.yml" },
-    @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.locale.yml"; local = Join-Path $outDir "$PackageIdentifier.locale.yml" },
-    @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.installer.yml"; local = Join-Path $outDir "$PackageIdentifier.installer.yml" }
+    @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.yaml"; local = Join-Path $outDir "$PackageIdentifier.yaml" },
+    @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.locale.en-US.yaml"; local = Join-Path $outDir "$PackageIdentifier.locale.en-US.yaml" },
+    @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.installer.yaml"; local = Join-Path $outDir "$PackageIdentifier.installer.yaml" }
 )
 
 # 2. Fork (idempotent) and resolve the owner identity for the commit.

@@ -52,11 +52,20 @@ The MSI is written to `dist/git-veil-<version>-windows-x86_64.msi`. It installs
 the executable under `Program Files\git-veil` and adds that directory to the
 system `PATH`.
 
-After publishing a tagged release, create the WinGet manifest from that MSI
-with `wingetcreate new`, use the release URL and SHA-256, validate it with
-`winget validate`, and submit it to the `microsoft/winget-pkgs` repository.
-WinGet accepts MSI installers and requires the installer URL and SHA-256 in
-the manifest. See Microsoft's [manifest creation] and [submission] guidance.
+The Windows release also publishes a portable ZIP containing the CLI
+executable. The WinGet manifest uses that ZIP by default and exposes the
+`git-veil` command through WinGet's portable package support. Generate and
+validate manifests for a published tag with:
+
+```powershell
+just deploy-winget-windows 0.17.5
+```
+
+The manifest files are written under `dist/winget/manifests`. Local manifest
+installation is an administrator-enabled WinGet feature; enable it only when
+you are ready to test the generated manifest. The MSI remains available as a
+separate release download for users who prefer a standard Windows installer.
+See Microsoft's [manifest creation] and [submission] guidance.
 
 [manifest creation]: https://learn.microsoft.com/en-us/windows/package-manager/package/manifest
 [submission]: https://learn.microsoft.com/en-us/windows/package-manager/package/repository

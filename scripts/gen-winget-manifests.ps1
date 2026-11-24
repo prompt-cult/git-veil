@@ -1,6 +1,6 @@
 ﻿# Generates winget manifests for a git-veil release.
 # The winget mirror of `deploy-tap` (see the brew-justfile on origin/brew-justfile):
-# hashes the published Windows release assets, reads the MSI ProductCode,
+# hashes the published Windows release assets,
 # and writes the three manifests for the winget-pkgs bootstrap PR.
 # The generated manifests are the only output; nothing is submitted here.
 [CmdletBinding()]
@@ -24,8 +24,7 @@ $version = $Tag.TrimStart("v")
 
 $releaseBase = "https://github.com/prompt-cult/git-veil/releases/download/$Tag"
 $kinds = @{
-    msi = @{ asset = "git-veil-windows-x86_64.msi"; checksum = "git-veil-windows-x86_64.msi.sha256" }
-    exe = @{ asset = "git-veil-windows-x86_64.exe"; checksum = "git-veil-windows-x86_64.exe.sha256" }
+    portable = @{ asset = "git-veil-windows-x86_64-portable.zip"; checksum = "git-veil-windows-x86_64-portable.zip.sha256" }
 }
 
 # Hash each asset and cross-check against the .sha256 the release workflow published.
@@ -51,17 +50,6 @@ foreach ($kind in $kinds.Keys) {
     }
 }
 
-# MSI installers need their ProductCode for upgrade detection; wingetcreate would
-# parse it the same way - keep this deterministic by reading it via Windows Installer COM.
-$installerCom = New-Object -ComObject WindowsInstaller.Installer
-Write-Host "probe: msi = $(Test-Path $tempFiles["msi"])"
-$database = $installerCom.GetType().InvokeMember("OpenDatabase", "InvokeMethod", $null, $installerCom, [Object[]]@([string]($tempFiles["msi"]), [int]0))
-$view = $database.GetType().InvokeMember("OpenView", "InvokeMethod", $null, $database, @("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductCode'"))
-$view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null)
-$record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)
-$productCode = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, @(1))
-$view.GetType().InvokeMember("Close", "InvokeMethod", $null, $view, $null)
-
 $release = Invoke-RestMethod -Uri "https://api.github.com/repos/prompt-cult/git-veil/releases/tags/$Tag"
 $releaseDate = ([datetime]$release.published_at).ToString("yyyy-MM-dd")
 
@@ -80,7 +68,7 @@ PackageVersion: $version
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.12.0
-"@ | Set-Content -NoNewline "$idPath.yml" -Encoding ascii
+"@ | Set-Content -NoNewline "$idPath.yaml" -Encoding ascii
 
 # 2. Default locale manifest.
 @"
@@ -104,9 +92,9 @@ Tags:
 - age
 ManifestType: defaultLocale
 ManifestVersion: 1.12.0
-"@ | Set-Content -NoNewline "$idPath.locale.yml" -Encoding ascii
+"@ | Set-Content -NoNewline "$idPath.locale.en-US.yaml" -Encoding ascii
 
-# 3. Installer manifest. MSI only for the bootstrap PR - adds the portable exe later.
+# 3. Portable package manifest: WinGet stages the ZIP and adds the CLI alias to PATH.
 @"
 # yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 PackageIdentifier: $PackageIdentifier
@@ -114,22 +102,19 @@ PackageVersion: $version
 Platform:
 - Windows.Desktop
 MinimumOSVersion: 10.0.0.0
-InstallerType: msi
-Scope: machine
-InstallModes:
-- interactive
-- silent
-- silentWithProgress
-UpgradeBehavior: install
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+- RelativeFilePath: git-veil-windows-x86_64.exe
+  PortableCommandAlias: git-veil
 ReleaseDate: $releaseDate
 Installers:
 - Architecture: x64
-  InstallerUrl: $releaseBase/$($kinds["msi"].asset)
-  InstallerSha256: $($hashes["msi"])
-  ProductCode: "$productCode"
+  InstallerUrl: $releaseBase/$($kinds["portable"].asset)
+  InstallerSha256: $($hashes["portable"])
 ManifestType: installer
 ManifestVersion: 1.12.0
-"@ | Set-Content -NoNewline "$idPath.installer.yml" -Encoding ascii
+"@ | Set-Content -NoNewline "$idPath.installer.yaml" -Encoding ascii
 
 # winget's own schema check is the local gate on this host.
 $wingetCommand = Get-Command winget -ErrorAction SilentlyContinue
@@ -143,6 +128,4 @@ if ($wingetCommand) {
 $tempFiles.Values | ForEach-Object { Remove-Item -Force $_ -ErrorAction SilentlyContinue }
 
 Write-Host "manifests: $outDir"
-Write-Host "msi ProductCode: $productCode"
-Write-Host "msi sha256: $($hashes["msi"])   exe sha256: $($hashes["exe"])"
-Write-Host "portable exe (git-veil-windows-x86_64.exe) is in the release but not in this bootstrap PR."
+Write-Host "portable zip sha256: $($hashes["portable"])"
