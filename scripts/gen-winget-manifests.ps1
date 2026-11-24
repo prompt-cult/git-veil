@@ -119,7 +119,7 @@ ManifestVersion: 1.12.0
 # winget's own schema check is the local gate on this host.
 $wingetCommand = Get-Command winget -ErrorAction SilentlyContinue
 if ($wingetCommand) {
-    & winget validate $outDir
+    & winget validate --manifest $outDir
     if ($LASTEXITCODE -ne 0) { throw "winget validate failed with exit code $LASTEXITCODE" }
 } else {
     Write-Host "winget is not on PATH; skipped winget validate."
