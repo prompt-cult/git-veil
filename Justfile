@@ -92,3 +92,21 @@ verify:
     got="$(/opt/homebrew/bin/git-veil --version | awk '{print $2}')"
     echo "cargo: $want  tap-installed: $got"
     test "$got" = "$want"
+
+# Windows lane (Win11 host, ticket #86): PowerShell mirroring of the brew cycle.
+# The winget tail prepares the submission; the "Create pull request" click
+# and the winget-pkgs PR itself stay with the owner.
+
+# Windows mirror of `release-patch`: bump -> tag -> push -> release + MSI assets -> winget prep.
+release-patch-windows:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-patch-windows.ps1
+
+# Prep + validate only the winget manifests for version $1 (computed hashes come
+# from the published v{{version}} assets; nothing is submitted).
+deploy-winget-windows version:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gen-winget-manifests.ps1 -Tag "v{{version}}"
+
+# Windows: push the validated winget manifests for version $1 to the fork (prep only).
+# Owner-run submission variant: just push-winget-windows 0.17.3 -Submit
+push-winget-windows version:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/push-winget-fork.ps1 -Version "{{version}}"

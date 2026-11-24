@@ -24,6 +24,58 @@ echo "$(curl -sL https://github.com/prompt-cult/git-veil/releases/latest/downloa
 chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
 ```
 
+`cargo binstall git-veil` resolves the same release assets (the manifest is
+wired into Cargo.toml).
+
+## Build from source
+
+```sh
+cargo build --release
+```
+
+The binary lands at `target/release/git-veil`.
+
+On Windows, install the Rust MSVC toolchain and WiX Toolset v4, then build
+the release binary and MSI:
+
+```powershell
+cargo build --release --locked --target x86_64-pc-windows-msvc
+dotnet tool install --global wix
+.\scripts\build-msi.ps1
+```
+
+If Windows Application Control blocks generated build DLLs under the
+checkout, keep Cargo's target directory under the user profile and the MSI
+script will follow it automatically:
+
+```powershell
+$env:CARGO_TARGET_DIR = "$env:USERPROFILE\.cargo-target\git-veil"
+cargo build --release --locked --target x86_64-pc-windows-msvc
+.\scripts\build-msi.ps1
+```
+
+The MSI is written to `dist/git-veil-<version>-windows-x86_64.msi`. It installs
+the executable under `Program Files\git-veil` and adds that directory to the
+system `PATH`.
+
+The Windows release also publishes a portable ZIP containing the CLI
+executable. The WinGet manifest uses that ZIP by default and exposes the
+`git-veil` command through WinGet's portable package support. Generate and
+validate manifests for a published tag with:
+
+```powershell
+just deploy-winget-windows 0.17.5
+```
+
+The manifest files are written under `dist/winget/manifests`. Local manifest
+installation is an administrator-enabled WinGet feature; enable it only when
+you are ready to test the generated manifest. The MSI remains available as a
+separate release download for users who prefer a standard Windows installer.
+See Microsoft's [manifest creation] and [submission] guidance.
+
+[manifest creation]: https://learn.microsoft.com/en-us/windows/package-manager/package/manifest
+[submission]: https://learn.microsoft.com/en-us/windows/package-manager/package/repository
+
 ## Man pages and completions
 
 ```sh
