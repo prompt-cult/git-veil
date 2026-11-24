@@ -58,6 +58,11 @@ jobs:
       # file that does not exist a build failure rather than a generated stub.
       - name: Build the book
         run: mdbook build
+      # SKILL.md lives at the repository root so a clone shows it beside the
+      # tool; the site publishes the same file, copied by the build so it can
+      # never drift from the source of truth.
+      - name: Publish SKILL.md at the site root
+        run: cp SKILL.md _book/SKILL.md
       # plain.txt: the whole book as one plain-text file at the site root.
       # mdBook's print page (print.html) carries every chapter in one page;
       # this renders that output as text, in the build, so the published
