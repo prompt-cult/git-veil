@@ -347,9 +347,7 @@ Contact the copyright holder at firstname at firstname surname dot org.
 
 ## License
 
-This is a FOSS security tool where I would like folks to share fixes. If you 
-want to privately use your own copy somewhere be my guest. If you want to 
-distribute or share then I am insisting you make the code public for inspection so that we can all benefit.
+git-veil is licensed under either the [MIT License](LICENSE-MIT) or the
+[Apache License 2.0](LICENSE-APACHE), at your option.
 
-SPDX-License-Identifier: GPL-3.0-or-later
-git-veil Copyright © 2026 Simon J. Massey
+SPDX-License-Identifier: MIT OR Apache-2.0

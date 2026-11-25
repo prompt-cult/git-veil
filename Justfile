@@ -49,7 +49,7 @@ deploy-tap version:
     class GitVeil < Formula
       desc "Secret management for git repositories using age X25519 encryption"
       homepage "https://prompt-cult.github.io/git-veil/"
-      license "GPL-3.0-or-later"
+      license any_of: ["MIT", "Apache-2.0"]
 
       on_macos do
         on_arm do

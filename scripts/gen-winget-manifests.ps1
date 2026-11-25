@@ -1,4 +1,4 @@
-﻿# Generates winget manifests for a git-veil release.
+# Generates winget manifests for a git-veil release.
 # The winget mirror of `deploy-tap` (see the brew-justfile on origin/brew-justfile):
 # hashes the published Windows release assets,
 # and writes the three manifests for the winget-pkgs bootstrap PR.
@@ -80,8 +80,8 @@ Publisher: prompt-cult
 PublisherUrl: https://github.com/prompt-cult
 PackageName: git-veil
 PackageUrl: https://github.com/prompt-cult/git-veil
-License: GPL-3.0-or-later
-LicenseUrl: https://www.gnu.org/licenses/gpl-3.0
+License: MIT OR Apache-2.0
+LicenseUrl: https://github.com/prompt-cult/git-veil/blob/main/LICENSE
 Copyright: Copyright (c) git-veil contributors
 ShortDescription: $description
 Moniker: git-veil
