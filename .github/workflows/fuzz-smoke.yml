@@ -1,26 +1,24 @@
 # Fuzz Smoke: blanket-fuzzes every attacker-controlled parse surface on
-# each push to main. The targets, what each one attacks, and the oracles
-# it asserts live in fuzz/fuzz_targets/*.rs - one file per target, which
-# is where to look for more. Committed seed corpora live in
-# fuzz/corpus/<target>/.
+# release. The targets, what each one attacks, and the oracles it asserts
+# live in fuzz/fuzz_targets/*.rs - one file per target, which is where to
+# look for more. Committed seed corpora live in fuzz/corpus/<target>/.
+#
+# This workflow is CALLED BY the release workflow (release.yml) only. It
+# never runs on PRs or main pushes: the release job is what agents watch,
+# so a fuzz crash fails the release the agent is monitoring. docs-only
+# releases skip the fuzz targets; pass docs_changed=false from the caller.
 
 name: Fuzz Smoke
 
 on:
-  # Every merge to main gets the smoke test; the weekly cron caused more
-  # red than value (see the run history), so it is gone.
-  push:
-    branches: [main]
-    # Docs-only pushes never touch the fuzz targets; skip the run.
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
+  workflow_call:
+    inputs:
+      docs_changed:
+        description: Whether the release push changed docs only
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
-
-# One run per ref; a superseded push cancels the still-running previous run.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always

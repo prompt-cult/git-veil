@@ -13,6 +13,7 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
+use crate::repo_identity::{get_remote_push_url, parse_git_remote_url};
 use crate::trust_store::TrustPinStore;
 
 /// CODEOWNERS locations by platform. Each platform owns its own lookup
@@ -32,23 +33,52 @@ pub const PLATFORM_CODEOWNERS_LOCATIONS: [(&str, &[&str]); 5] = [
     ("Bitbucket", &["CODEOWNERS", ".bitbucket/CODEOWNERS"]),
 ];
 
+/// The location list for a known hosting service, keyed by the host of
+/// the remote push URL (lowercased by `parse_git_remote_url`).
+///
+/// Self-hosted platforms (Gitea, Forgejo, generic git hosts) cannot be
+/// told apart from the URL, so the fallback is the root-first order:
+/// the repository root is the one location every platform evaluates, and
+/// the platform directory is checked second as the best-effort guess.
+fn locations_for_service(service: &str) -> &'static [&'static str] {
+    match service {
+        "github.com" => PLATFORM_CODEOWNERS_LOCATIONS[0].1,
+        "gitlab.com" => PLATFORM_CODEOWNERS_LOCATIONS[1].1,
+        "bitbucket.org" => PLATFORM_CODEOWNERS_LOCATIONS[4].1,
+        // Codeberg runs Forgejo.
+        "codeberg.org" => PLATFORM_CODEOWNERS_LOCATIONS[3].1,
+        _ => PLATFORM_CODEOWNERS_LOCATIONS[2].1,
+    }
+}
+
 /// The key store file recording repositories whose CODEOWNERS warning is
 /// suppressed (one sanitized repository id per line).
 fn suppression_path(key_store: &Path) -> PathBuf {
     key_store.join("codeowners-suppression")
 }
 
-/// The first CODEOWNERS file that exists, in platform precedence order.
+/// The first CODEOWNERS file that exists, in the hosting platform's
+/// precedence order.
+///
+/// The platform is read from the `origin` remote push URL. A repository
+/// with no usable remote falls back to the root-first order.
 pub fn find(repo_root: &Path) -> Option<PathBuf> {
-    for (_platform, locations) in PLATFORM_CODEOWNERS_LOCATIONS {
-        for location in locations.iter() {
-            let candidate = repo_root.join(location);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
+    let service = origin_service(repo_root);
+    let locations = locations_for_service(service.as_deref().unwrap_or(""));
+    for location in locations.iter() {
+        let candidate = repo_root.join(location);
+        if candidate.is_file() {
+            return Some(candidate);
         }
     }
     None
+}
+
+/// The hosting service from the `origin` remote push URL, lowercased.
+fn origin_service(repo_root: &Path) -> Option<String> {
+    let url = get_remote_push_url(repo_root, "origin").ok()?;
+    let (_repo, _user, service) = parse_git_remote_url(&url).ok()?;
+    Some(service)
 }
 
 /// Whether any pattern in the CODEOWNERS content covers `path`. The last

@@ -46,15 +46,20 @@ fn init_git_repo(dir: &Path) {
     assert!(s.success());
 }
 
-/// Adds a remote and runs the init ceremony from `key_store_dir`, whose
-/// key store receives the signing seed and the owner verifying key file.
-fn init_state_from(repo_root: &Path, key_store_dir: &Path, quiet: bool, suppress: bool) {
+/// Adds a remote with the given URL (service governs platform selection).
+fn add_remote(repo_root: &Path, url: &str) {
     let s = std::process::Command::new("git")
         .current_dir(repo_root)
-        .args(["remote", "add", "origin", "git@github.com:owner/fara.git"])
+        .args(["remote", "add", "origin", url])
         .status()
         .expect("git remote add");
     assert!(s.success());
+}
+
+/// Adds a remote and runs the init ceremony from `key_store_dir`, whose
+/// key store receives the signing seed and the owner verifying key file.
+fn init_state_from(repo_root: &Path, key_store_dir: &Path, quiet: bool, suppress: bool) {
+    add_remote(repo_root, "git@github.com:owner/fara.git");
 
     let (signing_key, verifying_hex) = git_veil::generate_signing_keypair();
     fs::create_dir_all(key_store_dir).unwrap();
@@ -100,6 +105,7 @@ fn test_covering_codeowners_in_root_and_platform_dirs() {
     let repo = TempDir::new("covering");
 
     init_git_repo(&repo.path);
+    add_remote(&repo.path, "git@github.com:owner/fara.git");
     fs::write(repo.join("CODEOWNERS"), covering_codeowners()).unwrap();
     assert_eq!(find_codeowners(&repo.path), Some(repo.join("CODEOWNERS")));
     assert!(covers_trust_critical_paths(&repo.path));
@@ -108,6 +114,7 @@ fn test_covering_codeowners_in_root_and_platform_dirs() {
     // docs are evaluated only when no platform-directory file exists.
     let repo_github = TempDir::new("covering-github");
     init_git_repo(&repo_github.path);
+    add_remote(&repo_github.path, "git@github.com:owner/fara.git");
     fs::create_dir_all(repo_github.join(".github")).unwrap();
     fs::write(
         repo_github.join(".github/CODEOWNERS"),
@@ -122,6 +129,59 @@ fn test_covering_codeowners_in_root_and_platform_dirs() {
         Some(repo_github.join(".github/CODEOWNERS"))
     );
     assert!(covers_trust_critical_paths(&repo_github.path));
+}
+
+/// A GitLab-hosted repository must use GitLab's precedence: the root
+/// file wins, and a leftover .github/CODEOWNERS is ignored entirely —
+/// it is not a location GitLab evaluates.
+#[test]
+fn test_gitlab_precedence_ignores_github_dir() {
+    let repo = TempDir::new("gitlab-precedence");
+    init_git_repo(&repo.path);
+    add_remote(&repo.path, "git@gitlab.com:org/project.git");
+
+    fs::create_dir_all(repo.join(".github")).unwrap();
+    fs::write(repo.join(".github/CODEOWNERS"), covering_codeowners()).unwrap();
+    fs::write(repo.join("CODEOWNERS"), covering_codeowners()).unwrap();
+
+    assert_eq!(
+        find_codeowners(&repo.path),
+        Some(repo.join("CODEOWNERS")),
+        "GitLab evaluates the root before anything else; .github/ must not win"
+    );
+    assert!(covers_trust_critical_paths(&repo.path));
+
+    // With no root file, GitLab's platform directory is the last stop,
+    // after docs/.
+    fs::remove_file(repo.join("CODEOWNERS")).unwrap();
+    assert!(find_codeowners(&repo.path).is_none());
+    fs::create_dir_all(repo.join(".gitlab")).unwrap();
+    fs::write(repo.join(".gitlab/CODEOWNERS"), covering_codeowners()).unwrap();
+    assert_eq!(
+        find_codeowners(&repo.path),
+        Some(repo.join(".gitlab/CODEOWNERS"))
+    );
+    assert!(covers_trust_critical_paths(&repo.path));
+}
+
+/// An unknown (self-hosted) host falls back to the root-first order:
+/// the repository root wins, and a .github/ leftover must not shadow it.
+#[test]
+fn test_self_hosted_fallback_prefers_root() {
+    let repo = TempDir::new("selfhosted-fallback");
+    init_git_repo(&repo.path);
+    add_remote(&repo.path, "git@git.internal.example:team/repo.git");
+
+    fs::create_dir_all(repo.join(".github")).unwrap();
+    fs::write(repo.join(".github/CODEOWNERS"), covering_codeowners()).unwrap();
+    fs::write(repo.join("CODEOWNERS"), covering_codeowners()).unwrap();
+
+    assert_eq!(
+        find_codeowners(&repo.path),
+        Some(repo.join("CODEOWNERS")),
+        "unknown hosts evaluate the root first; a .github/ leftover must not win"
+    );
+    assert!(covers_trust_critical_paths(&repo.path));
 }
 
 #[test]
