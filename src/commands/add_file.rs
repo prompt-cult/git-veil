@@ -123,18 +123,47 @@ pub(crate) fn is_tracked_in_git(repo_root: &Path, relative_path: &Path) -> bool 
         .unwrap_or(false)
 }
 
-/// Checks if a file is gitignored. If not, appends it to .gitignore.
+/// Encodes a repository-relative path as a literal Git ignore rule.
+///
+/// Git only special-cases a leading `#` or `!`, but escaping wildcard
+/// characters, backslashes and spaces everywhere keeps the encoding
+/// independent of later Git syntax changes and makes the line auditable
+/// with `git check-ignore`.
+fn literal_gitignore_rule(relative_path: &str) -> String {
+    let mut pattern = String::with_capacity(relative_path.len());
+    for (index, character) in relative_path.char_indices() {
+        if index == 0 && (character == '#' || character == '!')
+            || matches!(character, '\\' | '*' | '?' | '[' | ']' | ' ' | '#' | '!')
+        {
+            pattern.push('\\');
+        }
+        pattern.push(character);
+    }
+    pattern
+}
+/// Checks if a file is gitignored. If not, appends a literal Git rule
+/// and verifies that Git ignored the path before reporting success.
 fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
     if !is_gitignored(repo_root, relative_path)? {
         let gitignore_path = repo_root.join(".gitignore");
-        let mut content = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
+        let original = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
+        let mut content = original.clone();
         if !content.ends_with('\n') && !content.is_empty() {
             content.push('\n');
         }
-        content.push_str(relative_path);
+        content.push_str(&literal_gitignore_rule(relative_path));
         content.push('\n');
         std::fs::write(&gitignore_path, content)
             .with_context(|| "Failed to write .gitignore".to_string())?;
+        if !is_gitignored(repo_root, relative_path)? {
+            std::fs::write(&gitignore_path, original).with_context(|| {
+                "Failed to restore .gitignore after an invalid rule".to_string()
+            })?;
+            anyhow::bail!(
+                "git check-ignore did not confirm the literal .gitignore rule for {}",
+                relative_path
+            );
+        }
         println!("file not in .gitignore, adding: {}", relative_path);
     }
 
