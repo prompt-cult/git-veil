@@ -88,8 +88,9 @@ fn add_files(
 
     for value in &resolved {
         let relative_str = value.to_string_lossy().to_string();
-        ensure_gitignored(repo_root, &relative_str)?;
-        let secret_relative = format!("{}.secret", relative_str);
+        let normalized = normalize_separators(&relative_str);
+        ensure_gitignored(repo_root, &normalized)?;
+        let secret_relative = format!("{}.secret", normalized);
         if is_gitignored(repo_root, &secret_relative)? {
             println!(
                 "warning: a ciphertext path is git-ignored with error code 40 so it will never reach the repository. Fix .gitignore before hiding"
@@ -232,6 +233,23 @@ fn literal_gitignore_rule(relative_path: &str) -> String {
     }
     pattern
 }
+
+/// Normalises a repo-relative path to the `/` separator git expects.
+///
+/// On Windows a `PathBuf` formats with `\` separators; git's ignore
+/// engine and pathspecs only understand `/`. Everything git-veil hands
+/// to git — the literal ignore rule, check-ignore verification, index
+/// lookups — must use `/` so the written rule matches the path git sees.
+pub(crate) fn normalize_separators(relative_path: &str) -> String {
+    #[cfg(windows)]
+    {
+        relative_path.replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    {
+        relative_path.to_string()
+    }
+}
 #[cfg(unix)]
 fn gitignore_lock(repo_root: &Path) -> Result<std::fs::File> {
     use std::os::unix::io::AsRawFd as _;
@@ -271,18 +289,19 @@ fn with_gitignore_lock<T>(repo_root: &Path, action: impl FnOnce() -> Result<T>) 
 /// Checks if a file is gitignored. If not, appends a literal Git rule
 /// and verifies that Git ignored the path before reporting success.
 fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
+    let normalized = normalize_separators(relative_path);
     with_gitignore_lock(repo_root, || {
-        if !is_gitignored(repo_root, relative_path)? {
+        if !is_gitignored(repo_root, &normalized)? {
             let gitignore_path = repo_root.join(".gitignore");
             let original = read_gitignore(&gitignore_path)?;
             let mut content = original.clone().unwrap_or_default();
             if !content.ends_with("\n") && !content.is_empty() {
                 content.push('\n');
             }
-            content.push_str(&literal_gitignore_rule(relative_path));
+            content.push_str(&literal_gitignore_rule(&normalized));
             content.push('\n');
             write_gitignore(&gitignore_path, &content)?;
-            if !is_gitignored(repo_root, relative_path)? {
+            if !is_gitignored(repo_root, &normalized)? {
                 restore_gitignore(&gitignore_path, original.clone(), original.is_some())?;
                 anyhow::bail!(
                     "git check-ignore did not confirm the literal .gitignore rule for {}",
@@ -294,6 +313,37 @@ fn ensure_gitignored(repo_root: &Path, relative_path: &str) -> Result<()> {
         Ok(())
     })
 }
+#[cfg(test)]
+mod normalize_tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_separators_replaces_backslashes() {
+        assert_eq!(
+            normalize_separators(r"config\secrets.yml"),
+            "config/secrets.yml"
+        );
+        assert_eq!(normalize_separators("a\\b\\c"), "a/b/c");
+        assert_eq!(normalize_separators("no-slash"), "no-slash");
+        assert_eq!(normalize_separators(""), "");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn normalize_separators_is_identity_on_unix() {
+        assert_eq!(
+            normalize_separators("config/secrets.yml"),
+            "config/secrets.yml"
+        );
+        assert_eq!(
+            normalize_separators(r"config\secrets.yml"),
+            r"config\secrets.yml"
+        );
+        assert_eq!(normalize_separators(""), "");
+    }
+}
+
 #[cfg(unix)]
 #[cfg(test)]
 mod git_gate_tests {

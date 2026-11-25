@@ -62,10 +62,13 @@ fn write_atomic_impl(path: &Path, bytes: &[u8], mode: Option<u32>) -> Result<()>
         )
     })?;
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let tmp_path = parent.join(format!(
-        "{}.tmp-{}",
+        "{}.tmp-{}-{}",
         file_name.to_string_lossy(),
-        std::process::id()
+        std::process::id(),
+        seq
     ));
 
     let result = (|| -> Result<()> {
