@@ -232,9 +232,10 @@ The ciphertexts are committed, so a clone on a build box already carries
 every secret. Give the box its own X25519 private key, its own pin, and
 its own email:
 
-- Give every box its own `git config user.email`. The email is the label
-  of the keyring entry. Name the box in it, for example
-  `ci-runner-01@example.com`. Never use your own email.
+- Give every box its own `git config user.email`, scoped to that box's
+  clone. The email is the label of the keyring entry. Name the box in it,
+  for example `ci-runner-01@example.com`. Never use your own email. Never
+  pass `--global`: a machine's git identity is never altered by this book.
 - A box key only decrypts. It never signs the keyring. Only you can sign.
   So a non-person email takes nothing away. It makes clear which machine
   the key belongs to.

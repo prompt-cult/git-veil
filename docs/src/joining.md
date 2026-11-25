@@ -80,6 +80,9 @@ $ cd demo
 $ git config user.email newcomer@example.com
 ```
 
+Never add `--global` to that `git config`. It is local to this clone, and a
+machine's git identity is never altered by this book.
+
 What happened. You cloned the ciphertext plus `.git-veil/`, which holds
 keyring, trust.json and tracked.json. Decrypting commands resolve your
 principal from `git config user.email`. You can also pass `--email`

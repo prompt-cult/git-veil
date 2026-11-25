@@ -205,6 +205,9 @@ $ git-veil cat .env            # spot-check contents match pre-migration
 $ sha256sum .env               # or compare bytes against your step-1 copy
 ```
 
+Never add `--global` to that `git config user.email`. It is local to this
+clone, and a machine's git identity is never altered by this book.
+
 Checklist:
 
 - [ ] `trust` run on this machine. This step is new for git-secret
