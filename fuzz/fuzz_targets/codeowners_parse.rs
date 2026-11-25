@@ -6,7 +6,7 @@
 //! .github/workflows/fuzz-smoke.yml; this file is the target's only home.
 #![no_main]
 
-use git_veil::{covers_trust_critical_paths, find_codeowners, CODEOWNERS_LOCATIONS};
+use git_veil::{covers_trust_critical_paths, find_codeowners, PLATFORM_CODEOWNERS_LOCATIONS};
 use libfuzzer_sys::fuzz_target;
 use std::fs;
 
@@ -21,15 +21,17 @@ fuzz_target!(|data: &[u8]| {
     }
     // the same hostile content at each candidate location: whichever the
     // finder prefers, the verdict is trained on the attacker's bytes
-    for location in CODEOWNERS_LOCATIONS {
-        let path = dir.join(location);
-        if path
-            .parent()
-            .is_some_and(|p| fs::create_dir_all(p).is_err())
-        {
-            continue;
+    for (_platform, locations) in PLATFORM_CODEOWNERS_LOCATIONS {
+        for location in locations.iter() {
+            let path = dir.join(location);
+            if path
+                .parent()
+                .is_some_and(|p| fs::create_dir_all(p).is_err())
+            {
+                continue;
+            }
+            let _ = fs::write(path, data);
         }
-        let _ = fs::write(path, data);
     }
     let _ = find_codeowners(&dir);
     let _ = covers_trust_critical_paths(&dir); // must never panic
