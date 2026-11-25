@@ -5,7 +5,7 @@ use crate::age_crypto::{
     for_each_store_line, parse_x25519_private_key, parse_x25519_public_key,
     x25519_public_key_encoding,
 };
-use crate::fs_atomic::write_atomic;
+use crate::fs_atomic::{write_atomic, write_atomic_mode};
 
 /// One key line parsed out of a key store file.
 struct StoreLine {
@@ -151,8 +151,12 @@ pub fn cmd_forget(key_store: &Path, identifier: &str, yes: bool) -> Result<()> {
                 retained.push('\n');
             }
         }
-        write_atomic(&store.path, retained.as_bytes())
-            .with_context(|| format!("Failed to rewrite {}", store.path.display()))?;
+        let write_result = if store.path == private_keys_path {
+            write_atomic_mode(&store.path, retained.as_bytes(), 0o600)
+        } else {
+            write_atomic(&store.path, retained.as_bytes())
+        };
+        write_result.with_context(|| format!("Failed to rewrite {}", store.path.display()))?;
         println!(
             "Removed from {}: {}",
             store.path.display(),

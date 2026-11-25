@@ -1432,6 +1432,52 @@ fn test_export_not_found_fails() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn test_forget_preserves_private_key_mode() {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let fixture = TestRepo::new("forget-private-key-mode");
+    let (collab_identity, recipient) = fixture.add_collaborator("alice@example.com");
+    fixture.import_identity(&collab_identity, "alice.age");
+    let identities_path = fixture.key_store.path.join("identities.txt");
+
+    #[cfg(unix)]
+    {
+        let before = fs::metadata(&identities_path)
+            .expect("read identities mode before forget")
+            .permissions()
+            .mode();
+        assert_eq!(
+            before & 0o777,
+            0o600,
+            "imported private-key store starts 0600"
+        );
+    }
+
+    cmd_forget(&fixture.key_store.path, &recipient, false).expect("forget");
+
+    let identities =
+        git_veil::load_x25519_private_keys_from_store(&fixture.key_store.path).unwrap();
+    let retained = identities
+        .iter()
+        .any(|(_, r)| *r == fixture.owner_recipient);
+    assert!(retained, "owner private key remains after forget");
+
+    #[cfg(unix)]
+    {
+        let after = fs::metadata(&identities_path)
+            .expect("read identities mode after forget")
+            .permissions()
+            .mode();
+        assert_eq!(
+            after & 0o777,
+            0o600,
+            "forget preserves 0600 private-key mode"
+        );
+    }
+}
+
+#[test]
 fn test_forget_by_public_key() {
     let fixture = TestRepo::new("forget");
 
