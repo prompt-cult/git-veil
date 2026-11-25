@@ -5,4 +5,4 @@ package gitVeilSecurity
 
 @[default_target]
 lean_lib GitVeilSecurity where
-  roots := #[`GitVeil.SecurityModel]
+  roots := #[`GitVeil.SecurityModel, `GitVeil.V018]

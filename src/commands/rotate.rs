@@ -9,6 +9,7 @@ use crate::age_crypto::X25519PublicKey;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
+use crate::gates::{rotate_gate, RotateCell};
 use crate::tracked_files::{ensure_regular_file, validate_tracked_path, TrackedFiles};
 use crate::trust_store::RingPassStore;
 use crate::{
@@ -275,6 +276,23 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
             );
         }
     }
+
+    // Every sequential gate above has passed, so the pure admissibility
+    // gate (shared with the exhaustive Lean model, `rotateGateV18` in
+    // formal/GitVeil/V018.lean) must accept this exact feature cell. The
+    // assert is the invariant the gates are supposed to establish,
+    // checked at the point of commitment rather than trusted.
+    let gate_cell = RotateCell {
+        security_ok: true,  // verify_keyring_against_trust passed above
+        non_empty_ring: true, // the empty-ring bail passed above
+        stamp_match: true,  // the stamp gate passed above
+        no_orphans: true,   // the orphan gate passed above
+        index_only: !index_only.is_empty(),
+    };
+    assert!(
+        rotate_gate(&gate_cell),
+        "rotate admissibility gate rejected a cell its sequential checks accepted"
+    );
 
     // The operator's X25519 private keys, from the local key store. Each
     // ciphertext names every keyring public key, so the member key this

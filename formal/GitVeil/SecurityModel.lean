@@ -4,11 +4,13 @@ import Std
 # git-veil security transition model
 
 This is an explicit, finite-state abstraction of the security-relevant
-contracts in `docs/src/design.md` and `docs/src/commands.md`, checked against
-release v0.17.5. It is a model of the documented state transitions, not a
-proof that Rust, Git, age/rage, the filesystem, or the operating system
-implements those transitions. Countermodels below record concrete gaps found
-by reading the tagged implementation.
+contracts in `docs/src/design.md` and `docs/src/commands.md`, as at commit
+`c42f799c` (release v0.17.5). It is a model of the documented state
+transitions, not a proof that Rust, Git, age/rage, the filesystem, or the
+operating system implements those transitions. Countermodels below record
+concrete gaps found by reading the tagged implementation. Those gaps are
+fixed in releases >= v0.18.0: the fixed gates and their exhaustive
+verification live in `GitVeil/V018.lean` and in Rust in `src/gates.rs`.
 
 `Ciphertext.path` is the logical tracked plaintext path whose sibling
 `<path>.secret` is represented by the ciphertext. `indexCiphertexts` models
