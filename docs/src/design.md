@@ -900,8 +900,9 @@ $$
 \quad \textbf{guard } \mathit{input} \text{ is non-empty and relative, every component Normal} \quad \textbf{else refuse} \ . \ \text{exit 71 (} \texttt{validate\_tracked\_path} \text{)} \\
 \quad \textbf{guard } \text{canonicalise}(\mathit{input}, \text{symlinks resolved, } \texttt{..} \text{ collapsed}) \subseteq \text{repository root} \\
 \quad\quad \textbf{else refuse} \ . \ \text{exit 71; a link to } \text{/home/victim/.ssh/id\_rsa} \text{ fails here at add time} \\
-\quad \textbf{guard } \text{lstat}(\mathit{path}) \text{ is a regular file or absent} \quad \textbf{else refuse} \ . \ \text{exit 71; a committed symlink is refused on every use} \\
-\quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root} \quad \textbf{else refuse} \ . \ \text{exit 71} \\
+ \quad \textbf{guard } \text{every existing ancestor and the final component are lstat-checked from the canonical root} \\
+ \quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root and its own component walk passes} \\
+ \quad\quad \textbf{else refuse} \ . \ \text{exit 71; a ciphertext symlink is refused} \\
 \textbf{end function} \\[2mm]
 \textbf{upon } \textsc{Reveal} \text{ (the decryption-write gate)} \\
 \quad \textbf{guard } \text{the target plaintext is not tracked in the git index, case-insensitively} \\
@@ -917,10 +918,11 @@ $$
 Layer 1 is `validate_tracked_path`, layer 2 the add-time
 canonicalise-and-reject (`resolve_repo_relative_input` with
 `PathResolveMode::CanonicaliseRequireExists`), layer 3 the read-time
-regular-file gate (`ensure_regular_file`, lstat; a *missing* path is
-accepted - the plaintext is normally absent while hidden), layer 4
+regular-file gate (`ensure_regular_file`; it walks every existing
+ancestor and the final component from the canonical root and accepts only
+a regular file or an absent final component), layer 4
 `ensure_ciphertext_beside_plaintext`. Layers 1 to 4 fire on every use of a
-tracked path in hide, reveal, cat and changes. *Threats countered:*
+tracked path in hide, reveal, cat, changes, rotate and remove-file.
 a malicious committed tracked.json making git-veil read or write outside
 the repository; tracking a symlink whose target is read into committed
 ciphertext (hide) or printed (cat/changes) or written through

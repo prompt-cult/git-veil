@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::commands::hide::encrypted_path_for;
-use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, TrackedFiles};
+use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::tracked_files::{
+    ensure_regular_file, resolve_repo_relative_input, PathResolveMode, TrackedFiles,
+};
 
 /// Removes files from the tracked files list.
 ///
@@ -41,11 +43,13 @@ pub fn cmd_remove_file(repo_root: &Path, files: Vec<String>, keep_ciphertext: bo
         if !tracked.files.contains(&relative) {
             anyhow::bail!("file not tracked: {}. Add it before removing it", file);
         }
+        ensure_regular_file(repo_root, &relative)?;
         tracked.remove(&relative);
         count += 1;
 
         if !keep_ciphertext {
             let ciphertext = encrypted_path_for(repo_root, &relative);
+            ensure_ciphertext_beside_plaintext(repo_root, &relative, &ciphertext)?;
             if ciphertext.exists() {
                 std::fs::remove_file(&ciphertext).with_context(|| {
                     format!("Failed to delete ciphertext: {}", ciphertext.display())

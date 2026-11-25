@@ -9,7 +9,7 @@ use crate::age_crypto::X25519PublicKey;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::tracked_files::{validate_tracked_path, TrackedFiles};
+use crate::tracked_files::{ensure_regular_file, validate_tracked_path, TrackedFiles};
 use crate::trust_store::RingPassStore;
 use crate::{
     decrypt_with_x25519_private_key, encrypt_to_x25519_public_keys,
@@ -293,6 +293,7 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
     for file in &scoped {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
+        ensure_regular_file(repo_root, file)?;
 
         // Defence in depth: the ciphertext must stay inside the repository
         // root, exactly beside its plaintext
