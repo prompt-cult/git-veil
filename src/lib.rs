@@ -10,6 +10,7 @@ mod commands;
 mod exit_codes;
 mod fingerprint;
 mod fs_atomic;
+mod gates;
 mod key_discovery;
 mod keyring;
 mod permissions;

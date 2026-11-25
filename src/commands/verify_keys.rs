@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::age_crypto::for_each_store_line;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fingerprint::{fingerprint_for_public_key, is_16_hex_pin_shape};
+use crate::gates::{freshness_verdict, FreshnessCell, FreshnessVerdict, Rel3};
 use crate::{
     derive_repo_id, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
     get_remote_push_url, keyring_content_digest, parse_verifying_key, verify_keyring_signature,
@@ -208,28 +209,45 @@ pub fn verify_keyring_against_trust(
     };
     let (baseline_version, baseline_digest) =
         TrustPinStore::read_ring_baseline(key_store, &repo_id)?;
-    if unsigned_empty && baseline_version.is_some() {
-        return Err(coded(
-            ExitCode::KeyringRollback,
-            "keyring rollback refused. An unsigned empty keyring is a rollback to no collaborators on this baselined machine. See the keyring freshness documentation.".to_string(),
-        ));
-    }
-    if let Some(bv) = baseline_version {
-        if bv > observed {
+
+    // The gate decision is a pure function of the features the branches
+    // read, shared with the exhaustive Lean model
+    // (formal/GitVeil/V018.lean, `cellFreshnessV18`). The construction
+    // below is the total mapping from the observed ring and baseline to
+    // the cell; the match on the verdict is the only effectful part.
+    let cell = FreshnessCell {
+        signed,
+        empty: keyring.entries.is_empty(),
+        has_baseline: baseline_version.is_some(),
+        rel: match baseline_version {
+            Some(base_version) if base_version > observed => Rel3::Above,
+            Some(base_version) if base_version == observed => Rel3::Equal,
+            _ => Rel3::Below,
+        },
+        digest_diff: matches!(
+            (&baseline_digest, &current_digest),
+            (Some(base_digest), Some(current)) if base_digest != current
+        ),
+    };
+    match freshness_verdict(&cell) {
+        FreshnessVerdict::Accept => {}
+        FreshnessVerdict::UnsignedEmptyRollback => {
+            return Err(coded(
+                ExitCode::KeyringRollback,
+                "keyring rollback refused. An unsigned empty keyring is a rollback to no collaborators on this baselined machine. See the keyring freshness documentation.".to_string(),
+            ));
+        }
+        FreshnessVerdict::VersionRollback => {
             return Err(coded(
                 ExitCode::KeyringRollback,
                 "keyring rollback refused. The presented version is below this machine freshness baseline. See the keyring freshness documentation.".to_string(),
             ));
         }
-        if bv == observed {
-            if let (Some(bd), Some(cd)) = (&baseline_digest, &current_digest) {
-                if bd != cd {
-                    return Err(coded(
-                        ExitCode::KeyringRollback,
-                        "keyring fork refused. The keyring accepted on this machine at this version has different content than the one presented. This is an equal version substitution. See the keyring freshness documentation.".to_string(),
-                    ));
-                }
-            }
+        FreshnessVerdict::EqualVersionFork => {
+            return Err(coded(
+                ExitCode::KeyringRollback,
+                "keyring fork refused. The keyring accepted on this machine at this version has different content than the one presented. This is an equal version substitution. See the keyring freshness documentation.".to_string(),
+            ));
         }
     }
     if let Some(cd) = current_digest {

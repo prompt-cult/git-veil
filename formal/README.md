@@ -8,6 +8,30 @@ documentation; the design page, command page, and modeled source files were
 identical. The model targets the release tag without checking out or changing
 the shared branch.
 
+The gaps recorded by the countermodels are fixed in releases **>= v0.18.0**, so
+this model describes the vulnerable version by intent.
+
+## Post-fix exhaustive verification: `GitVeil/V018.lean` and `src/gates.rs`
+
+`GitVeil/V018.lean` encodes the gates as at commit **`7cbfc71`** (post tag
+**v0.18.1**, in-progress v0.18.2 bump) and kernel-checks them by exhaustive
+truth table: the complete enumerated input space of each gate (48 freshness
+cells, 32 rotate cells, 64 security-composition cells) is decided cell by
+cell. The same cell functions exist in Rust in `src/gates.rs`; its unit
+tests enumerate the same spaces, and the commands construct the cells from
+observed repository state (`verify_keyring_against_trust` dispatches on the
+pure freshness verdict; `cmd_rotate` asserts its gate cell holds at the
+point of commitment). The two sides are the same mathematics in two
+languages; editing one without the other is a defect the exhaustive tests
+are there to catch. The theorems assert that the v0.18.x gates equal the
+documented design gates on every reachable input, that the v0.17.5 gates
+diverge from the design on exactly the recorded countermodel classes and
+nowhere else, that the countermodel states are now refused, and that
+refusal is state-preserving (the ring-change stamp survives, so an honest
+pass stays armed). The completeness argument is that the enumerated
+features are exactly the variables read by the branches of the
+corresponding Rust gates.
+
 ## Verify
 
 With elan installed, from this directory run:
