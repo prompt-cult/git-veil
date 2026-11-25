@@ -851,12 +851,16 @@ requires, and it works unchanged on plain-git hosting. On platforms with
 no CODEOWNERS support the file simply sits there ignored, which is
 harmless.
 
-- **Locations, in platform precedence order**: GitHub checks
+- **Locations, in platform precedence order**: the hosting platform is
+  read from the `origin` remote push URL. GitHub checks
   `.github/CODEOWNERS` first, then the repository root and `docs/CODEOWNERS`.
   GitLab checks the repository root first, then `docs/CODEOWNERS` and
-  `.gitlab/CODEOWNERS`. Gitea, Forgejo and Bitbucket check the repository
-  root before their platform directory. The first file found in a
-  platform's order is the one evaluated (src/codeowners.rs).
+  `.gitlab/CODEOWNERS`. Bitbucket checks the repository root before
+  `.bitbucket/CODEOWNERS`; Codeberg (which runs Forgejo) checks the
+  root before `.forgejo/CODEOWNERS`. Self-hosted hosts that cannot be
+  told apart from the URL fall back to the root-first order (root, then
+  the platform directory). The first file found in the platform's order
+  is the one evaluated (src/codeowners.rs).
 - **Matching reuses the gitignore matcher** (gix-ignore, the gitoxide
   matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
   character ranges, no escape handling), so the matcher answers whether a
