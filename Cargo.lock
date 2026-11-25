@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "git-veil"
-version = "0.17.5"
+version = "0.17.6"
 dependencies = [
  "age",
  "anyhow",
