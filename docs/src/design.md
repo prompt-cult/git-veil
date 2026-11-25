@@ -253,8 +253,41 @@ returns to naming exactly the ids the configured remotes derive.
 
 ## The gated-command chain
 
-Every gated command verifies the keyring signature through
-`verify_keyring_against_trust` (src/commands/verify_keys.rs):
+Algorithm 4 is the **trust-and-freshness gate**. It is separate from the
+first-encrypt allowance gate, which asks a different question: "may this
+principal encode a plaintext for the first time on this machine?" The
+table below is the gate boundary for every CLI entry point. It names the
+trust or ownership check that runs before the command does its work;
+key-store permission checking is a separate, global gate.
+
+| Command | Algorithm 4 | Allowance | Gate rationale |
+| --- | --- | --- | --- |
+| `init` | Establishes | No | proves possession of the owner signing key, then writes the pin |
+| `trust` | Establishes | No | proves possession of the owner signing key, then writes the pin |
+| `export-pin` | No | No | possession proof for exporting the pin; no keyring change |
+| `import` | No | No | key-store-only private-key import |
+| `export` | No | No | key-store-only public-key export |
+| `forget` | No | No | key-store-only private-key removal |
+| `add-key` | Yes | No | verifies the ring, then mutates and signs it |
+| `remove-key` | Yes | No | verifies the ring, then mutates, signs it and purges its allowance records |
+| `add-file` | No | Records | resolves the allowance anchor from the pin, tracks the file and records consent |
+| `allow` | No | Records | resolves the allowance anchor from the pin and records first-encrypt consent |
+| `remove-file` | No | No | changes the manifest; reads no ciphertext or trust state |
+| `list` | No | No | prints the committed manifest; no secrets are revealed |
+| `hide` | Yes | Checks and uses | verifies the ring, then applies the first-encrypt allowance to the named set |
+| `rotate` | Yes | No | re-encrypts established ciphertexts only |
+| `reveal` | Yes | No | decryption needs the verified ring, not encryption consent |
+| `cat` | Yes | No | decryption needs the verified ring |
+| `changes` | Yes | No | decryption of the prior ciphertext needs the verified ring |
+| `repo-id` | No | No | derives and prints the repository identity |
+| `whoami` | No | No | prints the principal it would use |
+| `verify-keys` | Yes | No | is the direct verification-only form of Algorithm 4 |
+| `list-keys` | Yes | No | verifies before listing, and fails closed on an invalid ring |
+| `trust-permissions` | No | No | records the deliberate key-store permission acknowledgment |
+| `error-codes` | No | No | prints the public exit-code registry |
+| `clean` | No | No | removes repository-side git-veil state after its own confirmation guard |
+| `completions` | No | No | prints shell completion data |
+| `manpages` | No | No | writes generated documentation artifacts |
 
 $$
 \begin{array}{l}
@@ -509,8 +542,10 @@ model follows git's dubious-ownership pattern:
 0600 via `write_atomic_mode`); a later check passes only if every finding
 matches an acknowledged pair exactly - permissions that later change to
 anything else fail again. The check is bypassed entirely by the global
-`--dangerously-skip-permissions-check` flag or a truthy
-`GIT_VEIL_SKIP_PERMISSIONS` environment variable.
+`--dangerously-skip-permissions-check` flag. The `GIT_VEIL_SKIP_PERMISSIONS`
+environment variable is honored only when, after trimming leading and
+trailing whitespace and ignoring case, it equals `1`, `true`, or `yes`;
+all other values are ignored.
 
 Files git-veil itself creates that hold private key material -
 `identities.txt` (via `import` and `import_x25519_private_key_to_store`) and the
@@ -534,8 +569,8 @@ tracked.json (`TrackedFiles::save`), trust.json and pins (`TrustStore`,
 `TrustPinStore`), the private-key/public-key/verifying-key stores
 (`cmd_import`, `import_x25519_private_key_to_store`,
 `import_x25519_public_key_to_store`, `cmd_trust`), ciphertext (`cmd_hide`),
-restored plaintext (`cmd_reveal`), export output (`cmd_export`), the
-`forget` rewrite (`cmd_forget`), and the permissions acknowledgment
+restored plaintext (`cmd_reveal`), export output (`cmd_export`),
+`.gitignore` (`ensure_gitignored`), the `forget` rewrite (`cmd_forget`), and the permissions acknowledgment
 (`cmd_trust_permissions`). Key-store appends are implemented as read-existing
 plus `write_atomic` of the whole accumulated content - an accepted O(n) trade
 so a torn private-key store (which would brick all decryption) is impossible.
@@ -595,7 +630,10 @@ Algorithm 9 (`src/commands/add_file.rs`, `src/commands/hide.rs`,
 
 1. **Add-time gitignore gate** (`ensure_gitignored`): like git-secret, `add-file`
    runs `git check-ignore` on the plaintext path and appends it to
-   `.gitignore` when not already ignored.
+   `.gitignore` when not already ignored. A missing `.gitignore` is the
+   only empty baseline; read errors refuse. Updates are atomic, and
+   git-veil commands share an advisory lock so concurrent updates cannot
+   replace each other and lose rules.
 2. **Ciphertext-ignored refusal**: a `.secret` path can be silently swallowed
    by an unrelated broad rule (e.g. a parent directory like `.tmp/` in
    `.gitignore`) - `add-file` would succeed and the ciphertext would never reach
@@ -691,13 +729,17 @@ ring change into ciphertext, and the only whole-manifest pass.
   re-encrypts it to the current ring, two-phase and all-or-nothing
   (Algorithm 8). The ciphertext is the input: plaintexts are never read,
   written, deleted or compared, so a stale on-disk plaintext cannot
-  enter the data path and no reveal step exists in the ceremony. A
-  tracked path with no `.secret` on disk is skipped with a note. There
-  is no allowance question: every rotated ciphertext is committed to the
-  git index, so it is established. The orphan gate runs over the whole
-  git index before anything is re-encrypted, refusing any committed
-  ciphertext whose path is no longer tracked (exit 42). When the pass
-  completes, the stamp is cleared: one pass per ring change.
+  enter the data path and no reveal step exists in the ceremony.
+  Rotation writes worktree files; it does not update the Git index.
+  Before any write, a tracked path whose indexed ciphertext is absent
+  from the worktree refuses with exit code 70: an index-only copy would
+  otherwise stay on the old ring while the pass claimed completion.
+  The orphan gate runs over the whole git index before anything is
+  re-encrypted, refusing any committed ciphertext whose path is no
+  longer tracked (exit 42). A tracked path with neither an indexed nor
+  an on-disk ciphertext has nothing to re-encrypt and is skipped with
+  a note. When the pass completes, the stamp is cleared: one pass per
+  ring change.
 - **The notice.** `add-key` and `remove-key` print one plain line when
   they stamp: `note: the keyring has changed. To re-encrypt to the
   updated keyring, run the rotate command.` The line states the fact and
@@ -809,16 +851,19 @@ requires, and it works unchanged on plain-git hosting. On platforms with
 no CODEOWNERS support the file simply sits there ignored, which is
 harmless.
 
-- **Locations, in platform precedence order**: the repository root,
-  then `.github/`, `docs/`, `.gitlab/`, `.gitea/`, `.forgejo/` and
-  `.bitbucket/`. The first file found in that order is the one evaluated
-  (src/codeowners.rs).
+- **Locations, in platform precedence order**: GitHub checks
+  `.github/CODEOWNERS` first, then the repository root and `docs/CODEOWNERS`.
+  GitLab checks the repository root first, then `docs/CODEOWNERS` and
+  `.gitlab/CODEOWNERS`. Gitea, Forgejo and Bitbucket check the repository
+  root before their platform directory. The first file found in a
+  platform's order is the one evaluated (src/codeowners.rs).
 - **Matching reuses the gitignore matcher** (gix-ignore, the gitoxide
   matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
   character ranges, no escape handling), so the matcher answers whether a
    pattern covers the `.git-veil/` directory (which carries the
    verifying key beside the keyring it protects),
-  last-match-wins. Owner strings are not validated - only the question
+  last-match-wins. GitHub skips invalid negation lines, so this advisory
+  check skips `!` patterns too. Owner strings are not validated - only the question
   does any pattern match these paths is answered. Gitea and Forgejo use a
   different pattern language; the gitignore matcher may produce false
   negatives there, and the warning is non-blocking, so a false negative
@@ -855,8 +900,9 @@ $$
 \quad \textbf{guard } \mathit{input} \text{ is non-empty and relative, every component Normal} \quad \textbf{else refuse} \ . \ \text{exit 71 (} \texttt{validate\_tracked\_path} \text{)} \\
 \quad \textbf{guard } \text{canonicalise}(\mathit{input}, \text{symlinks resolved, } \texttt{..} \text{ collapsed}) \subseteq \text{repository root} \\
 \quad\quad \textbf{else refuse} \ . \ \text{exit 71; a link to } \text{/home/victim/.ssh/id\_rsa} \text{ fails here at add time} \\
-\quad \textbf{guard } \text{lstat}(\mathit{path}) \text{ is a regular file or absent} \quad \textbf{else refuse} \ . \ \text{exit 71; a committed symlink is refused on every use} \\
-\quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root} \quad \textbf{else refuse} \ . \ \text{exit 71} \\
+ \quad \textbf{guard } \text{every existing ancestor and the final component are lstat-checked from the canonical root} \\
+ \quad \textbf{guard } \text{ciphertext path} = \langle \text{plaintext}.secret \rangle \text{ inside the repository root and its own component walk passes} \\
+ \quad\quad \textbf{else refuse} \ . \ \text{exit 71; a ciphertext symlink is refused} \\
 \textbf{end function} \\[2mm]
 \textbf{upon } \textsc{Reveal} \text{ (the decryption-write gate)} \\
 \quad \textbf{guard } \text{the target plaintext is not tracked in the git index, case-insensitively} \\
@@ -872,10 +918,11 @@ $$
 Layer 1 is `validate_tracked_path`, layer 2 the add-time
 canonicalise-and-reject (`resolve_repo_relative_input` with
 `PathResolveMode::CanonicaliseRequireExists`), layer 3 the read-time
-regular-file gate (`ensure_regular_file`, lstat; a *missing* path is
-accepted - the plaintext is normally absent while hidden), layer 4
+regular-file gate (`ensure_regular_file`; it walks every existing
+ancestor and the final component from the canonical root and accepts only
+a regular file or an absent final component), layer 4
 `ensure_ciphertext_beside_plaintext`. Layers 1 to 4 fire on every use of a
-tracked path in hide, reveal, cat and changes. *Threats countered:*
+tracked path in hide, reveal, cat, changes, rotate and remove-file.
 a malicious committed tracked.json making git-veil read or write outside
 the repository; tracking a symlink whose target is read into committed
 ciphertext (hide) or printed (cat/changes) or written through

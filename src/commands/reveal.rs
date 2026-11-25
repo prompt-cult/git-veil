@@ -11,12 +11,12 @@ use crate::key_discovery::discover_x25519_private_key;
 use crate::tracked_files::{
     ensure_regular_file, resolve_repo_relative_input, validate_tracked_path, PathResolveMode,
 };
-use crate::{cmd_verify_keys, decrypt_with_x25519_private_key, Keyring, TrackedFiles};
+use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, TrackedFiles};
 
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
 /// index. See docs/src/design.md "Ignore safety" gate 4.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
-    if is_tracked_in_git(repo_root, file) {
+    if is_tracked_in_git(repo_root, file)? {
         return Err(coded(
             ExitCode::PlaintextTracked,
             "refusing to overwrite a file tracked in git. It is repository content \
@@ -51,13 +51,9 @@ pub fn cmd_reveal(
     key_store: &Path,
     files: Vec<String>,
 ) -> Result<()> {
-    // Verify keyring signature first
-    cmd_verify_keys(repo_root, remote_name, key_store)?;
-
-    // Load keyring
-    let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_text = fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
-    let keyring = Keyring::parse(&keyring_text)?;
+    // The revealed principal and public key must come from the ring that
+    // trust verification returned, not from a later re-read of the file.
+    let (_, _, keyring) = verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // Find user's entry
     let entry = keyring.find_by_email(email).ok_or_else(|| {

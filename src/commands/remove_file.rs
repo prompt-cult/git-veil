@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::commands::hide::encrypted_path_for;
-use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, TrackedFiles};
+use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
+use crate::tracked_files::{
+    ensure_regular_file, resolve_repo_relative_input, PathResolveMode, TrackedFiles,
+};
 
 /// Removes files from the tracked files list.
 ///
@@ -20,12 +22,11 @@ use crate::tracked_files::{resolve_repo_relative_input, PathResolveMode, Tracked
 /// same step. This is the fail-closed default. A de-tracked but
 /// committed ciphertext would otherwise be silently skipped by the
 /// next hide, leaving it decryptable by collaborators removed in a
-/// later rotation. See "Orphaned ciphertext" in docs/src/design.md. Hide
-/// refuses such orphans with exit 42. The ciphertext is committed
+/// later rotation. Rotation refuses such orphans with exit 42; hide ignores
+/// unrelated orphans by design. The ciphertext is committed
 /// content, so deletion is recoverable from git history.
 /// `--keep-ciphertext` leaves the ciphertext in place for callers that
-/// want it. Hide will then refuse the orphan until it is staged-deleted
-/// or the path is re-tracked.
+/// want it until it is staged-deleted or the path is re-tracked.
 pub fn cmd_remove_file(repo_root: &Path, files: Vec<String>, keep_ciphertext: bool) -> Result<()> {
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let mut tracked = TrackedFiles::load(&tracked_path)?;
@@ -42,11 +43,13 @@ pub fn cmd_remove_file(repo_root: &Path, files: Vec<String>, keep_ciphertext: bo
         if !tracked.files.contains(&relative) {
             anyhow::bail!("file not tracked: {}. Add it before removing it", file);
         }
+        ensure_regular_file(repo_root, &relative)?;
         tracked.remove(&relative);
         count += 1;
 
         if !keep_ciphertext {
             let ciphertext = encrypted_path_for(repo_root, &relative);
+            ensure_ciphertext_beside_plaintext(repo_root, &relative, &ciphertext)?;
             if ciphertext.exists() {
                 std::fs::remove_file(&ciphertext).with_context(|| {
                     format!("Failed to delete ciphertext: {}", ciphertext.display())

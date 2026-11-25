@@ -1180,6 +1180,65 @@ fn test_rotate_refuses_without_a_due_stamp() {
     );
 }
 
+/// Rotation accounts for an indexed ciphertext that is missing from the
+/// worktree. The pass cannot remove it from the index, so it must refuse
+/// before any worktree writes and must not consume the due stamp.
+#[test]
+fn test_rotate_refuses_indexed_ciphertext_absent_from_worktree() {
+    let f = Fixture::new("rotate-index-only");
+
+    let alice = f.add_collab("alice@example.com");
+    f.import_id(&alice, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("hide");
+
+    let stage = std::process::Command::new("git")
+        .current_dir(&f.repo.path)
+        .args(["add", "-A"])
+        .status()
+        .expect("git add")
+        .success();
+    assert!(stage, "the committed ciphertext must reach the index");
+
+    // The index still holds .env.secret, but the pass has no file to read
+    // and no way to write its rotated replacement into the index.
+    fs::remove_file(f.repo.join(".env.secret")).unwrap();
+
+    let bob = f.add_collab("bob@example.com");
+    f.import_id(&bob, "bob.age");
+
+    let stamp_before = RingPassStore::read(&f.key_store.path, TEST_REPO_ID).unwrap();
+    let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("an index-only tracked ciphertext refuses the pass");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::Refused as i32,
+        "the index-only gate refuses with the policy code 70"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("does not update the Git index") && message.contains(".env.secret"),
+        "the refusal states the index boundary and names the path: {message}"
+    );
+    assert_eq!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID).unwrap(),
+        stamp_before,
+        "a refused pass does not consume the stamp"
+    );
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is rotated when the pass refuses"
+    );
+}
+
 #[test]
 fn test_rotate_re_encrypts_every_tracked_ciphertext() {
     let f = Fixture::new("rotate-reencrypt");
@@ -1330,5 +1389,158 @@ fn test_a_scoped_hide_needs_no_stamp_and_consumes_none() {
             .unwrap()
             .is_none(),
         "the pass consumed the stamp"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_path_containment_refuses_a_symlinked_parent_across_commands() {
+    let f = Fixture::new("containment-symlink-parent");
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    let outside = TempDir::new("containment-outside-parent");
+    fs::write(outside.join("file"), b"outside plaintext\n").unwrap();
+    fs::write(outside.join("file.secret"), b"outside ciphertext\n").unwrap();
+    std::os::unix::fs::symlink(&outside.path, f.repo.join("sub")).unwrap();
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        r#"{"files":["sub/file"]}"#,
+    )
+    .unwrap();
+
+    let expected = git_veil::ExitCode::UnsafePath as i32;
+
+    let err = cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        vec!["sub/file".to_string()],
+    )
+    .expect_err("reveal must refuse a symlinked parent");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("sub/file"));
+
+    let err = cmd_cat(
+        &f.repo.path,
+        "sub/file",
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect_err("cat must refuse a symlinked parent");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("sub/file"));
+
+    let err = cmd_changes(
+        &f.repo.path,
+        vec!["sub/file".to_string()],
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect_err("changes must refuse a symlinked parent");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("sub/file"));
+
+    let err = git_veil::cmd_remove_file(&f.repo.path, vec!["sub/file".to_string()], false)
+        .expect_err("remove-file must refuse a symlinked parent");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("sub/file"));
+
+    let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("rotate must refuse a symlinked parent");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("sub/file"));
+
+    assert!(
+        fs::symlink_metadata(f.repo.join("sub"))
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "the refused commands leave the attacker's link in place"
+    );
+    assert!(
+        fs::read(outside.join("file.secret"))
+            .unwrap()
+            .eq(b"outside ciphertext\n"),
+        "no command rewrote the outside ciphertext"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ciphertext_symlink_is_refused_across_commands() {
+    let f = Fixture::new("containment-cipher-symlink");
+    let id = f.add_collab("alice@example.com");
+    f.import_id(&id, "alice.age");
+
+    let outside = TempDir::new("containment-outside-cipher");
+    fs::write(outside.join("payload"), b"outside ciphertext\n").unwrap();
+    std::os::unix::fs::symlink(outside.join("payload"), f.repo.join("file.secret")).unwrap();
+    fs::write(
+        f.repo.join(".git-veil/tracked.json"),
+        r#"{"files":["file"]}"#,
+    )
+    .unwrap();
+
+    let expected = git_veil::ExitCode::UnsafePath as i32;
+
+    let err = cmd_reveal(
+        &f.repo.path,
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+        vec!["file".to_string()],
+    )
+    .expect_err("reveal must refuse a ciphertext symlink");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("file.secret"));
+
+    let err = cmd_cat(
+        &f.repo.path,
+        "file",
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect_err("cat must refuse a ciphertext symlink");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("file.secret"));
+
+    let err = cmd_changes(
+        &f.repo.path,
+        vec!["file".to_string()],
+        "alice@example.com",
+        "origin",
+        &f.key_store.path,
+    )
+    .expect_err("changes must refuse a ciphertext symlink");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("file.secret"));
+
+    let err = git_veil::cmd_remove_file(&f.repo.path, vec!["file".to_string()], false)
+        .expect_err("remove-file must refuse a ciphertext symlink");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("file.secret"));
+
+    let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("rotate must refuse a ciphertext symlink");
+    assert_eq!(exit_code_of(&err), expected);
+    assert!(format!("{err:#}").contains("file.secret"));
+
+    assert!(
+        fs::symlink_metadata(f.repo.join("file.secret"))
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "the refused commands leave the ciphertext link in place"
+    );
+    assert!(
+        fs::read(outside.join("payload"))
+            .unwrap()
+            .eq(b"outside ciphertext\n"),
+        "no command rewrote the outside ciphertext target"
     );
 }

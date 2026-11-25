@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use std::fs;
 use std::path::Path;
 
 use crate::exit_codes::{coded, ExitCode};
@@ -8,7 +7,7 @@ use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
 use crate::trust_store::RingPassStore;
 use crate::{
     create_signature_block, encrypt_to_x25519_public_key, extract_content_to_verify_from_keyring,
-    keyring_content_digest, parse_x25519_public_key, verify_keyring_against_trust, Keyring,
+    keyring_content_digest, parse_x25519_public_key, verify_keyring_against_trust,
 };
 
 /// Fixed in-memory canary test-encrypted to the collaborator key before it is
@@ -31,7 +30,7 @@ pub fn cmd_add_key(
     // keyring containing entries must already carry a valid signature
     // from the trusted key, otherwise add-key would launder trust by
     // re-signing attacker-supplied content.
-    let (repo_id, trusted_fingerprint, _) =
+    let (repo_id, trusted_fingerprint, mut keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
     // The second argument is the collaborator's bech32 X25519 public key
@@ -58,11 +57,9 @@ pub fn cmd_add_key(
         ));
     }
 
-    // Load keyring
+    // The mutation starts from the ring that was verified. A later
+    // re-read would let a concurrent change enter before it is signed.
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_content =
-        fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
-    let mut keyring = Keyring::parse(&keyring_content)?;
 
     // The label must be new. Replacing the key under an existing label is
     // banned (exit 73): an attacker who asks for a "lost key" replacement

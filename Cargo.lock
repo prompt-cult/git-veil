@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "git-veil"
-version = "0.17.6"
+version = "0.18.0"
 dependencies = [
  "age",
  "anyhow",
@@ -815,6 +815,7 @@ dependencies = [
  "gix-glob",
  "gix-ignore",
  "hex",
+ "libc",
  "predicates",
  "rand 0.8.6",
  "regex",

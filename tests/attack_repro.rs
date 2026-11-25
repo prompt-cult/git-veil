@@ -1100,3 +1100,45 @@ fn fix_equal_version_fork_refused_by_baseline_digest() {
     cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
         .expect("the legitimate version bump advances the baseline");
 }
+
+/// The document contract makes any baseline, including version 0, refuse
+/// the unsigned empty ring. A version-0 baseline is easy for a version
+/// comparison to miss because the unsigned ring also reports version 0.
+#[test]
+fn fix_unsigned_empty_ring_refused_with_zero_version_baseline() {
+    let f = Fixture::new("unsigned-empty-zero-baseline");
+
+    let _carol = f.add_collab("carol@example.com");
+    let keyring_path = f.repo.join(".git-veil/keyring");
+    let real_ring = fs::read_to_string(&keyring_path).unwrap();
+
+    // Write the version-0 baseline directly so this regression isolates
+    // the exact edge that a plain numeric comparison misses.
+    git_veil::TrustPinStore::write_ring_baseline(
+        &f.key_store.path,
+        TEST_REPO_ID,
+        0,
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    )
+    .unwrap();
+
+    fs::write(
+        &keyring_path,
+        format!(
+            "{}\nversion:18446744073709551615\n{}\n",
+            git_veil::BEGIN_MARKER,
+            git_veil::END_MARKER
+        ),
+    )
+    .unwrap();
+
+    let err = cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("an unsigned empty ring must be refused with any baseline");
+    assert_eq!(exit_code_of(&err), 14);
+
+    // The refusal is because the unsigned ring has no authority, not
+    // because the baseline is unusable. The signed ring verifies again.
+    fs::write(&keyring_path, &real_ring).unwrap();
+    cmd_verify_keys(&f.repo.path, "origin", &f.key_store.path)
+        .expect("the signed ring still verifies after the refused unsigned ring");
+}

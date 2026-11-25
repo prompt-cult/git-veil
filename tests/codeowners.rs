@@ -104,8 +104,8 @@ fn test_covering_codeowners_in_root_and_platform_dirs() {
     assert_eq!(find_codeowners(&repo.path), Some(repo.join("CODEOWNERS")));
     assert!(covers_trust_critical_paths(&repo.path));
 
-    // Precedence: the root file wins over a platform-directory file, and a
-    // platform-directory file is found on its own too.
+    // Precedence: GitHub checks its platform directory first. Root and
+    // docs are evaluated only when no platform-directory file exists.
     let repo_github = TempDir::new("covering-github");
     init_git_repo(&repo_github.path);
     fs::create_dir_all(repo_github.join(".github")).unwrap();
@@ -114,6 +114,9 @@ fn test_covering_codeowners_in_root_and_platform_dirs() {
         covering_codeowners(),
     )
     .unwrap();
+    fs::write(repo_github.join("CODEOWNERS"), covering_codeowners()).unwrap();
+    fs::create_dir_all(repo_github.join("docs")).unwrap();
+    fs::write(repo_github.join("docs/CODEOWNERS"), covering_codeowners()).unwrap();
     assert_eq!(
         find_codeowners(&repo_github.path),
         Some(repo_github.join(".github/CODEOWNERS"))
@@ -147,9 +150,8 @@ fn test_directory_pattern_and_inner_file_both_cover_the_state_directory() {
     fs::write(repo_partial.join("CODEOWNERS"), b"owner.verifying @owner\n").unwrap();
     assert!(!covers_trust_critical_paths(&repo_partial.path));
 
-    // Last match wins. A final negation uncovers what an earlier pattern
-    // covered. Negation is not valid CODEOWNERS, but the matcher reports
-    // the gitignore semantics honestly.
+    // Last valid match wins. GitHub ignores invalid negation lines, so
+    // this advisory check ignores them too instead of uncovering what an earlier pattern covered.
     let repo_negated = TempDir::new("negated");
     init_git_repo(&repo_negated.path);
     fs::write(
@@ -157,7 +159,7 @@ fn test_directory_pattern_and_inner_file_both_cover_the_state_directory() {
         b"* @owner\n.git-veil/\n!.git-veil\n!.git-veil/tracked.json\n",
     )
     .unwrap();
-    assert!(!covers_trust_critical_paths(&repo_negated.path));
+    assert!(covers_trust_critical_paths(&repo_negated.path));
 }
 
 #[test]

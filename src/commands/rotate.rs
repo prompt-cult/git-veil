@@ -9,7 +9,7 @@ use crate::age_crypto::X25519PublicKey;
 use crate::commands::hide::{encrypted_path_for, ensure_ciphertext_beside_plaintext};
 use crate::exit_codes::{coded, ExitCode};
 use crate::fs_atomic::write_atomic;
-use crate::tracked_files::{validate_tracked_path, TrackedFiles};
+use crate::tracked_files::{ensure_regular_file, validate_tracked_path, TrackedFiles};
 use crate::trust_store::RingPassStore;
 use crate::{
     decrypt_with_x25519_private_key, encrypt_to_x25519_public_keys,
@@ -204,7 +204,7 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
 
     // The orphan gate. It runs over the whole git index before anything is
     // rotated, because the pass rotates the whole manifest.
-    let (_established, orphans) = index_state(repo_root, &tracked)?;
+    let (established, orphans) = index_state(repo_root, &tracked)?;
     if !orphans.is_empty() {
         return Err(coded(
             ExitCode::OrphanedCiphertext,
@@ -227,10 +227,42 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
         return Ok(());
     }
 
-    // The working set is every tracked path whose `.secret` ciphertext
-    // exists on disk. A tracked path with no ciphertext on disk has
-    // nothing to re-encrypt, so it is skipped with a note: the pass
-    // reports honestly what it did and did not rotate.
+    // A tracked path with an indexed ciphertext but no worktree copy cannot
+    // be re-encrypted by this pass: rotation writes worktree files and does
+    // not itself update the Git index. Refuse before any writes. An index
+    // copy would otherwise remain decryptable by the old ring while the
+    // ceremony completed.
+    let mut index_only: Vec<PathBuf> = Vec::new();
+    for file in &tracked.files {
+        let ciphertext_path = encrypted_path_for(repo_root, file);
+        if established.contains(file) && !ciphertext_path.exists() {
+            index_only.push(file.clone());
+        }
+    }
+    if !index_only.is_empty() {
+        return Err(coded(
+            ExitCode::Refused,
+            format!(
+                "refusing the ring-change pass: committed ciphertext paths are absent from the \
+                 worktree with error code 70. Rotation writes worktree files only and does not \
+                 update the Git index, so the pass cannot account for an index-only copy. Remove \
+                 each path from the index with git rm --cached, restore it to the worktree, or \
+                 resolve it explicitly before clearing the stamp. The affected committed \
+                 ciphertext paths:\n  {}",
+                index_only
+                    .iter()
+                    .map(|file| format!("{}.secret", file.to_string_lossy()))
+                    .collect::<Vec<_>>()
+                    .join("\n  ")
+            ),
+        ));
+    }
+
+    // The working set is every tracked path whose .secret ciphertext exists
+    // on disk and is not index-only. A tracked path with neither a committed
+    // ciphertext nor a worktree file has nothing to re-encrypt, so it is
+    // skipped with a note: the pass reports honestly what it did and did
+    // not rotate.
     let mut scoped: Vec<PathBuf> = Vec::new();
     for file in &tracked.files {
         let ciphertext_path = encrypted_path_for(repo_root, file);
@@ -261,6 +293,7 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
     for file in &scoped {
         validate_tracked_path(file)
             .with_context(|| format!("Refusing unsafe tracked path: {}", file.display()))?;
+        ensure_regular_file(repo_root, file)?;
 
         // Defence in depth: the ciphertext must stay inside the repository
         // root, exactly beside its plaintext

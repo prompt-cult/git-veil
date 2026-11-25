@@ -62,8 +62,100 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Walks a repo-relative path component by component from the canonical
+/// repository root and refuses any symlink in the path.
+///
+/// The final component may be absent when `allow_missing` is true. If it
+/// exists it must be a regular file; if it is a directory, symlink, or any
+/// other file type the path is refused. Every existing ancestor must be a
+/// directory, never a symlink. This gives the caller a hard containment
+/// guarantee without relying on `Path::starts_with` on a lexical path.
+pub(crate) fn ensure_regular_repo_path(
+    repo_root: &Path,
+    relative: &Path,
+    allow_missing: bool,
+) -> Result<()> {
+    validate_tracked_path(relative)
+        .with_context(|| format!("Invalid tracked path: {}", relative.display()))?;
+
+    let canonical_root =
+        fs::canonicalize(repo_root).context("Failed to canonicalise repository root")?;
+    let mut current = canonical_root;
+    let component_count = relative.components().count();
+    for (index, component) in relative.components().enumerate() {
+        let Component::Normal(name) = component else {
+            return Err(coded(
+                ExitCode::UnsafePath,
+                format!(
+                    "Tracked path contains forbidden {:?} component: {}",
+                    component,
+                    relative.display()
+                ),
+            ));
+        };
+        current.push(name);
+        let is_last = index + 1 == component_count;
+        let metadata = match fs::symlink_metadata(&current) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                if is_last && allow_missing {
+                    return Ok(());
+                }
+                if !is_last && allow_missing {
+                    return Ok(());
+                }
+                return Err(err).with_context(|| {
+                    format!("Failed to stat tracked path: {}", relative.display())
+                });
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("Failed to stat tracked path: {}", relative.display())
+                });
+            }
+        };
+
+        if is_last {
+            if metadata.file_type().is_symlink() {
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!(
+                        "tracked path is a symlink. Refusing to read. Remove the link and re-add the real file: {}",
+                        relative.display()
+                    ),
+                ));
+            }
+            if !metadata.is_file() {
+                return Err(coded(
+                    ExitCode::UnsafePath,
+                    format!("tracked path is not a regular file: {}", relative.display()),
+                ));
+            }
+        } else if metadata.file_type().is_symlink() {
+            return Err(coded(
+                ExitCode::UnsafePath,
+                format!(
+                    "tracked path traverses a symlinked ancestor. Refusing to read: {}",
+                    relative.display()
+                ),
+            ));
+        } else if !metadata.is_dir() {
+            return Err(coded(
+                ExitCode::UnsafePath,
+                format!(
+                    "tracked path traverses a non-directory ancestor: {}",
+                    relative.display()
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Defence in depth: the tracked path, as it exists on disk under
-/// `repo_root`, must not be a symlink and must be a regular file.
+/// `repo_root`, must not contain a symlink and must resolve to a regular
+/// file or be absent.
 ///
 /// A committed tracked.json can name a path another repo writer has
 /// committed as a symlink pointing outside the repository, for example
@@ -71,36 +163,12 @@ pub fn validate_tracked_path(path: &Path) -> Result<()> {
 /// path for reading would leak the link target into ciphertext committed
 /// back to the repo (hide), or print or diff it (cat/changes). Writing
 /// through it would corrupt the link target or silently replace the link.
-/// The lstat gate (symlink_metadata, which does not follow the link)
-/// rejects this, naming the path. A path that does not exist on disk is
-/// accepted. For cat/changes/reveal the plaintext is normally
-/// absent: the file is hidden and only the `.secret` ciphertext remains.
+/// The shared component walk rejects this, naming the path. A path that
+/// does not exist on disk is accepted. For cat/changes/reveal the plaintext
+/// is normally absent: the file is hidden and only the `.secret` ciphertext
+/// remains.
 pub fn ensure_regular_file(repo_root: &Path, file: &Path) -> Result<()> {
-    let full_path = repo_root.join(file);
-    let metadata = match fs::symlink_metadata(&full_path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(err) => {
-            return Err(err)
-                .with_context(|| format!("Failed to stat tracked path: {}", file.display()));
-        }
-    };
-    if metadata.file_type().is_symlink() {
-        return Err(coded(
-            ExitCode::UnsafePath,
-            format!(
-                "tracked path is a symlink. Refusing to read. Remove the link and re-add the real file: {}",
-                file.display()
-            ),
-        ));
-    }
-    if !metadata.is_file() {
-        return Err(coded(
-            ExitCode::UnsafePath,
-            format!("tracked path is not a regular file: {}", file.display()),
-        ));
-    }
-    Ok(())
+    ensure_regular_repo_path(repo_root, file, true)
 }
 
 /// Defence in depth: lexically joins `path` under a repository root and

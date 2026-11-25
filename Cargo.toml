@@ -1,6 +1,6 @@
 [package]
 name = "git-veil"
-version = "0.17.6"
+version = "0.18.0"
 edition = "2021"
 authors = ["git-veil contributors"]
 description = "Store encrypted secrets in a git repository using age encryption"
@@ -43,6 +43,7 @@ rand = "0.8"
 
 # Base64 encoding (for signatures)
 base64 = "0.21"
+libc = "0.2"
 
 # Hex encoding (for Ed25519 keys)
 hex = "0.4"

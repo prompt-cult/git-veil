@@ -183,9 +183,10 @@ pub fn verify_keyring_against_trust(
     // pin, turns any version regression into a fail-closed refusal. A
     // versionless keyring counts as 0.
     //
-    // An unsigned zero-entry keyring (the fresh-init state) is
-    // unauthenticated repo content. It is accepted as version 0 but must
-    // never move the baseline. Otherwise an attacker's junk ring, for
+    // An unsigned zero-entry keyring is unauthenticated repo content. It
+    // is accepted only on a baseline-less machine; any baseline, including
+    // version 0, is a rollback to no collaborators. It never moves the
+    // baseline. Otherwise an attacker's junk ring, for
     // example version:u64::MAX, poisons the baseline and bricks every
     // machine past a revert of the attacker's commit.
     //
@@ -207,6 +208,12 @@ pub fn verify_keyring_against_trust(
     };
     let (baseline_version, baseline_digest) =
         TrustPinStore::read_ring_baseline(key_store, &repo_id)?;
+    if unsigned_empty && baseline_version.is_some() {
+        return Err(coded(
+            ExitCode::KeyringRollback,
+            "keyring rollback refused. An unsigned empty keyring is a rollback to no collaborators on this baselined machine. See the keyring freshness documentation.".to_string(),
+        ));
+    }
     if let Some(bv) = baseline_version {
         if bv > observed {
             return Err(coded(

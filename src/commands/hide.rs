@@ -41,18 +41,18 @@ pub(crate) fn ensure_ciphertext_beside_plaintext(
     file: &Path,
     encrypted_path: &Path,
 ) -> Result<()> {
-    let plaintext_path = repo_root.join(file);
-    let beside_plaintext = plaintext_path.with_file_name(format!(
+    let relative_ciphertext = file.with_file_name(format!(
         "{}.secret",
         file.file_name().unwrap_or_default().to_string_lossy()
     ));
-    if encrypted_path != beside_plaintext || !encrypted_path.starts_with(repo_root) {
+    let expected_path = repo_root.join(&relative_ciphertext);
+    if encrypted_path != expected_path {
         anyhow::bail!(
             "Encrypted path escaped the repository root: {}",
             encrypted_path.display()
         );
     }
-    Ok(())
+    crate::tracked_files::ensure_regular_repo_path(repo_root, &relative_ciphertext, true)
 }
 
 /// Encrypts tracked files to all keys in the keyring.
