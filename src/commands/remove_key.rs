@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use std::fs;
 use std::path::Path;
 
 use crate::allowance::AllowanceStore;
@@ -9,7 +8,7 @@ use crate::key_discovery::{discover_signing_key, discover_signing_key_explicit};
 use crate::trust_store::RingPassStore;
 use crate::{
     create_signature_block, extract_content_to_verify_from_keyring, keyring_content_digest,
-    verify_keyring_against_trust, Keyring,
+    verify_keyring_against_trust,
 };
 
 /// Removes a collaborator's entry from the keyring and re-signs it.
@@ -26,14 +25,12 @@ pub fn cmd_remove_key(
     // keyring containing entries must already carry a valid signature
     // from the trusted key, otherwise remove-key would launder trust by
     // re-signing attacker-supplied content.
-    let (repo_id, trusted_fingerprint, _) =
+    let (repo_id, trusted_fingerprint, mut keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
-    // Load keyring
+    // The removal starts from the ring that was verified. A later
+    // re-read would let a concurrent change enter before it is signed.
     let keyring_path = repo_root.join(".git-veil/keyring");
-    let keyring_content =
-        fs::read_to_string(&keyring_path).context("Failed to read keyring file")?;
-    let mut keyring = Keyring::parse(&keyring_content)?;
 
     // Find the entry by exact email
     if keyring.find_by_email(email_to_remove).is_none() {

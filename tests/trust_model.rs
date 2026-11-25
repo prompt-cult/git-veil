@@ -8,7 +8,8 @@ use git_veil::cli::Cli;
 use git_veil::{
     cmd_add_key, cmd_export_pin, cmd_hide, cmd_import, cmd_init, cmd_reveal, cmd_trust,
     cmd_verify_keys, exit_code_of, generate_signing_keypair, generate_x25519_private_key,
-    owner_key_fingerprint, x25519_public_key_encoding, PinFile, TrustPinStore, TrustStore,
+    owner_key_fingerprint, verify_keyring_against_trust, x25519_public_key_encoding, Keyring,
+    PinFile, TrustPinStore, TrustStore,
 };
 use std::fs;
 use std::path::Path;
@@ -1300,4 +1301,18 @@ fn test_reconcile_owner_fingerprints_removes_only_non_live_ids() {
     assert!(store.get_owner_fingerprint("a+owner@github.com").is_some());
     assert!(store.get_owner_fingerprint("b+owner@github.com").is_none());
     assert!(store.get_owner_fingerprint("c+owner@github.com").is_some());
+}
+
+#[test]
+fn test_verified_keyring_matches_file() {
+    let f = Fixture::new("verified-ring-match");
+    let (_, _, verified) = verify_keyring_against_trust(&f.repo.path, "origin", &f.key_store.path)
+        .expect("the fresh ring verifies");
+    let on_disk_text = fs::read_to_string(f.repo.join(".git-veil/keyring")).unwrap();
+    let on_disk = Keyring::parse(&on_disk_text).unwrap();
+    assert_eq!(
+        verified.serialize(),
+        on_disk.serialize(),
+        "verification must return the exact ring read for verification"
+    );
 }
