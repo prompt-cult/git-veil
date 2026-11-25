@@ -27,6 +27,22 @@ chmod +x git-veil-linux-x86_64 && sudo mv git-veil-linux-x86_64 /usr/local/bin/g
 `cargo binstall git-veil` resolves the same release assets (the manifest is
 wired into Cargo.toml).
 
+## Windows
+
+Download the Windows x86-64 MSI from the [latest release](https://github.com/prompt-cult/git-veil/releases/latest), or run the following in PowerShell. It downloads the MSI and its published checksum, verifies the download, and opens the installer:
+
+```powershell
+$base = 'https://github.com/prompt-cult/git-veil/releases/latest/download'
+$msi = Join-Path $env:TEMP 'git-veil-windows-x86_64.msi'
+Invoke-WebRequest "$base/git-veil-windows-x86_64.msi" -OutFile $msi
+$checksum = (Invoke-WebRequest "$base/git-veil-windows-x86_64.msi.sha256" -UseBasicParsing).Content
+if ($checksum -is [byte[]]) { $checksum = [Text.Encoding]::UTF8.GetString($checksum) }
+if ((Get-FileHash $msi -Algorithm SHA256).Hash -ne (($checksum.Trim() -split '\s+')[0])) { throw 'MSI checksum mismatch' }
+Start-Process msiexec.exe -ArgumentList @('/i', "`"$msi`"") -Wait
+```
+
+The MSI installs for all users and may request administrator approval. Open a new PowerShell window after installation, then run `git-veil --version`. The release also provides a standalone `.exe` and a portable ZIP; place the executable on your `PATH` to run it directly.
+
 ## Build from source
 
 ```sh
