@@ -37,6 +37,13 @@ jobs:
     with:
       tag: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
+  # Fuzz smoke is part of the release itself, so the agent monitoring the
+  # release build sees a fuzz crash as a release failure. It does not run
+  # on PRs or main pushes (see fuzz-smoke.yml).
+  fuzz-smoke:
+    needs: prepare-release
+    uses: ./.github/workflows/fuzz-smoke.yml
+
   build-release:
     needs: prepare-release
     name: Build Release - ${{ matrix.asset_name }}
@@ -176,7 +183,9 @@ jobs:
     # windows-msi is a required gate: a release is only published when the
     # Windows x86_64 assets built and uploaded successfully (see issue #86 -
     # v0.17.2 shipped without them because this job's failure did not block).
-    needs: [build-release, man-pages, windows-msi]
+    # fuzz-smoke is equally required: a fuzz crash fails the release the
+    # agent watches.
+    needs: [build-release, man-pages, windows-msi, fuzz-smoke]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:

@@ -13,8 +13,26 @@ name: pages
 on:
   push:
     branches: [main]
+    # The site depends only on these paths; anything else never changes
+    # the published book, so the build is skipped.
+    paths:
+      - 'docs/**'
+      - 'book.toml'
+      - 'SKILL.md'
+      - 'README.md'
+      - 'scripts/gen-plain-txt.py'
+      - 'scripts/gen-crawler-meta.py'
+      - '.github/workflows/pages.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'docs/**'
+      - 'book.toml'
+      - 'SKILL.md'
+      - 'README.md'
+      - 'scripts/gen-plain-txt.py'
+      - 'scripts/gen-crawler-meta.py'
+      - '.github/workflows/pages.yml'
   # Manual rebuilds: Actions tab - pages - Run workflow, or
   # `gh workflow run pages`. The deploy is gated on push, so a manual run
   # must also be able to deploy; see the dispatch condition below.
