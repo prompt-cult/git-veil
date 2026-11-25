@@ -112,6 +112,7 @@ impl Fixture {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn add_file_encodes_literal_gitignore_rules() {
     let fixture = Fixture::new("literal-rules");
@@ -204,6 +205,7 @@ fn add_file_refuses_a_gitignore_read_error() {
     assert!(fixture.repo.join(".gitignore").is_dir());
 }
 
+#[cfg(unix)]
 #[test]
 fn add_file_preserves_concurrent_rules() {
     let fixture = Fixture::new("concurrent-rules");
