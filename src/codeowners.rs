@@ -15,17 +15,21 @@ use std::path::{Path, PathBuf};
 
 use crate::trust_store::TrustPinStore;
 
-/// CODEOWNERS locations in platform precedence order: the repository root,
-/// then the per-platform directories (GitHub, GitLab, Bitbucket, Gitea,
-/// Forgejo). The first file found in this order is the one evaluated.
-pub const CODEOWNERS_LOCATIONS: [&str; 7] = [
-    "CODEOWNERS",
-    ".github/CODEOWNERS",
-    "docs/CODEOWNERS",
-    ".gitlab/CODEOWNERS",
-    ".gitea/CODEOWNERS",
-    ".forgejo/CODEOWNERS",
-    ".bitbucket/CODEOWNERS",
+/// CODEOWNERS locations by platform. Each platform owns its own lookup
+/// order; the repository root is the usual shared fallback. GitHub checks
+/// its platform directory first, as documented by GitHub.
+pub const PLATFORM_CODEOWNERS_LOCATIONS: [(&str, &[&str]); 5] = [
+    (
+        "GitHub",
+        &[".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"],
+    ),
+    (
+        "GitLab",
+        &["CODEOWNERS", "docs/CODEOWNERS", ".gitlab/CODEOWNERS"],
+    ),
+    ("Gitea", &["CODEOWNERS", ".gitea/CODEOWNERS"]),
+    ("Forgejo", &["CODEOWNERS", ".forgejo/CODEOWNERS"]),
+    ("Bitbucket", &["CODEOWNERS", ".bitbucket/CODEOWNERS"]),
 ];
 
 /// The key store file recording repositories whose CODEOWNERS warning is
@@ -36,19 +40,20 @@ fn suppression_path(key_store: &Path) -> PathBuf {
 
 /// The first CODEOWNERS file that exists, in platform precedence order.
 pub fn find(repo_root: &Path) -> Option<PathBuf> {
-    for location in CODEOWNERS_LOCATIONS {
-        let candidate = repo_root.join(location);
-        if candidate.is_file() {
-            return Some(candidate);
+    for (_platform, locations) in PLATFORM_CODEOWNERS_LOCATIONS {
+        for location in locations.iter() {
+            let candidate = repo_root.join(location);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None
 }
 
 /// Whether any pattern in the CODEOWNERS content covers `path`. The last
-/// match wins, and a final negated match counts as not covered. A file
-/// with negation lines is not valid CODEOWNERS, but the matcher reports
-/// the gitignore semantics honestly rather than guessing intent.
+/// valid pattern wins. GitHub skips invalid negation lines, so this
+/// advisory check skips them too rather than giving them gitignore meaning.
 fn content_covers(content: &[u8], path: &str, is_dir: bool) -> bool {
     use bstr::ByteSlice;
     let rel_path = bstr::BString::from(path);
@@ -146,7 +151,7 @@ fn pattern_tokens_only(content: &[u8]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::with_capacity(content.len());
     for line in content.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with(b"#") {
+        if line.is_empty() || line.starts_with(b"#") || line.starts_with(b"!") {
             continue;
         }
         let token_end = line

@@ -844,16 +844,19 @@ requires, and it works unchanged on plain-git hosting. On platforms with
 no CODEOWNERS support the file simply sits there ignored, which is
 harmless.
 
-- **Locations, in platform precedence order**: the repository root,
-  then `.github/`, `docs/`, `.gitlab/`, `.gitea/`, `.forgejo/` and
-  `.bitbucket/`. The first file found in that order is the one evaluated
-  (src/codeowners.rs).
+- **Locations, in platform precedence order**: GitHub checks
+  `.github/CODEOWNERS` first, then the repository root and `docs/CODEOWNERS`.
+  GitLab checks the repository root first, then `docs/CODEOWNERS` and
+  `.gitlab/CODEOWNERS`. Gitea, Forgejo and Bitbucket check the repository
+  root before their platform directory. The first file found in a
+  platform's order is the one evaluated (src/codeowners.rs).
 - **Matching reuses the gitignore matcher** (gix-ignore, the gitoxide
   matcher): CODEOWNERS patterns are a subset of gitignore (no negation, no
   character ranges, no escape handling), so the matcher answers whether a
    pattern covers the `.git-veil/` directory (which carries the
    verifying key beside the keyring it protects),
-  last-match-wins. Owner strings are not validated - only the question
+  last-match-wins. GitHub skips invalid negation lines, so this advisory
+  check skips `!` patterns too. Owner strings are not validated - only the question
   does any pattern match these paths is answered. Gitea and Forgejo use a
   different pattern language; the gitignore matcher may produce false
   negatives there, and the warning is non-blocking, so a false negative
