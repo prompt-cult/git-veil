@@ -1030,6 +1030,7 @@ fn fix_case_variant_refused_by_tracked_plaintext_gate() {
 /// Hide does not false-positive on core.quotePath-quoted unicode names,
 /// because the index is read verbatim, nor on an attacker-committed file
 /// named exactly `.secret`. That file is warned about and ignored.
+#[cfg(unix)]
 #[test]
 fn fix_hide_survives_quoting_and_dot_secret_in_index() {
     let f = Fixture::new("orphan-brick");
