@@ -253,8 +253,41 @@ returns to naming exactly the ids the configured remotes derive.
 
 ## The gated-command chain
 
-Every gated command verifies the keyring signature through
-`verify_keyring_against_trust` (src/commands/verify_keys.rs):
+Algorithm 4 is the **trust-and-freshness gate**. It is separate from the
+first-encrypt allowance gate, which asks a different question: "may this
+principal encode a plaintext for the first time on this machine?" The
+table below is the gate boundary for every CLI entry point. It names the
+trust or ownership check that runs before the command does its work;
+key-store permission checking is a separate, global gate.
+
+| Command | Algorithm 4 | Allowance | Gate rationale |
+| --- | --- | --- | --- |
+| `init` | Establishes | No | proves possession of the owner signing key, then writes the pin |
+| `trust` | Establishes | No | proves possession of the owner signing key, then writes the pin |
+| `export-pin` | No | No | possession proof for exporting the pin; no keyring change |
+| `import` | No | No | key-store-only private-key import |
+| `export` | No | No | key-store-only public-key export |
+| `forget` | No | No | key-store-only private-key removal |
+| `add-key` | Yes | No | verifies the ring, then mutates and signs it |
+| `remove-key` | Yes | No | verifies the ring, then mutates, signs it and purges its allowance records |
+| `add-file` | No | Records | resolves the allowance anchor from the pin, tracks the file and records consent |
+| `allow` | No | Records | resolves the allowance anchor from the pin and records first-encrypt consent |
+| `remove-file` | No | No | changes the manifest; reads no ciphertext or trust state |
+| `list` | No | No | prints the committed manifest; no secrets are revealed |
+| `hide` | Yes | Checks and uses | verifies the ring, then applies the first-encrypt allowance to the named set |
+| `rotate` | Yes | No | re-encrypts established ciphertexts only |
+| `reveal` | Yes | No | decryption needs the verified ring, not encryption consent |
+| `cat` | Yes | No | decryption needs the verified ring |
+| `changes` | Yes | No | decryption of the prior ciphertext needs the verified ring |
+| `repo-id` | No | No | derives and prints the repository identity |
+| `whoami` | No | No | prints the principal it would use |
+| `verify-keys` | Yes | No | is the direct verification-only form of Algorithm 4 |
+| `list-keys` | Yes | No | verifies before listing, and fails closed on an invalid ring |
+| `trust-permissions` | No | No | records the deliberate key-store permission acknowledgment |
+| `error-codes` | No | No | prints the public exit-code registry |
+| `clean` | No | No | removes repository-side git-veil state after its own confirmation guard |
+| `completions` | No | No | prints shell completion data |
+| `manpages` | No | No | writes generated documentation artifacts |
 
 $$
 \begin{array}{l}
@@ -509,8 +542,10 @@ model follows git's dubious-ownership pattern:
 0600 via `write_atomic_mode`); a later check passes only if every finding
 matches an acknowledged pair exactly - permissions that later change to
 anything else fail again. The check is bypassed entirely by the global
-`--dangerously-skip-permissions-check` flag or a truthy
-`GIT_VEIL_SKIP_PERMISSIONS` environment variable.
+`--dangerously-skip-permissions-check` flag. The `GIT_VEIL_SKIP_PERMISSIONS`
+environment variable is honored only when, after trimming leading and
+trailing whitespace and ignoring case, it equals `1`, `true`, or `yes`;
+all other values are ignored.
 
 Files git-veil itself creates that hold private key material -
 `identities.txt` (via `import` and `import_x25519_private_key_to_store`) and the
