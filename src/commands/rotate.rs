@@ -283,10 +283,10 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
     // assert is the invariant the gates are supposed to establish,
     // checked at the point of commitment rather than trusted.
     let gate_cell = RotateCell {
-        security_ok: true,  // verify_keyring_against_trust passed above
+        security_ok: true,    // verify_keyring_against_trust passed above
         non_empty_ring: true, // the empty-ring bail passed above
-        stamp_match: true,  // the stamp gate passed above
-        no_orphans: true,   // the orphan gate passed above
+        stamp_match: true,    // the stamp gate passed above
+        no_orphans: true,     // the orphan gate passed above
         index_only: !index_only.is_empty(),
     };
     assert!(

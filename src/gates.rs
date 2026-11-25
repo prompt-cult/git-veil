@@ -244,8 +244,7 @@ mod tests {
         for c in all_freshness_cells() {
             let diverges =
                 freshness_reachable(&c) && cell_freshness_v175(&c) != cell_freshness_design(&c);
-            let countermodel =
-                !c.signed && c.empty && c.has_baseline && c.rel != Rel3::Above;
+            let countermodel = !c.signed && c.empty && c.has_baseline && c.rel != Rel3::Above;
             assert_eq!(diverges, countermodel, "cell {c:?}");
         }
     }
