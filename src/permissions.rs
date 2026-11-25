@@ -22,6 +22,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::exit_codes::{coded, ExitCode};
+use crate::gates::{security_gate, SecurityCell};
+
+// Evaluate the permission projection; trust is checked separately by gated commands.
+fn permissions_allowed(perms_safe: bool, bypass: bool) -> bool {
+    security_gate(&SecurityCell {
+        pin_present: true,
+        pin_match: true,
+        sig_ok: true,
+        fresh_ok: true,
+        perms_safe,
+        bypass,
+    })
+}
 
 /// One acknowledged (path, mode) pair: the exact permission state the
 /// user accepted. A later finding matches only on both fields.
@@ -103,12 +116,12 @@ fn load_acknowledgments(key_store: &Path) -> Result<Vec<AckEntry>> {
 /// Passes when every finding matches an acknowledged `(path, mode)` pair
 /// exactly. Permissions that changed to anything else fail again.
 pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
-    if skip {
+    if permissions_allowed(false, skip) {
         return Ok(());
     }
 
     let findings = find_unsafe_permissions(key_store)?;
-    if findings.is_empty() {
+    if findings.is_empty() && permissions_allowed(true, false) {
         return Ok(());
     }
 
@@ -122,7 +135,7 @@ pub fn check_key_store_permissions(key_store: &Path, skip: bool) -> Result<()> {
                 .any(|ack| ack.path == canonical && ack.mode == finding.mode)
         })
         .collect();
-    if unacked.is_empty() {
+    if permissions_allowed(unacked.is_empty(), false) {
         return Ok(());
     }
 

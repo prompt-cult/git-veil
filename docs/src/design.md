@@ -7,12 +7,14 @@ when prose elsewhere disagrees with this document or with the code, this
 document should be corrected first, then the prose. Each claim names the
 enforcing function; the named function, not any line number, is the contract.
 
-Mechanisms are specified as formal algorithms in a modified I/O automaton
+Mechanisms are explained using algorithms in a modified I/O automaton
 notation, after Algorithm 1 of Michael et al 2017, "Recovering Shared Objects
 without Stable Storage" (extended version): numbered lines; `upon` handlers for
 command invocations; `function` blocks for helpers; `guards` that refuse; state
 sections annotated with the invariant each variable carries. The algorithms
-render here in LaTeX math blocks and on the project GitHub Pages site.
+render here in LaTeX math blocks and on the project GitHub Pages site. Where a
+Lean specification exists, its definitions and theorems are linked below;
+the diagrams and prose explain the surrounding mechanism.
 
 ## Terminology: crypto terms in the core, ageisms at the boundary
 
@@ -439,25 +441,23 @@ repository next to the pin
 (`<key store>/trust-pins/<sanitized repo id>.ring-version`,
 TrustPinStore, src/trust_store.rs):
 
-$$
-\begin{array}{l}
-v \leftarrow \mathit{ring}.\mathit{version} \quad . \ \text{a versionless ring counts as 0} \\
-\textbf{if } \mathit{ring} \text{ is unsigned with zero entries then} \\
-\quad \textbf{if } B = \bot \textbf{ then return} \ . \ \text{accepted as version 0; the fresh-init state is never recorded} \\
-\quad \textbf{refuse} \ . \ \text{exit 14: on a baselined machine an unsigned ring is a rollback to no collaborators} \\
-\textbf{if } B \ne \bot \textbf{ then} \\
-\quad \textbf{if } v < B.\mathit{version} \textbf{ then refuse} \ . \ \text{exit 14: rollback} \\
-\quad \textbf{if } v = B.\mathit{version} \land \text{digest}(\mathit{ring}) \ne B.\mathit{digest} \textbf{ then refuse} \ . \ \text{exit 14: fork, equal-version substitution} \\
-\textbf{if the ring is signed then } B \leftarrow (v, \text{digest}(\mathit{ring})) \quad . \ \text{only a signed ring moves the baseline} \\
-\end{array}
-$$
+**Freshness decision (Algorithm 5).** The Lean specification is
+[`designFreshnessGate`](https://github.com/prompt-cult/git-veil/blob/main/formal/GitVeil/SecurityModel.lean)
+and the post-fix implementation model and proofs are in
+[`V018.lean`](https://github.com/prompt-cult/git-veil/blob/main/formal/GitVeil/V018.lean).
+The theorem `v18_freshness_matches_design_on_gated_rings` states that the
+modeled implementation agrees with the design after the signature gate. The
+Rust implementation is `freshness_verdict` in `src/gates.rs`, called from
+`src/commands/verify_keys.rs`. The Lean and Rust definitions are maintained
+separately: the proofs do not mechanically establish that the Rust function
+or its inputs match the Lean model.
 
-<p align="center">
-<strong>Algorithm 5 - FreshnessGate(repoId, ring) - invoked from Algorithm 4, step 14</strong><br>
-<em>Machine state: B[repoId] = (version, digest) or ⊥</em>
-</p>
+The decision covers acceptance or refusal; updating the machine-local baseline
+is a separate action in the command implementation. An accepted signed ring
+updates the baseline; an unsigned empty ring accepted at fresh initialization
+does not record one. A versionless ring counts as version zero.
 
-The fork rule (step 7) exists because two curating machines that do not
+The fork rule exists because two curating machines that do not
 pull in between would otherwise produce two differently-populated
 version-N keyrings, and the second would silently replace the first; a
 legitimate bump to a higher version is accepted and advances both version

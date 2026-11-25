@@ -1316,3 +1316,32 @@ fn test_verified_keyring_matches_file() {
         "verification must return the exact ring read for verification"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn permission_bypass_does_not_bypass_trust_and_preserves_error_order() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let f = Fixture::new("permission-bypass-trust");
+    fs::set_permissions(&f.key_store.path, fs::Permissions::from_mode(0o755)).unwrap();
+    TrustPinStore::write_pin(&f.key_store.path, TEST_REPO_ID, &"ff".repeat(32)).unwrap();
+    let run = |bypass: bool| {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"));
+        command
+            .current_dir(&f.repo.path)
+            .env("GIT_VEIL_HOME", &f.key_store.path)
+            .env_remove("GIT_VEIL_SKIP_PERMISSIONS");
+        if bypass {
+            command.arg("--dangerously-skip-permissions-check");
+        }
+        command.arg("verify-keys").output().unwrap()
+    };
+    assert_eq!(
+        run(false).status.code(),
+        Some(git_veil::ExitCode::UnsafeKeyStorePermissions as i32)
+    );
+    assert_eq!(
+        run(true).status.code(),
+        Some(git_veil::ExitCode::TrustMismatch as i32)
+    );
+}

@@ -5,12 +5,28 @@ use std::path::Path;
 use crate::age_crypto::for_each_store_line;
 use crate::exit_codes::{coded, ExitCode};
 use crate::fingerprint::{fingerprint_for_public_key, is_16_hex_pin_shape};
-use crate::gates::{freshness_verdict, FreshnessCell, FreshnessVerdict, Rel3};
+use crate::gates::{
+    freshness_verdict, security_gate, FreshnessCell, FreshnessVerdict, Rel3, SecurityCell,
+};
+
 use crate::{
     derive_repo_id, extract_content_to_verify_from_keyring, extract_signature_from_keyring,
     get_remote_push_url, keyring_content_digest, parse_verifying_key, verify_keyring_signature,
     Keyring, TrustPinStore, TrustStore,
 };
+
+// Permission checking precedes this function in the CLI. This projection
+// evaluates the trust stage without claiming that library callers checked it.
+fn trust_allowed(pin_present: bool, pin_match: bool, sig_ok: bool, fresh_ok: bool) -> bool {
+    security_gate(&SecurityCell {
+        pin_present,
+        pin_match,
+        sig_ok,
+        fresh_ok,
+        perms_safe: true,
+        bypass: false,
+    })
+}
 
 /// The refusal for a 16 hex character fingerprint, wherever it is
 /// found. Plain ASCII. It names the derivation and no command.
@@ -113,27 +129,33 @@ pub fn verify_keyring_against_trust(
     // record so a missing pin stays a missing pin and a 16-hex pin is
     // never silently compared away. Nothing is rewritten. The recovery is
     // re-establishing the pin.
-    let pinned = match TrustPinStore::read_pin(key_store, &repo_id)? {
-        Some(pinned) => {
-            if is_16_hex_pin_shape(&pinned) {
-                return Err(legacy_fingerprint_error());
-            }
-            pinned
-        }
-        None => {
-            return Err(coded(
-                ExitCode::NoTrustPin,
-                format!(
-                    "no trust pin exists on this machine for repository identity {repo_id} \
-                     derived from remote {remote_name}. See the trust documentation."
-                ),
-            ))
-        }
+    let pinned = TrustPinStore::read_pin(key_store, &repo_id)?;
+    let missing_pin = || {
+        coded(
+            ExitCode::NoTrustPin,
+            format!(
+                "no trust pin exists on this machine for repository identity {repo_id} \
+                 derived from remote {remote_name}. See the trust documentation."
+            ),
+        )
     };
+    if !trust_allowed(pinned.is_some(), true, true, true) {
+        return Err(missing_pin());
+    }
+    // Fail closed even if the gate is later changed to admit a missing pin.
+    let pinned = pinned.ok_or_else(missing_pin)?;
+    if is_16_hex_pin_shape(&pinned) {
+        return Err(legacy_fingerprint_error());
+    }
     if is_16_hex_pin_shape(trusted_fingerprint) {
         return Err(legacy_fingerprint_error());
     }
-    if !pinned.eq_ignore_ascii_case(trusted_fingerprint) {
+    if !trust_allowed(
+        true,
+        pinned.eq_ignore_ascii_case(trusted_fingerprint),
+        true,
+        true,
+    ) {
         return Err(coded(
             ExitCode::TrustMismatch,
             "the pinned repository identity changed on this machine. The committed trust record and this machine pin disagree. See the trust documentation.".to_string(),
@@ -158,14 +180,15 @@ pub fn verify_keyring_against_trust(
         let signature_b64 = extract_signature_from_keyring(&keyring_text)?;
 
         // Verify signature
-        verify_keyring_signature(&content_to_verify, &signature_b64, &verifying_key)
-            .map_err(|_| {
-                coded(
-                    ExitCode::SignatureVerificationFailed,
-                    "keyring signature verification failed. The keyring or its signature does not match the pinned trusted key.".to_string(),
-                )
-            })?;
-    } else if !keyring.entries.is_empty() {
+        let signature_valid =
+            verify_keyring_signature(&content_to_verify, &signature_b64, &verifying_key).is_ok();
+        if !trust_allowed(true, true, signature_valid, true) {
+            return Err(coded(
+                ExitCode::SignatureVerificationFailed,
+                "keyring signature verification failed. The keyring or its signature does not match the pinned trusted key.".to_string(),
+            ));
+        }
+    } else if !trust_allowed(true, true, keyring.entries.is_empty(), true) {
         return Err(coded(
             ExitCode::SignatureVerificationFailed,
             format!(
@@ -229,25 +252,28 @@ pub fn verify_keyring_against_trust(
             (Some(base_digest), Some(current)) if base_digest != current
         ),
     };
-    match freshness_verdict(&cell) {
-        FreshnessVerdict::Accept => {}
-        FreshnessVerdict::UnsignedEmptyRollback => {
-            return Err(coded(
+    let verdict = freshness_verdict(&cell);
+    if !trust_allowed(true, true, true, verdict == FreshnessVerdict::Accept) {
+        match verdict {
+            FreshnessVerdict::Accept => unreachable!("security gate rejected a fresh keyring"),
+            FreshnessVerdict::UnsignedEmptyRollback => {
+                return Err(coded(
                 ExitCode::KeyringRollback,
                 "keyring rollback refused. An unsigned empty keyring is a rollback to no collaborators on this baselined machine. See the keyring freshness documentation.".to_string(),
             ));
-        }
-        FreshnessVerdict::VersionRollback => {
-            return Err(coded(
+            }
+            FreshnessVerdict::VersionRollback => {
+                return Err(coded(
                 ExitCode::KeyringRollback,
                 "keyring rollback refused. The presented version is below this machine freshness baseline. See the keyring freshness documentation.".to_string(),
             ));
-        }
-        FreshnessVerdict::EqualVersionFork => {
-            return Err(coded(
+            }
+            FreshnessVerdict::EqualVersionFork => {
+                return Err(coded(
                 ExitCode::KeyringRollback,
                 "keyring fork refused. The keyring accepted on this machine at this version has different content than the one presented. This is an equal version substitution. See the keyring freshness documentation.".to_string(),
             ));
+            }
         }
     }
     if let Some(cd) = current_digest {

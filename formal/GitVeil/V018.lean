@@ -18,12 +18,9 @@ nowhere else. Completeness argument: the enumerated features are
 precisely the variables read by the corresponding Rust branches; no
 branch in the implementation reads anything else.
 
-The same cell functions exist in Rust in `src/gates.rs`, whose unit
-tests enumerate the same spaces; the Rust commands
+Corresponding cell functions exist in Rust in `src/gates.rs`; the Rust commands
 (`verify_keyring_against_trust`, `cmd_rotate`) construct these cells from
-observed repository state and dispatch on the pure verdicts. The two
-sides are the same mathematics in two languages; editing one without the
-other is a defect the exhaustive tests are there to catch.
+observed repository state and dispatch on the pure verdicts. The definitions are maintained separately; Lean does not check the Rust implementation.
 
 The rotate and hide fixes are additionally tied back to the full `State`
 transition model from `GitVeil.SecurityModel`: the v0.17.5 countermodel
@@ -97,19 +94,27 @@ structure FreshnessCell where
   deriving DecidableEq, Repr
 
 /-- Rings with entries but no valid signature never reach the freshness
-branches: the signature gate refuses them first. Rust:
-`gates::freshness_reachable`. -/
+branches: the signature gate refuses them first. -/
 def freshnessReachable (c : FreshnessCell) : Bool := c.signed || c.empty
 
-/-- The v0.18.x freshness gate as a cell function. Rust:
-`gates::freshness_verdict` (where `Accept` is `true`). -/
+/-- The distinct results returned by the Rust freshness gate. -/
+inductive FreshnessVerdict where
+  | accept | unsignedEmptyRollback | versionRollback | equalVersionFork
+  deriving BEq, DecidableEq, Repr
+
+def freshnessVerdictV18 (c : FreshnessCell) : FreshnessVerdict :=
+  match c.signed, c.empty, c.hasBaseline, c.rel, c.digestDiff with
+  | false, true, false, _, _ => .accept
+  | false, true, true, _, _ => .unsignedEmptyRollback
+  | _, _, false, _, _ => .accept
+  | _, _, true, .above, _ => .versionRollback
+  | true, _, true, .equal, true => .equalVersionFork
+  | _, _, true, .equal, _ => .accept
+  | _, _, true, .below, _ => .accept
+
+/-- The acceptance projection used in the design-gate theorems. -/
 def cellFreshnessV18 (c : FreshnessCell) : Bool :=
-  if !c.signed && c.empty then !c.hasBaseline
-  else if !c.hasBaseline then true
-  else match c.rel with
-    | .above => false
-    | .equal => !(c.signed && c.digestDiff)
-    | .below => true
+  freshnessVerdictV18 c == .accept
 
 /-- The design freshness gate as a cell function (Algorithm 5). -/
 def cellFreshnessDesign (c : FreshnessCell) : Bool :=
@@ -143,7 +148,7 @@ def allFreshnessCells : List FreshnessCell :=
     { signed, empty, hasBaseline, rel, digestDiff }
 
 /-- Exhaustive: on every reachable input the v0.18.x gate is the design
-gate. Rust mirror: `gates::tests::freshness_gate_is_design_on_all_48_cells`. -/
+gate. -/
 theorem exhaustive_v18_freshness_is_design :
     allFreshnessCells.all (fun c =>
       if freshnessReachable c then cellFreshnessV18 c == cellFreshnessDesign c else true) = true := by
@@ -152,8 +157,7 @@ theorem exhaustive_v18_freshness_is_design :
 /-- Exhaustive: among reachable inputs the v0.17.5 gate diverges from the
 design exactly on unsigned-empty-with-a-baseline — the recorded
 countermodel class — excluding version rollbacks both versions refuse,
-and nowhere else. Rust mirror:
-`gates::tests::v175_divergence_is_exactly_the_countermodel_class`. -/
+and nowhere else. -/
 theorem exhaustive_v175_divergence_is_exactly_the_countermodel :
     allFreshnessCells.all (fun c =>
       (freshnessReachable c && (cellFreshnessV175 c != cellFreshnessDesign c))
@@ -222,18 +226,19 @@ def rotateGateDesign (c : RotateCell) : Bool :=
 
 /-- The v0.18.x rotate gate. Rust: `gates::rotate_gate`. -/
 def rotateGateV18 (c : RotateCell) : Bool :=
-  rotateGateV175 c && !c.indexOnly
+  match c.securityOk, c.nonEmptyRing, c.stampMatch, c.noOrphans, c.indexOnly with
+  | true, true, true, true, false => true
+  | _, _, _, _, _ => false
 
 /-- Exhaustive: on all 32 inputs the v0.18.x gate is the design gate.
-Rust mirror: `gates::tests::rotate_gate_is_design_on_all_32_cells`. -/
+-/
 theorem exhaustive_v18_rotate_is_design :
     allRotateCells.all (fun c => rotateGateV18 c == rotateGateDesign c) = true := by
   decide
 
 /-- Exhaustive: the v0.17.5 gate diverges from the design exactly when
 every other gate passes and an index-only ciphertext exists — the
-countermodel class — and nowhere else. Rust mirror:
-`gates::tests::v175_rotate_divergence_is_exactly_the_countermodel_class`. -/
+countermodel class — and nowhere else. -/
 theorem exhaustive_v175_rotate_divergence_is_exactly_the_countermodel :
     allRotateCells.all (fun c =>
       (rotateGateV175 c != rotateGateDesign c)
@@ -275,7 +280,10 @@ def cellTrusted (c : SecurityCell) : Bool :=
 
 /-- The shared security gate. Rust: `gates::security_gate`. -/
 def cellSecurity (c : SecurityCell) : Bool :=
-  cellTrusted c && (c.permsSafe || c.bypass)
+  match c.pinPresent, c.pinMatch, c.sigOk, c.freshOk, c.permsSafe, c.bypass with
+  | true, true, true, true, true, _ => true
+  | true, true, true, true, false, true => true
+  | _, _, _, _, _, _ => false
 
 /-- A command is admissible only when the security gate passes and its
 own checks do. Rust: `gates::tests::cell_admissible`. -/

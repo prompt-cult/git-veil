@@ -166,10 +166,6 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
     let (repo_id, _pin_fingerprint, keyring) =
         verify_keyring_against_trust(repo_root, remote_name, key_store)?;
 
-    if keyring.entries.is_empty() {
-        anyhow::bail!("no keys in the keyring. Add a collaborator first.");
-    }
-
     // The stamp gate. Both sides must be present and equal: the version
     // and the digest of the signed content, stamped at the last ring
     // change on this machine, against the committed keyring as it verifies
@@ -180,54 +176,13 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
         (&stamp, &version, &digest),
         (Some((sv, sd)), Some(rv), Some(rd)) if sv == rv && sd == rd
     );
-    if !due {
-        return Err(coded(
-            ExitCode::Refused,
-            format!(
-                "refusing the ring-change pass: no due pass is stamped for repository identity \
-                 {repo_id} on this machine. The pass is armed only where a keyring change was \
-                 signed, and one pass consumes it. See the ring-change ceremony documentation. \
-                 Error code 70."
-            ),
-        ));
-    }
-
     // Load tracked files
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let tracked = TrackedFiles::load(&tracked_path)?;
 
-    // Parse all X25519 public key encodings
-    let public_keys: Vec<X25519PublicKey> = keyring
-        .entries
-        .iter()
-        .map(|e| parse_x25519_public_key(&e.public_key))
-        .collect::<Result<Vec<_>>>()?;
-
     // The orphan gate. It runs over the whole git index before anything is
     // rotated, because the pass rotates the whole manifest.
     let (established, orphans) = index_state(repo_root, &tracked)?;
-    if !orphans.is_empty() {
-        return Err(coded(
-            ExitCode::OrphanedCiphertext,
-            format!(
-                "refusing the ring-change pass: committed ciphertext paths are not tracked with \
-                 error code 42. Rotation would silently leave them decryptable by removed \
-                 collaborators. Re-track the paths, or delete the stale ciphertext. See the \
-                 rotation documentation. The offending committed ciphertext paths:\n  {}",
-                orphans.join("\n  ")
-            ),
-        ));
-    }
-
-    if tracked.files.is_empty() {
-        // Nothing to re-encrypt: the pass is complete, so it consumes the
-        // stamp. Files added later are encrypted to the current ring from
-        // the start.
-        RingPassStore::clear(key_store, &repo_id)?;
-        println!("No files tracked");
-        return Ok(());
-    }
-
     // A tracked path with an indexed ciphertext but no worktree copy cannot
     // be re-encrypted by this pass: rotation writes worktree files and does
     // not itself update the Git index. Refuse before any writes. An index
@@ -240,24 +195,80 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
             index_only.push(file.clone());
         }
     }
-    if !index_only.is_empty() {
-        return Err(coded(
-            ExitCode::Refused,
-            format!(
-                "refusing the ring-change pass: committed ciphertext paths are absent from the \
-                 worktree with error code 70. Rotation writes worktree files only and does not \
-                 update the Git index, so the pass cannot account for an index-only copy. Remove \
-                 each path from the index with git rm --cached, restore it to the worktree, or \
-                 resolve it explicitly before clearing the stamp. The affected committed \
-                 ciphertext paths:\n  {}",
-                index_only
-                    .iter()
-                    .map(|file| format!("{}.secret", file.to_string_lossy()))
-                    .collect::<Vec<_>>()
-                    .join("\n  ")
-            ),
-        ));
+    let gate_cell = RotateCell {
+        security_ok: true,
+        non_empty_ring: !keyring.entries.is_empty(),
+        stamp_match: due,
+        no_orphans: orphans.is_empty(),
+        index_only: !index_only.is_empty(),
+    };
+    if !rotate_gate(&gate_cell) {
+        if keyring.entries.is_empty() {
+            anyhow::bail!("no keys in the keyring. Add a collaborator first.");
+        }
+
+        if !due {
+            return Err(coded(
+                ExitCode::Refused,
+                format!(
+                    "refusing the ring-change pass: no due pass is stamped for repository identity \
+                     {repo_id} on this machine. The pass is armed only where a keyring change was \
+                     signed, and one pass consumes it. See the ring-change ceremony documentation. \
+                     Error code 70."
+                ),
+            ));
+        }
+
+        if !orphans.is_empty() {
+            return Err(coded(
+                ExitCode::OrphanedCiphertext,
+                format!(
+                    "refusing the ring-change pass: committed ciphertext paths are not tracked with \
+                     error code 42. Rotation would silently leave them decryptable by removed \
+                     collaborators. Re-track the paths, or delete the stale ciphertext. See the \
+                     rotation documentation. The offending committed ciphertext paths:\n  {}",
+                    orphans.join("\n  ")
+                ),
+            ));
+        }
+
+        if !index_only.is_empty() {
+            return Err(coded(
+                ExitCode::Refused,
+                format!(
+                    "refusing the ring-change pass: committed ciphertext paths are absent from the \
+                     worktree with error code 70. Rotation writes worktree files only and does not \
+                     update the Git index, so the pass cannot account for an index-only copy. Remove \
+                     each path from the index with git rm --cached, restore it to the worktree, or \
+                     resolve it explicitly before clearing the stamp. The affected committed \
+                     ciphertext paths:\n  {}",
+                    index_only
+                        .iter()
+                        .map(|file| format!("{}.secret", file.to_string_lossy()))
+                        .collect::<Vec<_>>()
+                        .join("\n  ")
+                ),
+            ));
+        }
+
+        anyhow::bail!("rotation security gate refused");
     }
+
+    if tracked.files.is_empty() {
+        // Nothing to re-encrypt: the pass is complete, so it consumes the
+        // stamp. Files added later are encrypted to the current ring from
+        // the start.
+        RingPassStore::clear(key_store, &repo_id)?;
+        println!("No files tracked");
+        return Ok(());
+    }
+
+    // Parse all X25519 public key encodings
+    let public_keys: Vec<X25519PublicKey> = keyring
+        .entries
+        .iter()
+        .map(|e| parse_x25519_public_key(&e.public_key))
+        .collect::<Result<Vec<_>>>()?;
 
     // The working set is every tracked path whose .secret ciphertext exists
     // on disk and is not index-only. A tracked path with neither a committed
@@ -276,23 +287,6 @@ pub fn cmd_rotate(repo_root: &Path, remote_name: &str, key_store: &Path) -> Resu
             );
         }
     }
-
-    // Every sequential gate above has passed, so the pure admissibility
-    // gate (shared with the exhaustive Lean model, `rotateGateV18` in
-    // formal/GitVeil/V018.lean) must accept this exact feature cell. The
-    // assert is the invariant the gates are supposed to establish,
-    // checked at the point of commitment rather than trusted.
-    let gate_cell = RotateCell {
-        security_ok: true,    // verify_keyring_against_trust passed above
-        non_empty_ring: true, // the empty-ring bail passed above
-        stamp_match: true,    // the stamp gate passed above
-        no_orphans: true,     // the orphan gate passed above
-        index_only: !index_only.is_empty(),
-    };
-    assert!(
-        rotate_gate(&gate_cell),
-        "rotate admissibility gate rejected a cell its sequential checks accepted"
-    );
 
     // The operator's X25519 private keys, from the local key store. Each
     // ciphertext names every keyring public key, so the member key this

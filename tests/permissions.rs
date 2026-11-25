@@ -194,3 +194,12 @@ fn test_import_writes_identities_0600() {
         & 0o777;
     assert_eq!(mode, 0o600);
 }
+
+#[test]
+fn skip_does_not_read_invalid_acknowledgments() {
+    let store = TempDir::new("skip-invalid-ack");
+    store.set_mode(0o755);
+    fs::write(store.join("permissions-ack.json"), "invalid json").unwrap();
+    assert!(check_key_store_permissions(&store.path, false).is_err());
+    check_key_store_permissions(&store.path, true).expect("bypass must not read acknowledgment");
+}

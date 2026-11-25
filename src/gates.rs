@@ -15,12 +15,8 @@
 //!   `exhaustive_security_gate_dominates`,
 //!   `exhaustive_bypass_scope_is_permissions_only`)
 //!
-//! The unit tests here re-run the same exhaustive enumerations in Rust:
-//! every cell, asserted against an independent transcription of the
-//! design gates from `docs/src/design.md`. The Lean file and this module
-//! are the same mathematics in two languages; if one is edited the other
-//! must be, and the exhaustive tests are the check that neither drifted
-//! from the design.
+//! Lean and Rust are maintained separately. Matching branch structure makes
+//! review possible; it is not a mechanical proof of Rust equivalence.
 
 /// Three-way comparison of the baseline version against the observed
 /// keyring version. Lean: `Rel3`.
@@ -73,34 +69,21 @@ pub(crate) enum FreshnessVerdict {
 /// 4. at equal versions a signed ring with different content is a fork;
 /// 5. otherwise the ring is fresh.
 pub(crate) fn freshness_verdict(cell: &FreshnessCell) -> FreshnessVerdict {
-    if !cell.signed && cell.empty {
-        return if cell.has_baseline {
-            FreshnessVerdict::UnsignedEmptyRollback
-        } else {
-            FreshnessVerdict::Accept
-        };
+    use FreshnessVerdict::*;
+    match (
+        cell.signed,
+        cell.empty,
+        cell.has_baseline,
+        cell.rel,
+        cell.digest_diff,
+    ) {
+        (false, true, false, _, _) => Accept,
+        (false, true, true, _, _) => UnsignedEmptyRollback,
+        (_, _, false, _, _) => Accept,
+        (_, _, true, Rel3::Above, _) => VersionRollback,
+        (true, _, true, Rel3::Equal, true) => EqualVersionFork,
+        (_, _, true, Rel3::Equal | Rel3::Below, _) => Accept,
     }
-    if !cell.has_baseline {
-        return FreshnessVerdict::Accept;
-    }
-    match cell.rel {
-        Rel3::Above => FreshnessVerdict::VersionRollback,
-        Rel3::Equal => {
-            if cell.signed && cell.digest_diff {
-                FreshnessVerdict::EqualVersionFork
-            } else {
-                FreshnessVerdict::Accept
-            }
-        }
-        Rel3::Below => FreshnessVerdict::Accept,
-    }
-}
-
-/// Rings with entries but no valid signature are refused by the
-/// signature gate before freshness runs. Lean: `freshnessReachable`.
-#[cfg(test)]
-fn freshness_reachable(cell: &FreshnessCell) -> bool {
-    cell.signed || cell.empty
 }
 
 /// Every feature the rotate admissibility branches read. Lean:
@@ -120,12 +103,18 @@ pub(crate) struct RotateCell {
 }
 
 /// The v0.18.x rotate admissibility gate. Lean: `rotateGateV18`.
+#[allow(clippy::match_like_matches_macro)]
 pub(crate) fn rotate_gate(cell: &RotateCell) -> bool {
-    cell.security_ok
-        && cell.non_empty_ring
-        && cell.stamp_match
-        && cell.no_orphans
-        && !cell.index_only
+    match (
+        cell.security_ok,
+        cell.non_empty_ring,
+        cell.stamp_match,
+        cell.no_orphans,
+        cell.index_only,
+    ) {
+        (true, true, true, true, false) => true,
+        _ => false,
+    }
 }
 
 /// Every feature of the shared security gate: the pin exists and matches
@@ -149,105 +138,36 @@ pub(crate) struct SecurityCell {
 
 /// The trust conjunction. Lean: `cellTrusted`.
 #[cfg_attr(not(test), allow(dead_code))]
+#[allow(clippy::match_like_matches_macro)]
 pub(crate) fn trusted(cell: &SecurityCell) -> bool {
-    cell.pin_present && cell.pin_match && cell.sig_ok && cell.fresh_ok
+    match (cell.pin_present, cell.pin_match, cell.sig_ok, cell.fresh_ok) {
+        (true, true, true, true) => true,
+        _ => false,
+    }
 }
 
 /// The security gate every mutating gated command passes through:
 /// trust holds, and the key-store permissions are safe or explicitly
 /// bypassed. Lean: `cellSecurity`.
 #[cfg_attr(not(test), allow(dead_code))]
+#[allow(clippy::match_like_matches_macro)]
 pub(crate) fn security_gate(cell: &SecurityCell) -> bool {
-    trusted(cell) && (cell.perms_safe || cell.bypass)
+    match (
+        cell.pin_present,
+        cell.pin_match,
+        cell.sig_ok,
+        cell.fresh_ok,
+        cell.perms_safe,
+        cell.bypass,
+    ) {
+        (true, true, true, true, true, _) | (true, true, true, true, false, true) => true,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The design freshness gate, transcribed independently from
-    /// `docs/src/design.md` (Algorithm 5) — NOT from `freshness_verdict`.
-    /// Lean: `cellFreshnessDesign`.
-    fn cell_freshness_design(c: &FreshnessCell) -> bool {
-        if !c.signed && c.empty {
-            return !c.has_baseline;
-        }
-        if !c.has_baseline {
-            return true;
-        }
-        match c.rel {
-            Rel3::Above => false,
-            Rel3::Equal => !c.digest_diff,
-            Rel3::Below => true,
-        }
-    }
-
-    /// The v0.17.5 freshness gate: the unsigned-empty ring sailed
-    /// through every baseline check. Lean: `cellFreshnessV175`.
-    fn cell_freshness_v175(c: &FreshnessCell) -> bool {
-        if !c.has_baseline {
-            return true;
-        }
-        match c.rel {
-            Rel3::Above => false,
-            Rel3::Equal => !(c.signed && c.digest_diff),
-            Rel3::Below => true,
-        }
-    }
-
-    /// The complete freshness input space: 2×2×2×3×2 = 48 cells.
-    fn all_freshness_cells() -> Vec<FreshnessCell> {
-        let mut cells = Vec::with_capacity(48);
-        for signed in [false, true] {
-            for empty in [false, true] {
-                for has_baseline in [false, true] {
-                    for rel in [Rel3::Below, Rel3::Equal, Rel3::Above] {
-                        for digest_diff in [false, true] {
-                            cells.push(FreshnessCell {
-                                signed,
-                                empty,
-                                has_baseline,
-                                rel,
-                                digest_diff,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        cells
-    }
-
-    /// Exhaustive: on every reachable input the gate is the design gate.
-    /// Rust mirror of Lean theorem `exhaustive_v18_freshness_is_design`.
-    #[test]
-    fn freshness_gate_is_design_on_all_48_cells() {
-        let cells = all_freshness_cells();
-        assert_eq!(cells.len(), 48);
-        for c in &cells {
-            if freshness_reachable(c) {
-                assert_eq!(
-                    freshness_verdict(c) == FreshnessVerdict::Accept,
-                    cell_freshness_design(c),
-                    "cell {c:?}"
-                );
-            }
-        }
-    }
-
-    /// Exhaustive: among reachable inputs the v0.17.5 gate diverges from
-    /// the design exactly on unsigned-empty-with-a-baseline, excluding
-    /// version rollbacks both versions refuse. Rust mirror of Lean
-    /// theorem `exhaustive_v175_divergence_is_exactly_the_countermodel`.
-    #[test]
-    fn v175_divergence_is_exactly_the_countermodel_class() {
-        for c in all_freshness_cells() {
-            let diverges =
-                freshness_reachable(&c) && cell_freshness_v175(&c) != cell_freshness_design(&c);
-            let countermodel = !c.signed && c.empty && c.has_baseline && c.rel != Rel3::Above;
-            assert_eq!(diverges, countermodel, "cell {c:?}");
-        }
-    }
 
     /// The recorded v0.17.5 countermodel cell: unsigned, empty, existing
     /// equal-version baseline. The v0.18.x gate refuses it.
@@ -264,65 +184,6 @@ mod tests {
             freshness_verdict(&cell),
             FreshnessVerdict::UnsignedEmptyRollback
         );
-    }
-
-    /// The design rotate gate from `docs/src/design.md`: the ceremony
-    /// accounts for every committed ciphertext. Lean: `rotateGateDesign`.
-    fn rotate_gate_design(c: &RotateCell) -> bool {
-        c.security_ok && c.non_empty_ring && c.stamp_match && c.no_orphans && !c.index_only
-    }
-
-    /// The v0.17.5 rotate gate: no index-only check. Lean:
-    /// `rotateGateV175`.
-    fn rotate_gate_v175(c: &RotateCell) -> bool {
-        c.security_ok && c.non_empty_ring && c.stamp_match && c.no_orphans
-    }
-
-    /// The complete rotate input space: 2⁵ = 32 cells.
-    fn all_rotate_cells() -> Vec<RotateCell> {
-        let mut cells = Vec::with_capacity(32);
-        for security_ok in [false, true] {
-            for non_empty_ring in [false, true] {
-                for stamp_match in [false, true] {
-                    for no_orphans in [false, true] {
-                        for index_only in [false, true] {
-                            cells.push(RotateCell {
-                                security_ok,
-                                non_empty_ring,
-                                stamp_match,
-                                no_orphans,
-                                index_only,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        cells
-    }
-
-    /// Exhaustive: on all 32 inputs the gate is the design gate. Rust
-    /// mirror of Lean theorem `exhaustive_v18_rotate_is_design`.
-    #[test]
-    fn rotate_gate_is_design_on_all_32_cells() {
-        let cells = all_rotate_cells();
-        assert_eq!(cells.len(), 32);
-        for c in &cells {
-            assert_eq!(rotate_gate(c), rotate_gate_design(c), "cell {c:?}");
-        }
-    }
-
-    /// Exhaustive: the v0.17.5 gate diverges exactly when every other
-    /// gate passes and an index-only ciphertext exists. Rust mirror of
-    /// Lean theorem `exhaustive_v175_rotate_divergence_is_exactly_the_countermodel`.
-    #[test]
-    fn v175_rotate_divergence_is_exactly_the_countermodel_class() {
-        for c in all_rotate_cells() {
-            let diverges = rotate_gate_v175(&c) != rotate_gate_design(&c);
-            let countermodel =
-                c.security_ok && c.non_empty_ring && c.stamp_match && c.no_orphans && c.index_only;
-            assert_eq!(diverges, countermodel, "cell {c:?}");
-        }
     }
 
     /// The complete security-gate input space: 2⁶ = 64 cells.

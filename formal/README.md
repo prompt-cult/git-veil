@@ -17,13 +17,12 @@ this model describes the vulnerable version by intent.
 **v0.18.1**, in-progress v0.18.2 bump) and kernel-checks them by exhaustive
 truth table: the complete enumerated input space of each gate (48 freshness
 cells, 32 rotate cells, 64 security-composition cells) is decided cell by
-cell. The same cell functions exist in Rust in `src/gates.rs`; its unit
-tests enumerate the same spaces, and the commands construct the cells from
-observed repository state (`verify_keyring_against_trust` dispatches on the
-pure freshness verdict; `cmd_rotate` asserts its gate cell holds at the
-point of commitment). The two sides are the same mathematics in two
-languages; editing one without the other is a defect the exhaustive tests
-are there to catch. The theorems assert that the v0.18.x gates equal the
+cell. `tests/lean_gate_correspondence.rs` builds the Lean model, evaluates
+`GateTable.lean`, and compares every generated result with `src/gates.rs`,
+including all freshness refusal classes and unreachable cells. The commands
+construct cells from observed repository state; this comparison does not
+prove those constructions or command transitions correct. The theorems
+assert that the v0.18.x gates equal the
 documented design gates on every reachable input, that the v0.17.5 gates
 diverge from the design on exactly the recorded countermodel classes and
 nowhere else, that the countermodel states are now refused, and that
@@ -42,7 +41,8 @@ lake build
 
 The project pins Lean in `lean-toolchain`. `lake build` elaborates the model
 and checks every theorem with Lean's kernel; no git-veil runtime tests are
-part of this formal project.
+part of this formal project. The Rust correspondence test requires `lake`
+and the pinned toolchain and runs as part of `cargo test --locked`.
 
 ## What the model states
 
