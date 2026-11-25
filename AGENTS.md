@@ -10,6 +10,10 @@ When committing changes to this repository:
 - Follow conventional commit style: `<type>: <description>`
 - Types include: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `wip`
 
+## NEVER ALTER THE USER'S GIT IDENTITY (law)
+
+It is FORBIDDEN to change the git identity on any host: no `git config --global user.name` / `user.email`, no editing `~/.gitconfig` or `$XDG_CONFIG_HOME/git/config`, no `GIT_AUTHOR_*` / `GIT_COMMITTER_*` outside a child process you spawn. The operator's identity is not a test fixture. If a task appears to need it, stop and Andon.
+
 ## Andon 行灯 - Stop the Line
 
 If the best and correct fix lies outside your assigned lane:

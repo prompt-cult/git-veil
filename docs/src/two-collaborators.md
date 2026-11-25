@@ -85,6 +85,9 @@ $ git-veil import alice-age-identity.txt
 Summary: 1 imported, 0 skipped
 ```
 
+Never add `--global` to that `git config`. It is local to this clone, and a
+machine's git identity is never altered by this book.
+
 She imports only her own X25519 private key into her local key store. Exit
 code 21 tells anyone missing one exactly how to create and back it up. Then
 she pins the owner key. Pinning is per machine, and her machine holds no

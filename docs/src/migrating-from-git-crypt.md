@@ -210,6 +210,9 @@ shasum -a 256 .env config/credentials.yml  # must match plaintext-before.sha256
 git-veil changes                           # "unchanged" everywhere, nothing pending
 ```
 
+Never add `--global` to that `git config user.email`. It is local to this
+clone, and a machine's git identity is never altered by this book.
+
 What happened. The clone arrived with ciphertext and a signed keyring
 but no trust pin. The first gated command fails closed until `trust`
 pins the owner key on that machine. `reveal` then decrypted every tracked
