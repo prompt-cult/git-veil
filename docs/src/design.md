@@ -569,8 +569,8 @@ tracked.json (`TrackedFiles::save`), trust.json and pins (`TrustStore`,
 `TrustPinStore`), the private-key/public-key/verifying-key stores
 (`cmd_import`, `import_x25519_private_key_to_store`,
 `import_x25519_public_key_to_store`, `cmd_trust`), ciphertext (`cmd_hide`),
-restored plaintext (`cmd_reveal`), export output (`cmd_export`), the
-`forget` rewrite (`cmd_forget`), and the permissions acknowledgment
+restored plaintext (`cmd_reveal`), export output (`cmd_export`),
+`.gitignore` (`ensure_gitignored`), the `forget` rewrite (`cmd_forget`), and the permissions acknowledgment
 (`cmd_trust_permissions`). Key-store appends are implemented as read-existing
 plus `write_atomic` of the whole accumulated content - an accepted O(n) trade
 so a torn private-key store (which would brick all decryption) is impossible.
@@ -630,7 +630,10 @@ Algorithm 9 (`src/commands/add_file.rs`, `src/commands/hide.rs`,
 
 1. **Add-time gitignore gate** (`ensure_gitignored`): like git-secret, `add-file`
    runs `git check-ignore` on the plaintext path and appends it to
-   `.gitignore` when not already ignored.
+   `.gitignore` when not already ignored. A missing `.gitignore` is the
+   only empty baseline; read errors refuse. Updates are atomic, and
+   git-veil commands share an advisory lock so concurrent updates cannot
+   replace each other and lose rules.
 2. **Ciphertext-ignored refusal**: a `.secret` path can be silently swallowed
    by an unrelated broad rule (e.g. a parent directory like `.tmp/` in
    `.gitignore`) - `add-file` would succeed and the ciphertext would never reach
@@ -726,13 +729,17 @@ ring change into ciphertext, and the only whole-manifest pass.
   re-encrypts it to the current ring, two-phase and all-or-nothing
   (Algorithm 8). The ciphertext is the input: plaintexts are never read,
   written, deleted or compared, so a stale on-disk plaintext cannot
-  enter the data path and no reveal step exists in the ceremony. A
-  tracked path with no `.secret` on disk is skipped with a note. There
-  is no allowance question: every rotated ciphertext is committed to the
-  git index, so it is established. The orphan gate runs over the whole
-  git index before anything is re-encrypted, refusing any committed
-  ciphertext whose path is no longer tracked (exit 42). When the pass
-  completes, the stamp is cleared: one pass per ring change.
+  enter the data path and no reveal step exists in the ceremony.
+  Rotation writes worktree files; it does not update the Git index.
+  Before any write, a tracked path whose indexed ciphertext is absent
+  from the worktree refuses with exit code 70: an index-only copy would
+  otherwise stay on the old ring while the pass claimed completion.
+  The orphan gate runs over the whole git index before anything is
+  re-encrypted, refusing any committed ciphertext whose path is no
+  longer tracked (exit 42). A tracked path with neither an indexed nor
+  an on-disk ciphertext has nothing to re-encrypt and is skipped with
+  a note. When the pass completes, the stamp is cleared: one pass per
+  ring change.
 - **The notice.** `add-key` and `remove-key` print one plain line when
   they stamp: `note: the keyring has changed. To re-encrypt to the
   updated keyring, run the rotate command.` The line states the fact and

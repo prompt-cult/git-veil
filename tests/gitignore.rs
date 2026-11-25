@@ -170,3 +170,79 @@ fn add_file_encodes_trailing_space_rules() {
         "git check-ignore must confirm the trailing-space rule"
     );
 }
+
+#[test]
+fn add_file_preserves_existing_rules() {
+    let fixture = Fixture::new("preserve-rules");
+    std::fs::write(fixture.repo.join(".gitignore"), "existing\n").unwrap();
+
+    fixture.add_file("secret.txt", b"secret\n");
+
+    let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap();
+    assert!(gitignore.contains("existing"));
+    assert!(gitignore.contains("secret.txt"));
+}
+
+#[test]
+fn add_file_refuses_a_gitignore_read_error() {
+    let fixture = Fixture::new("read-error");
+    let gitignore = fixture.repo.join(".gitignore");
+    if gitignore.is_file() {
+        fs::remove_file(&gitignore).unwrap();
+    }
+    fs::create_dir(&gitignore).unwrap();
+    fs::write(fixture.repo.join("secret.txt"), b"secret\n").unwrap();
+
+    let result = cmd_add_file(
+        &fixture.repo.path,
+        vec!["secret.txt".to_string()],
+        "origin",
+        &fixture.key_store.path,
+    );
+
+    assert!(result.is_err());
+    assert!(fixture.repo.join(".gitignore").is_dir());
+}
+
+#[test]
+fn add_file_preserves_concurrent_rules() {
+    let fixture = Fixture::new("concurrent-rules");
+    fs::write(fixture.repo.join("one.txt"), b"one\n").unwrap();
+    fs::write(fixture.repo.join("two.txt"), b"two\n").unwrap();
+
+    let handles = vec![
+        {
+            let repo = fixture.repo.path.clone();
+            let key_store = fixture.key_store.path.clone();
+            std::thread::spawn(move || {
+                cmd_add_file(&repo, vec!["one.txt".to_string()], "origin", &key_store)
+                    .expect("add file one");
+            })
+        },
+        {
+            let repo = fixture.repo.path.clone();
+            let key_store = fixture.key_store.path.clone();
+            std::thread::spawn(move || {
+                cmd_add_file(&repo, vec!["two.txt".to_string()], "origin", &key_store)
+                    .expect("add file two");
+            })
+        },
+    ];
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let gitignore = fs::read_to_string(fixture.repo.join(".gitignore")).unwrap();
+    assert!(gitignore.contains("one.txt"));
+    assert!(gitignore.contains("two.txt"));
+
+    for entry in fs::read_dir(&fixture.repo.path).unwrap() {
+        let path = entry.unwrap().path();
+        let file_name = path.file_name().unwrap().to_string_lossy().to_string();
+        assert!(
+            !file_name.starts_with(".gitignore.tmp-"),
+            "no temporary gitignore files remain: {file_name}"
+        );
+    }
+}

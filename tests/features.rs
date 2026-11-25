@@ -1180,6 +1180,65 @@ fn test_rotate_refuses_without_a_due_stamp() {
     );
 }
 
+/// Rotation accounts for an indexed ciphertext that is missing from the
+/// worktree. The pass cannot remove it from the index, so it must refuse
+/// before any worktree writes and must not consume the due stamp.
+#[test]
+fn test_rotate_refuses_indexed_ciphertext_absent_from_worktree() {
+    let f = Fixture::new("rotate-index-only");
+
+    let alice = f.add_collab("alice@example.com");
+    f.import_id(&alice, "alice.age");
+
+    f.add_file(".env", b"API_KEY=1\n");
+    cmd_hide(
+        &f.repo.path,
+        "origin",
+        &f.key_store.path,
+        false,
+        vec![".env".to_string()],
+    )
+    .expect("hide");
+
+    let stage = std::process::Command::new("git")
+        .current_dir(&f.repo.path)
+        .args(["add", "-A"])
+        .status()
+        .expect("git add")
+        .success();
+    assert!(stage, "the committed ciphertext must reach the index");
+
+    // The index still holds .env.secret, but the pass has no file to read
+    // and no way to write its rotated replacement into the index.
+    fs::remove_file(f.repo.join(".env.secret")).unwrap();
+
+    let bob = f.add_collab("bob@example.com");
+    f.import_id(&bob, "bob.age");
+
+    let stamp_before = RingPassStore::read(&f.key_store.path, TEST_REPO_ID).unwrap();
+    let err = cmd_rotate(&f.repo.path, "origin", &f.key_store.path)
+        .expect_err("an index-only tracked ciphertext refuses the pass");
+    assert_eq!(
+        exit_code_of(&err),
+        git_veil::ExitCode::Refused as i32,
+        "the index-only gate refuses with the policy code 70"
+    );
+    let message = format!("{:#}", err);
+    assert!(
+        message.contains("does not update the Git index") && message.contains(".env.secret"),
+        "the refusal states the index boundary and names the path: {message}"
+    );
+    assert_eq!(
+        RingPassStore::read(&f.key_store.path, TEST_REPO_ID).unwrap(),
+        stamp_before,
+        "a refused pass does not consume the stamp"
+    );
+    assert!(
+        !f.repo.join(".env.secret").exists(),
+        "nothing is rotated when the pass refuses"
+    );
+}
+
 #[test]
 fn test_rotate_re_encrypts_every_tracked_ciphertext() {
     let f = Fixture::new("rotate-reencrypt");

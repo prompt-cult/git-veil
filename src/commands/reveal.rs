@@ -16,7 +16,7 @@ use crate::{decrypt_with_x25519_private_key, verify_keyring_against_trust, Track
 /// Refuses (exit 43) when the tracked plaintext path is tracked in the git
 /// index. See docs/src/design.md "Ignore safety" gate 4.
 fn ensure_not_tracked_in_git(repo_root: &Path, file: &Path) -> Result<()> {
-    if is_tracked_in_git(repo_root, file) {
+    if is_tracked_in_git(repo_root, file)? {
         return Err(coded(
             ExitCode::PlaintextTracked,
             "refusing to overwrite a file tracked in git. It is repository content \

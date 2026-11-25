@@ -815,6 +815,7 @@ dependencies = [
  "gix-glob",
  "gix-ignore",
  "hex",
+ "libc",
  "predicates",
  "rand 0.8.6",
  "regex",
