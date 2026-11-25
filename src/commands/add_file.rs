@@ -30,14 +30,47 @@ pub fn cmd_add_file(
     key_store: &std::path::Path,
 ) -> Result<()> {
     let tracked_path = repo_root.join(".git-veil/tracked.json");
-    let mut tracked = TrackedFiles::load(&tracked_path)?;
+    let gitignore_path = repo_root.join(".gitignore");
+    let gitignore_existed = gitignore_path.exists();
+    let gitignore_original = if gitignore_existed {
+        Some(
+            std::fs::read_to_string(&gitignore_path)
+                .with_context(|| "Failed to read .gitignore".to_string())?,
+        )
+    } else {
+        None
+    };
+
+    let result = add_files(repo_root, files, remote_name, key_store, &tracked_path);
+    if let Err(error) = result {
+        restore_gitignore(&gitignore_path, gitignore_original, gitignore_existed)?;
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+/// Validates and applies add-file in dependency order.
+///
+/// Every path resolves and is safely ignored in two phases. The manifest
+/// save happens before any allowance append. A later failure therefore
+/// cannot leave standing first-encrypt consent that was not in the saved
+/// manifest.
+fn add_files(
+    repo_root: &Path,
+    files: Vec<String>,
+    remote_name: &str,
+    key_store: &std::path::Path,
+    tracked_path: &Path,
+) -> Result<()> {
+    let mut tracked = TrackedFiles::load(tracked_path)?;
 
     let (repo_id, pin) = resolve_allowance_anchor(repo_root, remote_name, key_store)?;
     let principal = get_git_config_email(repo_root).context(
         "add-file records the allowance with the manifest nomination, which needs your git config user.email",
     )?;
 
-    let mut count = 0;
+    let mut resolved = Vec::with_capacity(files.len());
     for file in &files {
         let relative = resolve_repo_relative_input(
             repo_root,
@@ -45,29 +78,43 @@ pub fn cmd_add_file(
             PathResolveMode::CanonicaliseRequireExists,
             "track",
         )?;
-        let relative_str = relative.to_string_lossy().to_string();
+        if resolved.contains(&relative) {
+            continue;
+        }
+        resolved.push(relative);
+    }
 
+    for value in &resolved {
+        let relative_str = value.to_string_lossy().to_string();
         ensure_gitignored(repo_root, &relative_str)?;
-
-        // A .secret swallowed by a broad ignore rule, such as a parent
-        // directory like .tmp/, would silently never reach the repository.
-        // Add succeeds, but the ciphertext beside the plaintext is
-        // untrackable. Warn now. Hide refuses outright before encrypting.
         let secret_relative = format!("{}.secret", relative_str);
         if is_gitignored(repo_root, &secret_relative)? {
             println!(
                 "warning: a ciphertext path is git-ignored with error code 40 so it will never reach the repository. Fix .gitignore before hiding"
             );
         }
-
-        tracked.add(relative.clone());
-        AllowanceStore::record(key_store, &repo_id, &pin, &principal, &relative)?;
-        count += 1;
+        tracked.add(value.clone());
     }
 
-    tracked.save(&tracked_path)?;
-    println!("added {} files", count);
+    tracked.save(tracked_path)?;
+
+    for value in &resolved {
+        AllowanceStore::record(key_store, &repo_id, &pin, &principal, value)?;
+    }
+
+    println!("added {} files", resolved.len());
     Ok(())
+}
+
+fn restore_gitignore(path: &Path, original: Option<String>, existed: bool) -> Result<()> {
+    match (existed, original) {
+        (true, Some(content)) => std::fs::write(path, content)
+            .with_context(|| "Failed to restore .gitignore".to_string()),
+        (true, None) => {
+            std::fs::write(path, "").with_context(|| "Failed to restore .gitignore".to_string())
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Runs `git check-ignore` for one repo-relative path: true when git

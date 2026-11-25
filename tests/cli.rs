@@ -11,8 +11,9 @@ use git_veil::cli::{Cli, Commands};
 use git_veil::{
     cmd_add_file, cmd_add_key, cmd_cat, cmd_changes, cmd_clean, cmd_forget, cmd_hide, cmd_import,
     cmd_init, cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal,
-    cmd_verify_keys, cmd_whoami, exit_code_of, export_public_key, generate_signing_keypair,
-    generate_x25519_private_key, x25519_public_key_encoding, ExitCode, Keyring, TrackedFiles,
+    cmd_verify_keys, cmd_whoami, derive_repo_id, exit_code_of, export_public_key,
+    generate_signing_keypair, generate_x25519_private_key, get_remote_push_url,
+    x25519_public_key_encoding, AllowanceStore, ExitCode, Keyring, TrackedFiles, TrustPinStore,
     TrustStore,
 };
 use std::fs;
@@ -559,6 +560,73 @@ fn test_verify_keys_fails_without_trust() {
 // ---------------------------------------------------------------------------
 // add-file + list + remove-file
 // ---------------------------------------------------------------------------
+
+#[cfg(unix)]
+#[test]
+fn test_failed_add_file_leaves_no_allowance() {
+    let fixture = TestRepo::new("failed-add-file-allowance");
+
+    fs::write(fixture.repo.join("good.txt"), b"good\n").unwrap();
+    let repo_id =
+        derive_repo_id(&get_remote_push_url(&fixture.repo.path, "origin").unwrap()).unwrap();
+    let pin = TrustPinStore::read_pin(&fixture.key_store.path, &repo_id)
+        .unwrap()
+        .unwrap();
+    let principal = "owner@example.com";
+    let good = PathBuf::from("good.txt");
+
+    let result = cmd_add_file(
+        &fixture.repo.path,
+        vec!["good.txt".to_string(), "missing.txt".to_string()],
+        "origin",
+        &fixture.key_store.path,
+    );
+    assert!(result.is_err(), "a missing second path must refuse");
+
+    let tracked = TrackedFiles::load(&fixture.repo.path.join(".git-veil/tracked.json")).unwrap();
+    assert!(
+        !tracked.files.contains(&good),
+        "a failed add-file must not track the earlier path"
+    );
+    assert!(
+        !AllowanceStore::contains(&fixture.key_store.path, &repo_id, &pin, principal, &good),
+        "a failed add-file must not leave standing consent"
+    );
+}
+
+#[test]
+fn test_successful_add_file_records_allowance() {
+    let fixture = TestRepo::new("successful-add-file-allowance");
+
+    fs::write(fixture.repo.join(".env"), b"SECRET=value\n").unwrap();
+    let repo_id =
+        derive_repo_id(&get_remote_push_url(&fixture.repo.path, "origin").unwrap()).unwrap();
+    let pin = TrustPinStore::read_pin(&fixture.key_store.path, &repo_id)
+        .unwrap()
+        .unwrap();
+    let encrypted = PathBuf::from(".env");
+
+    cmd_add_file(
+        &fixture.repo.path,
+        vec![".env".to_string()],
+        "origin",
+        &fixture.key_store.path,
+    )
+    .expect("add-file");
+
+    let tracked = TrackedFiles::load(&fixture.repo.path.join(".git-veil/tracked.json")).unwrap();
+    assert!(tracked.files.contains(&encrypted));
+    assert!(
+        AllowanceStore::contains(
+            &fixture.key_store.path,
+            &repo_id,
+            &pin,
+            "owner@example.com",
+            &encrypted
+        ),
+        "a successful add-file must record the allowance"
+    );
+}
 
 #[test]
 fn test_add_file_and_list_files() {
