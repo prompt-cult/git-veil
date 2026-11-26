@@ -231,5 +231,10 @@ jobs:
             sha256sum -c "$asset.sha256"
           done
           test "$(find . -maxdepth 1 -type f | wc -l)" -eq 14
-          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes ./*
+          notes="../release-source/release-notes/$RELEASE_TAG.md"
+          if test -f "$notes"; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --notes-file "$notes" ./*
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes ./*
+          fi
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
