@@ -74,13 +74,14 @@ fn init_state_from(repo_root: &Path, key_store_dir: &Path, quiet: bool, suppress
     )
     .unwrap();
 
-    git_veil::cmd_init(
+    git_veil::cmd_init_with_tips(
         repo_root,
         &key_store_dir.join("owner.verifying"),
         "origin",
         key_store_dir,
         quiet,
         suppress,
+        !quiet,
     )
     .expect("init runs the pin ceremony");
 }
@@ -252,10 +253,10 @@ fn test_suppression_is_per_repository_and_recorded_in_the_key_store() {
 }
 
 #[test]
-fn test_init_suggestion_respects_quiet_and_the_coverage_gate() {
-    // Not quiet and nothing covered. cmd_init must not fail and the state
-    // directory must exist. The suggestion is printed to stdout, which
-    // these cmd-level tests cannot capture.
+fn test_init_tips_respect_opt_in_and_the_coverage_gate() {
+    // Tips enabled and nothing covered. cmd_init must not fail and the
+    // state directory must exist. The suggestion is printed to stderr,
+    // which these cmd-level tests cannot capture.
     let repo = TempDir::new("init-suggest");
     init_git_repo(&repo.path);
     {

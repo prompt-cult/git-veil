@@ -29,6 +29,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub dangerously_skip_permissions_check: bool,
 
+    /// Print optional next-step guidance for successful setup and trust commands
+    #[arg(long, global = true)]
+    pub tips: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -66,8 +70,8 @@ EXAMPLES
         /// Git remote name
         #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
-        /// Suppress the CODEOWNERS suggestion and other non-error output
-        #[arg(long, short = 'q')]
+        /// Legacy opt-out for setup guidance; tips are already off by default
+        #[arg(long, short = 'q', hide = true)]
         quiet: bool,
         /// Suppress the CODEOWNERS warning for this pinned repository; the suppression is
         /// recorded in the key store next to the pin
@@ -262,9 +266,11 @@ repository worktree: a committed pin would be exactly the self-supplied
 anchor the pin model exists to prevent. Keep stdout pins out of the
 worktree the same way.
 
-The owner key fingerprint, on stderr, is the human out-of-band
-verification token: read it to the importing machine's operator and have
-them compare it against the repository's committed .git-veil/trust.json.
+With --tips, the owner key fingerprint and handoff guidance are printed on
+stderr for the importing machine's operator. Without --tips, export-pin
+prints only the pin artifact (or the --outfile result line), so redirects
+remain machine-clean. Compare the fingerprint against the repository's
+committed .git-veil/trust.json before importing.
 It is the single documented derivation with the repository id as the
 label, so it is reproducible with stock OS tools; see the fingerprint
 documentation.

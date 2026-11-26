@@ -57,8 +57,12 @@ You should backup the private keys such as add them into the Apple password appl
 
 ## 2. Initialize, import, identify
 
+> **Tip:** Setup and trust commands are quiet by default. Add `--tips` to
+> print their next-step guidance on stderr. Everyday `add-file`, `remove-file`,
+> `reveal`, and `hide` do not need tips.
+
 ```sh
-$ git-veil init "$HOME/.git-veil/owner.verifying"
+$ git-veil --tips init "$HOME/.git-veil/owner.verifying"
 git-veil initialized
 trusted the repository owner key
 pinned this repository owner key on this machine

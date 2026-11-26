@@ -34,8 +34,12 @@ Read the public key encoding or its fingerprint to her over a voice call,
 or use any channel an attacker cannot rewrite. Then the owner adds her to
 the keyring:
 
+> **Tip:** Key handoff and trust ceremonies are quiet by default. Add
+> `--tips` to print the next-step guidance on stderr; ordinary file work
+> remains factual output only.
+
 ```sh
-$ git-veil add-key alice@example.com age1xxxx
+$ git-veil --tips add-key alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
@@ -64,7 +68,7 @@ The owner also exports the repository's pin-file for Alice. She holds no
 signing key, so the pin-file is the only way she can pin:
 
 ```sh
-$ git-veil export-pin demo+example@github.com > /tmp/demo.pin
+$ git-veil --tips export-pin demo+example@github.com > /tmp/demo.pin
 owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de (stderr)
 ```
 
@@ -94,7 +98,7 @@ she pins the owner key. Pinning is per machine, and her machine holds no
 signing key, so she imports the pin-file the owner sent her:
 
 ```sh
-$ git-veil trust --import ~/demo.pin
+$ git-veil --tips trust --import ~/demo.pin
 trusted the repository owner key
 pinned this repository owner key on this machine
 warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.

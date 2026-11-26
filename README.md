@@ -125,6 +125,11 @@ git-veil generates no keys. It only reads keys you created and own. If a
 command needs a key you do not have, it tells you how to make one and how to
 back it up.
 
+Successful setup and trust commands print factual results only by default.
+Use the global `--tips` flag when you want next-step guidance on stderr;
+errors remain on stderr with their documented nonzero exit code. The daily
+`add-file`, `remove-file`, `reveal`, and `hide` cycle does not need tips.
+
 ```sh
 git-veil init ~/.git-veil/owner.verifying        # create .git-veil/ state, pin the owner key
 git-veil import my-age-identity.txt             # import your X25519 private key into the local key store

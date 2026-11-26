@@ -29,10 +29,14 @@ You can only reveal files that were encrypted after you were added. You
 can only pin from a pin-file the owner exported. The owner runs this on
 their machine, which holds the signing key:
 
+> **Tip:** `export-pin`, `trust`, and key-ring changes are quiet by default.
+> Add `--tips` when you want the next-step guidance on stderr; the pin
+> artifact remains clean on stdout.
+
 ```sh
-$ git-veil export-pin demo+example@github.com > /tmp/demo.pin
+$ git-veil --tips export-pin demo+example@github.com > /tmp/demo.pin
 owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de (stderr)
-$ git-veil add-key newcomer@example.com age1xxxx
+$ git-veil --tips add-key newcomer@example.com age1xxxx
 added newcomer@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
@@ -122,7 +126,7 @@ See [Commands - repo-id](commands.md#repo-id).
 ### 4. Import the pin-file - per machine
 
 ```sh
-$ git-veil trust --import ~/demo.pin
+$ git-veil --tips trust --import ~/demo.pin
 trusted the repository owner key
 pinned this repository owner key on this machine
 warning: no CODEOWNERS file covers the .git-veil directory. Trust anchor changes are not review gated on the platform.

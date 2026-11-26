@@ -19,10 +19,13 @@ Understand the semantics before you rely on them:
 
 ## 1. What the owner runs
 
+> **Tip:** `remove-key` is quiet by default. Add `--tips` to print the
+> rotate next step on stderr after the keyring changes.
+
 Remove bob, then deliver the ring-change pass:
 
 ```sh
-$ git-veil remove-key bob@example.com
+$ git-veil --tips remove-key bob@example.com
 removed bob@example.com from the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 $ git-veil rotate

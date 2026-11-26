@@ -111,7 +111,7 @@ $ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -outform DER \
 $ openssl pkey -in "$HOME/.git-veil/ed25519.pem" -pubout -outform DER \
   | tail -c 32 | xxd -p -c 32 > "$HOME/.git-veil/owner.verifying"
 $ age-keygen -o my-age-identity.txt
-$ git-veil init "$HOME/.git-veil/owner.verifying"
+$ git-veil --tips init "$HOME/.git-veil/owner.verifying"
 git-veil initialized
 trusted the repository owner key
 pinned this repository owner key on this machine
@@ -139,7 +139,7 @@ X25519 public key encoding itself, pasted as text, so each collaborator
 sends the `age1xxxx` line their `git-veil export` prints:
 
 ```sh
-$ git-veil add-key alice@example.com age1xxxx
+$ git-veil --tips add-key alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 ```
@@ -192,7 +192,7 @@ $ git config user.email alice@example.com
 $ git-veil import alice-age-identity.txt      # once per machine
 $ git-veil repo-id                             # print the ID trust wants
 demo+example@github.com
-$ git-veil trust --import ~/demo.pin          # pin-file from the owner, out of band
+$ git-veil --tips trust --import ~/demo.pin          # pin-file from the owner, out of band
 trusted the repository owner key
 pinned this repository owner key on this machine
 $ git-veil list-keys

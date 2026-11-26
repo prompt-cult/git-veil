@@ -15,6 +15,25 @@ chapters is one fetch away. READ THIS FIRST:
 
     https://prompt-cult.github.io/git-veil/llms.txt
 
+## Tips are opt-in
+
+The CLI follows Unix stream behavior by default: successful commands print
+their factual result, failures print errors on stderr and exit nonzero, and
+setup guidance is silent. Add the global `--tips` flag when a human wants
+next-step advice on stderr:
+
+```sh
+git-veil --tips init "$HOME/.git-veil/owner.verifying"
+git-veil --tips add-key alice@example.com age1xxxx
+git-veil --tips trust --import /tmp/repo.pin
+git-veil --tips remove-key alice@example.com
+```
+
+The daily `add-file`, `remove-file`, `reveal`, and `hide` cycle does not need
+tips; use its normal factual output. `--tips` never changes the exit code:
+success is 0, and failures keep their documented nonzero code and error on
+stderr.
+
 ## Recon before you act
 
 ```sh

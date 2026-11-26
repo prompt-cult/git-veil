@@ -31,6 +31,7 @@ subcommand):
 |------|--------|
 | `--git-veil-home <dir>` | Key store directory. Default: `$GIT_VEIL_HOME` or `$HOME/.git-veil` |
 | `--dangerously-skip-permissions-check` | Bypass the key store permission checks (exit 30). Also settable as `GIT_VEIL_SKIP_PERMISSIONS=1` |
+| `--tips` | Opt into next-step guidance on stderr for setup and trust ceremonies; off by default |
 
 Accepted by every command that resolves the repository identity:
 
@@ -55,7 +56,7 @@ sharing one store across repositories that do not trust each other.
 ### `init`
 
 ```sh
-git-veil init <verifying-key> [--git-remote <name>] [-q | --quiet] [--suppress-codeowners]
+git-veil [--tips] init <verifying-key> [--git-remote <name>] [--suppress-codeowners]
               [--git-veil-home <dir>]
 ```
 
@@ -77,11 +78,12 @@ exactly match the verifying key derived from a seed in the key store's
   is untouched. A degenerate duplicate seed store is exit 70.
 - A configured remote is required; the repository id derived from it
   labels the pin, the committed trust record and the owner fingerprint.
+- `--tips` opts into the CODEOWNERS suggestion. It is off by default so a
+  successful setup command emits no unsolicited advice. The suggestion is
+  worth acting on: protect `.git-veil/` with a CODEOWNERS file so
+  trust-anchor changes are review gated on the platform.
 - `--suppress-codeowners` records the CODEOWNERS warning suppression
-  beside the pin. `-q`, `--quiet` suppresses the CODEOWNERS suggestion
-  and other non-error output. The suggestion is worth acting on: protect
-  `.git-veil/` with a CODEOWNERS file so trust-anchor changes are review
-  gated on the platform.
+  beside the pin.
 - `init` never touches `.gitignore`. The `.secret` ciphertexts are meant
   to be committed, so gitignoring them would defeat the fresh-clone
   decryptability contract.
@@ -91,11 +93,11 @@ exactly match the verifying key derived from a seed in the key store's
   and commit the removal if you really want a fresh start. Exit 70.
 
 ```sh
-$ git-veil init "$HOME/.git-veil/owner.verifying"
+$ git-veil --tips init "$HOME/.git-veil/owner.verifying"
 git-veil initialized
 trusted the repository owner key
 pinned this repository owner key on this machine
-suggestion: protect the trust-critical paths with a CODEOWNERS file ...
+suggestion: protect the trust-critical paths with a CODEOWNERS file ...  # stderr
 ```
 
 ### `import`
@@ -210,9 +212,9 @@ clones, imports. The pin-file must live outside the repository worktree
 committed. A pin or trust record in the 16-hex-character fingerprint
 format is refused as hostile until trust is re-established (exit 70).
 
-`--suppress-codeowners` records the CODEOWNERS warning's suppression in
-the key store next to the pin, for repositories that genuinely cannot
-carry a CODEOWNERS file.
+`--tips` opts into the CODEOWNERS warning on stderr. `--suppress-codeowners`
+records the CODEOWNERS warning's suppression in the key store next to the
+pin, for repositories that genuinely cannot carry a CODEOWNERS file.
 
 Requires [init](#init) first: it creates the `.git-veil/` directory that
 holds the committed verifying key the import checks, and every trust
@@ -251,16 +253,13 @@ and never into the repository worktree.
   point outside the repository worktree; exit 71 otherwise: a committed
   pin-file would be exactly the self-supplied anchor the pin model
   exists to prevent.
-- The owner key fingerprint is printed on stderr - chatter never shares
-  the artifact's stdout, so a redirect captures the pin alone. The
-  fingerprint is the human out-of-band verification token: read it to
-  the importing machine's operator and have them compare it with the
-  fingerprint recorded in the committed `.git-veil/trust.json` before
-  importing.
+- `--tips` prints the owner fingerprint and handoff guidance on stderr.
+  Without `--tips`, export-pin prints only the pin artifact (or the
+  `--outfile` result line), so redirects remain machine-clean.
 
 ```sh
-$ git-veil export-pin demo+example@github.com > /tmp/demo.pin
-owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de (on stderr)
+$ git-veil --tips export-pin demo+example@github.com > /tmp/demo.pin
+owner key fingerprint: f722e9afe322ac443cbc4c69dc236b5a03afa81f86011726b2a7285c173b63de  # stderr
 $ git-veil export-pin demo+example@github.com | ssh box 'cat > demo.pin'
 $ git-veil trust --import demo.pin             # on the box
 ```
@@ -380,9 +379,9 @@ Requires [init](#init), an established pin ([trust](#trust)) and the
 signing key in the local key store.
 
 ```sh
-$ git-veil add-key alice@example.com age1xxxx
+$ git-veil --tips add-key alice@example.com age1xxxx
 added alice@example.com to the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.  # stderr
 ```
 
 Exit codes: 20 (missing signing key), 61 (the canary would not encrypt),
@@ -412,9 +411,9 @@ Fails closed on a tampered or unsigned keyring, and on an email that is
 not in the ring.
 
 ```sh
-$ git-veil remove-key bob@example.com
+$ git-veil --tips remove-key bob@example.com
 removed bob@example.com from the keyring
-note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
+note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.  # stderr
 ```
 
 Exit codes: 20 (missing signing key), 22 (email not in the ring), plus the
@@ -653,7 +652,7 @@ never consults or consumes the stamp: for day-to-day work, name the
 files you touched and reserve `rotate` for the ceremony.
 
 ```sh
-$ git-veil add-key alice@example.com age1xxxx
+$ git-veil --tips add-key alice@example.com age1xxxx
 added alice@example.com to the keyring
 note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.
 $ git-veil rotate
