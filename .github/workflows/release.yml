@@ -191,6 +191,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes from shipped changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          python3 scripts/generate-release-notes.py "$GITHUB_REPOSITORY" "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
 
       # Assets are attached by the build and man-pages jobs against the
       # same tag. This final pass attaches the release body. Files
@@ -199,25 +208,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          body: |
-            ## git-veil ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-
-            ### Downloads
-            - Linux (x86_64): `git-veil-linux-x86_64`
-            - macOS (x86_64): `git-veil-macos-x86_64`
-            - macOS (Apple Silicon): `git-veil-macos-aarch64`
-            - Windows (x86_64): `git-veil-windows-x86_64.exe` and `git-veil-windows-x86_64.msi` (uploaded by the independent Windows job)
-            - Man pages: `git-veil-man-pages.tar.gz`
-
-            SHA-256 checksums are provided for every asset (`*.sha256`).
-
-            ### Installation
-            ```bash
-            chmod +x git-veil-*
-            sudo mv git-veil-linux-x86_64 /usr/local/bin/git-veil
-            ```
-
-            ### Documentation
-            Tutorials and guides live in [docs/](https://github.com/prompt-cult/git-veil/tree/main/docs):
-            solo workflows, two-collaborator setup, joining and departing
-            repos, and migrations from git-crypt / git-secret.
+          body_path: ${{ runner.temp }}/release-notes.md
