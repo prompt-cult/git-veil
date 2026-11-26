@@ -23,16 +23,9 @@ on:
       - 'scripts/gen-plain-txt.py'
       - 'scripts/gen-crawler-meta.py'
       - '.github/workflows/pages.yml'
+  # This job is required by branch protection, including for non-docs PRs.
   pull_request:
     branches: [main]
-    paths:
-      - 'docs/**'
-      - 'book.toml'
-      - 'SKILL.md'
-      - 'README.md'
-      - 'scripts/gen-plain-txt.py'
-      - 'scripts/gen-crawler-meta.py'
-      - '.github/workflows/pages.yml'
   # Manual rebuilds: Actions tab - pages - Run workflow, or
   # `gh workflow run pages`. The deploy is gated on push, so a manual run
   # must also be able to deploy; see the dispatch condition below.

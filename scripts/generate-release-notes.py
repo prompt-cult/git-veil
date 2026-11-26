@@ -87,7 +87,7 @@ def main() -> int:
             "- Linux (x86_64): `git-veil-linux-x86_64`",
             "- macOS (x86_64): `git-veil-macos-x86_64`",
             "- macOS (Apple Silicon): `git-veil-macos-aarch64`",
-            "- Windows (x86_64): `git-veil-windows-x86_64.exe` and `git-veil-windows-x86_64.msi`",
+            "- Windows (x86_64): `git-veil-windows-x86_64.exe`, `git-veil-windows-x86_64.msi`, and `git-veil-windows-x86_64-portable.zip`",
             "- Man pages: `git-veil-man-pages.tar.gz`",
             "",
             "SHA-256 checksums are provided for every asset (`*.sha256`).",

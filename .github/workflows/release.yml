@@ -18,34 +18,46 @@ permissions:
   contents: write
 
 jobs:
-  prepare-release:
+  resolve-tag:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
     steps:
-      - name: Ensure the release exists before uploading platform assets
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - name: Verify release tag and main ancestry
+        id: resolve
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
         run: |
-          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"; then
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
-          fi
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
+          test "$RELEASE_TAG" = "v$version"
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   windows-msi:
-    needs: prepare-release
+    needs: resolve-tag
     uses: ./.github/workflows/windows-msi.yml
     with:
-      tag: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      tag: ${{ needs.resolve-tag.outputs.commit }}
 
   # Fuzz smoke is part of the release itself, so the agent monitoring the
   # release build sees a fuzz crash as a release failure. It does not run
   # on PRs or main pushes (see fuzz-smoke.yml).
   fuzz-smoke:
-    needs: prepare-release
+    needs: resolve-tag
     uses: ./.github/workflows/fuzz-smoke.yml
+    with:
+      tag: ${{ needs.resolve-tag.outputs.commit }}
 
   build-release:
-    needs: prepare-release
+    needs: resolve-tag
     name: Build Release - ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -69,6 +81,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.commit }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -117,21 +131,24 @@ jobs:
             sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
           fi
 
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+      - name: Stage release assets
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          files: |
+          name: release-${{ matrix.asset_name }}
+          path: |
             ${{ matrix.asset_name }}
             ${{ matrix.asset_name }}.sha256
 
   man-pages:
+    needs: resolve-tag
     name: Man Pages
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.commit }}
 
       - name: Install Rust toolchain
         run: |
@@ -170,42 +187,64 @@ jobs:
           tar -czf git-veil-man-pages.tar.gz -C docs man
           sha256sum git-veil-man-pages.tar.gz > git-veil-man-pages.tar.gz.sha256
 
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+      - name: Stage release assets
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          files: |
+          name: release-man-pages
+          path: |
             git-veil-man-pages.tar.gz
             git-veil-man-pages.tar.gz.sha256
 
   create-release:
     name: Create Release
-    # windows-msi is a required gate: a release is only published when the
-    # Windows x86_64 assets built and uploaded successfully (see issue #86 -
-    # v0.17.2 shipped without them because this job's failure did not block).
-    # fuzz-smoke is equally required: a fuzz crash fails the release the
-    # agent watches.
-    needs: [build-release, man-pages, windows-msi, fuzz-smoke]
+    needs: [resolve-tag, build-release, man-pages, windows-msi, fuzz-smoke]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
-      - name: Checkout code
+      - name: Download staged release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify tag still points to the tested commit
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          path: release-source
           fetch-depth: 0
-
+      - name: Check tag commit
+        env:
+          EXPECTED_COMMIT: ${{ needs.resolve-tag.outputs.commit }}
+        shell: bash
+        run: test "$(git -C release-source rev-parse HEAD)" = "$EXPECTED_COMMIT"
       - name: Generate release notes from shipped changes
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
         run: |
-          python3 scripts/generate-release-notes.py "$GITHUB_REPOSITORY" "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
-
-      # Assets are attached by the build and man-pages jobs against the
-      # same tag. This final pass attaches the release body. Files
-      # already uploaded are left untouched.
-      - name: Create / annotate release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          body_path: ${{ runner.temp }}/release-notes.md
+          set -euo pipefail
+          python3 release-source/scripts/generate-release-notes.py "$GITHUB_REPOSITORY" "$RELEASE_TAG" > "$RUNNER_TEMP/generated-notes.md"
+          notes="release-source/release-notes/$RELEASE_TAG.md"
+          if test -f "$notes"; then
+            cat "$notes" "$RUNNER_TEMP/generated-notes.md" > "$RUNNER_TEMP/release-notes.md"
+          else
+            cp "$RUNNER_TEMP/generated-notes.md" "$RUNNER_TEMP/release-notes.md"
+          fi
+      - name: Verify staged assets and publish once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          for asset in git-veil-linux-x86_64 git-veil-macos-x86_64 git-veil-macos-aarch64 git-veil-man-pages.tar.gz git-veil-windows-x86_64.exe git-veil-windows-x86_64.msi git-veil-windows-x86_64-portable.zip; do
+            test -f "$asset"
+            test -f "$asset.sha256"
+            sha256sum -c "$asset.sha256"
+          done
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 14
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --notes-file "$RUNNER_TEMP/release-notes.md" ./*
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

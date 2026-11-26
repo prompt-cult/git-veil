@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag to build and attach to (for example, v0.7.0)'
+        description: 'Git tag or commit to build as a CI artifact'
         required: true
         type: string
 
@@ -122,7 +122,7 @@ jobs:
       - name: Upload MSI workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: git-veil-windows-x86_64-${{ inputs.tag }}
+          name: release-windows-x86_64
           path: |
             git-veil-windows-x86_64.msi
             git-veil-windows-x86_64.msi.sha256
@@ -130,30 +130,3 @@ jobs:
             git-veil-windows-x86_64.exe.sha256
             git-veil-windows-x86_64-portable.zip
             git-veil-windows-x86_64-portable.zip.sha256
-
-      - name: Check whether the tag has a GitHub release
-        id: release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: |
-          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) {
-            'exists=true' >> $env:GITHUB_OUTPUT
-          } else {
-            'exists=false' >> $env:GITHUB_OUTPUT
-          }
-          exit 0
-
-      - name: Attach Windows packages to existing GitHub release
-        if: steps.release.outputs.exists == 'true'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY git-veil-windows-x86_64.msi git-veil-windows-x86_64.msi.sha256 git-veil-windows-x86_64.exe git-veil-windows-x86_64.exe.sha256 git-veil-windows-x86_64-portable.zip git-veil-windows-x86_64-portable.zip.sha256
-
-      - name: Report missing GitHub release
-        if: steps.release.outputs.exists != 'true'
-        run: Write-Host 'The MSI is available as this workflow artifact; no existing release matched the selected ref.'

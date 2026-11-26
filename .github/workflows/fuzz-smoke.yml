@@ -13,6 +13,11 @@ name: Fuzz Smoke
 on:
   workflow_call:
     inputs:
+      tag:
+        description: Release tag to test
+        required: false
+        type: string
+        default: ''
       docs_changed:
         description: Whether the release push changed docs only
         required: false
@@ -46,6 +51,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Install nightly toolchain
         run: |
