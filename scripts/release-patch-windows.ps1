@@ -1,8 +1,6 @@
 # The Windows mirror of `release-patch` (see the brew-justfile on origin/brew-justfile):
 # bump -> tag -> push -> wait for the release and MSI workflows -> winget manifest prep -> fork branch.
-# The final compare URL is printed and opened in the browser; that page's
-# "Create pull request" click - the winget submission itself - stays with the owner.
-# No agent submits anything to winget on the owner's behalf (ticket #86).
+# WinGet submission is a separate, tested step; see push-winget-fork.ps1.
 [CmdletBinding()]
 param(
     [string]$Slug = "prompt-cult/git-veil",
@@ -51,7 +49,4 @@ function Wait-Workflow([string]$Workflow) {
     throw "$Workflow never completed on v$new"
 }
 Wait-Workflow release.yml  # release.yml calls windows-msi.yml and (after the fix) gates on it
-# 3. Winget prep: generate + validate manifests, push the fork branch (prep only;
-#    the Create pull request click stays with the owner, ticket #86).
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "push-winget-fork.ps1") -Version $new -PackageIdentifier $PackageIdentifier -Slug $Slug -WingetUpstream $WingetUpstream -ForkOwner $ForkOwner
-if ($LASTEXITCODE -ne 0) { throw "push-winget-fork.ps1 failed with exit code $LASTEXITCODE" }
+Write-Host "Release completed. Verify the Windows artifacts and follow the WinGet submission steps in scripts/push-winget-fork.ps1."
