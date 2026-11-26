@@ -23,6 +23,7 @@ on:
       - 'scripts/gen-plain-txt.py'
       - 'scripts/gen-crawler-meta.py'
       - '.github/workflows/pages.yml'
+  # This job is required by branch protection, including for non-docs PRs.
   pull_request:
     branches: [main]
   # Manual rebuilds: Actions tab - pages - Run workflow, or
