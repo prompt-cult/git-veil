@@ -83,7 +83,7 @@ PackageName: git-veil
 PackageUrl: https://github.com/prompt-cult/git-veil
 License: MIT OR Apache-2.0
 LicenseUrl: https://github.com/prompt-cult/git-veil/blob/$Tag/LICENSE
-Copyright: Copyright (c) git-veil contributors
+Copyright: Copyright (c) 2026 Simon J. Massey
 Author: Simon J. Massey
 ShortDescription: $description
 Documentations:
