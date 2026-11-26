@@ -212,11 +212,26 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           path: release-source
+          fetch-depth: 0
       - name: Check tag commit
         env:
           EXPECTED_COMMIT: ${{ needs.resolve-tag.outputs.commit }}
         shell: bash
         run: test "$(git -C release-source rev-parse HEAD)" = "$EXPECTED_COMMIT"
+      - name: Generate release notes from shipped changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 release-source/scripts/generate-release-notes.py "$GITHUB_REPOSITORY" "$RELEASE_TAG" > "$RUNNER_TEMP/generated-notes.md"
+          notes="release-source/release-notes/$RELEASE_TAG.md"
+          if test -f "$notes"; then
+            cat "$notes" "$RUNNER_TEMP/generated-notes.md" > "$RUNNER_TEMP/release-notes.md"
+          else
+            cp "$RUNNER_TEMP/generated-notes.md" "$RUNNER_TEMP/release-notes.md"
+          fi
       - name: Verify staged assets and publish once
         env:
           GH_TOKEN: ${{ github.token }}
@@ -231,10 +246,5 @@ jobs:
             sha256sum -c "$asset.sha256"
           done
           test "$(find . -maxdepth 1 -type f | wc -l)" -eq 14
-          notes="../release-source/release-notes/$RELEASE_TAG.md"
-          if test -f "$notes"; then
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --notes-file "$notes" ./*
-          else
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes ./*
-          fi
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --notes-file "$RUNNER_TEMP/release-notes.md" ./*
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
