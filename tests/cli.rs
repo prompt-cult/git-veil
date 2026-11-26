@@ -561,6 +561,12 @@ fn test_verify_keys_fails_without_trust() {
 // add-file + list + remove-file
 // ---------------------------------------------------------------------------
 
+#[test]
+fn test_tips_is_a_global_opt_in_flag() {
+    let cli = Cli::try_parse_from(["git-veil", "--tips", "repo-id"]).expect("--tips parses");
+    assert!(cli.tips);
+}
+
 #[cfg(unix)]
 #[test]
 fn test_failed_add_file_leaves_no_allowance() {
@@ -2176,12 +2182,10 @@ fn test_hide_all_is_a_clap_usage_error() {
     );
 }
 
-/// The ring-change note names the follow-up command. The note prints on
-/// every add-key and remove-key, so the operator is never left guessing
-/// what delivers the pass. The note is a hint, not report data: it
-/// prints on stderr, keeping stdout for the factual report.
+/// Ring-change guidance is opt-in. The default remains Unix-clean: the
+/// factual report is on stdout and a successful command has no stderr tips.
 #[test]
-fn test_add_key_and_remove_key_note_names_rotate() {
+fn test_add_key_and_remove_key_tips_name_rotate() {
     let fixture = TestRepo::new("rotate-note");
 
     let collab_identity = generate_x25519_private_key();
@@ -2204,17 +2208,12 @@ fn test_add_key_and_remove_key_note_names_rotate() {
         String::from_utf8_lossy(&out.stderr)
     );
     let stderr = String::from_utf8(out.stderr).expect("add-key stderr is utf8");
-    assert!(
-        stderr.contains(
-            "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
-        ),
-        "add-key prints the rotate note on stderr: {stderr}"
-    );
+    assert!(stderr.is_empty(), "tips are silent by default: {stderr}");
 
-    let out = run(&["remove-key", "bob@example.com"]);
+    let out = run(&["--tips", "remove-key", "bob@example.com"]);
     assert!(
         out.status.success(),
-        "remove-key failed: {}",
+        "remove-key with tips failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     let stderr = String::from_utf8(out.stderr).expect("remove-key stderr is utf8");
@@ -2222,7 +2221,26 @@ fn test_add_key_and_remove_key_note_names_rotate() {
         stderr.contains(
             "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
         ),
-        "remove-key prints the rotate note on stderr: {stderr}"
+        "--tips prints the rotate note on stderr: {stderr}"
+    );
+
+    let out = run(&["add-key", "bob@example.com", &recipient]);
+    assert!(
+        out.status.success(),
+        "add-key after removal failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8(out.stderr).expect("remove-key stderr is utf8");
+    assert!(stderr.is_empty(), "tips are silent by default: {stderr}");
+
+    let out = run(&["--tips", "remove-key", "bob@example.com"]);
+    assert!(out.status.success(), "remove-key with tips failed");
+    let stderr = String::from_utf8(out.stderr).expect("remove-key stderr is utf8");
+    assert!(
+        stderr.contains(
+            "note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command."
+        ),
+        "--tips prints the rotate note on stderr: {stderr}"
     );
 }
 

@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_git_veil_global_optspecs
-    string join \n dangerously-skip-permissions-check h/help V/version
+    string join \n dangerously-skip-permissions-check tips h/help V/version
 end
 
 function __fish_git_veil_needs_command
@@ -25,6 +25,7 @@ function __fish_git_veil_using_subcommand
 end
 
 complete -c git-veil -n "__fish_git_veil_needs_command" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_needs_command" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_needs_command" -s h -l help -d 'Print help'
 complete -c git-veil -n "__fish_git_veil_needs_command" -s V -l version -d 'Print version'
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "init" -d 'Initialize git-veil state (.git-veil/) in the current repository'
@@ -57,106 +58,133 @@ complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "manpages" -d 'Wri
 complete -c git-veil -n "__fish_git_veil_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it' -r -F
-complete -c git-veil -n "__fish_git_veil_using_subcommand init" -s q -l quiet -d 'Suppress the CODEOWNERS suggestion and other non-error output'
+complete -c git-veil -n "__fish_git_veil_using_subcommand init" -s q -l quiet -d 'Legacy opt-out for setup guidance; tips are already off by default'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -l suppress-codeowners -d 'Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand init" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand init" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand import" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand import" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand import" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand import" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l outfile -d 'Write the public key encoding to this file instead of stdout' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand export" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand forget" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand forget" -l yes -d 'Confirm destructive removal: required when the target is the only private key in the store'
 complete -c git-veil -n "__fish_git_veil_using_subcommand forget" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand forget" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand forget" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l import -d 'Import a pin-file produced by git-veil export-pin on a machine holding the signing key' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l suppress-codeowners -d 'Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l outfile -d 'Write the pin to a file instead of stdout - must be OUTSIDE the repository worktree' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand export-pin" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand fingerprint" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand fingerprint" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand fingerprint" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-key" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-key" -l signing-key -d 'Signing key to use: its full 64-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-key" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-key" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand add-key" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-key" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l signing-key -d 'Signing key to use: its full 64-hex Ed25519 verifying key (default: the key matching the pinned fingerprint)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l force -d 'Explicitly add this .secret plaintext path (repeat for each forced file)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l git-remote -d 'Git remote name (derives the repository id for the allowance store)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand allow" -l git-remote -d 'Git remote name (derives the repository id for the allowance store)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand allow" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand allow" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand allow" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-file" -l keep-ciphertext -d 'Leave the <name>.secret ciphertext in place (hide will refuse it as an orphan)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-file" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand remove-file" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-file" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand list" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand list" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand list" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l keep-plaintext -d 'Skip best-effort shredding and leave plaintext files beside their ciphertexts'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand rotate" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand rotate" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand rotate" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand rotate" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand rotate" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand reveal" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand cat" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l email -d 'Your email address' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand changes" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand repo-id" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand repo-id" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand repo-id" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand repo-id" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l email -d 'Email override' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand whoami" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keys" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keys" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keys" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keys" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand verify-keys" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand list-keys" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust-permissions" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust-permissions" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand trust-permissions" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand trust-permissions" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand error-codes" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand error-codes" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand error-codes" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand clean" -l yes -d 'Confirm destruction of tracked state and any ciphertext. Required when the clean would destroy tracked files or their in-place `<name>.secret` ciphertext (which may be the only remaining copy)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand clean" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand clean" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand clean" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand completions" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand completions" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand completions" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand manpages" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
+complete -c git-veil -n "__fish_git_veil_using_subcommand manpages" -l tips -d 'Print optional next-step guidance for successful setup and trust commands'
 complete -c git-veil -n "__fish_git_veil_using_subcommand manpages" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand help; and not __fish_seen_subcommand_from init import export forget trust export-pin fingerprint add-key remove-key add-file allow remove-file list hide rotate reveal cat changes repo-id whoami verify-keys list-keys trust-permissions error-codes clean completions manpages help" -f -a "init" -d 'Initialize git-veil state (.git-veil/) in the current repository'
 complete -c git-veil -n "__fish_git_veil_using_subcommand help; and not __fish_seen_subcommand_from init import export forget trust export-pin fingerprint add-key remove-key add-file allow remove-file list hide rotate reveal cat changes repo-id whoami verify-keys list-keys trust-permissions error-codes clean completions manpages help" -f -a "import" -d 'Import your X25519 private key into the git-veil key store'

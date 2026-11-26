@@ -24,6 +24,17 @@ pub fn cmd_export_pin(
     remote_name: &str,
     key_store: &Path,
 ) -> Result<()> {
+    cmd_export_pin_with_tips(repo_root, repo_id, output, remote_name, key_store, false)
+}
+
+pub fn cmd_export_pin_with_tips(
+    repo_root: &Path,
+    repo_id: &str,
+    output: Option<&Path>,
+    remote_name: &str,
+    key_store: &Path,
+    tips: bool,
+) -> Result<()> {
     derive_and_check_repo_id(repo_root, remote_name, repo_id)?;
 
     // Same possession proof as trust: no matching seed, no export.
@@ -36,10 +47,10 @@ pub fn cmd_export_pin(
     };
 
     // The owner key fingerprint (the single derivation with the repository
-    // id as the label) is the human out-of-band verification token: read
-    // it to the importing machine's operator and have them compare it
-    // against the repository's committed metadata. Chatter lives on
-    // stderr so a redirected stdout captures the pin artifact alone.
+    // id as the label) is the optional human out-of-band verification
+    // token: read it to the importing machine's operator and have them
+    // compare it against the repository's committed metadata. Tips live
+    // on stderr so a redirected stdout captures the pin artifact alone.
     //
     // With --outfile the artifact goes to the file. The destination must
     // not land inside the repository: it would be committed, and a
@@ -52,18 +63,24 @@ pub fn cmd_export_pin(
             ensure_path_outside_repo(repo_root, path)?;
             write_pin_file(path, &pin_file)?;
             println!("pin-file written to {}", path.display());
-            eprintln!("owner key fingerprint: {}", pin_file.owner_fingerprint());
-            eprintln!(
-                "import it on the target machine with: git-veil trust --import {}",
-                path.display()
-            );
-            eprintln!("keep pin-files out of the repository worktree");
+            if tips {
+                eprintln!("owner key fingerprint: {}", pin_file.owner_fingerprint());
+                eprintln!(
+                    "import it on the target machine with: git-veil trust --import {}",
+                    path.display()
+                );
+                eprintln!("keep pin-files out of the repository worktree");
+            }
         }
         None => {
             print!("{}", pin_file.serialize());
-            eprintln!("owner key fingerprint: {}", pin_file.owner_fingerprint());
-            eprintln!("import it on the target machine with: git-veil trust --import <pin-file>");
-            eprintln!("keep stdout's pin out of the repository worktree");
+            if tips {
+                eprintln!("owner key fingerprint: {}", pin_file.owner_fingerprint());
+                eprintln!(
+                    "import it on the target machine with: git-veil trust --import <pin-file>"
+                );
+                eprintln!("keep stdout's pin out of the repository worktree");
+            }
         }
     }
     Ok(())

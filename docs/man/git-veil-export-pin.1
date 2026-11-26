@@ -44,9 +44,11 @@ repository worktree: a committed pin would be exactly the self\-supplied
 anchor the pin model exists to prevent. Keep stdout pins out of the
 worktree the same way.
 
-The owner key fingerprint, on stderr, is the human out\-of\-band
-verification token: read it to the importing machine\*(Aqs operator and have
-them compare it against the repository\*(Aqs committed .git\-veil/trust.json.
+With \-\-tips, the owner key fingerprint and handoff guidance are printed on
+stderr for the importing machine\*(Aqs operator. Without \-\-tips, export\-pin
+prints only the pin artifact (or the \-\-outfile result line), so redirects
+remain machine\-clean. Compare the fingerprint against the repository\*(Aqs
+committed .git\-veil/trust.json before importing.
 It is the single documented derivation with the repository id as the
 label, so it is reproducible with stock OS tools; see the fingerprint
 documentation.

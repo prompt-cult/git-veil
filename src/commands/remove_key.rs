@@ -19,6 +19,24 @@ pub fn cmd_remove_key(
     key_store: &Path,
     signing_key_selection: Option<&str>,
 ) -> Result<()> {
+    cmd_remove_key_with_tips(
+        repo_root,
+        email_to_remove,
+        remote_name,
+        key_store,
+        signing_key_selection,
+        false,
+    )
+}
+
+pub fn cmd_remove_key_with_tips(
+    repo_root: &Path,
+    email_to_remove: &str,
+    remote_name: &str,
+    key_store: &Path,
+    signing_key_selection: Option<&str>,
+    tips: bool,
+) -> Result<()> {
     // Verify trust is established and the existing keyring signature
     // against the trusted key before any mutation. An unsigned keyring is
     // only acceptable when it has zero entries (the fresh-init state). A
@@ -99,6 +117,8 @@ pub fn cmd_remove_key(
     // follow-up command. After a removal the pass is the rotation step:
     // without it, existing ciphertext stays decryptable by the removed
     // principal. A future-action hint: stderr, never stdout.
-    eprintln!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
+    if tips {
+        eprintln!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
+    }
     Ok(())
 }

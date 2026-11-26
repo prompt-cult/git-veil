@@ -16,6 +16,7 @@ _git-veil() {
     local context curcontext="$curcontext" state line
     _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \
@@ -33,10 +34,11 @@ _git-veil() {
 _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
-'-q[Suppress the CODEOWNERS suggestion and other non-error output]' \
-'--quiet[Suppress the CODEOWNERS suggestion and other non-error output]' \
+'-q[Legacy opt-out for setup guidance; tips are already off by default]' \
+'--quiet[Legacy opt-out for setup guidance; tips are already off by default]' \
 '--suppress-codeowners[Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':verifying_key -- Path to the repo owner'\''s Ed25519 verifying key file, from outside the repository:_files' \
@@ -46,6 +48,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) containing AGE-SECRET-KEY-1... lines (age-keygen output works as-is):_default' \
@@ -56,6 +59,7 @@ _arguments "${_arguments_options[@]}" : \
 '--outfile=[Write the public key encoding to this file instead of stdout]:OUTPUT:_files' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':identifier -- X25519 public key encoding (age1xxxx) of the key to export:_default' \
@@ -66,6 +70,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--yes[Confirm destructive removal\: required when the target is the only private key in the store]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':identifier -- Exact X25519 public key encoding (age1xxxx) of the key to remove:_default' \
@@ -78,6 +83,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil). The store and its pins are the trust boundary for every repository that uses it]:KEY_STORE:_files' \
 '--suppress-codeowners[Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -88,6 +94,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':repo_id -- Repository ID (e.g., fara+simbo1905@github.com):_default' \
@@ -96,6 +103,7 @@ _arguments "${_arguments_options[@]}" : \
 (fingerprint)
 _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':label -- Principal label (keyring principal) or repository id (owner key):_default' \
@@ -108,6 +116,7 @@ _arguments "${_arguments_options[@]}" : \
 '--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Collaborator'\''s email:_default' \
@@ -120,6 +129,7 @@ _arguments "${_arguments_options[@]}" : \
 '--signing-key=[Signing key to use\: its full 64-hex Ed25519 verifying key (default\: the key matching the pinned fingerprint)]:VERIFYING_KEY:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':email -- Email of the collaborator to remove:_default' \
@@ -130,6 +140,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--force=[Explicitly add this .secret plaintext path (repeat for each forced file)]:FILE:_default' \
 '--git-remote=[Git remote name (derives the repository id for the allowance store)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) to add:_default' \
@@ -139,6 +150,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name (derives the repository id for the allowance store)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) to allow:_default' \
@@ -148,6 +160,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--keep-ciphertext[Leave the <name>.secret ciphertext in place (hide will refuse it as an orphan)]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) to remove:_default' \
@@ -156,6 +169,7 @@ _arguments "${_arguments_options[@]}" : \
 (list)
 _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -166,6 +180,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--keep-plaintext[Skip best-effort shredding and leave plaintext files beside their ciphertexts]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- Tracked files to hide:_default' \
@@ -176,6 +191,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -186,6 +202,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- Tracked files to reveal:_default' \
@@ -197,6 +214,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':file -- File to decrypt:_default' \
@@ -208,6 +226,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '*::files -- File(s) to check (default\: all tracked files):_default' \
@@ -217,6 +236,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -226,6 +246,7 @@ _arguments "${_arguments_options[@]}" : \
 '--email=[Email override]:EMAIL:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -235,6 +256,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -244,6 +266,7 @@ _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -252,6 +275,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -259,6 +283,7 @@ _arguments "${_arguments_options[@]}" : \
 (error-codes)
 _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -267,6 +292,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--yes[Confirm destruction of tracked state and any ciphertext. Required when the clean would destroy tracked files or their in-place \`<name>.secret\` ciphertext (which may be the only remaining copy)]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 && ret=0
@@ -274,6 +300,7 @@ _arguments "${_arguments_options[@]}" : \
 (completions)
 _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':shell -- Shell to generate completions for:(bash elvish fish powershell zsh)' \
@@ -282,6 +309,7 @@ _arguments "${_arguments_options[@]}" : \
 (manpages)
 _arguments "${_arguments_options[@]}" : \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
+'--tips[Print optional next-step guidance for successful setup and trust commands]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 '::output_dir -- Directory to write the .1 files into (default\: ./man):_files' \

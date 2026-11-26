@@ -6,9 +6,8 @@ use std::process::ExitCode as StdExitCode;
 use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin,
-    cmd_fingerprint, cmd_forget, cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys,
-    cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal, cmd_rotate, cmd_trust,
+    cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_fingerprint, cmd_forget, cmd_hide,
+    cmd_import, cmd_list, cmd_list_keys, cmd_remove_file, cmd_repo_id, cmd_reveal, cmd_rotate,
     cmd_trust_permissions, cmd_verify_keys, cmd_whoami, default_key_store, exit_code_of,
     get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
 };
@@ -86,6 +85,7 @@ fn run() -> Result<()> {
     }
 
     let cli = Cli::parse();
+    let tips = cli.tips;
     let skip_permissions_check =
         cli.dangerously_skip_permissions_check || permissions_check_bypassed_from_env();
     let repo_root = std::env::current_dir()?;
@@ -98,13 +98,14 @@ fn run() -> Result<()> {
             suppress_codeowners,
             key_store: opt,
         } => {
-            cmd_init(
+            git_veil::cmd_init_with_tips(
                 &repo_root,
                 &verifying_key,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
                 quiet,
                 suppress_codeowners,
+                tips,
             )?;
         }
         Commands::Import {
@@ -146,12 +147,13 @@ fn run() -> Result<()> {
             key_store: opt,
         } => {
             let key_store = resolve_key_store(opt, skip_permissions_check)?;
-            cmd_trust(
+            git_veil::cmd_trust_with_tips(
                 &repo_root,
                 &import,
                 &remote,
                 &key_store,
                 suppress_codeowners,
+                tips,
             )?;
         }
         Commands::ExportPin {
@@ -160,12 +162,13 @@ fn run() -> Result<()> {
             remote,
             key_store: opt,
         } => {
-            cmd_export_pin(
+            git_veil::cmd_export_pin_with_tips(
                 &repo_root,
                 &repo_id,
                 output.as_deref(),
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
+                tips,
             )?;
         }
         Commands::Fingerprint { label, public_key } => {
@@ -178,13 +181,14 @@ fn run() -> Result<()> {
             signing_key,
             key_store: opt,
         } => {
-            cmd_add_key(
+            git_veil::cmd_add_key_with_tips(
                 &repo_root,
                 &email,
                 &public_key,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
                 signing_key.as_deref(),
+                tips,
             )?;
         }
         Commands::RemoveKey {
@@ -193,12 +197,13 @@ fn run() -> Result<()> {
             signing_key,
             key_store: opt,
         } => {
-            cmd_remove_key(
+            git_veil::cmd_remove_key_with_tips(
                 &repo_root,
                 &email,
                 &remote,
                 &resolve_key_store(opt, skip_permissions_check)?,
                 signing_key.as_deref(),
+                tips,
             )?;
         }
         Commands::AddFile {

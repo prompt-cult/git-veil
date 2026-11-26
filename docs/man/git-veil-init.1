@@ -4,16 +4,13 @@
 .SH NAME
 git\-veil\-init \- Initialize git\-veil state (.git\-veil/) in the current repository
 .SH SYNOPSIS
-\fBgit\-veil init\fR [\fB\-\-git\-remote\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIVERIFYING_KEY\fR> 
+\fBgit\-veil init\fR [\fB\-\-git\-remote\fR] [\fB\-\-suppress\-codeowners\fR] [\fB\-\-git\-veil\-home\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIVERIFYING_KEY\fR> 
 .SH DESCRIPTION
 Initialize git\-veil state (.git\-veil/) in the current repository
 .SH OPTIONS
 .TP
 \fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name
-.TP
-\fB\-q\fR, \fB\-\-quiet\fR
-Suppress the CODEOWNERS suggestion and other non\-error output
 .TP
 \fB\-\-suppress\-codeowners\fR
 Suppress the CODEOWNERS warning for this pinned repository; the suppression is recorded in the key store next to the pin

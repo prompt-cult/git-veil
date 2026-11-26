@@ -60,6 +60,26 @@ pub fn cmd_init(
     quiet: bool,
     suppress_codeowners: bool,
 ) -> Result<()> {
+    cmd_init_with_tips(
+        repo_root,
+        verifying_key_path,
+        remote_name,
+        key_store,
+        quiet,
+        suppress_codeowners,
+        false,
+    )
+}
+
+pub fn cmd_init_with_tips(
+    repo_root: &Path,
+    verifying_key_path: &Path,
+    remote_name: &str,
+    key_store: &Path,
+    quiet: bool,
+    suppress_codeowners: bool,
+    tips: bool,
+) -> Result<()> {
     // The trust anchor travels in from outside the repository only, and
     // the possession proof runs before anything is written. A refusal
     // here leaves the worktree untouched.
@@ -166,11 +186,11 @@ pub fn cmd_init(
         true,
     )?;
 
-    // Suggest CODEOWNERS coverage for the trust-critical paths. Once, in
-    // plain text, with opt-out via -q. Never a prompt, never a block.
+    // Suggest CODEOWNERS coverage for the trust-critical paths only when
+    // the caller opts into tips. Never a prompt, never a block.
     // A future-action hint: stderr, never stdout.
-    if !quiet && !covers_trust_critical_paths(repo_root) {
+    if tips && !quiet && !covers_trust_critical_paths(repo_root) {
         eprintln!("{}", suggestion_text());
     }
-    codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners)
+    codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners, tips)
 }

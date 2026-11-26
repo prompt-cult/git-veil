@@ -24,6 +24,26 @@ pub fn cmd_add_key(
     key_store: &Path,
     signing_key_selection: Option<&str>,
 ) -> Result<()> {
+    cmd_add_key_with_tips(
+        repo_root,
+        email,
+        collaborator_key,
+        remote_name,
+        key_store,
+        signing_key_selection,
+        false,
+    )
+}
+
+pub fn cmd_add_key_with_tips(
+    repo_root: &Path,
+    email: &str,
+    collaborator_key: &str,
+    remote_name: &str,
+    key_store: &Path,
+    signing_key_selection: Option<&str>,
+    tips: bool,
+) -> Result<()> {
     // Verify trust is established and the existing keyring signature
     // against the trusted key before any mutation. An unsigned keyring is
     // only acceptable when it has zero entries (the fresh-init state). A
@@ -132,6 +152,8 @@ the same label."
     // notice is unconditional: the fresh-start flow reaches the same
     // pass on its first rotate. A future-action hint: stderr, never
     // stdout.
-    eprintln!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
+    if tips {
+        eprintln!("note: the keyring has changed. To re-encrypt to the updated keyring, run the rotate command.");
+    }
     Ok(())
 }

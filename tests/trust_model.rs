@@ -829,8 +829,27 @@ fn test_export_pin_without_output_prints_only_the_artifact_to_stdout() {
         "stdout must be the pin artifact and nothing else"
     );
 
-    // The verification token and the handoff hint are stderr chatter.
+    // Tips are opt-in; the default successful export is silent on stderr.
     let stderr = String::from_utf8(run.stderr).expect("stderr is utf8");
+    assert!(
+        stderr.is_empty(),
+        "export-pin is silent by default: {stderr}"
+    );
+
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .current_dir(&f.repo.path)
+        .args([
+            "--dangerously-skip-permissions-check",
+            "--tips",
+            "export-pin",
+            TEST_REPO_ID,
+            "--git-veil-home",
+            f.key_store.path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run git-veil export-pin with tips");
+    assert!(run.status.success());
+    let stderr = String::from_utf8(run.stderr).expect("tips stderr is utf8");
     let fingerprint = owner_key_fingerprint(TEST_REPO_ID, &f.signing_key.verifying_key());
     assert!(
         stderr.contains(&format!("owner key fingerprint: {}", fingerprint)),
@@ -843,6 +862,57 @@ fn test_export_pin_without_output_prints_only_the_artifact_to_stdout() {
     assert!(
         stderr.contains("out of the repository worktree"),
         "stderr reminds the operator about worktree hygiene: {stderr}"
+    );
+}
+
+#[test]
+fn test_trust_tips_are_opt_in() {
+    let f = Fixture::new("trust-tips");
+    let out_dir = TempDir::new("trust-tips-out");
+    let pin = out_dir.join("fara.pin");
+    cmd_export_pin(
+        &f.repo.path,
+        TEST_REPO_ID,
+        Some(&pin),
+        "origin",
+        &f.key_store.path,
+    )
+    .expect("export pin");
+
+    let fresh_store = TempDir::new("trust-tips-fresh");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .current_dir(&f.repo.path)
+        .args([
+            "--dangerously-skip-permissions-check",
+            "trust",
+            "--import",
+            pin.to_str().unwrap(),
+            "--git-veil-home",
+            fresh_store.path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run trust");
+    assert!(run.status.success());
+    assert!(run.stderr.is_empty(), "trust tips are off by default");
+
+    let tipped_store = TempDir::new("trust-tips-enabled");
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_git-veil"))
+        .current_dir(&f.repo.path)
+        .args([
+            "--dangerously-skip-permissions-check",
+            "--tips",
+            "trust",
+            "--import",
+            pin.to_str().unwrap(),
+            "--git-veil-home",
+            tipped_store.path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run trust with tips");
+    assert!(run.status.success());
+    assert!(
+        String::from_utf8_lossy(&run.stderr).contains("warning: no CODEOWNERS"),
+        "--tips prints the trust guidance"
     );
 }
 

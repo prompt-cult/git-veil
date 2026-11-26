@@ -191,7 +191,7 @@ _git__veil() {
 
     case "${cmd}" in
         git__veil)
-            opts="-h -V --dangerously-skip-permissions-check --help --version init import export forget trust export-pin fingerprint add-key remove-key add-file allow remove-file list hide rotate reveal cat changes repo-id whoami verify-keys list-keys trust-permissions error-codes clean completions manpages help"
+            opts="-h -V --dangerously-skip-permissions-check --tips --help --version init import export forget trust export-pin fingerprint add-key remove-key add-file allow remove-file list hide rotate reveal cat changes repo-id whoami verify-keys list-keys trust-permissions error-codes clean completions manpages help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -205,7 +205,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__add__subcmd__file)
-            opts="-h --force --git-remote --dangerously-skip-permissions-check --help"
+            opts="-h --force --git-remote --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -227,7 +227,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__add__subcmd__key)
-            opts="-h --git-remote --signing-key --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --signing-key --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -253,7 +253,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__allow)
-            opts="-h --git-remote --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -271,7 +271,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__cat)
-            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -297,7 +297,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__changes)
-            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -323,7 +323,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__clean)
-            opts="-h --yes --dangerously-skip-permissions-check --help"
+            opts="-h --yes --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -337,7 +337,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__completions)
-            opts="-h --dangerously-skip-permissions-check --help bash elvish fish powershell zsh"
+            opts="-h --dangerously-skip-permissions-check --tips --help bash elvish fish powershell zsh"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -351,7 +351,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__error__subcmd__codes)
-            opts="-h --dangerously-skip-permissions-check --help"
+            opts="-h --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -365,7 +365,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__export)
-            opts="-h --outfile --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --outfile --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -387,7 +387,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__export__subcmd__pin)
-            opts="-h --outfile --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --outfile --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -413,7 +413,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__fingerprint)
-            opts="-h --dangerously-skip-permissions-check --help"
+            opts="-h --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -427,7 +427,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__forget)
-            opts="-h --yes --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --yes --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -851,7 +851,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__hide)
-            opts="-h --git-remote --git-veil-home --keep-plaintext --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --keep-plaintext --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -873,7 +873,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__import)
-            opts="-h --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -891,7 +891,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__init)
-            opts="-q -h --git-remote --quiet --suppress-codeowners --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-q -h --git-remote --quiet --suppress-codeowners --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -913,7 +913,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__list)
-            opts="-h --dangerously-skip-permissions-check --help"
+            opts="-h --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -927,7 +927,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__list__subcmd__keys)
-            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -949,7 +949,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__manpages)
-            opts="-h --dangerously-skip-permissions-check --help"
+            opts="-h --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -963,7 +963,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__remove__subcmd__file)
-            opts="-h --keep-ciphertext --dangerously-skip-permissions-check --help"
+            opts="-h --keep-ciphertext --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -977,7 +977,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__remove__subcmd__key)
-            opts="-h --git-remote --signing-key --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --signing-key --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1003,7 +1003,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__repo__subcmd__id)
-            opts="-h --git-remote --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1021,7 +1021,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__reveal)
-            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1047,7 +1047,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__rotate)
-            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1069,7 +1069,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__trust)
-            opts="-h --import --git-remote --suppress-codeowners --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --import --git-remote --suppress-codeowners --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1095,7 +1095,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__trust__subcmd__permissions)
-            opts="-h --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1113,7 +1113,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__verify__subcmd__keys)
-            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --git-remote --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1135,7 +1135,7 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__whoami)
-            opts="-h --email --git-veil-home --dangerously-skip-permissions-check --help"
+            opts="-h --email --git-veil-home --dangerously-skip-permissions-check --tips --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

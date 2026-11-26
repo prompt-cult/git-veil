@@ -861,8 +861,9 @@ paths.
 CODEOWNERS is a platform feature, not a git feature: plain git ignores the
 file. Where the platform enforces it (with branch protection), a
 write-access attacker's rekey of the trust anchor becomes a review-gated
-change instead of a silent push. The tool suggests and warns; it never
-requires, and it works unchanged on plain-git hosting. On platforms with
+change instead of a silent push. The tool suggests and warns when `--tips`
+is requested; it never requires CODEOWNERS, and it works unchanged on
+plain-git hosting. On platforms with
 no CODEOWNERS support the file simply sits there ignored, which is
 harmless.
 
@@ -887,14 +888,13 @@ harmless.
   different pattern language; the gitignore matcher may produce false
   negatives there, and the warning is non-blocking, so a false negative
   only costs an unnecessary reminder.
-- **`git-veil init` suggests, once, in plain text.** After initializing
-  `.git-veil/`, a non-quiet `init` prints a suggestion naming the
-  trust-critical paths and the lines to add, with no prompt, no stdin and
-  no file creation. `git-veil init -q` prints nothing. The tool never
-  creates a CODEOWNERS file.
-- **`git-veil trust` warns when the trust anchor is not review-gated.**
-  Algorithm 2's final step: after a successful pin (proof or import), a
-  non-blocking warning is printed when no CODEOWNERS file covers the
+- **`git-veil init --tips` suggests, once, in plain text.** After
+  initializing `.git-veil/`, the opt-in tip names the trust-critical paths
+  and the lines to add, with no prompt, no stdin and no file creation. The
+  tool never creates a CODEOWNERS file.
+- **`git-veil trust --tips` warns when the trust anchor is not review-gated.**
+  Algorithm 2's final step: after a successful pin (proof or import), an
+  opt-in, non-blocking warning is printed when no CODEOWNERS file covers the
   trust-critical paths. The warning never refuses and never alters the
   exit code.
 - **Suppression is deliberate and bound to the pin.** A user who does not
@@ -956,11 +956,10 @@ tool refusing beats overwriting. Which path-resolution contract each
 command uses is pinned down per caller in `PathResolveMode`
 (src/tracked_files.rs).
 
-## Output policy: silent unix, stderr for what comes next
+## Output policy: silent unix, opt-in tips
 
-Every command's output follows one policy so stdout stays usable by
-humans and scripts alike, and so agents or operators always see the
-proper flow:
+Every command's default output follows Unix stream conventions so stdout
+stays usable by scripts and stderr means failure:
 
 - **Introspection commands** — the ones run again and again just to see
   what is going on (`list`, `list-keys`, `verify-keys`, `whoami`,
@@ -972,16 +971,20 @@ proper flow:
   print nothing at all (`verify-keys`, the unchanged files of
   `changes`). Empty data is empty stdout.
 - **Setup and mutating commands** report what they did on stdout
-  (`added 2 files`, `Decrypted: .env`, `files hidden`) and put warnings
-  and **future-action hints** on stderr. A future-action hint names an
-  action someone should do at some point; it is never an error and
-  never changes an exit code. The canonical example is the rotate
-  reminder after `add-key`/`remove-key`: the tool does not rotate for
-  the operator — they may add three keys and then rotate once — so it
-  says so, on stderr, every time the ring changes. The CODEOWNERS
-  suggestion and warning (`init`, `trust`), the `hide`
-  plaintext-not-ignored warning, and the `export-pin` out-of-band
-  guidance are the same kind of aid.
+  (`added 2 files`, `Decrypted: .env`, `files hidden`). They do not print
+  optional next-step advice by default. `--tips` opts into that advice on
+  stderr: the rotate reminder after `add-key`/`remove-key`, the CODEOWNERS
+  suggestion and warning (`init`, `trust`), and the `export-pin` out-of-band
+  guidance. Tips are never errors and never change an exit code. Keeping
+  them opt-in prevents a successful command from adding unsolicited
+  diagnostics to a pipeline while preserving the guided setup path for a
+  human operator.
+
+The global `--tips` flag is for setup and trust ceremonies that have a useful
+next action. Everyday `add-file`, `remove-file`, `reveal`, and `hide` use
+their normal factual output and do not need tips. A command that succeeds
+with tips still exits 0; a failed command exits nonzero and writes its error
+to stderr.
 
 Exit codes are unaffected by this policy: they are governed by
 [Exit codes](#exit-codes) below.

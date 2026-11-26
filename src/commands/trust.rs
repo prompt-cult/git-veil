@@ -289,6 +289,24 @@ pub fn cmd_trust(
     key_store: &Path,
     suppress_codeowners: bool,
 ) -> Result<()> {
+    cmd_trust_with_tips(
+        repo_root,
+        pin_file_path,
+        remote_name,
+        key_store,
+        suppress_codeowners,
+        false,
+    )
+}
+
+pub fn cmd_trust_with_tips(
+    repo_root: &Path,
+    pin_file_path: &Path,
+    remote_name: &str,
+    key_store: &Path,
+    suppress_codeowners: bool,
+    tips: bool,
+) -> Result<()> {
     let push_url = get_remote_push_url(repo_root, remote_name)?;
     let repo_id = derive_repo_id(&push_url)?;
 
@@ -368,10 +386,10 @@ pub fn cmd_trust(
         public_key,
         false,
     )?;
-    codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners)
+    codeowners_notice(repo_root, key_store, &repo_id, suppress_codeowners, tips)
 }
 
-/// The non-blocking CODEOWNERS notice after a successful pin.
+/// The opt-in, non-blocking CODEOWNERS notice after a successful pin.
 /// Suppress the warning when asked. The suppression lives beside the
 /// pin in the key store and is recorded only by this
 /// possession-proofed command. Warn when no CODEOWNERS file covers
@@ -382,6 +400,7 @@ pub(crate) fn codeowners_notice(
     key_store: &Path,
     repo_id: &str,
     suppress: bool,
+    tips: bool,
 ) -> Result<()> {
     if suppress {
         record_suppression(key_store, repo_id)?;
@@ -390,7 +409,7 @@ pub(crate) fn codeowners_notice(
     if is_suppressed(key_store, repo_id) {
         return Ok(());
     }
-    if !covers_trust_critical_paths(repo_root) {
+    if tips && !covers_trust_critical_paths(repo_root) {
         // A warning and a future-action hint: stderr, never stdout.
         eprintln!("{}", warning_text());
     }
