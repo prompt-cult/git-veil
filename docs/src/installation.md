@@ -80,7 +80,7 @@ executable. The WinGet manifest uses that ZIP by default and exposes the
 validate manifests for a published tag with:
 
 ```powershell
-just deploy-winget-windows 0.17.5
+just deploy-winget-windows 0.18.4
 ```
 
 The manifest files are written under `dist/winget/manifests`. Local manifest
