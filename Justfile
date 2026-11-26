@@ -2,7 +2,7 @@
 # The GitHub Releases build (release.yml on tag push) is unchanged.
 # This automates the rest: bump -> tag -> push -> wait for release -> tap update -> local verify.
 
-current := `grep '^version' Cargo.toml | head -1 | cut -d'"' -f2`
+set windows-shell := ["cmd", "/c"]
 
 # Full pure-automation cycle: make a x.y.+1 point release, deploy to the tap, verify locally.
 release-patch:
@@ -93,9 +93,7 @@ verify:
     echo "cargo: $want  tap-installed: $got"
     test "$got" = "$want"
 
-# Windows lane (Win11 host, ticket #86): PowerShell mirroring of the brew cycle.
-# The winget tail prepares the submission; the "Create pull request" click
-# and the winget-pkgs PR itself stay with the owner.
+# Windows lane (Win11 host): see scripts/push-winget-fork.ps1 for submission steps.
 
 # Windows mirror of `release-patch`: bump -> tag -> push -> release + MSI assets -> winget prep.
 release-patch-windows:
@@ -104,9 +102,20 @@ release-patch-windows:
 # Prep + validate only the winget manifests for version $1 (computed hashes come
 # from the published v{{version}} assets; nothing is submitted).
 deploy-winget-windows version:
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gen-winget-manifests.ps1 -Tag "v{{version}}"
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gen-winget-manifests.ps1 -Tag v{{version}}
 
 # Windows: push the validated winget manifests for version $1 to the fork (prep only).
-# Owner-run submission variant: just push-winget-windows 0.18.4 -Submit
 push-winget-windows version:
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/push-winget-fork.ps1 -Version "{{version}}"
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/push-winget-fork.ps1 -Version {{version}}
+
+# Submit the committed and tested manifest from current main.
+submit-winget-windows version:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/push-winget-fork.ps1 -Version {{version}} -Submit
+
+# Install and remove the committed portable manifest on Windows 11.
+test-winget-windows version:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-local-manifest.ps1 -Version {{version}}
+
+# Verify the published Windows release, including MSI install and uninstall.
+test-windows-release version:
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-release.ps1 -Version {{version}}

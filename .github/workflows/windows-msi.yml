@@ -92,11 +92,13 @@ jobs:
           Copy-Item target\x86_64-pc-windows-msvc\release\git-veil.exe git-veil-windows-x86_64.exe
           $exeHash = (Get-FileHash -Algorithm SHA256 git-veil-windows-x86_64.exe).Hash.ToLower()
           "$exeHash  git-veil-windows-x86_64.exe" | Set-Content -NoNewline git-veil-windows-x86_64.exe.sha256
-          Compress-Archive -Path git-veil-windows-x86_64.exe -DestinationPath git-veil-windows-x86_64-portable.zip -CompressionLevel Optimal
+          New-Item -ItemType Directory -Path winget-package | Out-Null
+          Copy-Item git-veil-windows-x86_64.exe winget-package/git-veil.exe
+          Compress-Archive -Path winget-package/git-veil.exe -DestinationPath git-veil-windows-x86_64-portable.zip -CompressionLevel Optimal
           $zipHash = (Get-FileHash -Algorithm SHA256 git-veil-windows-x86_64-portable.zip).Hash.ToLower()
           "$zipHash  git-veil-windows-x86_64-portable.zip" | Set-Content -NoNewline git-veil-windows-x86_64-portable.zip.sha256
           Expand-Archive -Path git-veil-windows-x86_64-portable.zip -DestinationPath portable-check
-          $portableExe = Join-Path $PWD 'portable-check\git-veil-windows-x86_64.exe'
+          $portableExe = Join-Path $PWD 'portable-check\git-veil.exe'
           if ((Get-FileHash $portableExe).Hash -ne (Get-FileHash 'git-veil-windows-x86_64.exe').Hash) { throw 'Portable ZIP does not contain the release executable.' }
           & $portableExe --version
           if ($LASTEXITCODE -ne 0) { throw 'Executable from portable ZIP failed.' }
@@ -150,7 +152,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-        run: gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --clobber git-veil-windows-x86_64.msi git-veil-windows-x86_64.msi.sha256 git-veil-windows-x86_64.exe git-veil-windows-x86_64.exe.sha256 git-veil-windows-x86_64-portable.zip git-veil-windows-x86_64-portable.zip.sha256
+        run: gh release upload $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY git-veil-windows-x86_64.msi git-veil-windows-x86_64.msi.sha256 git-veil-windows-x86_64.exe git-veil-windows-x86_64.exe.sha256 git-veil-windows-x86_64-portable.zip git-veil-windows-x86_64-portable.zip.sha256
 
       - name: Report missing GitHub release
         if: steps.release.outputs.exists != 'true'

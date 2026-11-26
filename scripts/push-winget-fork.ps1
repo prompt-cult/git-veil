@@ -1,11 +1,18 @@
-# Pushes the winget manifests for a released version to the owner's winget-pkgs fork.
-# Flow (mirrors deploy-tap on the brew side): generate manifests from the published
-# release assets, winget-validate them, then build the fork branch through the GitHub
-# API (a winget-pkgs clone is 785k files / ~250MB - never clone it).
-#
-# Default mode PREP-ONLY: the branch waits on the fork and the compare URL is printed.
-# -Submit creates the pull request against microsoft/winget-pkgs - that click belongs
-# to the owner (ticket #86); the switch exists so the owner can run it deliberately.
+# Windows 11 release submission, run from a clean local main at origin/main:
+# 1. Publish the release. In an elevated Windows 11 shell, run
+#    `just test-windows-release VERSION` to check EXE, MSI and ZIP.
+# 2. Generate the manifest from the release:
+#    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gen-winget-manifests.ps1 -Tag vVERSION -OutputDirectory packaging/winget
+#    Enable local manifests in an elevated shell with
+#    `winget settings --enable LocalManifestFiles`, then run
+#    `just test-winget-windows VERSION` from a normal shell. Disable that
+#    setting afterward if it was disabled before the test.
+#    PR the verified manifest files and any tooling updates to main.
+# 3. Fetch and fast-forward local main. Run `just submit-winget-windows VERSION`.
+#    This submits the committed files. Record the main commit in the PR.
+# 4. Follow the WinGet PR checks and reviewer requests. A CLA may be required.
+# The WinGet PR contains only this version's three manifest files. The MSI is a
+# separate release download; the submitted package is the portable ZIP.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Version,
@@ -22,11 +29,20 @@ $ProgressPreference = "SilentlyContinue"
 if (-not $Version.StartsWith("v")) { $Version = "v$Version" }
 $v = $Version.TrimStart("v")
 
-# 1. Generate + winget-validate the manifests from the published release assets.
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "gen-winget-manifests.ps1") -Tag $Version -PackageIdentifier $PackageIdentifier
-if ($LASTEXITCODE -ne 0) { throw "gen-winget-manifests.ps1 failed with exit code $LASTEXITCODE" }
-
-$outDir = Join-Path $PSScriptRoot "..\dist\winget\manifests\p\PromptCult\GitVeil\$v"
+# Submit exactly the files committed on main; regenerating here would break the
+# correspondence between the submission and its main commit.
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$branchName = git -C $root branch --show-current
+if ($branchName -ne 'main') { throw 'Run from local main.' }
+if (git -C $root status --porcelain) { throw 'Working tree must be clean.' }
+git -C $root fetch origin main
+if ($LASTEXITCODE -ne 0) { throw 'Could not fetch origin/main.' }
+$head = git -C $root rev-parse HEAD
+$remote = git -C $root rev-parse origin/main
+if ($head -ne $remote) { throw 'Fast-forward local main to origin/main before submission.' }
+$outDir = Join-Path $root "packaging\winget\p\PromptCult\GitVeil\$v"
+& winget validate --manifest $outDir
+if ($LASTEXITCODE -ne 0) { throw 'Manifest validation failed.' }
 $files = @(
     @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.yaml"; local = Join-Path $outDir "$PackageIdentifier.yaml" },
     @{ path = "manifests/p/PromptCult/GitVeil/$v/$PackageIdentifier.locale.en-US.yaml"; local = Join-Path $outDir "$PackageIdentifier.locale.en-US.yaml" },
@@ -68,12 +84,8 @@ $commit = gh api "repos/$ForkOwner/winget-pkgs/git/commits" --input $commitPaylo
 
 $refPayload = Join-Path $tmp "ref.json"
 @{ ref = "refs/heads/git-veil-$v"; sha = $commit } | ConvertTo-Json -Depth 6 | Set-Content -NoNewline $refPayload -Encoding ascii
-try {
-    $null = gh api "repos/$ForkOwner/winget-pkgs/git/refs" --input $refPayload
-} catch {
-    # Branch already exists from a previous prep: force-update it to the fresh commit.
-    $null = gh api "repos/$ForkOwner/winget-pkgs/git/refs/heads/git-veil-$v" -X PATCH --input $refPayload
-}
+$null = gh api "repos/$ForkOwner/winget-pkgs/git/refs" --input $refPayload
+if ($LASTEXITCODE -ne 0) { throw "Could not create fork branch; inspect any existing branch before retrying." }
 Remove-Item -Recurse -Force $tmp
 
 $branch = "git-veil-$v"
@@ -84,10 +96,10 @@ Write-Host "compare: $compare"
 
 if ($Submit) {
     gh pr create --repo $WingetUpstream --head "${ForkOwner}:$branch" --base master `
-        --title "$PackageIdentifier version $v" `
-        --body "New package submission for git-veil $v (Windows x86_64 MSI). Installer: $Slug releases/download/$Version/git-veil-windows-x86_64.msi"
-    Write-Host "PR created - review + CLA signing happen on the winget-pkgs side."
+        --title "New package: $PackageIdentifier version $v" `
+        --body "Add git-veil $v as a portable x64 package."
+    if ($LASTEXITCODE -ne 0) { throw 'Pull request creation failed.' }
+    Write-Host "PR created from main commit $head."
 } else {
-    Write-Host "prep only - the Create pull request click stays with the owner (ticket #86)."
-    Write-Host "to submit deliberately later: just push-winget-windows $v -Submit  (owner-run)"
+    Write-Host "Prepared branch only; inspect it before submitting."
 }
