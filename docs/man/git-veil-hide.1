@@ -16,7 +16,7 @@ Git remote name
 Key store directory (default: $GIT_VEIL_HOME or $HOME/.git\-veil)
 .TP
 \fB\-\-keep\-plaintext\fR
-Leave plaintext files beside their ciphertexts instead of deleting them
+Skip best\-effort shredding and leave plaintext files beside their ciphertexts
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
@@ -52,9 +52,15 @@ disk, no committed ciphertext in the git index, and no allowance on this
 machine: tracked.json is committed and unsigned, so a path added by
 someone else is refused until you allow it here. The allowance is
 recorded by add\-file on this machine, or deliberately with git\-veil allow.
-The plaintext is DELETED by default once every ciphertext is durably
-written \- the normal loop is reveal (restore plaintexts) \-> edit \-> hide.
-\-\-keep\-plaintext leaves the plaintexts beside their ciphertexts. Each
+The plaintext is shredded on a best\-effort basis by default once every
+ciphertext is durably written \- the normal loop is reveal (restore
+plaintexts) \-> edit \-> hide. Shredding overwrites, renames, truncates, and
+removes the file, but cannot guarantee physical erasure on SSDs, APFS,
+wear\-levelled storage, snapshots, or copy\-on\-write filesystems.
+If shredding fails, hide reports an error and does not fall back to unlinking.
+\-\-keep\-plaintext leaves the plaintexts beside their ciphertexts.
+GIT_VEIL_KEEP_PLAINTEXT=1 has the same opt\-out behavior (also accepts
+case\-insensitive 1, true, or yes after trimming whitespace). Each
 named file must exist when you name it (hide resolves paths the way
 add\-file does); once a plaintext is hidden, reveal restores it before
 hide can re\-encrypt it.
@@ -69,8 +75,9 @@ The whole\-manifest re\-encrypt is the ring\-change pass, and it is a
 separate command: git\-veil rotate.
 
 EXAMPLES
-  $ git\-veil hide .env    # encrypt .env and delete the plaintext (the default)
+  $ git\-veil hide .env    # encrypt .env and best\-effort shred the plaintext
   $ git\-veil hide .env \-\-keep\-plaintext
+  $ GIT_VEIL_KEEP_PLAINTEXT=1 git\-veil hide .env
   $ git\-veil hide .env \-\-git\-remote upstream
   $ git\-veil hide .env config.yml    # encrypt exactly the named files
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files

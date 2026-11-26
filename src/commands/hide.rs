@@ -75,6 +75,11 @@ pub fn cmd_hide(
     keep_plaintext: bool,
     files: Vec<String>,
 ) -> Result<()> {
+    let keep_plaintext = should_keep_plaintext(
+        keep_plaintext,
+        std::env::var("GIT_VEIL_KEEP_PLAINTEXT").ok().as_deref(),
+    );
+
     // Verify the keyring signature first. The same call yields the repo id
     // and the pin fingerprint the allowance gate keys on, plus the keyring
     // hide encrypts with.
@@ -290,22 +295,51 @@ pub fn cmd_hide(
         )));
     }
 
-    // Plaintext deletion is the default (docs/src/design.md "Plaintext
-    // lifecycle"). The plaintext's only worktree protection is a
-    // .gitignore line, so it is deleted once every ciphertext is durably
-    // on disk. --keep-plaintext opts out. The delete happens only after
-    // the full all-or-nothing write phase above succeeded. At worst both
-    // copies exist, never neither.
+    // Best-effort shredding is the default (docs/src/design.md "Plaintext
+    // lifecycle"). The ciphertexts are all durably written before any
+    // plaintext is shredded. --keep-plaintext and its environment variable
+    // opt out. At worst both copies exist, never neither. Shredding does not
+    // guarantee physical erasure on SSDs or copy-on-write storage.
     if !keep_plaintext {
         for (file, _, _) in &prepared {
             let plaintext_path = repo_root.join(file);
-            fs::remove_file(&plaintext_path).with_context(|| {
-                format!("Failed to delete plaintext: {}", plaintext_path.display())
+            crate::uu_shred::shred_file(&plaintext_path).with_context(|| {
+                format!("Failed to shred plaintext: {}", plaintext_path.display())
             })?;
-            println!("Deleted plaintext: {}", file.display());
+            println!("Shredded plaintext: {}", file.display());
+        }
+    } else {
+        for (file, _, _) in &prepared {
+            println!("Kept plaintext: {}", file.display());
         }
     }
 
     println!("files hidden");
     Ok(())
+}
+
+fn should_keep_plaintext(flag: bool, environment_value: Option<&str>) -> bool {
+    flag || environment_value.is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_keep_plaintext;
+
+    #[test]
+    fn keep_plaintext_flag_and_environment_share_truthy_rules() {
+        assert!(should_keep_plaintext(true, None));
+        for value in ["1", "true", "TRUE", " yes "] {
+            assert!(should_keep_plaintext(false, Some(value)), "{value:?}");
+        }
+        for value in ["", "0", "no", "on"] {
+            assert!(!should_keep_plaintext(false, Some(value)), "{value:?}");
+        }
+        assert!(should_keep_plaintext(true, Some("0")));
+    }
 }

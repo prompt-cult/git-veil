@@ -19,6 +19,7 @@ mod repo_identity;
 mod signing;
 mod tracked_files;
 mod trust_store;
+mod uu_shred;
 
 pub use age_crypto::{
     decrypt_with_x25519_private_key, default_key_store, encrypt_to_x25519_public_key,
@@ -34,7 +35,7 @@ pub use codeowners::{
     record_suppression as record_codeowners_suppression, suggestion_text as codeowners_suggestion,
     warning_text as codeowners_warning, PLATFORM_CODEOWNERS_LOCATIONS,
 };
-pub use commands::add_file::cmd_add_file;
+pub use commands::add_file::{cmd_add_file, cmd_add_file_with_force};
 pub use commands::add_key::cmd_add_key;
 pub use commands::allow::cmd_allow;
 pub use commands::cat::cmd_cat;

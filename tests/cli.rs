@@ -9,10 +9,10 @@ use age::secrecy::ExposeSecret;
 use clap::Parser as _;
 use git_veil::cli::{Cli, Commands};
 use git_veil::{
-    cmd_add_file, cmd_add_key, cmd_cat, cmd_changes, cmd_clean, cmd_forget, cmd_hide, cmd_import,
-    cmd_init, cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal,
-    cmd_verify_keys, cmd_whoami, derive_repo_id, exit_code_of, export_public_key,
-    generate_signing_keypair, generate_x25519_private_key, get_remote_push_url,
+    cmd_add_file, cmd_add_file_with_force, cmd_add_key, cmd_cat, cmd_changes, cmd_clean,
+    cmd_forget, cmd_hide, cmd_import, cmd_init, cmd_list_keys, cmd_remove_file, cmd_remove_key,
+    cmd_repo_id, cmd_reveal, cmd_verify_keys, cmd_whoami, derive_repo_id, exit_code_of,
+    export_public_key, generate_signing_keypair, generate_x25519_private_key, get_remote_push_url,
     x25519_public_key_encoding, AllowanceStore, ExitCode, Keyring, TrackedFiles, TrustPinStore,
     TrustStore,
 };
@@ -595,6 +595,36 @@ fn test_failed_add_file_leaves_no_allowance() {
 }
 
 #[test]
+fn test_add_file_refuses_secret_suffix_unless_path_is_named_with_force() {
+    let fixture = TestRepo::new("add-file-secret-suffix");
+    fs::write(fixture.repo.join("fixture.secret"), b"already encrypted\n").unwrap();
+
+    let error = cmd_add_file(
+        &fixture.repo.path,
+        vec!["fixture.secret".to_string()],
+        "origin",
+        &fixture.key_store.path,
+    )
+    .expect_err(".secret names are derived ciphertext names by default");
+    let message = format!("{error:#}");
+    assert!(message.contains("tracks the plaintext name"), "{message}");
+    assert!(message.contains("--force fixture.secret"), "{message}");
+    let tracked = TrackedFiles::load(&fixture.repo.path.join(".git-veil/tracked.json")).unwrap();
+    assert!(!tracked.files.contains(&PathBuf::from("fixture.secret")));
+
+    cmd_add_file_with_force(
+        &fixture.repo.path,
+        vec![],
+        vec!["fixture.secret".to_string()],
+        "origin",
+        &fixture.key_store.path,
+    )
+    .expect("a named --force path explicitly opts into tracking a .secret plaintext");
+    let tracked = TrackedFiles::load(&fixture.repo.path.join(".git-veil/tracked.json")).unwrap();
+    assert!(tracked.files.contains(&PathBuf::from("fixture.secret")));
+}
+
+#[test]
 fn test_successful_add_file_records_allowance() {
     let fixture = TestRepo::new("successful-add-file-allowance");
 
@@ -747,6 +777,24 @@ fn test_allow_requires_a_file_argument() {
         err.use_stderr(),
         "allow without files must be a usage error"
     );
+}
+
+#[test]
+fn test_add_file_force_names_secret_path() {
+    let cli = Cli::try_parse_from(["git-veil", "add-file", "--force", "fixture.secret"])
+        .expect("add-file --force parses");
+    match cli.command {
+        Commands::AddFile {
+            files,
+            force_files,
+            remote,
+        } => {
+            assert!(files.is_empty());
+            assert_eq!(force_files, vec!["fixture.secret"]);
+            assert_eq!(remote, "origin");
+        }
+        _ => panic!("expected the AddFile subcommand"),
+    }
 }
 
 #[test]
@@ -1743,7 +1791,7 @@ fn test_multi_recipient_hide_reveal() {
     let revealed = fs::read(fixture.repo.join(".env")).unwrap();
     assert_eq!(revealed, plaintext);
 
-    // Re-hide for bob (plaintext still exists, hide does not delete it)
+    // Re-hide for bob while retaining plaintext with the opt-out flag.
     cmd_hide(
         &fixture.repo.path,
         "origin",
@@ -1855,8 +1903,8 @@ fn test_full_lifecycle() {
 // ---------------------------------------------------------------------------
 // Plaintext lifecycle tests
 //
-// Hide deletes the plaintext by default. --keep-plaintext leaves both
-// copies in place, matching git-secret.
+// Hide shreds and removes the plaintext by default. --keep-plaintext leaves
+// both copies in place, matching git-secret.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -1879,7 +1927,7 @@ fn test_hide_keep_plaintext_leaves_both_copies() {
 
     assert!(
         fixture.repo.join(".env").exists(),
-        "plaintext must NOT be deleted by hide --keep-plaintext"
+        "plaintext must remain untouched by hide --keep-plaintext"
     );
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -1888,8 +1936,8 @@ fn test_hide_keep_plaintext_leaves_both_copies() {
 }
 
 #[test]
-fn test_hide_deletes_plaintext_by_default() {
-    let fixture = TestRepo::new("hide-deletes-plaintext");
+fn test_hide_shreds_plaintext_by_default() {
+    let fixture = TestRepo::new("hide-shreds-plaintext");
 
     let (collab_identity, _) = fixture.add_collaborator("alice@example.com");
     fixture.import_identity(&collab_identity, "alice.age");
@@ -1903,7 +1951,7 @@ fn test_hide_deletes_plaintext_by_default() {
         false,
         fixture.tracked_names(),
     )
-    .expect("hide (default deletes plaintext)");
+    .expect("hide (default shreds plaintext)");
 
     assert!(
         fixture.repo.join(".env.secret").exists(),
@@ -1911,7 +1959,7 @@ fn test_hide_deletes_plaintext_by_default() {
     );
     assert!(
         !fixture.repo.join(".env").exists(),
-        "plaintext must be deleted by hide by default"
+        "plaintext must be removed by hide by default"
     );
 }
 
@@ -1933,7 +1981,7 @@ fn test_hide_of_an_already_hidden_name_refuses_at_resolution() {
     .expect("hide");
     assert!(!fixture.repo.join(".env").exists());
 
-    // The plaintext is deleted, so the name no longer exists on disk.
+    // The plaintext is removed, so the name no longer exists on disk.
     // Naming it refuses: hide resolves paths the way add-file does. Reveal
     // restores the plaintext, then hide re-encrypts.
     let err = cmd_hide(

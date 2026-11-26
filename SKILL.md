@@ -38,13 +38,14 @@ Decrypt, edit, then give the secret back:
 git-veil reveal .env      # plaintext back into the tree
 # ... edit .env ...
 git-veil changes .env     # diff vs the last hidden version, never echoes secrets
-git-veil hide .env        # re-encrypt and DELETE the plaintext
+git-veil hide .env        # re-encrypt and best-effort shred the plaintext
 git commit -m "chore: update .env secret"
 ```
 
-`hide` deletes the plaintext on success; commit the `.secret` beside the
-manifest change in the same commit. Working tree hygiene: never leave
-plaintext lying around, never commit it, never circumvent `hide`.
+Commit the `.secret` beside the manifest change in the same commit. For the
+`hide` plaintext lifecycle, opt-out, and storage limitations, follow
+[the design guide](docs/src/design.md#plaintext-lifecycle). Working tree
+hygiene: never commit plaintext and never circumvent `hide`.
 
 ## What the refusals mean
 

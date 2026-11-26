@@ -205,12 +205,16 @@ _git__veil() {
             return 0
             ;;
         git__subcmd__veil__subcmd__add__subcmd__file)
-            opts="-h --git-remote --dangerously-skip-permissions-check --help"
+            opts="-h --force --git-remote --dangerously-skip-permissions-check --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --force)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --git-remote)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

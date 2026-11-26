@@ -580,19 +580,27 @@ $$
 \textbf{phase 1 (in memory): } \text{read and validate every target;} \text{ compute all outputs} \\
 \quad \text{any failure aborts with nothing changed on disk} \\
 \textbf{phase 2 (commit): } \text{write each output atomically;} \text{ a part-way failure is reported with written/total counts, exit non-zero} \\
-\textbf{hide (default): } \text{delete each plaintext after its ciphertext is durably on disk} \ . \ \texttt{--keep-plaintext} \text{ opts out} \\
+\textbf{phase 3 (hide): } \text{shred each plaintext after every ciphertext is durably on disk;} \text{ failure is an error} \\
+\quad \texttt{--keep-plaintext} \text{ or } \texttt{GIT\_VEIL\_KEEP\_PLAINTEXT} \text{ opts out} \\
 \textbf{invariant: at worst both copies exist, never neither}
 \end{array}
 $$
 
 <p align="center">
-<strong>Algorithm 8 - TwoPhase - the hide/reveal commit discipline</strong>
+<strong>Algorithm 8 - Hide write and plaintext shredding discipline</strong>
 </p>
 
-**Plaintext lifecycle.** Deleting by default is a deliberate posture: the
-plaintext's only protection in the worktree is a `.gitignore` line, so the
-normal loop is `reveal` → edit → `hide`, with the plaintext existing only
-while it is being edited. Consequences, stated honestly:
+**Plaintext lifecycle.** Best-effort shredding by default is a deliberate
+posture: the plaintext's only protection in the worktree is a `.gitignore`
+line, so the normal loop is `reveal` → edit → `hide`, with the plaintext
+existing only while it is being edited. `hide` overwrites file contents,
+renames the path, truncates it, and unlinks it only after all ciphertexts
+are durably written. `--keep-plaintext` and the truthy values `1`, `true`,
+or `yes` for `GIT_VEIL_KEEP_PLAINTEXT` skip that sequence for one invocation.
+If shredding fails, `hide` returns an error and never falls back to plain
+unlinking. This is best-effort: SSD wear levelling and TRIM, APFS and other
+copy-on-write filesystems, snapshots, backups, and storage controller caches
+can retain earlier blocks. It does not promise physical erasure. Consequences:
 
 - **The working set.** `hide` and `reveal` require named paths: they act
   on exactly the named tracked files (an unknown or untracked name
@@ -603,7 +611,12 @@ while it is being edited. Consequences, stated honestly:
   you name it; reveal resolves with the lexical strip, so a name need not
   exist on disk. The allowance gate and the code-41 warning apply to the
   named set.
-- **Naming a hidden file.** A plaintext that hide deleted does not
+- **Plaintext destinations.** Tracked paths stay inside the repository; hide
+  and reveal do not accept a separate external plaintext location. For a
+  one-shot consumer, `cat` writes the decrypted bytes to stdout. When a local
+  copy must remain after encryption, `--keep-plaintext` is the per-invocation
+  opt-out.
+- **Naming a hidden file.** A plaintext that hide removed does not
   exist, so naming it refuses at resolution (File not found). The loop
   is `reveal` (restores the plaintexts you name) → edit → `hide`. There
   is no skip-and-report on the named path: the file must exist to be
@@ -612,10 +625,12 @@ while it is being edited. Consequences, stated honestly:
   apply to paths that have a plaintext to encrypt; a path with no plaintext
   has nothing to exfiltrate and nothing to warn about.
 
-**Crash windows that remain.** Death between a phase-2 write and its paired
-delete (the default path) leaves both copies on disk. This is stated
-honestly: it is a redundancy window, not a data-loss window, and the
-plaintext is gitignored. The next command resolves it: re-running `hide`
+**Crash windows that remain.** Death between a phase-2 write and the start
+of shredding leaves both copies on disk. Death during overwriting can leave
+a partially overwritten plaintext path. The ciphertext is already durable;
+the next command can re-run `hide` while that path remains. This is a
+redundancy window, not a data-loss window, and the plaintext is gitignored.
+The next command resolves it: re-running `hide`
 re-encrypts the still-present plaintexts to the current keyring and atomically
 overwrites the ciphertexts. Death during `trust` between the trust.json write
 and the pin write fails closed on the next gated command (Algorithm 2's

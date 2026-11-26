@@ -137,7 +137,7 @@ $ git-veil allow deploy.env
 allowed 1 files
 $ git-veil hide deploy.env
 Encrypted: deploy.env
-Deleted plaintext: deploy.env
+Shredded plaintext: deploy.env
 files hidden
 ```
 
@@ -178,8 +178,9 @@ the secret values is the real remedy; see [Departing](departing.md).
 - **A refused command changed nothing.** `hide` and `reveal` are
   two-phase and all-or-nothing: validation and encryption happen in
   memory first, and the disk is written only after every file succeeds.
-- **Plaintext deleted by `hide`.** It is not gone: the `.secret` beside
-  it decrypts back. `git-veil reveal <file>` restores it.
+- **Plaintext shredded by `hide`.** The `.secret` beside it decrypts back.
+  `git-veil reveal <file>` restores it. Shredding is best-effort and cannot
+  guarantee physical erasure on SSDs or copy-on-write storage.
 - **Ciphertext deleted by `remove-file`.** Recover it from git history; the
   deletion is a normal committed deletion.
 - **A corrupt key store** is refused untouched, naming the file, the line

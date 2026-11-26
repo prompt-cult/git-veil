@@ -207,7 +207,7 @@ fn stays_inside_repo_root(path: &Path) -> bool {
 /// - whether the plaintext may be absent. `cmd_add_file`, `cmd_cat` and
 ///   `cmd_changes` require existence for the paths they canonicalise,
 ///   while `cmd_remove_file` and `cmd_reveal` must work while the file is
-///   hidden (hide deleted the plaintext, only the `.secret` ciphertext
+///   hidden (hide removed the plaintext, only the `.secret` ciphertext
 ///   remains).
 /// - which path `validate_tracked_path` guards. `cmd_add_file` and
 ///   `cmd_remove_file` validate the resolved result, which is about to be

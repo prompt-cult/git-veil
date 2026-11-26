@@ -161,7 +161,7 @@ file not in .gitignore, adding: .env
 added 1 files
 $ git-veil hide .env
 Encrypted: .env
-Deleted plaintext: .env
+Shredded plaintext: .env
 files hidden
 $ git add .gitignore .git-veil/keyring .git-veil/tracked.json .git-veil/trust.json .env.secret
 $ git commit -m "feat: re-key secrets with git-veil"
@@ -169,8 +169,8 @@ $ git push
 ```
 
 What happened. `hide .env` encrypts `.env` to the whole current keyring
-and deletes the plaintext. Pass `--keep-plaintext` to keep
-it, as git-secret does by default. The committed
+and best-effort shreds the plaintext. Pass `--keep-plaintext` to keep
+it for that invocation, as git-secret does by default. The committed
 set matches git-secret's philosophy of check in the state and the
 ciphertext. That is `.git-veil/keyring`, signed, plus `tracked.json`,
 `trust.json` and the `.env.secret` files. Repeat `add-file` and `hide` for
@@ -236,7 +236,7 @@ Checklist:
 | `git secret whoknows`                   | `git-veil list-keys`            | Prints keyring members after verifying the keyring signature |
 | `git secret add`                        | `git-veil add-file`             | Both append the plaintext name to `.gitignore` when not already ignored; git-veil also warns when the `.secret` path is itself git-ignored |
 | `git secret rm`                         | `git-veil remove-file`          | Both untrack; git-veil leaves any ciphertext in place, like git-secret |
-| `git secret hide`                       | `git-veil hide`                 | Diverged shape and default. git-veil `hide` names its files. git-veil deletes the plaintext, git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
+| `git secret hide`                       | `git-veil hide`                 | Diverged shape and default. git-veil `hide` names its files and best-effort shreds plaintext by default; git-secret keeps it. git-veil `--keep-plaintext` matches git-secret's default |
 | `git secret reveal`                     | `git-veil reveal`               | Same ciphertext behaviour: both leave the `.secret` in place. git-veil `reveal` names its files |
 | `git secret cat`                        | `git-veil cat`                  | Both print one file to stdout without touching disk state |
 | `git secret changes`                    | `git-veil changes`              | Both compare on-disk plaintext with the last hidden version |

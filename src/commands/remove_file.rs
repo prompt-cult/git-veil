@@ -8,8 +8,8 @@ use crate::tracked_files::{
 
 /// Removes files from the tracked files list.
 ///
-/// Unlike cmd_add_file, the tracked plaintext may not exist. Hide deletes
-/// it and leaves only the `.secret` ciphertext beside it, so removal
+/// Unlike cmd_add_file, the tracked plaintext may not exist. Hide shreds
+/// and removes it, leaving only the `.secret` ciphertext beside it, so removal
 /// must not require the plaintext to be on disk. Forcing the user to
 /// reveal a secret just to untrack it would defeat the purpose.
 /// Resolution therefore tolerates the missing plaintext: an absolute

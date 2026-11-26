@@ -128,7 +128,7 @@ file not in .gitignore, adding: .env
 added 1 files
 $ git-veil hide .env
 Encrypted: .env
-Deleted plaintext: .env
+Shredded plaintext: .env
 files hidden
 $ ls .env .env.secret
 ls: .env: No such file or directory
@@ -141,9 +141,16 @@ key store: `add-file` implies `allow`, so the first `hide` runs without a
 question. (The
 question exists for paths someone else nominated; it is described in the
 [two-collaborators guide](two-collaborators.md).) `hide` encrypted `.env`
-to your key as `.env.secret` and deleted the plaintext. Pass
-`--keep-plaintext` to keep it. `reveal` brings the plaintext back. That is
-the only recovery.
+to your key as `.env.secret`, then best-effort shredded the plaintext.
+`reveal` restores it; `--keep-plaintext` leaves it in place for that
+invocation.
+
+For a deployment that only needs the value once, use `git-veil cat .env` and
+consume its stdout instead of restoring a plaintext file. File paths stay
+inside the repository; use `--keep-plaintext` only when the workflow needs a
+local file to remain after encryption. Shredding is best-effort and cannot
+guarantee physical erasure on SSDs, APFS, copy-on-write storage, or snapshots;
+see [the hide lifecycle](design.md#crash-safety-and-durability) for its limits.
 
 Two guards watch the working tree: `hide` warns when a tracked plaintext is
 not gitignored, and refuses when the ciphertext path itself is, because
@@ -162,8 +169,10 @@ decryptability contract.
 
 ## 5. The daily cycle
 
-Peek at secrets with `git-veil cat`; decrypt in place with `git-veil
-reveal` when you need to edit:
+Peek at secrets with `git-veil cat`; this writes plaintext to stdout and
+does not restore a file to the repository. That also suits one-shot deployment
+consumers that can read stdin. Decrypt in place with `git-veil reveal` when
+you need to edit:
 
 ```sh
 $ git-veil cat .env             # plaintext to stdout; nothing on disk is touched
@@ -177,9 +186,9 @@ changed: .env
 + API_KEY=hunter4
 
 1 files with changes
-$ git-veil hide .env            # re-encrypt one file; plaintext deleted
+$ git-veil hide .env            # re-encrypt one file; best-effort shred plaintext
 Encrypted: .env
-Deleted plaintext: .env
+Shredded plaintext: .env
 files hidden
 $ git add .env.secret && git commit -m "Rotate API key"
 $ git-veil reveal .env          # bring one file back
@@ -206,9 +215,10 @@ you are editing it. If you simply want to use the secrets, script
 `git-veil cat` to load them as environment variables in your deployment
 scripts instead.
 
-For the tightest solo posture, no plaintext lingers on disk. That is the
-default. `hide` deletes the plaintext. Pass `--keep-plaintext` if you want
-the plaintext left in place.
+For the tightest solo posture, `hide` best-effort shreds and removes the
+plaintext by default. This cannot guarantee physical erasure on SSDs or
+copy-on-write storage. Pass `--keep-plaintext` if you want the plaintext
+left in place.
 
 Install a pre-commit guard. The plaintext's only protection is the
 `.gitignore` entry.
