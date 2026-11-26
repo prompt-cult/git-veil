@@ -250,7 +250,7 @@ verifies the keyring signature, then decrypts each named file back to
 its plaintext path and leaves each `.secret` in the worktree. It fails
 outright if any named ciphertext is missing. There is nothing to `lock`.
 The inverse one-shot is `git-veil hide`, which re-encrypts the named
-plaintexts to the whole keyring and deletes them. Pass
+plaintexts to the whole keyring and best-effort shreds them. Pass
 `--keep-plaintext` to keep them. It fails if a named plaintext is
 missing. For one file at a time, name it in `reveal`;
 and `cat` prints a file to stdout without touching disk state.

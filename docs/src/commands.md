@@ -449,7 +449,7 @@ Exit codes: the gated-chain codes 10/11/12/14/63, plus 30.
 ### `add-file`
 
 ```sh
-git-veil add-file <files>... [--git-remote <name>]
+git-veil add-file <files>... [--force <FILE>]... [--git-remote <name>]
 ```
 
 Tracks files for encryption in `.git-veil/tracked.json` (stored
@@ -467,11 +467,16 @@ The short form `add` keeps working.
   `add-file` implies [allow](#allow) and the first `hide` of a path you added
   never asks.
 - `add-file` gitignores the plaintext name for you and tells you it did.
+- The argument is the plaintext name; its sibling `.secret` path is derived.
+  Names ending in `.secret` are refused to prevent accidentally tracking a
+  ciphertext filename as plaintext. For a deliberate secret-of-a-secret,
+  name each such file explicitly with `--force <FILE>` on that invocation.
 
 ```sh
 $ git-veil add-file .env
 file not in .gitignore, adding: .env
 added 1 files
+$ git-veil add-file --force fixture.secret
 ```
 
 Exit codes: 40 (warning; the exit stays 0), 71 (path safety).
@@ -517,8 +522,8 @@ git-veil remove-file <files>... [--keep-ciphertext]
 ```
 
 Untracks files: removes them from `.git-veil/tracked.json`. The plaintext
-may already be gone, since `hide` deletes plaintexts by default, so the
-file does not need to exist. The short form `rm` keeps working.
+may already be gone, since `hide` shreds and removes plaintexts by default,
+so the file does not need to exist. The short form `rm` keeps working.
 
 By default the sibling `<name>.secret` ciphertext is deleted too. A
 de-tracked but committed ciphertext would otherwise be silently skipped by
@@ -586,16 +591,21 @@ decryptable by every keyring member via [reveal](#reveal).
   [allow](#allow). Re-encrypting an established ciphertext never asks,
   which is why rotation on a fresh clone never asks either.
 - **Unknown or untracked names refuse.** Exit 71.
-- **The plaintext is deleted by default** once every ciphertext is
-  durably written. `--keep-plaintext` leaves the plaintexts beside their
-  ciphertexts.
+- **The plaintext is shredded by default** once every ciphertext is
+  durably written. `--keep-plaintext` or `GIT_VEIL_KEEP_PLAINTEXT=1`
+  leaves it beside its ciphertext. The environment variable also accepts
+  `true` and `yes`, case-insensitively and with surrounding whitespace.
+  Shredding overwrites, renames, truncates, and removes each regular file;
+  it cannot guarantee physical erasure on SSDs, APFS, wear-levelled storage,
+  snapshots, or copy-on-write filesystems. If shredding fails, `hide` returns
+  an error and does not fall back to plain deletion.
 - The keyring signature is verified against the pin before anything is
   encrypted.
 
 ```sh
 $ git-veil hide .env
 Encrypted: .env
-Deleted plaintext: .env
+Shredded plaintext: .env
 files hidden
 ```
 

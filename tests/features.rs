@@ -242,14 +242,15 @@ fn test_reveal_all_or_nothing_missing_ciphertext() {
     );
 
     // The other file should not be revealed (all-or-nothing).
-    // config.yml still exists because hide does not delete plaintext
+    // The setup used --keep-plaintext, so both originals remain after the
+    // reveal refusal.
     assert!(
         f.repo.join("config.yml.secret").exists(),
         "config.yml.secret should still exist"
     );
     assert!(
         f.repo.join("config.yml").exists(),
-        "config.yml should still exist (hide does not delete plaintext)"
+        "config.yml should still exist because hide kept the plaintext"
     );
 }
 
@@ -290,7 +291,7 @@ fn test_multi_recipient_both_can_decrypt() {
     .expect("alice reveal");
     assert_eq!(fs::read(f.repo.join(".env")).unwrap(), plaintext);
 
-    // Re-hide and bob reveals (plaintext still exists, hide does not delete it)
+    // Re-hide for bob while retaining the plaintext with the opt-out flag.
     cmd_hide(
         &f.repo.path,
         "origin",
@@ -410,7 +411,7 @@ fn test_cat_preserves_disk_state() {
     // cat should not touch disk. Both plaintext and ciphertext exist.
     assert!(
         f.repo.join(".env").exists(),
-        "plaintext should still exist (hide does not delete)"
+        "plaintext should still exist because hide kept it"
     );
     assert!(
         f.repo.join(".env.secret").exists(),
@@ -459,7 +460,7 @@ fn test_reveal_isolates_single_file() {
         f.repo.join(".env.secret").exists(),
         "ciphertext should still exist"
     );
-    // other file still has both (hide does not delete plaintext)
+    // The first hide used --keep-plaintext, so the other file still has both.
     assert!(f.repo.join("config.yml").exists());
     assert!(f.repo.join("config.yml.secret").exists());
 }
@@ -728,7 +729,7 @@ fn test_positional_hide_hides_only_named_files() {
     .expect("scoped hide");
     assert!(
         !f.repo.join(".env").exists(),
-        "the named plaintext is deleted by default after the ciphertext is durable"
+        "the named plaintext is removed by default after the ciphertext is durable"
     );
     assert!(
         f.repo.join(".env.secret").exists(),
@@ -779,7 +780,7 @@ fn test_positional_hide_refuses_untracked_name_with_code_71() {
     );
     assert!(
         f.repo.join(".env").exists(),
-        "no plaintext is deleted when the named set refuses"
+        "no plaintext is removed when the named set refuses"
     );
 }
 
@@ -880,7 +881,7 @@ fn test_positional_reveal_reveals_only_named_files() {
     f.add_file(".env", b"API_KEY=1\n");
     f.add_file("config.yml", b"config\n");
 
-    // Hide everything. The default deletes both plaintexts. The test names
+    // Hide everything. The default shreds and removes both plaintexts. The test names
     // the whole tracked set explicitly: the bare form is gone (issue 50).
     cmd_hide(
         &f.repo.path,

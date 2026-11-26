@@ -426,14 +426,22 @@ cannot silently nominate your files for encryption.
 Typical flow: init -> trust -> add-key (once per collaborator) -> add-file
 -> hide.
 
+The argument to add-file is the PLAINTEXT filename. Its sibling <name>.secret
+is derived as the ciphertext path. A path ending in .secret is refused unless
+you name that specific path with --force <FILE>.
+
 EXAMPLES
   $ git-veil add-file .env
   $ git-veil add-file config/credentials.yml notes.md
+  $ git-veil add-file --force fixture.secret
 ")]
     AddFile {
         /// File(s) to add
-        #[arg(required = true)]
+        #[arg(required_unless_present = "force_files")]
         files: Vec<String>,
+        /// Explicitly add this .secret plaintext path (repeat for each forced file)
+        #[arg(long = "force", value_name = "FILE")]
+        force_files: Vec<String>,
         /// Git remote name (derives the repository id for the allowance store)
         #[arg(long = "git-remote", default_value = "origin")]
         remote: String,
@@ -475,8 +483,8 @@ EXAMPLES
     #[command(alias = "rm")]
     #[command(after_long_help = "\
 Untracks files (removes them from .git-veil/tracked.json). The plaintext
-may already be gone - hide deletes plaintexts by default - so the file
-does not need to exist.
+may already be gone - hide shreds and removes plaintexts by default - so
+the file does not need to exist.
 
 By default the sibling <name>.secret ciphertext is deleted too: a
 de-tracked but committed ciphertext would otherwise be silently skipped
@@ -542,9 +550,15 @@ disk, no committed ciphertext in the git index, and no allowance on this
 machine: tracked.json is committed and unsigned, so a path added by
 someone else is refused until you allow it here. The allowance is
 recorded by add-file on this machine, or deliberately with git-veil allow.
-The plaintext is DELETED by default once every ciphertext is durably
-written - the normal loop is reveal (restore plaintexts) -> edit -> hide.
---keep-plaintext leaves the plaintexts beside their ciphertexts. Each
+The plaintext is shredded on a best-effort basis by default once every
+ciphertext is durably written - the normal loop is reveal (restore
+plaintexts) -> edit -> hide. Shredding overwrites, renames, truncates, and
+removes the file, but cannot guarantee physical erasure on SSDs, APFS,
+wear-levelled storage, snapshots, or copy-on-write filesystems.
+If shredding fails, hide reports an error and does not fall back to unlinking.
+--keep-plaintext leaves the plaintexts beside their ciphertexts.
+GIT_VEIL_KEEP_PLAINTEXT=1 has the same opt-out behavior (also accepts
+case-insensitive 1, true, or yes after trimming whitespace). Each
 named file must exist when you name it (hide resolves paths the way
 add-file does); once a plaintext is hidden, reveal restores it before
 hide can re-encrypt it.
@@ -559,8 +573,9 @@ The whole-manifest re-encrypt is the ring-change pass, and it is a
 separate command: git-veil rotate.
 
 EXAMPLES
-  $ git-veil hide .env    # encrypt .env and delete the plaintext (the default)
+  $ git-veil hide .env    # encrypt .env and best-effort shred the plaintext
   $ git-veil hide .env --keep-plaintext
+  $ GIT_VEIL_KEEP_PLAINTEXT=1 git-veil hide .env
   $ git-veil hide .env --git-remote upstream
   $ git-veil hide .env config.yml    # encrypt exactly the named files
   $ echo .env >> .gitignore    # ignore plaintext names; commit the .secret files
@@ -572,7 +587,7 @@ EXAMPLES
         /// Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)
         #[arg(long = "git-veil-home")]
         key_store: Option<PathBuf>,
-        /// Leave plaintext files beside their ciphertexts instead of deleting them
+        /// Skip best-effort shredding and leave plaintext files beside their ciphertexts
         #[arg(long)]
         keep_plaintext: bool,
         /// Tracked files to hide

@@ -127,6 +127,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (add-file)
 _arguments "${_arguments_options[@]}" : \
+'*--force=[Explicitly add this .secret plaintext path (repeat for each forced file)]:FILE:_default' \
 '--git-remote=[Git remote name (derives the repository id for the allowance store)]:REMOTE:_default' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -163,7 +164,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--git-remote=[Git remote name]:REMOTE:_default' \
 '--git-veil-home=[Key store directory (default\: \$GIT_VEIL_HOME or \$HOME/.git-veil)]:KEY_STORE:_files' \
-'--keep-plaintext[Leave plaintext files beside their ciphertexts instead of deleting them]' \
+'--keep-plaintext[Skip best-effort shredding and leave plaintext files beside their ciphertexts]' \
 '--dangerously-skip-permissions-check[Bypass the key store permission checks (also\: GIT_VEIL_SKIP_PERMISSIONS=1)]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \

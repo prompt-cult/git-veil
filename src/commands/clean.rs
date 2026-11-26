@@ -12,7 +12,7 @@ use crate::{coded, ExitCode, TrackedFiles};
 /// `<name>.secret` ciphertext files are ordinary committable files that a
 /// clean must not disown.
 ///
-/// Because hide deletes the plaintexts, the `<name>.secret`
+/// Because hide shreds and removes the plaintexts, the `<name>.secret`
 /// ciphertexts beside them can be the only remaining copy of a
 /// secret, and the tracked state that references them dies with the
 /// clean. A clean that would destroy such data therefore refuses

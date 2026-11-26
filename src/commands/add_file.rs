@@ -31,6 +31,33 @@ pub fn cmd_add_file(
     remote_name: &str,
     key_store: &std::path::Path,
 ) -> Result<()> {
+    cmd_add_file_with_force(repo_root, files, Vec::new(), remote_name, key_store)
+}
+
+/// Adds files while requiring an explicit `--force <path>` for any plaintext
+/// name that itself ends in `.secret`.
+pub fn cmd_add_file_with_force(
+    repo_root: &Path,
+    mut files: Vec<String>,
+    force_files: Vec<String>,
+    remote_name: &str,
+    key_store: &std::path::Path,
+) -> Result<()> {
+    if files.is_empty() && force_files.is_empty() {
+        anyhow::bail!("add-file needs at least one path");
+    }
+    if let Some(file) = files.iter().find(|file| file.ends_with(".secret")) {
+        anyhow::bail!(
+            "refusing to add `{file}`: add-file tracks the plaintext name, then derives the `.secret` ciphertext name; use `--force {file}` only when you deliberately want to encrypt a `.secret` plaintext"
+        );
+    }
+    if let Some(file) = force_files.iter().find(|file| !file.ends_with(".secret")) {
+        anyhow::bail!(
+            "`--force {file}` must name a path ending in `.secret`; it is a per-file escape hatch for deliberate secret-of-a-secret tracking"
+        );
+    }
+    files.extend(force_files);
+
     let tracked_path = repo_root.join(".git-veil/tracked.json");
     let gitignore_path = repo_root.join(".gitignore");
     let gitignore_existed = gitignore_path.exists();

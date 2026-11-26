@@ -55,8 +55,10 @@ mean raise me a PR and join the discussion.
 Three ideas carry the whole design.
 
 1. **Encryption in place.** `git-veil hide` turns `.env` into `.env.secret`, a
-   standard `age` file encrypted to every key in the keyring, and deletes
-   the plaintext. You gitignore the plaintext to prevent accidental commits. You commit the `.secret` files. `git-veil reveal` brings a plaintext back.
+   standard `age` file encrypted to every key in the keyring, and best-effort
+   shreds the plaintext. You gitignore the plaintext to prevent accidental
+   commits. You commit the `.secret` files. `git-veil reveal` brings a
+   plaintext back.
 2. **A signed keyring.** `.git-veil/keyring` names who can decrypt. It is
    signed with the repository owner's Ed25519 key. Every gated command
    verifies that signature against a pin held in your local key store
@@ -97,7 +99,7 @@ git-veil export age1xxxx                        # your public key string
 git-veil add-key example@github.com age1xxxx    # adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add-file .env                          # tracks it, gitignores the plaintext name
-git-veil hide .env                              # encrypts to the keyring; deletes the plaintext
+git-veil hide .env                              # encrypts to the keyring; best-effort shreds the plaintext
 git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
 git-veil reveal .env                            # brings it back when you need to edit

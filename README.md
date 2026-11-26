@@ -133,11 +133,16 @@ git-veil export age1xxxx                        # print your public key string
 git-veil add-key example@github.com age1xxxx    # paste the string, adds you to the signed keyring
 printf 'API_KEY=hunter2\n' > .env
 git-veil add-file .env                          # track the file (gitignores the plaintext name)
-git-veil hide .env                              # encrypt: .env -> .env.secret (plaintext deleted)
+git-veil hide .env                              # encrypt and best-effort shred plaintext
 git add .gitignore .git-veil .env.secret
 git commit -m "Add encrypted secrets"
+git-veil cat .env                               # send plaintext to stdout for one-shot use
 git-veil reveal .env                            # decrypt back when you need the plaintext
 ```
+
+For a deployment that can consume stdin, `git-veil cat <path>` supplies the
+secret without restoring a plaintext file to the worktree. Use `reveal` when
+you need to edit a file in place.
 
 The `.secret` ciphertext files are standard `age`-encrypted blobs. You can
 verify interoperability with any `age`-compatible tool:
@@ -288,7 +293,7 @@ the workflow differ. One payoff is a smaller binary.
 | `allow`          | Allow files for encryption on this machine (answers `hide`'s allowance question) |
 | `remove-file`    | Untrack files (the sibling `.secret` ciphertext is deleted by default) |
 | `list`           | List all tracked files                                                  |
-| `hide`           | Encrypt the named tracked files to the keyring and DELETE the plaintexts |
+| `hide`           | Encrypt named tracked files and best-effort shred plaintexts by default |
 | `rotate`         | Deliver the due ring-change pass: re-encrypt every tracked ciphertext to the current keyring, in memory, plaintexts untouched |
 | `reveal`         | Decrypt the named tracked files back to plaintext (never gated) |
 | `cat`            | Decrypt a single tracked file to stdout                                 |

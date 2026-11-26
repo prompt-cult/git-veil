@@ -4,10 +4,13 @@
 .SH NAME
 git\-veil\-add\-file \- Track files for encryption
 .SH SYNOPSIS
-\fBgit\-veil add\-file\fR [\fB\-\-git\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIFILES\fR> 
+\fBgit\-veil add\-file\fR [\fB\-\-force\fR] [\fB\-\-git\-remote\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Track files for encryption
 .SH OPTIONS
+.TP
+\fB\-\-force\fR \fI<FILE>\fR
+Explicitly add this .secret plaintext path (repeat for each forced file)
 .TP
 \fB\-\-git\-remote\fR \fI<REMOTE>\fR [default: origin]
 Git remote name (derives the repository id for the allowance store)
@@ -15,7 +18,7 @@ Git remote name (derives the repository id for the allowance store)
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
-<\fIFILES\fR>
+[\fIFILES\fR]
 File(s) to add
 .SH EXTRA
 Tracks files for encryption in .git\-veil/tracked.json (stored
@@ -32,6 +35,11 @@ cannot silently nominate your files for encryption.
 Typical flow: init \-> trust \-> add\-key (once per collaborator) \-> add\-file
 \-> hide.
 
+The argument to add\-file is the PLAINTEXT filename. Its sibling <name>.secret
+is derived as the ciphertext path. A path ending in .secret is refused unless
+you name that specific path with \-\-force <FILE>.
+
 EXAMPLES
   $ git\-veil add\-file .env
   $ git\-veil add\-file config/credentials.yml notes.md
+  $ git\-veil add\-file \-\-force fixture.secret

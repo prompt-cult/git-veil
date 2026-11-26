@@ -6,9 +6,9 @@ use std::process::ExitCode as StdExitCode;
 use git_veil::{
     check_key_store_permissions,
     cli::{Cli, Commands},
-    cmd_add_file, cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export,
-    cmd_export_pin, cmd_fingerprint, cmd_forget, cmd_hide, cmd_import, cmd_init, cmd_list,
-    cmd_list_keys, cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal, cmd_rotate, cmd_trust,
+    cmd_add_key, cmd_allow, cmd_cat, cmd_changes, cmd_clean, cmd_export, cmd_export_pin,
+    cmd_fingerprint, cmd_forget, cmd_hide, cmd_import, cmd_init, cmd_list, cmd_list_keys,
+    cmd_remove_file, cmd_remove_key, cmd_repo_id, cmd_reveal, cmd_rotate, cmd_trust,
     cmd_trust_permissions, cmd_verify_keys, cmd_whoami, default_key_store, exit_code_of,
     get_git_config_email, permissions_check_bypassed_from_env, ExitCode,
 };
@@ -201,9 +201,14 @@ fn run() -> Result<()> {
                 signing_key.as_deref(),
             )?;
         }
-        Commands::AddFile { files, remote } => cmd_add_file(
+        Commands::AddFile {
+            files,
+            force_files,
+            remote,
+        } => git_veil::cmd_add_file_with_force(
             &repo_root,
             files,
+            force_files,
             &remote,
             &resolve_key_store(None, skip_permissions_check)?,
         )?,

@@ -95,6 +95,7 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l signing
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand remove-key" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l force -d 'Explicitly add this .secret plaintext path (repeat for each forced file)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l git-remote -d 'Git remote name (derives the repository id for the allowance store)' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand add-file" -s h -l help -d 'Print help (see more with \'--help\')'
@@ -108,7 +109,7 @@ complete -c git-veil -n "__fish_git_veil_using_subcommand list" -l dangerously-s
 complete -c git-veil -n "__fish_git_veil_using_subcommand list" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l git-remote -d 'Git remote name' -r
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l git-veil-home -d 'Key store directory (default: $GIT_VEIL_HOME or $HOME/.git-veil)' -r -F
-complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l keep-plaintext -d 'Leave plaintext files beside their ciphertexts instead of deleting them'
+complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l keep-plaintext -d 'Skip best-effort shredding and leave plaintext files beside their ciphertexts'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -l dangerously-skip-permissions-check -d 'Bypass the key store permission checks (also: GIT_VEIL_SKIP_PERMISSIONS=1)'
 complete -c git-veil -n "__fish_git_veil_using_subcommand hide" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c git-veil -n "__fish_git_veil_using_subcommand rotate" -l git-remote -d 'Git remote name' -r
