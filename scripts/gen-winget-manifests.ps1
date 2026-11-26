@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
 
 if (-not $Tag) {
     $cargoToml = Get-Content -Raw (Join-Path $PSScriptRoot "..\Cargo.toml")
@@ -58,21 +59,21 @@ $outDir = Join-Path $OutputDirectory ($letters[0].Substring(0,1).ToLower())
 foreach ($part in ($letters + $version)) { $outDir = Join-Path $outDir $part }
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $idPath = Join-Path $outDir $PackageIdentifier
-$description = "Secret management for git repositories using age X25519 encryption"
+$description = "Store encrypted secrets in a git repository using age encryption"
 
 # 1. Version manifest.
 @"
-# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.28.0.schema.json
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $version
 DefaultLocale: en-US
 ManifestType: version
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
 "@ | Set-Content -NoNewline "$idPath.yaml" -Encoding ascii
 
 # 2. Default locale manifest.
 @"
-# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $version
 PackageLocale: en-US
@@ -81,9 +82,13 @@ PublisherUrl: https://github.com/prompt-cult
 PackageName: git-veil
 PackageUrl: https://github.com/prompt-cult/git-veil
 License: MIT OR Apache-2.0
-LicenseUrl: https://github.com/prompt-cult/git-veil/blob/main/LICENSE
+LicenseUrl: https://github.com/prompt-cult/git-veil/blob/$Tag/LICENSE
 Copyright: Copyright (c) git-veil contributors
+Author: Simon J. Massey
 ShortDescription: $description
+Documentations:
+- DocumentLabel: Documentation
+  DocumentUrl: https://prompt-cult.github.io/git-veil/
 Moniker: git-veil
 Tags:
 - git
@@ -91,12 +96,12 @@ Tags:
 - encryption
 - age
 ManifestType: defaultLocale
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
 "@ | Set-Content -NoNewline "$idPath.locale.en-US.yaml" -Encoding ascii
 
 # 3. Portable package manifest: WinGet stages the ZIP and adds the CLI alias to PATH.
 @"
-# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.28.0.schema.json
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $version
 Platform:
@@ -105,7 +110,7 @@ MinimumOSVersion: 10.0.0.0
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
-- RelativeFilePath: git-veil-windows-x86_64.exe
+- RelativeFilePath: git-veil.exe
   PortableCommandAlias: git-veil
 ReleaseDate: $releaseDate
 Installers:
@@ -113,7 +118,7 @@ Installers:
   InstallerUrl: $releaseBase/$($kinds["portable"].asset)
   InstallerSha256: $($hashes["portable"])
 ManifestType: installer
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
 "@ | Set-Content -NoNewline "$idPath.installer.yaml" -Encoding ascii
 
 # winget's own schema check is the local gate on this host.
