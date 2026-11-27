@@ -11,6 +11,22 @@ brew tap prompt-cult/tap
 brew install prompt-cult/tap/git-veil
 ```
 
+## WinGet (Windows)
+
+In PowerShell, install the portable CLI package:
+
+```powershell
+winget install --id PromptCult.GitVeil --exact --source winget
+```
+
+To upgrade it later:
+
+```powershell
+winget upgrade --id PromptCult.GitVeil --exact --source winget
+```
+
+Open a new shell if necessary, then run `git-veil --version`.
+
 ## Release binary
 
 Grab a binary from the
