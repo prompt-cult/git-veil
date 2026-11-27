@@ -1,5 +1,7 @@
 # git-veil
 
+[![WinGet package version](https://img.shields.io/winget/v/PromptCult.GitVeil)](https://prompt-cult.github.io/git-veil/installation.html#winget-windows)
+
 git-veil stores encrypted secrets in a git repository. It is written in Rust.
 It encrypts files using [`age`][age] identity keys (via the pure-Rust [`age` crate][age-crate]). The public parts of the identities are committed into the git repo. That keyring of `age` public keys is signed with an [Ed25519][ed25519] (via [`ed25519-dalek`][dalek]) key pair you generate using `openssl`.
 
@@ -192,6 +194,12 @@ including the cases that never ask, are in
 ```sh
 brew tap prompt-cult/tap
 brew install prompt-cult/tap/git-veil
+```
+
+On Windows, install with WinGet:
+
+```powershell
+winget install --id PromptCult.GitVeil --exact --source winget
 ```
 
 Prebuilt binaries for every release are on the [releases page](https://github.com/prompt-cult/git-veil/releases).
